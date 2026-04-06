@@ -12,10 +12,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -39,8 +35,12 @@ jobs:
         run: ./gradlew assembleDebug -PbuildSuffix=release
 
       - name: Build and Sign Release APK
-        if: ${{ secrets.KEYSTORE_PASSWORD != '' }}
         run: ./gradlew assembleRelease -PbuildSuffix=release
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        continue-on-error: true
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v7
@@ -49,11 +49,11 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
 
       - name: Upload Release APK
-        if: ${{ secrets.KEYSTORE_PASSWORD != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: app-release
           path: app/build/outputs/apk/release/*.apk
+        continue-on-error: true
 
       - name: Generate Changelog
         id: changelog
