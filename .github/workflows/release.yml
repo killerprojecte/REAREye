@@ -32,6 +32,15 @@ jobs:
       - name: Setup Android SDK
         uses: amyu/setup-android@v5
 
+      - name: Fix SDK symlink for compileSdk=37
+        run: |
+          # SDK installs as android-37.0, but some modules expect android-37
+          if [ -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -d "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s "$ANDROID_HOME/platforms/android-37.0" "$ANDROID_HOME/platforms/android-37"
+            echo "Created symlink: android-37 -> android-37.0"
+          fi
+          ls -la "$ANDROID_HOME/platforms/"
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
