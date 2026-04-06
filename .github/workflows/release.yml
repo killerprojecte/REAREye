@@ -69,9 +69,20 @@ jobs:
           fi
           echo "" >> changelog.md
 
+      - name: Create tag if manual trigger
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          NEW_TAG="v$(date +%Y%m%d.%H%M%S)"
+          git tag "$NEW_TAG"
+          git push origin "$NEW_TAG"
+          echo "RELEASE_TAG=$NEW_TAG" >> $GITHUB_ENV
+
       - name: Create Release and Upload Asset
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name || env.RELEASE_TAG }}
           files: |
             app/build/outputs/apk/release/*.apk
             app/build/outputs/apk/debug/*.apk
