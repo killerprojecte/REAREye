@@ -74,7 +74,11 @@ android {
 
     buildTypes {
         getByName("debug") {
-            signingConfig = signingConfigs.getByName("release")
+            // Use release signing if keystore secrets are configured
+            if (System.getenv("KEYSTORE_PASSWORD") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            // Otherwise use default debug keystore (CI builds without secrets)
         }
         release {
             isMinifyEnabled = true
