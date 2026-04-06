@@ -32,15 +32,6 @@ jobs:
       - name: Setup Android SDK
         uses: amyu/setup-android@v5
 
-      - name: Fix SDK symlink for compileSdk=37
-        run: |
-          # SDK installs as android-37.0, but some modules expect android-37
-          if [ -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -d "$ANDROID_HOME/platforms/android-37" ]; then
-            ln -s "$ANDROID_HOME/platforms/android-37.0" "$ANDROID_HOME/platforms/android-37"
-            echo "Created symlink: android-37 -> android-37.0"
-          fi
-          ls -la "$ANDROID_HOME/platforms/"
-
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
@@ -65,10 +56,7 @@ jobs:
       - name: Generate Changelog
         id: changelog
         run: |
-          # Get the previous tag
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-
-          # Generate changelog
           if [ -z "$PREVIOUS_TAG" ]; then
             echo "### 🎉 Initial Release" > changelog.md
           else
@@ -76,7 +64,6 @@ jobs:
             echo "" >> changelog.md
             git log --pretty=format:"- %s" $PREVIOUS_TAG..HEAD >> changelog.md
           fi
-
           echo "" >> changelog.md
 
       - name: Create Release and Upload Asset
@@ -86,23 +73,3 @@ jobs:
           body_path: changelog.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # 注释掉了：发布到 Xposed Modules Repo 需要 XPOSED_REPO_TOKEN
-      # 和 Xposed-Modules-Repo 组织的 write 权限
-      # 如需启用，取消注释并配置对应的 secret
-      #
-      # - name: Prepare Changelog for Xposed Repo
-      #   run: |
-      #     echo "https://github.com/guocheng1378/REAREye/releases/tag/${{ github.ref_name }}" > changelog_xposed.md
-      #     cat changelog.md >> changelog_xposed.md
-      #
-      # - name: Publish to Xposed Modules Repo
-      #   uses: softprops/action-gh-release@v2
-      #   with:
-      #     repository: Xposed-Modules-Repo/hk.uwu.reareye
-      #     token: ${{ secrets.XPOSED_REPO_TOKEN }}
-      #     tag_name: ${{ github.ref_name }}
-      #     name: ${{ github.ref_name }}
-      #     generate_release_notes: false
-      #     body_path: changelog_xposed.md
-      #     files: app/build/outputs/apk/release/*.apk
