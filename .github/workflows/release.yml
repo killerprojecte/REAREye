@@ -39,6 +39,7 @@ jobs:
         run: ./gradlew assembleDebug -PbuildSuffix=release
 
       - name: Build and Sign Release APK
+        if: ${{ secrets.KEYSTORE_PASSWORD != '' }}
         run: ./gradlew assembleRelease -PbuildSuffix=release
 
       - name: Upload Debug APK
@@ -48,6 +49,7 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
 
       - name: Upload Release APK
+        if: ${{ secrets.KEYSTORE_PASSWORD != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: app-release
@@ -69,7 +71,9 @@ jobs:
       - name: Create Release and Upload Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/release/*.apk
+          files: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
           body_path: changelog.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
