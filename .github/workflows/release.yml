@@ -7,6 +7,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -34,17 +35,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug -PbuildSuffix=release
+      - name: Decode Keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release-key.jks
 
       - name: Build and Sign Release APK
         run: ./gradlew assembleRelease -PbuildSuffix=release
 
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v7
-        with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/*.apk
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug -PbuildSuffix=release
 
       - name: Upload Release APK
         uses: actions/upload-artifact@v7
@@ -52,13 +50,16 @@ jobs:
           name: app-release
           path: app/build/outputs/apk/release/*.apk
 
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/*.apk
+
       - name: Generate Changelog
         id: changelog
         run: |
-          # Get the previous tag
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-
-          # Generate changelog
           if [ -z "$PREVIOUS_TAG" ]; then
             echo "### 🎉 Initial Release" > changelog.md
           else
@@ -66,29 +67,25 @@ jobs:
             echo "" >> changelog.md
             git log --pretty=format:"- %s" $PREVIOUS_TAG..HEAD >> changelog.md
           fi
-
           echo "" >> changelog.md
+
+      - name: Create tag if manual trigger
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          NEW_TAG="v$(date +%Y%m%d.%H%M%S)"
+          git tag "$NEW_TAG"
+          git push origin "$NEW_TAG"
+          echo "RELEASE_TAG=$NEW_TAG" >> $GITHUB_ENV
 
       - name: Create Release and Upload Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/release/*.apk
+          tag_name: ${{ github.ref_name || env.RELEASE_TAG }}
+          files: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
           body_path: changelog.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Prepare Changelog for Xposed Repo
-        run: |
-          echo "https://github.com/killerprojecte/REAREye/releases/tag/${{ github.ref_name }}" > changelog_xposed.md
-          cat changelog.md >> changelog_xposed.md
-
-      - name: Publish to Xposed Modules Repo
-        uses: softprops/action-gh-release@v2
-        with:
-          repository: Xposed-Modules-Repo/hk.uwu.reareye
-          token: ${{ secrets.XPOSED_REPO_TOKEN }}
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          generate_release_notes: false
-          body_path: changelog_xposed.md
-          files: app/build/outputs/apk/release/*.apk
