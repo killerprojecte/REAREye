@@ -122,7 +122,6 @@
     <string name="rear_wallpaper_catalog_empty">当前没有可用壁纸</string>
     <string name="rear_wallpaper_refresh_success">壁纸列表已刷新</string>
     <string name="rear_wallpaper_refresh_failed">刷新壁纸列表失败：%1$s</string>
-    <string name="rear_wallpaper_set_now">应用</string>
     <string name="rear_wallpaper_add_to_schedule">加入轮播</string>
     <string name="rear_wallpaper_add_sheet_trigger">添加壁纸</string>
     <string name="rear_wallpaper_added">已加入轮播</string>
