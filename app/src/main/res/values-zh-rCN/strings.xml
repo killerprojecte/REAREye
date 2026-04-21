@@ -177,7 +177,6 @@
     <string name="rear_wallpaper_meta_support_aon">支持 AON</string>
     <string name="rear_widget_business_manager">组件模板管理器</string>
     <string name="rear_widget_business_manager_desc">管理 组件 到模板文件的映射</string>
-    <string name="rear_widget_scene_route_manager">通知路由管理器</string>
     <string name="rear_widget_scene_route_manager_desc">在通知解析前，将指定应用的 scene 值映射到组件</string>
     <string name="rear_widget_business_extra_manager">组件额外设置管理器</string>
     <string name="rear_widget_business_extra_manager_desc">手动添加需要额外显示选项的组件</string>
@@ -187,11 +186,8 @@
     <string name="allow_rear_focus_notices_desc">必须先存在该焦点通知对应的组件或模板，否则系统仍会拒绝显示</string>
     <string name="rear_widget_target_package">目标包名</string>
     <string name="rear_widget_business_name">组件名称</string>
-    <string name="rear_widget_scene_name">通知规则</string>
     <string name="rear_widget_business_file_mode_title">组件模板映射</string>
     <string name="rear_widget_business_file_mode_hint">维护 组件 到模板文件的映射，例如 music -&gt; 自定义模板</string>
-    <string name="rear_widget_scene_route_hint_title">通知到组件映射</string>
-    <string name="rear_widget_scene_route_hint">配置 包名 + 通知 -&gt; 组件 的路由\n当通知匹配路由时，模块会在通知解析前注入匹配的组件</string>
     <string name="rear_widget_scene_route_count">已配置路由：%1$d</string>
     <string name="rear_widget_template_file">模板文件路径</string>
     <string name="rear_widget_default_priority">默认优先级 (数值越低优先级越高)</string>
@@ -213,8 +209,6 @@
     <string name="rear_widget_card_saved">卡片已保存</string>
     <string name="rear_widget_add_business">新增组件</string>
     <string name="rear_widget_edit_business">编辑组件</string>
-    <string name="rear_widget_add_scene_route">新增 通知 路由</string>
-    <string name="rear_widget_edit_scene_route">编辑 通知 路由</string>
     <string name="rear_widget_business_extra_add">添加组件</string>
     <string name="rear_widget_business_extra_empty">暂无组件额外设置</string>
     <string name="rear_widget_business_extra_hint_title">组件额外选项</string>
