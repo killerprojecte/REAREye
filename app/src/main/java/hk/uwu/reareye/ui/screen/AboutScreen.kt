@@ -1135,7 +1135,7 @@ private fun LicenseContent(
         overscrollEffect = null,
     ) {
         items(data.libraries) {
-            LibraryItem(it)
+            LibraryItem(it,data.licenses)
         }
     }
 

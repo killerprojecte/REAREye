@@ -105,6 +105,7 @@ private fun rememberRearDefaultBadgePalette(emphasized: Boolean): RearBadgePalet
 fun RearBadgePill(
     text: String,
     emphasized: Boolean,
+    modifier: Modifier = Modifier,
     palette: RearBadgePalette? = null,
     singleLine: Boolean = true,
 ) {
@@ -116,6 +117,7 @@ fun RearBadgePill(
     val resolvedPalette = palette ?: defaultPalette
 
     Surface(
+        modifier = modifier,
         color = resolvedPalette.background,
         shape = RoundedCornerShape(18.dp),
     ) {

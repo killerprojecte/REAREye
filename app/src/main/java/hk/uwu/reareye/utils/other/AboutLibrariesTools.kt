@@ -2,8 +2,23 @@ package hk.uwu.reareye.utils.other
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -12,14 +27,18 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import hk.uwu.reareye.R
+import hk.uwu.reareye.ui.components.OverlayDialog
+import hk.uwu.reareye.ui.components.RearBadgePill
 import hk.uwu.reareye.ui.components.card.SuperCard
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonColors
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -78,9 +97,10 @@ fun loadLibraries(context: Context): AboutLibraries {
 }
 
 @Composable
-fun LibraryItem(lib: Library) {
+fun LibraryItem(lib: Library, licenses: Map<String, License>) {
     val context = LocalContext.current
     val hasLink = lib.website != null
+    var showLicense by remember { mutableStateOf<License?>(null) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         SuperCard(
@@ -115,12 +135,89 @@ fun LibraryItem(lib: Library) {
                 }
             },
             bottomAction = {
-                if (lib.developers.isNotEmpty()) {
-                    LibraryDevelopersText(lib.developers)
+                if (lib.developers.isNotEmpty() || lib.licenses.isNotEmpty()) {
+                    HorizontalDivider(
+                        modifier = Modifier
+                            .height(16.dp)
+                        ,
+                        thickness = 1.dp,
+                        color = MiuixTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    )
                 }
-                if (lib.licenses.isNotEmpty()) {
-                    Text(text = "License: " + lib.licenses.joinToString(", "))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (lib.developers.isNotEmpty()) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            LibraryDevelopersText(lib.developers)
+                        }
+                    }
+                    if (lib.licenses.isNotEmpty()) {
+                        Column (
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            lib.licenses.forEach { licenseId ->
+                                val license = licenses[licenseId]
+                                RearBadgePill(
+                                    modifier = Modifier.clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        license?.let { showLicense = it }
+                                    },
+                                    text = license?.name?.take(15) ?: if (licenseId.length > 15) licenseId.take(15) + "\u2026" else licenseId,
+                                    emphasized = false
+                                )
+                            }
+                        }
+                    }
                 }
+                showLicense?.let { lic ->
+                    val primaryColor = MiuixTheme.colorScheme.primary
+                    OverlayDialog(
+                        show = true,
+                        title = lic.name,
+                        onDismissRequest = { showLicense = null }
+                    ) {
+                        // 准备原始文本
+                        val rawText = lic.content ?: lic.url
+
+                        // 自动识别链接并构建 AnnotatedString
+                        val annotatedText = remember(rawText) {
+                            buildAnnotatedString {
+                                append(rawText)
+                                // 匹配 http/https 链接的正则表达式
+                                val urlPattern = Regex("(https?://[\\w-]+(\\.[\\w-]+)+(/\\S*)?)")
+                                urlPattern.findAll(rawText).forEach { match ->
+                                    addLink(
+                                        LinkAnnotation.Url(
+                                            url = match.value,
+                                            styles = TextLinkStyles(
+                                                SpanStyle(
+                                                    color = primaryColor ,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            )
+                                        ),
+                                        start = match.range.first,
+                                        end = match.range.last + 1
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            modifier = Modifier
+                                .padding(vertical = 8.dp)
+                                .verticalScroll(rememberScrollState()),
+                            text = annotatedText, // 传入处理好的 AnnotatedString
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        )
+                    }
+                }
+
             },
         )
     }
@@ -143,7 +240,6 @@ private fun LibraryDevelopersText(developers: List<Developer>) {
             val url = developer.organisationUrl
 
             if (url != null) {
-                append("Developer: ")
                 val start = length
                 append(name)
                 addLink(
@@ -160,7 +256,6 @@ private fun LibraryDevelopersText(developers: List<Developer>) {
                     end = length,
                 )
             } else {
-                append("Developer: ")
                 append(name)
             }
 
