@@ -10,7 +10,7 @@ private const val DEX_KIT_MMKV_ID = "reareye_dexkit_cache"
 private const val DEX_KIT_MMKV_RELATIVE_PATH = "/files/reareye_dexkit_cache"
 private const val STRING_KEY_PREFIX = "string:"
 private const val LIST_KEY_PREFIX = "list:"
-private const val HOST_VERSION_KEY_PREFIX = "host_version:"
+private const val HOST_IDENTITY_KEY_PREFIX = "host_identity:"
 
 @OptIn(DexKitExperimentalApi::class)
 internal object MMKVCache : DexKitCacheBridge.Cache {
@@ -78,17 +78,17 @@ internal object MMKVCache : DexKitCacheBridge.Cache {
         requireMMKV().clearAll()
     }
 
-    fun syncHostVersion(
+    fun syncHostIdentity(
         packageName: String,
-        versionCode: Long,
+        appTag: String,
     ) {
         val mmkv = requireMMKV()
-        val key = hostVersionKey(packageName)
-        val cachedVersionCode = mmkv.decodeLong(key, Long.MIN_VALUE)
-        if (cachedVersionCode != Long.MIN_VALUE && cachedVersionCode != versionCode) {
-            DexKitCacheBridge.clearCache(buildDexKitAppTag(packageName, cachedVersionCode))
+        val key = hostIdentityKey(packageName)
+        val cachedAppTag = mmkv.decodeString(key, null)
+        if (!cachedAppTag.isNullOrBlank() && cachedAppTag != appTag) {
+            DexKitCacheBridge.clearCache(cachedAppTag)
         }
-        mmkv.encode(key, versionCode)
+        mmkv.encode(key, appTag)
     }
 
     private fun requireMMKV(): MMKV =
@@ -115,4 +115,4 @@ private fun logicalKeyOrNull(key: String): String? {
     }
 }
 
-private fun hostVersionKey(packageName: String): String = "$HOST_VERSION_KEY_PREFIX$packageName"
+private fun hostIdentityKey(packageName: String): String = "$HOST_IDENTITY_KEY_PREFIX$packageName"

@@ -6,6 +6,28 @@ import android.os.IBinder
 import hk.uwu.reareye.hook.hostbridge.HookHostBridgeClient
 import hk.uwu.reareye.internal.notification.INotificationRouteBridgeService
 import java.util.ArrayDeque
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+
+internal const val NOTIFICATION_ROUTE_BIND_TIMEOUT_MS = 0L
+
+private enum class NotificationRouteDrainResult {
+    EMPTY,
+    DISCONNECTED,
+}
+
+private fun <T> drainNotificationRouteQueue(
+    next: () -> T?,
+    deliver: (T) -> Boolean?,
+    remove: (T) -> Unit,
+): NotificationRouteDrainResult {
+    while (true) {
+        val pending = next() ?: return NotificationRouteDrainResult.EMPTY
+        deliver(pending) ?: return NotificationRouteDrainResult.DISCONNECTED
+        remove(pending)
+    }
+}
 
 internal class NotificationRouteBridgeClient :
     HookHostBridgeClient<INotificationRouteBridgeService>(
@@ -29,20 +51,25 @@ internal class NotificationRouteBridgeClient :
 
     private val pendingDispatches = ArrayDeque<PendingDispatch>()
     private val queueLock = Any()
+    private val drainScheduled = AtomicBoolean(false)
+    private val enqueueVersion = AtomicLong(0L)
+    private val drainExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "REAREye-NotificationRoute").apply { isDaemon = true }
+    }
 
     override fun asRemoteInterface(binder: IBinder?): INotificationRouteBridgeService? {
         return INotificationRouteBridgeService.Stub.asInterface(binder)
     }
 
     override fun onRemoteConnected(remote: INotificationRouteBridgeService) {
-        drainPendingDispatches()
+        scheduleDrain()
     }
 
     fun bind(
         context: Context,
         onConnected: (() -> Unit)? = null,
         onClosed: ((String) -> Unit)? = null,
-        timeoutMs: Long = 900L,
+        timeoutMs: Long = NOTIFICATION_ROUTE_BIND_TIMEOUT_MS,
     ): Boolean {
         return bindToHost(
             context = context,
@@ -56,17 +83,11 @@ internal class NotificationRouteBridgeClient :
         val normalizedSubchannel = subchannel.trim()
         if (normalizedSubchannel.isBlank()) return false
 
-        val payloadCopy = Bundle(payload)
-        callRemote { remote ->
-            remote.dispatch(normalizedSubchannel, payloadCopy)
-        }?.let { return it }
-
         enqueuePendingDispatch(
             subchannel = normalizedSubchannel,
-            payload = payloadCopy,
+            payload = Bundle(payload),
         )
-        currentContext()?.let { bind(it, timeoutMs = 0L) }
-        requestRebind()
+        scheduleDrain()
         return true
     }
 
@@ -83,26 +104,52 @@ internal class NotificationRouteBridgeClient :
             while (pendingDispatches.size > MAX_PENDING_DISPATCHES) {
                 pendingDispatches.removeFirst()
             }
+            enqueueVersion.incrementAndGet()
         }
     }
 
-    private fun drainPendingDispatches() {
-        while (true) {
-            val next = synchronized(queueLock) {
-                pruneExpiredDispatchesLocked()
-                pendingDispatches.firstOrNull()
-            } ?: return
-
-            val delivered = callRemote { remote ->
-                remote.dispatch(next.subchannel, Bundle(next.payload))
-            } ?: return
-            if (!delivered) return
-
-            synchronized(queueLock) {
-                if (pendingDispatches.firstOrNull() === next) {
-                    pendingDispatches.removeFirst()
-                } else {
-                    pendingDispatches.remove(next)
+    private fun scheduleDrain() {
+        if (!drainScheduled.compareAndSet(false, true)) return
+        drainExecutor.execute {
+            val observedVersion = enqueueVersion.get()
+            var result = NotificationRouteDrainResult.DISCONNECTED
+            try {
+                result = drainNotificationRouteQueue(
+                    next = {
+                        synchronized(queueLock) {
+                            pruneExpiredDispatchesLocked()
+                            pendingDispatches.firstOrNull()
+                        }
+                    },
+                    deliver = { pending ->
+                        callRemote { remote ->
+                            remote.dispatch(pending.subchannel, Bundle(pending.payload))
+                        }
+                    },
+                    remove = { pending ->
+                        synchronized(queueLock) {
+                            if (pendingDispatches.firstOrNull() === pending) {
+                                pendingDispatches.removeFirst()
+                            } else {
+                                pendingDispatches.remove(pending)
+                            }
+                        }
+                    },
+                )
+                if (result == NotificationRouteDrainResult.DISCONNECTED) {
+                    currentContext()?.let {
+                        bind(it, timeoutMs = NOTIFICATION_ROUTE_BIND_TIMEOUT_MS)
+                    } ?: requestRebind()
+                }
+            } finally {
+                drainScheduled.set(false)
+                val pendingWork = synchronized(queueLock) {
+                    pruneExpiredDispatchesLocked()
+                    pendingDispatches.isNotEmpty()
+                }
+                val receivedNewWork = enqueueVersion.get() != observedVersion
+                if (pendingWork && (isConnected() || receivedNewWork)) {
+                    scheduleDrain()
                 }
             }
         }

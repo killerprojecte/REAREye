@@ -36,11 +36,20 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
                 }
             }
 
-            runCatching {
-                val runnableClz =
+            val postedHook = runCatching {
+                "com.android.systemui.statusbar.notification.MiuiNotificationListener".toClass()
+                    .resolve().firstMethod {
+                        name = "onNotificationPosted"
+                        parameterCount = 2
+                    }.hook().after {
+                        handleNotificationPosted(args.getOrNull(0) as? StatusBarNotification)
+                    }
+                "listener_method"
+            }.recoverCatching {
+                val runnableClass =
                     $$$"com.android.systemui.statusbar.notification.MiuiNotificationListener$$ExternalSyntheticLambda2".toClass()
                         .resolve()
-                runnableClz.firstMethod {
+                runnableClass.firstMethod {
                     name = "run"
                 }.hook().after {
                     val sbn = instance.asResolver().firstField {
@@ -48,17 +57,32 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
                     }.get<StatusBarNotification>()
                     handleNotificationPosted(sbn)
                 }
-            }.onFailure {
-                debugLog("hook onNotificationPosted failed err=${it.message}")
-            }.onSuccess {
-                debugLog("hook onNotificationPosted installed")
+                "synthetic_fallback"
+            }
+            postedHook.onSuccess { strategy ->
+                YLog.info("[$TAG] capability notificationPosted=true strategy=$strategy")
+            }.onFailure { error ->
+                YLog.warn("[$TAG] capability notificationPosted=false reason=${error.message}")
+                YLog.warn(error)
             }
 
-            runCatching {
-                val runnableClz =
+            val removedHook = runCatching {
+                "com.android.systemui.statusbar.notification.MiuiNotificationListener".toClass()
+                    .resolve().firstMethod {
+                        name = "onNotificationRemoved"
+                        parameterCount = 3
+                    }.hook().after {
+                        handleNotificationRemoved(
+                            sbn = args.getOrNull(0) as? StatusBarNotification,
+                            removeReason = args.getOrNull(2) as? Int ?: 1,
+                        )
+                    }
+                "listener_method"
+            }.recoverCatching {
+                val runnableClass =
                     $$$"com.android.systemui.statusbar.notification.MiuiNotificationListener$$ExternalSyntheticLambda1".toClass()
                         .resolve()
-                runnableClz.firstMethod {
+                runnableClass.firstMethod {
                     name = "run"
                 }.hook().after {
                     val sbn = instance.asResolver().firstField {
@@ -71,10 +95,13 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
                         }.get<Int>() ?: 1,
                     )
                 }
-            }.onFailure {
-                debugLog("hook onNotificationRemoved failed err=${it.message}")
-            }.onSuccess {
-                debugLog("hook onNotificationRemoved installed")
+                "synthetic_fallback"
+            }
+            removedHook.onSuccess { strategy ->
+                YLog.info("[$TAG] capability notificationRemoved=true strategy=$strategy")
+            }.onFailure { error ->
+                YLog.warn("[$TAG] capability notificationRemoved=false reason=${error.message}")
+                YLog.warn(error)
             }
         }
     }
@@ -95,6 +122,7 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
             onClosed = {
                 debugLog("route bridge closed reason=$it")
             },
+            timeoutMs = NOTIFICATION_ROUTE_BIND_TIMEOUT_MS,
         )
         if (!ok) {
             debugLog(
@@ -118,7 +146,7 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
 
         activeSnapshots[snapshot.stableKey()] = snapshot
         debugLog(
-            "posted accepted key=${snapshot.stableKey()} cacheSize=${activeSnapshots.size} channel=${snapshot.channelId} pkg=${snapshot.packageName}"
+            "posted accepted pkg=${snapshot.packageName} cacheSize=${activeSnapshots.size}"
         )
         dispatchPosted(snapshot, reason = "live_post")
     }
@@ -135,19 +163,18 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
                 return
             }
         debugLog(
-            "removed accepted key=${snapshot.stableKey()} cacheSize=${activeSnapshots.size} reason=$removeReason channel=${snapshot.channelId} pkg=${snapshot.packageName}"
+            "removed accepted pkg=${snapshot.packageName} cacheSize=${activeSnapshots.size} reason=$removeReason"
         )
         dispatchRemoved(snapshot, removeReason, reason = "live_remove")
     }
 
     private fun dispatchPosted(snapshot: NotificationRouteSnapshot, reason: String) {
-        bindRouteBridge(reason)
         val ok = routeClient.dispatch(
             NotificationRouteBridgeContract.Subchannel.NOTIFICATION_POSTED,
             snapshot.toBundle(),
         )
         if (!ok) {
-            debugLog("dispatch posted failed key=${snapshot.stableKey()} reason=$reason")
+            debugLog("dispatch posted failed pkg=${snapshot.packageName} reason=$reason")
         }
     }
 
@@ -156,13 +183,12 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
         removeReason: Int,
         reason: String,
     ) {
-        bindRouteBridge(reason)
         val ok = routeClient.dispatch(
             NotificationRouteBridgeContract.Subchannel.NOTIFICATION_REMOVED,
             snapshot.toRemovalBundle(removeReason),
         )
         if (!ok) {
-            debugLog("dispatch removed failed key=${snapshot.stableKey()} reason=$reason")
+            debugLog("dispatch removed failed pkg=${snapshot.packageName} reason=$reason")
         }
     }
 

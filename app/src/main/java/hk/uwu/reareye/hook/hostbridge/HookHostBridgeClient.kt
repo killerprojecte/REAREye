@@ -9,6 +9,58 @@ import hk.uwu.reareye.internal.hostbridge.IHookHostBridgeBootstrap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
+private class HookHostBridgeRequestState {
+    class Attempt(
+        val latch: CountDownLatch = CountDownLatch(1),
+    )
+
+    data class Lease(
+        val attempt: Attempt,
+        val started: Boolean,
+    )
+
+    private val lock = Any()
+    private var current: Attempt? = null
+
+    fun acquire(startRequest: (Attempt) -> Boolean): Lease = synchronized(lock) {
+        current?.let { return@synchronized Lease(it, started = false) }
+        Attempt().also { attempt ->
+            current = attempt
+            if (!startRequest(attempt)) {
+                current = null
+                attempt.latch.countDown()
+            }
+        }.let { Lease(it, started = true) }
+    }
+
+    fun abandon(attempt: Attempt) {
+        synchronized(lock) {
+            if (current === attempt) {
+                current = null
+            }
+        }
+    }
+
+    fun fail(attempt: Attempt) {
+        synchronized(lock) {
+            attempt.latch.countDown()
+            if (current === attempt) {
+                current = null
+            }
+        }
+    }
+
+    fun completeConnection(attempt: Attempt? = null) {
+        synchronized(lock) {
+            attempt?.latch?.countDown()
+            current?.let { pending ->
+                if (pending !== attempt) pending.latch.countDown()
+            }
+            current = null
+        }
+    }
+}
+
 abstract class HookHostBridgeClient<Remote : IInterface>(
     private val hostPackage: String,
 ) {
@@ -26,8 +78,7 @@ abstract class HookHostBridgeClient<Remote : IInterface>(
     @Volatile
     private var remoteDeathRecipient: IBinder.DeathRecipient? = null
 
-    @Volatile
-    private var connectLatch: CountDownLatch? = null
+    private val requestState = HookHostBridgeRequestState()
 
     @Volatile
     private var closedListener: ((String) -> Unit)? = null
@@ -103,12 +154,9 @@ abstract class HookHostBridgeClient<Remote : IInterface>(
     private fun requestBridge(forceSync: Boolean, timeoutMs: Long): Boolean {
         remote?.let { return true }
 
-        val latch = synchronized(lock) {
-            remote?.let { return true }
-            connectLatch?.let { return@synchronized it }
-
-            CountDownLatch(1).also { pending ->
-                connectLatch = pending
+        val lease = requestState.acquire { pending ->
+            synchronized(lock) {
+                if (remote != null) return@synchronized false
                 val context = appContext
                 val ok = if (context == null) {
                     false
@@ -117,7 +165,7 @@ abstract class HookHostBridgeClient<Remote : IInterface>(
                         onBeforeRequest(forceSync)
                         val callback = object : IHookHostBridgeBootstrap.Stub() {
                             override fun onBinderReady(binder: IBinder?) {
-                                installRemote(asRemoteInterface(binder))
+                                installRemote(asRemoteInterface(binder), pending)
                             }
                         }
                         val bundle = Bundle().apply {
@@ -134,34 +182,28 @@ abstract class HookHostBridgeClient<Remote : IInterface>(
                         true
                     }.getOrDefault(false)
                 }
-
-                if (!ok) {
-                    connectLatch = null
-                    pending.countDown()
-                }
+                ok
             }
         }
+        val attempt = lease.attempt
 
         if (timeoutMs <= 0L) {
+            if (lease.started) requestState.abandon(attempt)
             return remote != null
         }
 
-        val ok = runCatching { latch.await(timeoutMs, TimeUnit.MILLISECONDS) }
+        val ok = runCatching { attempt.latch.await(timeoutMs, TimeUnit.MILLISECONDS) }
             .getOrDefault(false) && remote != null
-        synchronized(lock) {
-            if (connectLatch === latch) {
-                connectLatch = null
-            }
-        }
+        requestState.abandon(attempt)
         return ok
     }
 
-    private fun installRemote(candidate: Remote?) {
+    private fun installRemote(
+        candidate: Remote?,
+        attempt: HookHostBridgeRequestState.Attempt,
+    ) {
         if (candidate == null) {
-            synchronized(lock) {
-                connectLatch?.countDown()
-                connectLatch = null
-            }
+            requestState.fail(attempt)
             return
         }
 
@@ -180,21 +222,20 @@ abstract class HookHostBridgeClient<Remote : IInterface>(
                 true
             }.getOrDefault(false)
             if (!linked) {
-                connectLatch?.countDown()
-                connectLatch = null
                 false
             } else {
                 remote = candidate
                 remoteBinder = binder
                 remoteDeathRecipient = deathRecipient
-                connectLatch?.countDown()
-                connectLatch = null
                 true
             }
         }
 
         if (installed) {
+            requestState.completeConnection(attempt)
             onRemoteConnected(candidate)
+        } else {
+            requestState.fail(attempt)
         }
     }
 
@@ -205,10 +246,9 @@ abstract class HookHostBridgeClient<Remote : IInterface>(
         val hadRemote = synchronized(lock) {
             val existed = remote != null
             releaseRemoteLocked()
-            connectLatch?.countDown()
-            connectLatch = null
             existed
         }
+        requestState.completeConnection()
 
         if (hadRemote) {
             onRemoteDisconnected(reason)
