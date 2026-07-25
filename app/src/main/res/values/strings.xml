@@ -84,6 +84,11 @@
     <string name="custom_activities_whitelist_apps_desc">Choose which apps can open on the rear screen</string>
 
     <string name="category_subscreencenter">Subscreen Center</string>
+    <string name="cfg_dynamic_island_auth_whitelist">Super Island Authorization Whitelist</string>
+    <string name="cfg_dynamic_island_auth_whitelist_desc">Allow selected apps to bypass Xiaomi XMS focus-notification authorization when using Super Island</string>
+    <string name="enable_dynamic_island_auth_whitelist">Enable Custom Super Island Authorization Whitelist</string>
+    <string name="dynamic_island_auth_whitelist_apps">Whitelist Apps</string>
+    <string name="dynamic_island_auth_whitelist_apps_desc">Select trusted apps whose valid focus notifications may bypass XMS authorization</string>
     <string name="cfg_music_control_whitelist">Music Controls Whitelist</string>
     <string name="cfg_music_control_whitelist_desc">Allows you to customize the music controls that can be displayed on the rear screen</string>
     <string name="enable_music_control_whitelist">Enable Custom Music Controls Whitelist</string>

@@ -12,6 +12,7 @@ import hk.uwu.reareye.hook.scopes.subscreencenter.modules.VideoVolumeHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.lyrics.LyriconHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.ExtraTimeTipHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.RearWidgetHook
+import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.SystemUiFocusAuthorizationWhitelistHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.SystemUiNotificationBridgeHook
 
 class SubscreenCenterScope : Scope {
@@ -26,6 +27,7 @@ class SubscreenCenterScope : Scope {
                     RearWallpaperHook(),
                     RearWidgetHook(),
                     SystemUiNotificationBridgeHook(),
+                    SystemUiFocusAuthorizationWhitelistHook(),
                     LyriconHook(),
                     VideoVolumeHook(),
                     ExtraTimeTipHook()

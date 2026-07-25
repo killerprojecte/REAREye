@@ -50,6 +50,10 @@ object ConfigKeys {
     const val REAR_WIDGET_CARD_DATA = "rear_widget_card_data"
     const val REAR_WIDGET_BUSINESS_EXTRA_CONFIG_DATA = "rear_widget_business_extra_config_data"
     const val HOOK_ALLOW_REAR_FOCUS_NOTICES = "enable_allow_rear_focus_notices"
+    const val HOOK_DYNAMIC_ISLAND_AUTH_WHITELIST =
+        "enable_dynamic_island_auth_whitelist_hook"
+    const val DYNAMIC_ISLAND_AUTH_WHITELIST_APPS =
+        "dynamic_island_auth_whitelist_apps"
 
     const val HOOK_BACKGROUND_WHITELIST = "enable_background_whitelist_hook"
     const val BACKGROUND_WHITELIST_APPS = "background_whitelist_apps"
@@ -384,6 +388,28 @@ val REAREyeConfig = listOf(
                         titleRes = R.string.allow_rear_focus_notices,
                         descriptionRes = R.string.allow_rear_focus_notices_desc,
                         type = ConfigType.BooleanVal(defaultValue = false),
+                    ),
+                ),
+            ),
+            ConfigCategory(
+                titleRes = R.string.cfg_dynamic_island_auth_whitelist,
+                descriptionRes = R.string.cfg_dynamic_island_auth_whitelist_desc,
+                children = listOf(
+                    ConfigGroup(
+                        children = listOf(
+                            ConfigItem(
+                                key = ConfigKeys.HOOK_DYNAMIC_ISLAND_AUTH_WHITELIST,
+                                titleRes = R.string.enable_dynamic_island_auth_whitelist,
+                                type = ConfigType.BooleanVal(defaultValue = true),
+                            ),
+                            ConfigItem(
+                                key = ConfigKeys.DYNAMIC_ISLAND_AUTH_WHITELIST_APPS,
+                                titleRes = R.string.dynamic_island_auth_whitelist_apps,
+                                descriptionRes =
+                                    R.string.dynamic_island_auth_whitelist_apps_desc,
+                                type = ConfigType.AppList(defaultValues = emptySet()),
+                            ),
+                        ),
                     ),
                 ),
             ),

@@ -84,6 +84,11 @@
     <string name="custom_activities_whitelist_apps_desc">选择哪些应用允许在背屏中打开</string>
 
     <string name="category_subscreencenter">背屏中心</string>
+    <string name="cfg_dynamic_island_auth_whitelist">超级岛授权白名单</string>
+    <string name="cfg_dynamic_island_auth_whitelist_desc">允许所选应用在使用超级岛时绕过小米 XMS 焦点通知授权</string>
+    <string name="enable_dynamic_island_auth_whitelist">启用自定义超级岛授权白名单</string>
+    <string name="dynamic_island_auth_whitelist_apps">白名单应用</string>
+    <string name="dynamic_island_auth_whitelist_apps_desc">选择允许结构有效的焦点通知绕过 XMS 授权的可信应用</string>
     <string name="cfg_music_control_whitelist">音乐控件白名单</string>
     <string name="cfg_music_control_whitelist_desc">允许您自定义哪些应用的音乐控件可以在背屏中显示</string>
     <string name="enable_music_control_whitelist">启用自定义音乐控件白名单</string>
