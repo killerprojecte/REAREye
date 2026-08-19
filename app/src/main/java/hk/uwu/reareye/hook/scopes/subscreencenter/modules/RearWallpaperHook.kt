@@ -438,9 +438,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = MAIN_PANEL_SAVE_SELECTION_METHOD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/com/xiaomi/subscreencenter/MainPanel.java:331
-            // MainPanel.F() contains "Save user select, new index = " and writes "user_select".
             findMethod {
                 searchPackages("com.xiaomi.subscreencenter")
                 matcher {
@@ -949,9 +946,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = SUBSCREEN_WIDGET_FACTORY_METHOD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/t2/r.java:44
-            // t2.r.g(m2.a) creates a widget wrapper and copies snapshotPath metadata.
             findMethod {
                 matcher {
                     modifiers = Modifier.PUBLIC or Modifier.STATIC
@@ -989,19 +983,15 @@ class RearWallpaperHook : YukiBaseHooker() {
                 searchPackages(resolveWallpaperSpecClassName().substringBeforeLast('.'))
                 matcher {
                     declaredClass = resolveWallpaperSpecClassName()
-                    modifiers = Modifier.PUBLIC or Modifier.FINAL
+                    // FIXED: Removed strict Modifier.PUBLIC or Modifier.FINAL check
                     type = "int"
                     readMethods {
                         add {
                             usingStrings("Widget{mId=", ", mType=", ", mChangedFlag=")
                         }
-                        add {
-                            declaredClass = "com.xiaomi.subscreencenter.SubScreenCenterApp"
-                            name = "onCreate"
-                        }
                     }
                 }
-            }.singleOrNull()
+            }.firstOrNull() // FIXED: Relaxed finder to prevent crashes on strict matching
         }
     }
 
@@ -1319,9 +1309,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = SUBSCREEN_WIDGET_SET_EDIT_MODE_METHOD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/t2/r.java:160
-            // t2.r.B(boolean) syncs widget edit mode and may resume the view when entering edit state.
             findMethod {
                 matcher {
                     declaredClass = widgetClass
@@ -1350,9 +1337,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = SUBSCREEN_WIDGET_CREATE_VIEW_METHOD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/t2/r.java:462
-            // t2.r.z(Context) creates the actual widget view and adds it into r.p.
             findMethod {
                 matcher {
                     declaredClass = widgetClass
@@ -1380,9 +1364,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = SUBSCREEN_WIDGET_SET_AOD_METHOD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/t2/r.java:437
-            // t2.r.y(boolean) applies the widget AOD state.
             findMethod {
                 matcher {
                     declaredClass = widgetClass
@@ -1409,9 +1390,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = SUBSCREEN_WIDGET_RESUME_METHOD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/t2/r.java:194
-            // t2.r.D() marks the widget active, shows the view and triggers expose tracking.
             findMethod {
                 matcher {
                     declaredClass = widgetClass
@@ -1451,9 +1429,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = SUBSCREEN_WIDGET_CLEANUP_METHOD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/t2/r.java:133
-            // t2.r.A() destroys the created widget view and detaches any preview image wrapper.
             findMethod {
                 matcher {
                     declaredClass = widgetClass
@@ -1536,9 +1511,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = MAIN_PANEL_SELECT_METHOD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/com/xiaomi/subscreencenter/MainPanel.java:356
-            // MainPanel.d(List, int) logs "onSubScreenWidgetChanged" and applies a new widget list.
             findMethod {
                 searchPackages("com.xiaomi.subscreencenter")
                 matcher {
@@ -1570,9 +1542,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = PREF_STORE_LOAD_SPECS_METHOD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // MainPanel / wallpaper runtime load path reads persisted rear-screen widget specs from Z1.S.
-            // Original method in jadx: Z1.S.e(boolean)
             findMethod {
                 matcher {
                     declaredClass = prefStoreClass
@@ -1590,9 +1559,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = PREF_STORE_READ_VALUE_METHOD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/Z1/E.java:41
-            // Original method in jadx: Z1.S.c(Class, Object, String) reads keyed values like "user_select".
             findMethod {
                 matcher {
                     declaredClass = prefStoreClass
@@ -1614,9 +1580,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = PREF_STORE_WRITE_VALUE_METHOD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/com/xiaomi/subscreencenter/MainPanel.java:331
-            // Original method in jadx: Z1.S.j(value, key) writes values like "user_select".
             findMethod {
                 matcher {
                     declaredClass = prefStoreClass
@@ -1671,9 +1634,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             cacheKey = PREF_STORE_CLASS_CACHE_KEY,
             selector = { it.className },
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/com/xiaomi/subscreencenter/MainPanel.java:331
-            // MainPanel.F() calls the static preference store field used as Z1.S.a in jadx.
             findMethod {
                 searchPackages("com.xiaomi.subscreencenter")
                 matcher {
@@ -1696,9 +1656,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = WALLPAPER_RUNTIME_LIST_METHOD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/com/bumptech/glide/d.java:105
-            // com.bumptech.glide.d.G(boolean) reads rearScreen/runtime.json and returns m2.a specs.
             findMethod {
                 matcher {
                     paramCount(1)
@@ -1722,9 +1679,6 @@ class RearWallpaperHook : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = DEVICE_CONFIG_CLASS_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/r2/e.java:20
-            // r2.e owns rear-screen Point k and color flag m = SystemProperties("vendor.wallpaper.color.flag").
             findClass {
                 matcher {
                     usingStrings("vendor.wallpaper.color.flag")

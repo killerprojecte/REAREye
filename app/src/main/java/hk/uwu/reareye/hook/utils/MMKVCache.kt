@@ -5,6 +5,7 @@ import org.json.JSONArray
 import org.luckypray.dexkit.DexKitCacheBridge
 import org.luckypray.dexkit.annotations.DexKitExperimentalApi
 import java.io.File
+import com.highcapable.yukihookapi.hook.log.YLog
 
 private const val DEX_KIT_MMKV_ID = "reareye_dexkit_cache"
 private const val DEX_KIT_MMKV_RELATIVE_PATH = "/files/reareye_dexkit_cache"
@@ -31,43 +32,58 @@ internal object MMKVCache : DexKitCacheBridge.Cache {
             if (mmkv != null && cacheRootPath == rootPath) {
                 return
             }
+
+            // FIXED: Prevent crash if HyperOS blocks folder creation
             if (!cacheDir.exists() && !cacheDir.mkdirs()) {
-                error("Failed to create DexKit MMKV directory: $rootPath")
+                YLog.warn("Failed to create DexKit MMKV directory: $rootPath, skipping cache.")
+                return
             }
-            require(cacheDir.isDirectory) { "DexKit MMKV path is not a directory: $rootPath" }
-            MMKV.initialize(rootPath, System::loadLibrary)
-            mmkv = requireNotNull(MMKV.mmkvWithID(DEX_KIT_MMKV_ID, MMKV.MULTI_PROCESS_MODE)) {
-                "Failed to open DexKit MMKV cache"
+
+            if (!cacheDir.isDirectory) {
+                YLog.warn("DexKit MMKV path is not a directory: $rootPath, skipping cache.")
+                return
             }
-            cacheRootPath = rootPath
+
+            try {
+                MMKV.initialize(rootPath, System::loadLibrary)
+                mmkv = MMKV.mmkvWithID(DEX_KIT_MMKV_ID, MMKV.MULTI_PROCESS_MODE)
+                if (mmkv == null) {
+                    YLog.warn("Failed to open DexKit MMKV cache.")
+                    return
+                }
+                cacheRootPath = rootPath
+            } catch (e: Throwable) {
+                YLog.warn("MMKV initialization failed: ${e.message}")
+            }
         }
     }
 
+    // FIXED: Safely handle null MMKV by using the safe call operator (?.) and fallbacks
     override fun getString(key: String, default: String?): String? =
-        requireMMKV().decodeString(stringKey(key), default)
+        mmkv?.decodeString(stringKey(key), default) ?: default
 
     override fun putString(key: String, value: String) {
-        requireMMKV().encode(stringKey(key), value)
+        mmkv?.encode(stringKey(key), value)
     }
 
     override fun getStringList(key: String, default: List<String>?): List<String>? {
-        val encoded = requireMMKV().decodeString(listKey(key), null) ?: return default
+        val encoded = mmkv?.decodeString(listKey(key), null) ?: return default
         return runCatching { decodeStringList(encoded) }
-            .onFailure { requireMMKV().removeValueForKey(listKey(key)) }
+            .onFailure { mmkv?.removeValueForKey(listKey(key)) }
             .getOrNull() ?: default
     }
 
     override fun putStringList(key: String, value: List<String>) {
-        requireMMKV().encode(listKey(key), JSONArray(value).toString())
+        mmkv?.encode(listKey(key), JSONArray(value).toString())
     }
 
     override fun remove(key: String) {
-        requireMMKV().removeValueForKey(stringKey(key))
-        requireMMKV().removeValueForKey(listKey(key))
+        mmkv?.removeValueForKey(stringKey(key))
+        mmkv?.removeValueForKey(listKey(key))
     }
 
     override fun getAllKeys(): Collection<String> =
-        requireMMKV().allKeys()
+        mmkv?.allKeys()
             ?.asSequence()
             ?.mapNotNull(::logicalKeyOrNull)
             ?.toSet()
@@ -75,24 +91,21 @@ internal object MMKVCache : DexKitCacheBridge.Cache {
             ?: emptyList()
 
     override fun clearAll() {
-        requireMMKV().clearAll()
+        mmkv?.clearAll()
     }
 
     fun syncHostVersion(
         packageName: String,
         versionCode: Long,
     ) {
-        val mmkv = requireMMKV()
+        val currentMmkv = mmkv ?: return // Exit safely if null
         val key = hostVersionKey(packageName)
-        val cachedVersionCode = mmkv.decodeLong(key, Long.MIN_VALUE)
+        val cachedVersionCode = currentMmkv.decodeLong(key, Long.MIN_VALUE)
         if (cachedVersionCode != Long.MIN_VALUE && cachedVersionCode != versionCode) {
             DexKitCacheBridge.clearCache(buildDexKitAppTag(packageName, cachedVersionCode))
         }
-        mmkv.encode(key, versionCode)
+        currentMmkv.encode(key, versionCode)
     }
-
-    private fun requireMMKV(): MMKV =
-        requireNotNull(mmkv) { "DexKit MMKV cache is not initialized" }
 
     private fun decodeStringList(value: String): List<String> {
         val jsonArray = JSONArray(value)

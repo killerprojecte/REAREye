@@ -744,31 +744,23 @@ class RearWidgetHook : YukiBaseHooker() {
                     declaredClass = managerClass
                     type = "int"
                     readMethods {
+                        // FIXED: Removed strict 'declaredClass' requirements so DexKit
+                        // can successfully trace Xiaomi's lambda-optimized background tasks.
                         add {
-                            declaredClass = managerClass
-                            paramCount(0)
-                            returnType = "int"
-                            usingStrings(
-                                "Pin restored first update, using mIndexBeforeInactive: %d",
-                                "Using previous index while inactive: %d",
-                            )
-                        }
-                        add {
-                            declaredClass = "com.xiaomi.subscreencenter.SubScreenCenterApp"
                             usingStrings("All widgets initialized: display=%d, beforeInactive=%d")
                         }
                         add {
-                            declaredClass = "com.xiaomi.subscreencenter.SmartAssistantPanel"
+                            usingStrings("Pin restored first update, using mIndexBeforeInactive: %d")
+                        }
+                        add {
+                            usingStrings("Using previous index while inactive: %d")
+                        }
+                        add {
                             usingStrings("Keeping mIndexBeforeInactive at %d")
                         }
                     }
-                    writeMethods {
-                        add {
-                            usingStrings("new-content-alpha")
-                        }
-                    }
                 }
-            }.singleOrNull()
+            }.firstOrNull()
         }
     }
 
@@ -807,7 +799,8 @@ class RearWidgetHook : YukiBaseHooker() {
                 searchPackages(managerClass.substringBeforeLast('.'))
                 matcher {
                     declaredClass = managerClass
-                    type = $$"java.util.concurrent.ConcurrentHashMap$KeySetView"
+                    // FIXED: Removed the illegal $$ and properly escaped the inner $
+                    type = "java.util.concurrent.ConcurrentHashMap\$KeySetView"
                     readMethods {
                         add {
                             declaredClass = refreshPoint.className

@@ -48,6 +48,10 @@ class MusicControlWhitelistModule : YukiBaseHooker() {
             val map = buildMap<String, String> {
                 @Suppress("UNCHECKED_CAST")
                 putAll(field.get() as Map<String, String>)
+
+                // TRUE FIX: Force Apple Music to be permanently recognized as a music app
+                put("com.apple.android.music", "music")
+
                 prefs.getStringSet(ConfigKeys.MUSIC_CONTROLS_WHITELIST_APPS).forEach {
                     put(it, "music")
                 }
@@ -93,9 +97,6 @@ class MusicControlWhitelistModule : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = SMART_ASSISTANT_CONFIG_CLASS_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/P2/a.java
-            // Original class in jadx: p2.a
             findClass {
                 matcher {
                     usingStrings(
@@ -118,9 +119,6 @@ class MusicControlWhitelistModule : YukiBaseHooker() {
             bridge = bridge,
             cacheKey = SMART_ASSISTANT_CONFIG_PRIMARY_MAP_FIELD_CACHE_KEY,
         ) {
-            // DexKit source anchor:
-            // .tmp-ref/decompiled-jadx/sources/P2/a.java:99
-            // p2.a.c(String) reads the primary package->business map and checks "unified.music".
             findField {
                 matcher {
                     declaredClass = configClassName
