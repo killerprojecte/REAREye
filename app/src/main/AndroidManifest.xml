@@ -24,7 +24,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AppDefault">
 
-        <meta-data
+
+    <meta-data
             android:name="xposedsharedprefs"
             android:value="true" />
         <meta-data

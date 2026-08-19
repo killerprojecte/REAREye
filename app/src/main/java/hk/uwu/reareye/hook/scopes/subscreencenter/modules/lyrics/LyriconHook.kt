@@ -1,3 +1,5 @@
+@file:Suppress("UNCHECKED_CAST")
+
 package hk.uwu.reareye.hook.scopes.subscreencenter.modules.lyrics
 
 import android.content.Context
@@ -180,12 +182,37 @@ class LyriconHook : YukiBaseHooker() {
 
             val clz = "com.miui.maml.elements.MusicControlScreenElement".toClass()
             val ref = clz.resolve()
+            var isProgressRunnableHooked = false
+
             ref.constructor().build().hookAll {
                 after {
                     elements.addIfAbsent(instance)
                     if (latestLyricLrc.isNotEmpty()) {
                         elements.forEach {
                             updateLyric(it, latestLyricLrc)
+                        }
+                    }
+
+                    synchronized(elements) {
+                        if (!isProgressRunnableHooked) {
+                            runCatching {
+                                val runnable = instance.asResolver().firstField { name = "mProgressRunnable" }.get<Any>()
+                                if (runnable != null) {
+                                    runnable.javaClass.resolve().firstMethod { name = "run" }.hook().replaceUnit {
+                                        val element = instance.readFieldValue("this$0") ?: run {
+                                            invokeOriginal()
+                                            return@replaceUnit
+                                        }
+                                        if (!isManagedFullLyric(element)) {
+                                            invokeOriginal()
+                                            return@replaceUnit
+                                        }
+                                        runManagedProgressTick(element)
+                                    }
+                                    isProgressRunnableHooked = true
+                                    YLog.debug("Dynamically hooked mProgressRunnable: ${runnable.javaClass.name}")
+                                }
+                            }
                         }
                     }
                 }
@@ -255,20 +282,6 @@ class LyriconHook : YukiBaseHooker() {
                     elements.remove(instance)
                     removeStateOf(instance)
                 }
-            }
-
-            "com.miui.maml.elements.MusicControlScreenElement$4".toClass().resolve().firstMethod {
-                name = "run"
-            }.hook().replaceUnit {
-                val element = instance.readFieldValue("this$0") ?: run {
-                    invokeOriginal()
-                    return@replaceUnit
-                }
-                if (!isManagedFullLyric(element)) {
-                    invokeOriginal()
-                    return@replaceUnit
-                }
-                runManagedProgressTick(element)
             }
 
             val musicControlListenerClz =

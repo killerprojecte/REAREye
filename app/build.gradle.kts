@@ -47,53 +47,6 @@ android {
         buildConfigField("String", "BUILD_CHANNEL", "\"$buildSuffix\"")
     }
 
-    signingConfigs {
-        create("release") {
-            val localProperties = Properties().apply {
-                val file = rootProject.file("local.properties")
-                if (file.exists()) {
-                    file.inputStream().use { load(it) }
-                }
-            }
-
-            fun getProp(key: String): String? =
-                localProperties.getProperty(key) ?: (project.findProperty(key) as? String)
-                ?: System.getenv(key)
-
-            storeFile = file(getProp("androidStoreFile") ?: "../release-key.jks")
-            storePassword = getProp("KEYSTORE_PASSWORD")
-            keyAlias = getProp("KEY_ALIAS")
-            keyPassword = getProp("KEY_PASSWORD")
-            enableV1Signing = true
-            enableV2Signing = true
-            enableV3Signing = true
-        }
-    }
-
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a", "x86_64")
-            isUniversalApk = true
-        }
-    }
-
-    buildTypes {
-        getByName("debug") {
-            signingConfig = signingConfigs.getByName("release")
-        }
-        release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-            signingConfig = signingConfigs.getByName("release")
-            versionNameSuffix = gradle.extra["versionSuffix"].toString()
-        }
-    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
