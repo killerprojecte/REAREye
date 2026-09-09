@@ -5,6 +5,7 @@ import hk.uwu.reareye.hook.core.HookModule
 import hk.uwu.reareye.hook.core.YLog
 import hk.uwu.reareye.hook.scopes.Scope
 import hk.uwu.reareye.hook.scopes.system.modules.BackgroundWhitelistModule
+import hk.uwu.reareye.hook.scopes.system.modules.AppEmbedInitialLayoutHook
 import hk.uwu.reareye.hook.scopes.system.modules.CustomBoundsCompatModule
 import hk.uwu.reareye.hook.scopes.system.modules.DisableRearScreenCoverHook
 import hk.uwu.reareye.hook.scopes.system.modules.DisableSubScreenDoubleTapSleepHook
@@ -28,6 +29,7 @@ class SystemScope : Scope {
         if (isRearDevice) {
             addAll(
                 listOf(
+                    AppEmbedInitialLayoutHook(),
                     RearScreenActivityWhitelistModule(),
                     BackgroundWhitelistModule(),
                     DisableRearScreenCoverHook(),

@@ -208,11 +208,13 @@ dependencies {
     implementation(libs.kavaref.extension)
 
     implementation(libs.dexkit)
+    implementation(libs.dexmaker)
     implementation(libs.mmkv)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.libxposed.api)
+    testImplementation(libs.dalvik.dx)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
 

@@ -55,3 +55,7 @@
 -keep class hk.uwu.reareye.utils.other.AboutLibrariesToolsKt
 -keep class com.hchen.superlyricapi.* {*;}
 -dontwarn android.os.ServiceManager
+
+# --- DexMaker (runtime bytecode generation, used by AppEmbed element) ---
+-keep class com.android.dx.** { *; }
+-dontwarn com.android.dx.**

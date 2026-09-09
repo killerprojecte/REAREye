@@ -26,6 +26,8 @@ gson = "2.14.0"
 dexkit = "2.2.0"
 foundation-layout = "1.11.1"
 mmkv = "2.4.0"
+dexmaker = "2.28.1"
+dalvik-dx = "9.0.0_r3"
 compose-icons = "2.2.1"
 
 [plugins]
@@ -73,10 +75,11 @@ gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 dexkit = { group = "org.luckypray", name = "dexkit", version.ref = "dexkit" }
 androidx-compose-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundation-layout" }
 mmkv = { group = "com.tencent", name = "mmkv-static", version.ref = "mmkv" }
+dexmaker = { group = "com.linkedin.dexmaker", name = "dexmaker", version.ref = "dexmaker" }
+dalvik-dx = { group = "com.jakewharton.android.repackaged", name = "dalvik-dx", version.ref = "dalvik-dx" }
 compose-icons-material-symbols-outlined-cmp = { group = "com.composables", name = "icons-material-symbols-outlined-cmp", version.ref = "compose-icons" }
 compose-icons-material-symbols-rounded-cmp = { group = "com.composables", name = "icons-material-symbols-rounded-cmp", version.ref = "compose-icons" }
 compose-icons-material-symbols-sharp-cmp = { group = "com.composables", name = "icons-material-symbols-sharp-cmp", version.ref = "compose-icons" }
 compose-icons-material-symbols-outlined-filled-cmp = { group = "com.composables", name = "icons-material-symbols-outlined-filled-cmp", version.ref = "compose-icons" }
 compose-icons-material-symbols-rounded-filled-cmp = { group = "com.composables", name = "icons-material-symbols-rounded-filled-cmp", version.ref = "compose-icons" }
 compose-icons-material-symbols-sharp-filled-cmp = { group = "com.composables", name = "icons-material-symbols-sharp-filled-cmp", version.ref = "compose-icons" }
-

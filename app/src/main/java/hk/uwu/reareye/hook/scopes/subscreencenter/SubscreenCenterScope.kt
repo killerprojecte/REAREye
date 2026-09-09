@@ -9,6 +9,8 @@ import hk.uwu.reareye.hook.scopes.subscreencenter.modules.SubScreenBackHomeWhite
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.VideoLoopModule
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.VideoProgressResumeModule
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.VideoVolumeHook
+import hk.uwu.reareye.hook.scopes.subscreencenter.modules.appembed.AppEmbedElementHook
+import hk.uwu.reareye.hook.scopes.systemui.modules.appembed.SystemUiAppEmbedHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.lyrics.LyriconHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.ExtraTimeTipHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.RearWidgetHook
@@ -28,7 +30,9 @@ class SubscreenCenterScope : Scope {
                     SystemUiNotificationBridgeHook(),
                     LyriconHook(),
                     VideoVolumeHook(),
-                    ExtraTimeTipHook()
+                    ExtraTimeTipHook(),
+                    AppEmbedElementHook(),
+                    SystemUiAppEmbedHook()
                 )
             )
         } else {

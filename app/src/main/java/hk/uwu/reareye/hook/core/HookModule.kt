@@ -64,6 +64,19 @@ abstract class HookModule {
     /** 不执行清理的 reload 预检；失败时整个事务不会进入资源 cleanup。 */
     open fun onReloadingPreflight(): Boolean = true
 
+    /**
+     * 建立提交冻结前所需的纯内存状态；返回 false 表示当前状态暂时不允许重载。
+     *
+     * 实现不得关闭 generation gate 或释放外部资源。返回 false 或抛出异常时，运行时会立即调用
+     * [onReloadingPreparationRolledBack] 撤销本次调用可能留下的部分准备。
+     */
+    open fun onReloadingPrepare(): Boolean = true
+
+    /**
+     * 撤销 [onReloadingPrepare] 建立的纯内存状态；实现必须幂等，并允许在部分准备后调用。
+     */
+    open fun onReloadingPreparationRolledBack() = Unit
+
     /** teardown 失败或多目标事务回滚时恢复旧代回调资源；必须幂等。 */
     open fun onReloadRollback(): Boolean = true
 
@@ -235,7 +248,7 @@ abstract class HookModule {
             .getOrElse { false }
             .also { passed ->
                 if (!passed) {
-                    current.logger.error(
+                    current.logger.warn(
                         "Hook module reload preflight returned false: module=${this::class.java.name} " +
                                 "package=${current.packageName} process=${current.processName}"
                     )
@@ -251,6 +264,30 @@ abstract class HookModule {
      */
     internal fun prepareFreeze(): Boolean {
         if (frozen || freezePrepared) return true
+        if (!installed) {
+            freezePrepared = true
+            return true
+        }
+        val current = requireTarget()
+        val prepared = try {
+            onReloadingPrepare()
+        } catch (throwable: Throwable) {
+            current.logger.error(
+                "Hook module reload preparation failed: module=${this::class.java.name} " +
+                        "package=${current.packageName} process=${current.processName}",
+                throwable,
+            )
+            rollbackReloadingPreparation(current)
+            return false
+        }
+        if (!prepared) {
+            current.logger.warn(
+                "Hook module reload preparation returned false: module=${this::class.java.name} " +
+                        "package=${current.packageName} process=${current.processName}"
+            )
+            rollbackReloadingPreparation(current)
+            return false
+        }
         freezePrepared = true
         return true
     }
@@ -312,8 +349,17 @@ abstract class HookModule {
 
     /** 撤销尚未提交的纯内存准备；旧代 gate 和资源从未被修改。 */
     internal fun rollbackFreezePreparation() {
-        if (frozen) return
-        freezePrepared = false
+        if (frozen || !freezePrepared) return
+        if (!installed) {
+            freezePrepared = false
+            return
+        }
+        val current = requireTarget()
+        try {
+            rollbackReloadingPreparation(current)
+        } finally {
+            freezePrepared = false
+        }
     }
 
     /** 单模块最终释放快捷方式；commit 失败后模块仍已冻结，不允许重试或复用。 */
@@ -322,6 +368,19 @@ abstract class HookModule {
         if (!preflightFreeze()) return false
         if (!prepareFreeze()) return false
         return commitFreeze()
+    }
+
+    /** 调用模块级准备回滚；异常只记录，调用方仍必须清除内部准备标记。 */
+    private fun rollbackReloadingPreparation(context: HookContext) {
+        try {
+            onReloadingPreparationRolledBack()
+        } catch (throwable: Throwable) {
+            context.logger.error(
+                "Hook module reload preparation rollback failed: module=${this::class.java.name} " +
+                        "package=${context.packageName} process=${context.processName}",
+                throwable,
+            )
+        }
     }
 
     private fun closeTrackedResources(context: HookContext): Boolean {

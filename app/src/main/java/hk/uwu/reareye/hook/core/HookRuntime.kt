@@ -257,7 +257,7 @@ class HookRuntimeImpl(
         }
 
         if (!transaction.accepted) {
-            logger.error(
+            logger.warn(
                 "Hot reload rejected before irreversible cleanup; old targets remain active: " +
                         "targets=${targetSnapshot.size}"
             )
@@ -746,25 +746,23 @@ class HookRuntimeImpl(
         /** 纯内存准备目标冻结；不得关闭 gate、释放资源或修改生命周期。 */
         fun prepareFreezeForReload(): Boolean {
             if (freezePrepared) return true
-            var success = true
             modules.forEach { module ->
-                if (!module.prepareFreeze()) success = false
+                if (!module.prepareFreeze()) {
+                    modules.asReversed().forEach(HookModule::rollbackFreezePreparation)
+                    return false
+                }
             }
-            if (success) {
-                freezePrepared = true
-            } else {
-                modules.forEach(HookModule::rollbackFreezePreparation)
-            }
-            return success
+            freezePrepared = true
+            return true
         }
 
         /** 撤销尚未提交的目标冻结准备，保证失败时旧代仍可被运行时持有。 */
         fun rollbackFreezeForReload() {
             if (!freezePrepared) {
-                modules.forEach(HookModule::rollbackFreezePreparation)
+                modules.asReversed().forEach(HookModule::rollbackFreezePreparation)
                 return
             }
-            modules.forEach(HookModule::rollbackFreezePreparation)
+            modules.asReversed().forEach(HookModule::rollbackFreezePreparation)
             freezePrepared = false
         }
 
@@ -1324,19 +1322,19 @@ internal fun <T> runReloadTransaction(
         return ReloadTransactionResult(accepted = false, commitFailureCount = 0)
     }
 
-    var success = true
-    items.forEach { item ->
+    val attempted = ArrayList<T>(items.size)
+    for (item in items) {
+        attempted += item
         val prepared = runCatching { prepare(item) }
             .onFailure { onFailure("prepare", item, it) }
             .getOrDefault(false)
-        if (!prepared) success = false
-    }
-    if (!success) {
-        items.forEach { item ->
-            runCatching { rollback(item) }
-                .onFailure { onFailure("rollback", item, it) }
+        if (!prepared) {
+            attempted.asReversed().forEach { attemptedItem ->
+                runCatching { rollback(attemptedItem) }
+                    .onFailure { onFailure("rollback", attemptedItem, it) }
+            }
+            return ReloadTransactionResult(accepted = false, commitFailureCount = 0)
         }
-        return ReloadTransactionResult(accepted = false, commitFailureCount = 0)
     }
     // prepare 是纯内存阶段。commit 才执行不可逆清理；一旦进入 commit，即使某项目标失败，
     // 也必须继续提交其余目标并允许新代启动，绝不能返回 false 后复用半清理旧代。

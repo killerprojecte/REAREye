@@ -193,6 +193,86 @@ class HookModuleReloadTest {
     }
 
     @Test
+    fun preparationFalseRollsBackTheFailingModuleImmediately() {
+        val events = mutableListOf<String>()
+        val module = PreparationModule("module", events, prepareResult = false)
+        module.install(FakeHookContext(), null)
+
+        assertFalse(module.prepareFreeze())
+
+        assertEquals(listOf("module.prepare", "module.rollback"), events)
+        assertTrue(module.gateOpen)
+    }
+
+    @Test
+    fun preparationExceptionRollsBackTheFailingModuleImmediately() {
+        val events = mutableListOf<String>()
+        val module = PreparationModule("module", events, throwDuringPrepare = true)
+        module.install(FakeHookContext(), null)
+
+        assertFalse(module.prepareFreeze())
+
+        assertEquals(listOf("module.prepare", "module.rollback"), events)
+        assertTrue(module.gateOpen)
+    }
+
+    @Test
+    fun laterPreparationFailureRollsBackPreparedModulesInReverseOrder() {
+        val events = mutableListOf<String>()
+        val first = PreparationModule("first", events)
+        val second = PreparationModule("second", events)
+        val failing = PreparationModule("failing", events, prepareResult = false)
+        listOf(first, second, failing).forEach { it.install(FakeHookContext(), null) }
+
+        val result = runReloadTransaction(
+            items = listOf<HookModule>(first, second, failing),
+            prepare = HookModule::prepareFreeze,
+            rollback = HookModule::rollbackFreezePreparation,
+            commit = HookModule::commitFreeze,
+        )
+
+        assertFalse(result.accepted)
+        assertEquals(
+            listOf(
+                "first.prepare",
+                "second.prepare",
+                "failing.prepare",
+                "failing.rollback",
+                "second.rollback",
+                "first.rollback",
+            ),
+            events,
+        )
+        assertTrue(first.gateOpen)
+        assertTrue(second.gateOpen)
+        assertTrue(failing.gateOpen)
+    }
+
+    @Test
+    fun successfulCommitDoesNotRunPreparationRollback() {
+        val events = mutableListOf<String>()
+        val first = PreparationModule("first", events)
+        val second = PreparationModule("second", events)
+        listOf(first, second).forEach { it.install(FakeHookContext(), null) }
+
+        val result = runReloadTransaction(
+            items = listOf<HookModule>(first, second),
+            prepare = HookModule::prepareFreeze,
+            rollback = HookModule::rollbackFreezePreparation,
+            commit = HookModule::commitFreeze,
+        )
+
+        assertTrue(result.accepted)
+        assertEquals(0, result.commitFailureCount)
+        assertEquals(
+            listOf("first.prepare", "second.prepare", "first.commit", "second.commit"),
+            events,
+        )
+        assertFalse(first.gateOpen)
+        assertFalse(second.gateOpen)
+    }
+
+    @Test
     fun businessModuleFailureDoesNotStopFollowingModules() {
         val failed = FailingModule(failInHook = true)
         val following = StatefulModule()
@@ -270,6 +350,33 @@ class HookModuleReloadTest {
             cleanupCalls++
             if (failFirstCleanup && cleanupCalls == 1) error("cleanup failure")
             if (failCleanupResult && cleanupCalls == 1) return false
+            return true
+        }
+    }
+
+    private class PreparationModule(
+        private val name: String,
+        private val events: MutableList<String>,
+        private val prepareResult: Boolean = true,
+        private val throwDuringPrepare: Boolean = false,
+    ) : HookModule() {
+        val gateOpen: Boolean
+            get() = reloadGenerationGate.isOpen()
+
+        override fun onHook() = Unit
+
+        override fun onReloadingPrepare(): Boolean {
+            events += "$name.prepare"
+            if (throwDuringPrepare) error("$name prepare failure")
+            return prepareResult
+        }
+
+        override fun onReloadingPreparationRolledBack() {
+            events += "$name.rollback"
+        }
+
+        override fun onReloading(): Boolean {
+            events += "$name.commit"
             return true
         }
     }
