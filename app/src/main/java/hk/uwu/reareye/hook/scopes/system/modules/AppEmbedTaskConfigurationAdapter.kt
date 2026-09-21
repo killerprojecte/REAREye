@@ -44,6 +44,9 @@ internal object AppEmbedTaskConfigurationAdapter {
         val config = code.newLocal(configType)
         val window = code.newLocal(windowType)
         val changes = code.newLocal(TypeId.INT)
+        val screenWidthDp = code.newLocal(TypeId.INT)
+        val screenHeightDp = code.newLocal(TypeId.INT)
+        val smallestDp = code.newLocal(TypeId.INT)
         code.cast(request, input)
         code.loadConstant(index, 0)
         code.aget(raw, request, index)
@@ -66,9 +69,27 @@ internal object AppEmbedTaskConfigurationAdapter {
             config,
             override
         )
+        code.iget(configType.getField(TypeId.INT, "screenWidthDp"), screenWidthDp, config)
+        code.iget(configType.getField(TypeId.INT, "screenHeightDp"), screenHeightDp, config)
+        code.iget(configType.getField(TypeId.INT, "smallestScreenWidthDp"), smallestDp, config)
+        code.iput(configType.getField(TypeId.INT, "compatScreenWidthDp"), config, screenWidthDp)
+        code.iput(configType.getField(TypeId.INT, "compatScreenHeightDp"), config, screenHeightDp)
+        code.iput(configType.getField(TypeId.INT, "compatSmallestScreenWidthDp"), config, smallestDp)
         code.iget(configType.getField(windowType, "windowConfiguration"), window, config)
         code.invokeVirtual(
             windowType.getMethod(TypeId.VOID, "setBounds", rectType),
+            null,
+            window,
+            bounds
+        )
+        code.invokeVirtual(
+            windowType.getMethod(TypeId.VOID, "setAppBounds", rectType),
+            null,
+            window,
+            bounds
+        )
+        code.invokeVirtual(
+            windowType.getMethod(TypeId.VOID, "setMaxBounds", rectType),
             null,
             window,
             bounds

@@ -312,18 +312,14 @@ internal class AppEmbedSurfaceView(
         )
         require(!actualBounds.isEmpty) { "AppEmbed SurfaceView has empty screen bounds" }
         val taskBounds = spec.resolveTaskBounds(actualBounds)
-        require(taskBounds == actualBounds) {
-            "AppEmbed bounds override must equal the same-display View bounds: override=$taskBounds view=$actualBounds"
-        }
-        val contentSize = spec.resolveContentSize(width, height)
-        require(contentSize.widthPx == width && contentSize.heightPx == height) {
-            "AppEmbed content scaling is unsupported by the same-display TaskView backend"
-        }
+        // TaskView content follows the resolved task bounds, not the host View rectangle. This keeps
+        // remote surface size, task configuration and input bounds coherent for ratio/inset/override layouts.
+        val contentSize = spec.resolveContentSize(taskBounds.width(), taskBounds.height())
         return LayoutSnapshot(
             hostToken = hostToken,
             displayId = currentDisplay.displayId,
-            widthPx = width,
-            heightPx = height,
+            widthPx = contentSize.widthPx,
+            heightPx = contentSize.heightPx,
             densityDpi = spec.densityDpi ?: 0,
             taskBoundsOnScreen = taskBounds,
         )

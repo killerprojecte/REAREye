@@ -6,6 +6,8 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Point
 import android.graphics.Rect
+import android.content.Intent
+import hk.uwu.reareye.internal.appembed.AppEmbedInitialLayout
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
 import hk.uwu.reareye.BuildConfig
@@ -51,6 +53,15 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
                 }
                 val packageName = activityRecord.field<String>("packageName") ?: run {
                     if (moreDebug) YLog.debug("[$TAG] skip reason=no_package")
+                    return@after
+                }
+                val launchIntent = activityRecord.field<Intent>("intent")
+                if (launchIntent?.getBooleanExtra(
+                        AppEmbedInitialLayout.EXTRA_CUSTOM_BOUNDS_OWNERSHIP,
+                        false,
+                    ) == true
+                ) {
+                    if (moreDebug) YLog.debug("[$TAG] skip package=$packageName reason=appembed_owns_configuration")
                     return@after
                 }
                 val config = CustomBoundsCompatHookConfig.find(

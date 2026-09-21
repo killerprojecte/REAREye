@@ -3,6 +3,8 @@ package hk.uwu.reareye.hook.scopes.subscreencenter.modules.appembed
 import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Rect
+import android.view.Gravity
+import kotlin.math.roundToInt
 import android.net.Uri
 import org.w3c.dom.Element
 
@@ -50,6 +52,13 @@ data class AppEmbedSpec(
     val densityDpi: Int?,
     /** 可选任务绝对屏幕 bounds；为空时始终跟随 AppEmbed View 的屏幕位置。 */
     val taskBoundsOverride: Rect?,
+    val aspectRatio: Float = 0f,
+    val gravity: Int = Gravity.CENTER,
+    val scale: Float = 1f,
+    val insetLeft: Int = 0,
+    val insetTop: Int = 0,
+    val insetRight: Int = 0,
+    val insetBottom: Int = 0,
 ) {
     /** 为 SystemUI broker 构造必须带显式 component 的启动 Intent。 */
     fun buildLaunchIntent(): Intent = Intent().apply {
@@ -75,7 +84,44 @@ data class AppEmbedSpec(
         require(!viewBoundsOnScreen.isEmpty) {
             "AppEmbed view bounds must be non-empty: $viewBoundsOnScreen"
         }
-        return Rect(taskBoundsOverride ?: viewBoundsOnScreen)
+        taskBoundsOverride?.let { return Rect(it) }
+        val insetBounds = Rect(
+            viewBoundsOnScreen.left + insetLeft,
+            viewBoundsOnScreen.top + insetTop,
+            (viewBoundsOnScreen.right - insetRight).coerceAtLeast(viewBoundsOnScreen.left + insetLeft + 1),
+            (viewBoundsOnScreen.bottom - insetBottom).coerceAtLeast(viewBoundsOnScreen.top + insetTop + 1),
+        )
+        if (aspectRatio <= 0f) return insetBounds
+        val width = insetBounds.width()
+        val height = insetBounds.height()
+        val containerRatio = width.toFloat() / height
+        val rawWidth: Int
+        val rawHeight: Int
+        if (aspectRatio >= containerRatio) {
+            rawWidth = width
+            rawHeight = (width / aspectRatio).roundToInt().coerceAtLeast(1)
+        } else {
+            rawHeight = height
+            rawWidth = (height * aspectRatio).roundToInt().coerceAtLeast(1)
+        }
+        val resultWidth = (rawWidth * scale).roundToInt().coerceIn(1, width)
+        val resultHeight = (rawHeight * scale).roundToInt().coerceIn(1, height)
+        val left = when (gravity and Gravity.HORIZONTAL_GRAVITY_MASK) {
+            Gravity.LEFT -> 0
+            Gravity.RIGHT -> width - resultWidth
+            else -> (width - resultWidth) / 2
+        }
+        val top = when (gravity and Gravity.VERTICAL_GRAVITY_MASK) {
+            Gravity.TOP -> 0
+            Gravity.BOTTOM -> height - resultHeight
+            else -> (height - resultHeight) / 2
+        }
+        return Rect(
+            insetBounds.left + left,
+            insetBounds.top + top,
+            insetBounds.left + left + resultWidth,
+            insetBounds.top + top + resultHeight,
+        )
     }
 
     companion object {
@@ -113,6 +159,13 @@ data class AppEmbedSpec(
                 contentHeightPx = height,
                 densityDpi = density,
                 taskBoundsOverride = parseBounds(xml.getAttribute("bounds").trim()),
+                aspectRatio = parseOptionalPositiveFloat(xml, "aspectRatio", "ratio") ?: 0f,
+                gravity = parseGravity(xml.getAttribute("gravity").trim()),
+                scale = parseOptionalPositiveFloat(xml, "scale") ?: 1f,
+                insetLeft = parseOptionalNonNegativeInt(xml, "insetLeft") ?: 0,
+                insetTop = parseOptionalNonNegativeInt(xml, "insetTop") ?: 0,
+                insetRight = parseOptionalNonNegativeInt(xml, "insetRight") ?: 0,
+                insetBottom = parseOptionalNonNegativeInt(xml, "insetBottom") ?: 0,
             )
         }
 
@@ -173,6 +226,31 @@ data class AppEmbedSpec(
                 ?: throw IllegalArgumentException("Invalid AppEmbed ${names.first()}: $raw")
             require(value > 0) { "AppEmbed ${names.first()} must be positive: $value" }
             return value
+        }
+
+        private fun parseOptionalPositiveFloat(xml: Element, vararg names: String): Float? {
+            val raw = firstNonBlank(xml, *names) ?: return null
+            val value = raw.toFloatOrNull() ?: throw IllegalArgumentException("Invalid AppEmbed ${names.first()}: $raw")
+            require(value > 0f) { "AppEmbed ${names.first()} must be positive: $value" }
+            return value
+        }
+
+        private fun parseOptionalNonNegativeInt(xml: Element, name: String): Int? {
+            val raw = xml.getAttribute(name).trim()
+            if (raw.isEmpty()) return null
+            val value = raw.toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid AppEmbed $name: $raw")
+            require(value >= 0) { "AppEmbed $name must be non-negative: $value" }
+            return value
+        }
+
+        private fun parseGravity(raw: String): Int = when (raw.lowercase()) {
+            "", "center" -> Gravity.CENTER
+            "left", "top_left" -> Gravity.LEFT or Gravity.TOP
+            "right", "top_right" -> Gravity.RIGHT or Gravity.TOP
+            "bottom_left" -> Gravity.LEFT or Gravity.BOTTOM
+            "bottom_right" -> Gravity.RIGHT or Gravity.BOTTOM
+            else -> throw IllegalArgumentException("Invalid AppEmbed gravity: $raw")
         }
 
         /** 解析 `left,top,right,bottom` 绝对屏幕 bounds。 */

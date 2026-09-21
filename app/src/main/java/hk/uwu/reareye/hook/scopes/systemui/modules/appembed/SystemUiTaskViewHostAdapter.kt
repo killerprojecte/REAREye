@@ -520,45 +520,9 @@ internal class SystemUiTaskViewHostAdapter private constructor(
             code.returnValue(result)
 
             code.mark(labels[Operation.APPLY_TASK_DENSITY])
-            loadObjectArg(code, request, index, arg1, 1)
-            loadObjectArg(code, request, index, arg2, 2)
-            loadObjectArg(code, request, index, arg3, 3)
-            loadObjectArg(code, request, index, arg4, 4)
-            loadObjectArg(code, request, index, arg5, 5)
-            loadObjectArg(code, request, index, arg6, 6)
-            code.cast(windowContainerTransaction, arg1)
-            code.cast(taskInfo, arg2)
-            code.cast(operationInteger, arg3)
-            code.invokeVirtual(types.integerIntValue, densityDpi, operationInteger)
-            code.cast(operationInteger, arg4)
-            code.invokeVirtual(types.integerIntValue, screenWidthDp, operationInteger)
-            code.cast(operationInteger, arg5)
-            code.invokeVirtual(types.integerIntValue, screenHeightDp, operationInteger)
-            code.cast(operationInteger, arg6)
-            code.invokeVirtual(types.integerIntValue, smallestScreenWidthDp, operationInteger)
-            code.iget(types.taskToken, windowContainerToken, taskInfo)
-            code.invokeVirtual(
-                types.setDensityDpi,
-                transactionResult,
-                windowContainerTransaction,
-                windowContainerToken,
-                densityDpi,
-            )
-            code.invokeVirtual(
-                types.setScreenSizeDp,
-                transactionResult,
-                windowContainerTransaction,
-                windowContainerToken,
-                screenWidthDp,
-                screenHeightDp,
-            )
-            code.invokeVirtual(
-                types.setSmallestScreenWidthDp,
-                transactionResult,
-                windowContainerTransaction,
-                windowContainerToken,
-                smallestScreenWidthDp,
-            )
+            // Deliberately keep this operation a no-op: density and logical configuration are
+            // injected once before Activity attachment. Rewriting them from TaskView callbacks
+            // causes duplicate configuration dispatches and can crash the embedded Activity.
             returnNull(code, nullResult)
 
             code.mark(labels[Operation.REMOVE_TASK])
@@ -953,25 +917,6 @@ internal class SystemUiTaskViewHostAdapter private constructor(
         val displayId = androidTaskInfo.getField(TypeId.INT, "displayId")
         val taskToken = androidTaskInfo.getField(windowContainerToken, "token")
         val tokenAsBinder = windowContainerToken.getMethod(iBinder, "asBinder")
-        val setDensityDpi = windowContainerTransaction.getMethod(
-            windowContainerTransaction,
-            "setDensityDpi",
-            windowContainerToken,
-            TypeId.INT,
-        )
-        val setScreenSizeDp = windowContainerTransaction.getMethod(
-            windowContainerTransaction,
-            "setScreenSizeDp",
-            windowContainerToken,
-            TypeId.INT,
-            TypeId.INT,
-        )
-        val setSmallestScreenWidthDp = windowContainerTransaction.getMethod(
-            windowContainerTransaction,
-            "setSmallestScreenWidthDp",
-            windowContainerToken,
-            TypeId.INT,
-        )
         val removeTask = taskView.getMethod(VOID, "removeTask")
         val release = taskView.getMethod(VOID, "release")
         val consumerAccept = consumer.getMethod(VOID, "accept", obj)

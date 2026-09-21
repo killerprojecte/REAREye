@@ -112,6 +112,39 @@ class AppEmbedSpecTest {
     }
 
     @Test
+    fun ratioGravityInsetsAndScaleMatchResolvedGeometry() {
+        val view = Rect(-100, -50, 900, 750)
+        val center = parse("<AppEmbed package=\"com.example.app\" class=\"MainActivity\" ratio=\"1\"/>")
+        assertEquals(Rect(0, -50, 800, 750), center.resolveTaskBounds(view))
+
+        val bottomRight = parse("<AppEmbed package=\"com.example.app\" class=\"MainActivity\" ratio=\"1\" gravity=\"bottom_right\"/>")
+        assertEquals(Rect(100, -50, 900, 750), bottomRight.resolveTaskBounds(view))
+
+        val inset = parse("<AppEmbed package=\"com.example.app\" class=\"MainActivity\" insetLeft=\"10\" insetTop=\"20\" insetRight=\"30\" insetBottom=\"40\"/>")
+        assertEquals(Rect(-90, -30, 870, 710), inset.resolveTaskBounds(view))
+
+        val scaled = parse("<AppEmbed package=\"com.example.app\" class=\"MainActivity\" ratio=\"1\" scale=\"0.5\"/>")
+        assertEquals(Rect(200, 150, 600, 550), scaled.resolveTaskBounds(view))
+    }
+
+    @Test
+    fun geometryInputValidationFailsFastAndPreservesNegativeCoordinates() {
+        listOf("oops", "1px").forEach { value ->
+            assertThrows(IllegalArgumentException::class.java) {
+                parse("<AppEmbed package=\"com.example.app\" class=\"MainActivity\" insetLeft=\"$value\"/>")
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            parse("<AppEmbed package=\"com.example.app\" class=\"MainActivity\" insetTop=\"-1\"/>")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            parse("<AppEmbed package=\"com.example.app\" class=\"MainActivity\" gravity=\"diagonal\"/>")
+        }
+        val spec = parse("<AppEmbed package=\"com.example.app\" class=\"MainActivity\" ratio=\"2\" gravity=\"bottom_right\"/>")
+        assertEquals(Rect(-100, 250, 900, 750), spec.resolveTaskBounds(Rect(-100, -50, 900, 750)))
+    }
+
+    @Test
     fun liveTaskBoundsPreserveSignedOffscreenCoordinates() {
         val spec = parse("<AppEmbed package=\"com.example.app\" class=\".MainActivity\"/>")
         val partiallyOffscreen = Rect(0, -552, 976, 44)

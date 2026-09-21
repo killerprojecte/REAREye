@@ -146,36 +146,6 @@ class SystemUiTaskViewHostAdapterTest {
         assertTrue(
             methods.contains(
                 DexMethod(
-                    owner = "Landroid/window/WindowContainerTransaction;",
-                    name = "setDensityDpi",
-                    parameters = listOf("Landroid/window/WindowContainerToken;", "I"),
-                    returnType = "Landroid/window/WindowContainerTransaction;",
-                )
-            )
-        )
-        assertTrue(
-            methods.contains(
-                DexMethod(
-                    owner = "Landroid/window/WindowContainerTransaction;",
-                    name = "setScreenSizeDp",
-                    parameters = listOf("Landroid/window/WindowContainerToken;", "I", "I"),
-                    returnType = "Landroid/window/WindowContainerTransaction;",
-                )
-            )
-        )
-        assertTrue(
-            methods.contains(
-                DexMethod(
-                    owner = "Landroid/window/WindowContainerTransaction;",
-                    name = "setSmallestScreenWidthDp",
-                    parameters = listOf("Landroid/window/WindowContainerToken;", "I"),
-                    returnType = "Landroid/window/WindowContainerTransaction;",
-                )
-            )
-        )
-        assertTrue(
-            methods.contains(
-                DexMethod(
                     owner = "Lcom/android/wm/shell/taskview/TaskViewFactory;",
                     name = "create",
                     parameters = listOf(
