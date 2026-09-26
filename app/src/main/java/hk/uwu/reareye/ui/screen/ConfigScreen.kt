@@ -3,6 +3,8 @@ package hk.uwu.reareye.ui.screen
 import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -33,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,8 +53,10 @@ import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.components.config.AppListSelectorScreen
 import hk.uwu.reareye.ui.components.config.BusinessExtraConfigManagerScreen
+import hk.uwu.reareye.ui.components.config.BusinessExtraConfigScreen
 import hk.uwu.reareye.ui.components.config.BusinessManagerScreen
 import hk.uwu.reareye.ui.components.config.CardManagerScreen
+import hk.uwu.reareye.ui.components.config.ConfigDashboard
 import hk.uwu.reareye.ui.components.config.ConfigNodeRow
 import hk.uwu.reareye.ui.components.config.CustomBoundsCompatManagerScreen
 import hk.uwu.reareye.ui.components.config.RearWallpaperManagerScreen
@@ -103,6 +108,7 @@ private sealed interface ConfigRoute {
     data object SceneRouteManager : ConfigRoute
     data object CardManager : ConfigRoute
     data object BusinessExtraManager : ConfigRoute
+    data class BusinessExtraDetail(val business: String) : ConfigRoute
     data object CustomBoundsCompatManager : ConfigRoute
 }
 
@@ -131,6 +137,7 @@ private fun ConfigRoute.isOverlayRoute(): Boolean {
             this is ConfigRoute.SceneRouteManager ||
             this is ConfigRoute.CardManager ||
             this is ConfigRoute.BusinessExtraManager ||
+            this is ConfigRoute.BusinessExtraDetail ||
             this is ConfigRoute.CustomBoundsCompatManager
 }
 
@@ -174,6 +181,9 @@ fun ConfigScreen(
             ).filterNotNull()
         )
     }
+    var dashboardTabIndex by rememberSaveable { mutableStateOf(0) }
+    var moreScrollIndex by rememberSaveable { mutableStateOf(0) }
+    var moreScrollOffset by rememberSaveable { mutableStateOf(0) }
     val currentRoute = routeStack.last()
     val isOverlayMode = currentRoute.isOverlayRoute()
     val animatedRoute = remember(currentRoute, routeStack.size) {
@@ -312,7 +322,7 @@ fun ConfigScreen(
 
     Scaffold(
         topBar = {
-            if (!isOverlayMode) {
+            if (!isOverlayMode && currentRoute != ConfigRoute.Root) {
                 TopAppBar(
                     modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
                     color = Color.Transparent,
@@ -334,6 +344,9 @@ fun ConfigScreen(
             targetState = animatedRoute,
             contentKey = { it.route },
             transitionSpec = {
+                if (targetState.route == ConfigRoute.Root) {
+                    EnterTransition.None togetherWith ExitTransition.None
+                } else {
                 val forward = targetState.depth >= initialState.depth
 
                 fadeIn(
@@ -364,11 +377,12 @@ fun ConfigScreen(
                             if (forward) -fullWidth / 12 else fullWidth / 12
                         }
                         )
+                }
             },
             label = "ConfigRouteTransition"
         ) { target ->
             when (val route = target.route) {
-                ConfigRoute.Root -> ConfigNodeList(
+                ConfigRoute.Root -> ConfigDashboard(
                     nodes = REAREyeConfig,
                     prefsManager = prefsManager,
                     contentPadding = PaddingValues(
@@ -378,16 +392,23 @@ fun ConfigScreen(
                     scrollBehavior = scrollBehavior,
                     modifier = Modifier.rearAcrylicSource(hazeState),
                     onOpenCategory = { category ->
+                        // More is the owner of legacy setting categories. Keep that tab selected
+                        // when the child route is popped back to the dashboard.
+                        dashboardTabIndex = 3
                         routeStack = routeStack + ConfigRoute.Category(category)
                     },
                     onOpenAppList = { item ->
+                        dashboardTabIndex = 3
                         openOverlayRoute(ConfigRoute.AppList(item))
                     },
-                    onOpenManager = { item -> openManagerItem(item) },
+                    onOpenManager = { item ->
+                        dashboardTabIndex = 3
+                        openManagerItem(item)
+                    },
                     onPreferenceChanged = handlePreferenceChanged,
-                    showFavoriteCategoryEntry = true,
                     favoriteNodeCount = favoriteNodes.size,
                     onOpenFavoriteCategory = {
+                        dashboardTabIndex = 3
                         routeStack = routeStack + ConfigRoute.Favorites
                     },
                     favoriteNodeIds = favoriteNodeIds,
@@ -396,6 +417,53 @@ fun ConfigScreen(
                     },
                     onToggleFavorite = { node ->
                         toggleFavoriteNode(node)
+                    },
+                    selectedTabIndex = dashboardTabIndex,
+                    onSelectedTabIndexChange = { dashboardTabIndex = it },
+                    moreScrollIndex = moreScrollIndex,
+                    moreScrollOffset = moreScrollOffset,
+                    onMoreScrollChanged = { index, offset ->
+                        moreScrollIndex = index
+                        moreScrollOffset = offset
+                    },
+                    cardContent = { focusCardId, onFocusHandled, actionRequest, onActionHandled ->
+                        CardManagerScreen(
+                            prefsManager = prefsManager,
+                            onBack = {},
+                            embedded = true,
+                            contentPadding = PaddingValues(
+                                bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
+                            ),
+                            focusCardId = focusCardId,
+                            onFocusCardHandled = onFocusHandled,
+                            actionRequest = actionRequest,
+                            onActionHandled = onActionHandled,
+                        )
+                    },
+                    componentContent = { onCardRequested, actionRequest, onActionHandled ->
+                        BusinessManagerScreen(
+                            prefsManager = prefsManager,
+                            onBack = {},
+                            embedded = true,
+                            contentPadding = PaddingValues(
+                                bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
+                            ),
+                            onOpenCard = onCardRequested,
+                            actionRequest = actionRequest,
+                            onActionHandled = onActionHandled,
+                        )
+                    },
+                    wallpaperContent = { actionRequest, onActionHandled ->
+                        RearWallpaperManagerScreen(
+                            prefsManager = prefsManager,
+                            onBack = {},
+                            embedded = true,
+                            contentPadding = PaddingValues(
+                                bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
+                            ),
+                            actionRequest = actionRequest,
+                            onActionHandled = onActionHandled,
+                        )
                     },
                 )
 
@@ -467,6 +535,9 @@ fun ConfigScreen(
                 ConfigRoute.BusinessManager -> BusinessManagerScreen(
                     prefsManager = prefsManager,
                     onBack = { closeOverlayRoute() },
+                    onOpenBusinessExtra = { business ->
+                        routeStack = routeStack + ConfigRoute.BusinessExtraDetail(business)
+                    },
                 )
 
                 ConfigRoute.SceneRouteManager -> SceneRouteManagerScreen(
@@ -482,6 +553,12 @@ fun ConfigScreen(
                 ConfigRoute.BusinessExtraManager -> BusinessExtraConfigManagerScreen(
                     prefsManager = prefsManager,
                     onBack = { closeOverlayRoute() },
+                )
+
+                is ConfigRoute.BusinessExtraDetail -> BusinessExtraConfigScreen(
+                    prefsManager = prefsManager,
+                    business = route.business,
+                    onBack = { routeStack = routeStack.dropLast(1) },
                 )
 
                 ConfigRoute.CustomBoundsCompatManager -> CustomBoundsCompatManagerScreen(
@@ -645,7 +722,7 @@ private fun ConfigNodeList(
 }
 
 @Composable
-private fun ConfigNodeRowWithFavoriteMenu(
+internal fun ConfigNodeRowWithFavoriteMenu(
     node: ConfigNode,
     prefsManager: PrefsManager,
     isListScrolling: Boolean,

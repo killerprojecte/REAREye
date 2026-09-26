@@ -201,6 +201,10 @@ class RearWallpaperHook : YukiBaseHooker() {
     )
 
     private val bootstrapReceiverRegistered = AtomicBoolean(false)
+    private val bootstrapReceiverLock = Any()
+
+    @Volatile
+    private var bootstrapReceiverContext: Context? = null
     private var hostContext: Context? = null
     private var mainPanel: Any? = null
     private var mainHandler: Handler? = null
@@ -256,7 +260,10 @@ class RearWallpaperHook : YukiBaseHooker() {
     }
 
     override fun onReloadingPreflight(): Boolean {
-        if (bootstrapReceiverRegistered.get() && hostContext == null) {
+        if (bootstrapReceiverRegistered.get() &&
+            bootstrapReceiverContext == null &&
+            hostContext == null
+        ) {
             YLog.error("Rear wallpaper reload preflight failed: bootstrap receiver has no host context")
             return false
         }
@@ -272,28 +279,51 @@ class RearWallpaperHook : YukiBaseHooker() {
         val callbackCleanupSucceeded = cancelPendingCallbacks()
         var success = schedulerCleanupSucceeded && callbackCleanupSucceeded
         var receiverCleanupSucceeded = true
-        val context = hostContext
-        if (bootstrapReceiverRegistered.get()) {
-            if (context == null) {
-                receiverCleanupSucceeded = false
-                success = false
-                YLog.error("Failed to unregister rear wallpaper bootstrap receiver: hostContext=null")
-            } else {
-                val unregistered = runCatching {
-                    context.unregisterReceiver(hookBootstrapReceiver)
-                    true
-                }.onFailure {
-                    YLog.error("Failed to unregister rear wallpaper bootstrap receiver", it)
-                }.getOrDefault(false)
-                if (unregistered) {
-                    bootstrapReceiverRegistered.set(false)
-                } else {
+        synchronized(bootstrapReceiverLock) {
+            if (bootstrapReceiverRegistered.get()) {
+                // Use the exact Context instance that performed registration. The host context can
+                // be replaced when attachBaseContext runs again before a hot reload.
+                val context = bootstrapReceiverContext ?: hostContext
+                if (context == null) {
                     receiverCleanupSucceeded = false
                     success = false
+                    YLog.error("Failed to unregister rear wallpaper bootstrap receiver: hostContext=null")
+                } else {
+                    val unregistered = runCatching {
+                        context.unregisterReceiver(hookBootstrapReceiver)
+                        true
+                    }.fold(
+                        onSuccess = { true },
+                        onFailure = { throwable ->
+                            // Android reports an already-removed receiver as
+                            // IllegalArgumentException. Cleanup is idempotent, so the desired
+                            // state has already been reached in this case.
+                            if (throwable is IllegalArgumentException) {
+                                YLog.warn(
+                                    "Rear wallpaper bootstrap receiver was already unregistered during reload"
+                                )
+                                true
+                            } else {
+                                YLog.error(
+                                    "Failed to unregister rear wallpaper bootstrap receiver",
+                                    throwable,
+                                )
+                                false
+                            }
+                        },
+                    )
+                    if (unregistered) {
+                        bootstrapReceiverRegistered.set(false)
+                        bootstrapReceiverContext = null
+                    } else {
+                        receiverCleanupSucceeded = false
+                        success = false
+                    }
                 }
+            } else {
+                bootstrapReceiverRegistered.set(false)
+                bootstrapReceiverContext = null
             }
-        } else {
-            bootstrapReceiverRegistered.set(false)
         }
         if (receiverCleanupSucceeded) hostContext = null
         mainPanel = null
@@ -316,15 +346,14 @@ class RearWallpaperHook : YukiBaseHooker() {
                 dataDir = appInfo.dataDir,
             )
             dexKitBridge = trackResource(bridge)
-            val appRef = "com.xiaomi.subscreencenter.SubScreenCenterApp".toClass().resolve()
             val launcherRef = "com.xiaomi.subscreencenter.SubScreenLauncher".toClass().resolve()
 
-            appRef.firstMethod {
-                name = "attachBaseContext"
-                parameterCount = 1
-            }.hook().after {
-                hostContext = (args[0] as? Context)?.applicationContext ?: (args[0] as? Context)
-                registerHookBootstrapReceiver()
+            onAppLifecycle {
+                attachBaseContext {
+                    val context = appContext ?: (args.getOrNull(0) as? Context)
+                    hostContext = context?.applicationContext ?: context
+                    registerHookBootstrapReceiver()
+                }
             }
 
             launcherRef.firstMethod {
@@ -547,23 +576,25 @@ class RearWallpaperHook : YukiBaseHooker() {
     }
 
     private fun registerHookBootstrapReceiver() {
-        if (!bootstrapReceiverRegistered.compareAndSet(false, true)) return
-        val ctx = hostContext ?: run {
-            bootstrapReceiverRegistered.set(false)
-            return
-        }
-        runCatching {
-            ContextCompat.registerReceiver(
-                ctx,
-                hookBootstrapReceiver,
-                IntentFilter(RearWallpaperApiContract.ACTION_REQUEST_HOOK_SERVICE),
-                RearWallpaperApiContract.SERVICE_PERMISSION,
-                null,
-                ContextCompat.RECEIVER_EXPORTED,
-            )
-        }.onFailure {
-            bootstrapReceiverRegistered.set(false)
-            YLog.error(it)
+        synchronized(bootstrapReceiverLock) {
+            if (bootstrapReceiverRegistered.get()) return
+            val ctx = hostContext ?: return
+            runCatching {
+                ContextCompat.registerReceiver(
+                    ctx,
+                    hookBootstrapReceiver,
+                    IntentFilter(RearWallpaperApiContract.ACTION_REQUEST_HOOK_SERVICE),
+                    RearWallpaperApiContract.SERVICE_PERMISSION,
+                    null,
+                    ContextCompat.RECEIVER_EXPORTED,
+                )
+                bootstrapReceiverContext = ctx
+                bootstrapReceiverRegistered.set(true)
+            }.onFailure {
+                bootstrapReceiverContext = null
+                bootstrapReceiverRegistered.set(false)
+                YLog.error(it)
+            }
         }
     }
 

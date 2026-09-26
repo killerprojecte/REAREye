@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -34,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.sp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
 import hk.uwu.reareye.repository.rearwidget.RearCardConfig
+import hk.uwu.reareye.repository.rearwidget.RearCardOrderSetting
+import hk.uwu.reareye.repository.rearwidget.RearCardPriorityManager
 import hk.uwu.reareye.repository.rearwidget.RearWidgetConfigCodec
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateConfigRepository
@@ -105,11 +107,18 @@ private fun normalizeTemplateBusinessName(raw: String): String {
 fun CardManagerScreen(
     prefsManager: PrefsManager,
     onBack: () -> Unit,
+    embedded: Boolean = false,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    focusCardId: String? = null,
+    onFocusCardHandled: () -> Unit = {},
+    actionRequest: ConfigDashboardAction? = null,
+    onActionHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val layoutDirection = LocalLayoutDirection.current
     val scope = rememberCoroutineScope()
     val scrollBehavior = MiuixScrollBehavior()
+    val listState = rememberLazyListState()
     val hazeState = rememberAcrylicHazeState()
     val hazeStyle = rememberAcrylicHazeStyle()
     val cards = remember { mutableStateListOf<RearCardConfig>() }
@@ -118,6 +127,10 @@ fun CardManagerScreen(
     var cardsLoaded by remember { mutableStateOf(false) }
     var dataCardsVisible by remember { mutableStateOf(false) }
     var runtimeRefreshTick by remember { mutableIntStateOf(0) }
+    val dragState = rememberRearLongPressDragState()
+    var dragOrigin by remember { mutableStateOf<List<RearCardConfig>>(emptyList()) }
+    val cardOrderSettings = remember { mutableStateMapOf<String, RearCardOrderSetting>() }
+    var highlightedCardId by remember { mutableStateOf<String?>(null) }
     val remotePrefsStatusRevision = rememberRemotePrefsStatusRevision()
 
     fun debugLog(message: String) {
@@ -137,24 +150,39 @@ fun CardManagerScreen(
             return@LaunchedEffect
         }
 
-        delay(220)
         val loadedCards = withContext(Dispatchers.IO) {
             RearWidgetManagerRepository.loadCards(prefsManager)
+        }
+        val loadedOrderSettings = withContext(Dispatchers.IO) {
+            RearWidgetManagerRepository.loadCardOrderSettings(prefsManager)
         }
         val loadedBusinesses = withContext(Dispatchers.IO) {
             RearWidgetManagerRepository.loadBusinesses(prefsManager)
         }
         cards.clear()
         cards.addAll(loadedCards)
+        cardOrderSettings.clear()
+        cardOrderSettings.putAll(loadedOrderSettings)
         businesses.clear()
         businesses.addAll(loadedBusinesses)
         cardsLoaded = true
-        delay(90)
         dataCardsVisible = true
         withContext(Dispatchers.IO) {
             RearWidgetManagerRepository.refreshRuntimeFromPrefs(context, prefsManager)
         }
         runtimeRefreshTick++
+    }
+
+    LaunchedEffect(focusCardId, cardsLoaded) {
+        val id = focusCardId ?: return@LaunchedEffect
+        if (!cardsLoaded) return@LaunchedEffect
+        val index = cards.indexOfFirst { it.id == id }
+        if (index < 0) return@LaunchedEffect
+        highlightedCardId = id
+        listState.animateScrollToItem(index + if (embedded) 0 else 1)
+        delay(1600)
+        highlightedCardId = null
+        onFocusCardHandled()
     }
 
     val showDialog = remember { mutableStateOf(false) }
@@ -165,6 +193,7 @@ fun CardManagerScreen(
     var draftPackageName by remember { mutableStateOf("hk.uwu.reareye") }
     var draftBusiness by remember { mutableStateOf("") }
     var draftPriorityText by remember { mutableStateOf("500") }
+    var draftAutomaticPriority by remember { mutableStateOf(true) }
     var draftSticky by remember { mutableStateOf(true) }
     var draftOneConfigJson by remember { mutableStateOf<String?>(null) }
 
@@ -175,6 +204,41 @@ fun CardManagerScreen(
         }
     }
 
+    fun persistCardOrder() {
+        // A drag is an automatic ordering action. Manual numeric priority remains
+        // available from the editor and can be restored there explicitly.
+        val currentSettings = cards.associate { card ->
+            card.id to (cardOrderSettings[card.id] ?: RearCardOrderSetting()).copy(automatic = true)
+        }
+        val withAutomaticPriority = RearCardPriorityManager.assignAutomaticPriorities(
+            cards = cards.toList(),
+            settings = currentSettings,
+        )
+        val reordered = RearCardPriorityManager.sorted(withAutomaticPriority, currentSettings)
+        val nextSettings = RearCardPriorityManager.rememberOrder(reordered, currentSettings)
+        cards.clear()
+        cards.addAll(reordered)
+        cardOrderSettings.clear()
+        cardOrderSettings.putAll(nextSettings)
+        scope.launch(Dispatchers.IO) {
+            RearWidgetManagerRepository.saveCardOrderSettings(prefsManager, nextSettings)
+            RearWidgetManagerRepository.saveCards(context, prefsManager, reordered)
+        }
+    }
+
+    fun cancelCardDrag() {
+        if (dragOrigin.isNotEmpty()) {
+            cards.clear()
+            cards.addAll(dragOrigin)
+        }
+        dragOrigin = emptyList()
+    }
+
+    fun finishCardDrag() {
+        if (dragState.draggedId != null) persistCardOrder()
+        dragOrigin = emptyList()
+    }
+
     fun openCreateDialog() {
         editingCardId = null
         draftCardId = RearWidgetConfigCodec.newCardId()
@@ -182,9 +246,17 @@ fun CardManagerScreen(
         draftPackageName = "hk.uwu.reareye"
         draftBusiness = ""
         draftPriorityText = "500"
+        draftAutomaticPriority = true
         draftSticky = true
         draftOneConfigJson = null
         showDialog.value = true
+    }
+
+    LaunchedEffect(actionRequest) {
+        if (actionRequest == ConfigDashboardAction.ADD_CARD && cardsLoaded) {
+            openCreateDialog()
+            onActionHandled()
+        }
     }
 
     fun openEditDialog(item: RearCardConfig) {
@@ -199,6 +271,7 @@ fun CardManagerScreen(
         draftPackageName = item.packageName
         draftBusiness = item.business
         draftPriorityText = item.priority.toString()
+        draftAutomaticPriority = cardOrderSettings[item.id]?.automatic ?: true
         draftSticky = item.sticky
         draftOneConfigJson = item.oneConfigJson
         showDialog.value = true
@@ -316,7 +389,25 @@ fun CardManagerScreen(
             cards.add(card)
         }
 
-        persist()
+        val nextSettings = cardOrderSettings.toMutableMap().apply {
+            this[card.id] = RearCardOrderSetting(
+                automatic = draftAutomaticPriority,
+                position = editingIndex.coerceAtLeast(0),
+            )
+        }
+        val reorderedCards = RearCardPriorityManager.assignAutomaticPriorities(
+            cards = cards.toList(),
+            settings = nextSettings,
+        )
+        cards.clear()
+        cards.addAll(reorderedCards)
+        cardOrderSettings.clear()
+        cardOrderSettings.putAll(nextSettings)
+
+        scope.launch(Dispatchers.IO) {
+            RearWidgetManagerRepository.saveCardOrderSettings(prefsManager, nextSettings)
+            RearWidgetManagerRepository.saveCards(context, prefsManager, reorderedCards)
+        }
         showDialog.value = false
         Toast.makeText(
             context,
@@ -353,7 +444,7 @@ fun CardManagerScreen(
     ) {
         Scaffold(
             topBar = {
-                TopAppBar(
+                if (!embedded) TopAppBar(
                     modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
                     color = Color.Transparent,
                     title = stringResource(R.string.rear_widget_card_manager),
@@ -381,21 +472,27 @@ fun CardManagerScreen(
             },
         ) { paddingValues ->
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .scrollEndHaptic()
                     .overScrollVertical()
                     .rearAcrylicSource(hazeState)
                     .padding(horizontal = 12.dp),
                 contentPadding = PaddingValues(
-                    top = paddingValues.calculateTopPadding() + 12.dp,
-                    bottom = paddingValues.calculateBottomPadding() + 12.dp,
+                    top = if (embedded) {
+                        contentPadding.calculateTopPadding()
+                    } else {
+                        paddingValues.calculateTopPadding() + contentPadding.calculateTopPadding()
+                    },
+                    bottom = paddingValues.calculateBottomPadding() + contentPadding.calculateBottomPadding() + 12.dp,
+                    start = contentPadding.calculateLeftPadding(layoutDirection),
+                    end = contentPadding.calculateRightPadding(layoutDirection),
                 ),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 overscrollEffect = null,
             ) {
-                item {
+                if (!embedded) item {
                     Card(
                         modifier = Modifier
                             .padding(bottom = 12.dp)
@@ -408,6 +505,11 @@ fun CardManagerScreen(
                                 onClick = {},
                                 bottomAction = {
                                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Text(
+                                            text = stringResource(R.string.rear_widget_card_reorder_hint),
+                                            fontSize = 12.sp,
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        )
                                         if (cardsLoaded) {
                                             RearBadgeGroup(
                                                 badges = listOf(rearWidgetCardCountBadge(cards.size)),
@@ -473,7 +575,31 @@ fun CardManagerScreen(
                                 }"
                             )
                         }
+                        val isHighlighted = highlightedCardId == item.id
                         ModuleStyleManagerCard(
+                            modifier = Modifier
+                                .rearDragVisual(item.id, dragState)
+                                .rearLongPressDrag(
+                                    id = item.id,
+                                    state = dragState,
+                                    listState = listState,
+                                    scope = scope,
+                                    layoutKeyToId = { key -> key as? String },
+                                    onMove = { fromId, toId ->
+                                        val fromIndex = cards.indexOfFirst { it.id == fromId }
+                                        val toIndex = cards.indexOfFirst { it.id == toId }
+                                        if (fromIndex >= 0 && toIndex >= 0 && fromIndex != toIndex) {
+                                            val moved = cards.removeAt(fromIndex)
+                                            cards.add(toIndex, moved)
+                                        }
+                                    },
+                                    onDragStart = { dragOrigin = cards.toList() },
+                                    onDragEnd = { finishCardDrag() },
+                                    onDragCancel = { cancelCardDrag() },
+                                ),
+                            backgroundColor = if (isHighlighted) {
+                                MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+                            } else null,
                             title = item.title,
                             badges = buildList {
                                 add(rearWidgetPackageBadge(item.packageName))
@@ -552,7 +678,23 @@ fun CardManagerScreen(
                                         onClick = {
                                             if (!item.renameable) return@ModuleStyleDeleteAction
                                             cards.remove(item)
-                                            persist()
+                                            val nextSettings =
+                                                cardOrderSettings.toMutableMap().apply {
+                                                    remove(item.id)
+                                                }
+                                            cardOrderSettings.clear()
+                                            cardOrderSettings.putAll(nextSettings)
+                                            scope.launch(Dispatchers.IO) {
+                                                RearWidgetManagerRepository.saveCardOrderSettings(
+                                                    prefsManager,
+                                                    nextSettings
+                                                )
+                                                RearWidgetManagerRepository.saveCards(
+                                                    context,
+                                                    prefsManager,
+                                                    cards.toList()
+                                                )
+                                            }
                                         },
                                     )
                                 }
@@ -640,11 +782,21 @@ fun CardManagerScreen(
                         }
                     }
                 }
+                SwitchPreference(
+                    title = stringResource(R.string.rear_widget_priority_mode_auto),
+                    summary = stringResource(
+                        if (draftAutomaticPriority) R.string.rear_widget_priority_auto_desc
+                        else R.string.rear_widget_priority_manual_desc,
+                    ),
+                    checked = draftAutomaticPriority,
+                    onCheckedChange = { draftAutomaticPriority = it },
+                )
                 TextField(
                     value = draftPriorityText,
                     onValueChange = { draftPriorityText = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = stringResource(R.string.rear_widget_default_priority),
+                    enabled = !draftAutomaticPriority,
                     singleLine = true,
                 )
                 if (lockedCard == null) {

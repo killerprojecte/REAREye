@@ -62,7 +62,27 @@ object RearWidgetManagerRepository {
             ConfigKeys.REAR_WIDGET_CARD_DATA,
             RearWidgetConfigCodec.EMPTY_ARRAY,
         )
-        return RearWidgetConfigCodec.parseCards(raw)
+        return RearCardPriorityManager.sorted(
+            RearWidgetConfigCodec.parseCards(raw), loadCardOrderSettings(prefsManager),
+        )
+    }
+
+    fun loadCardOrderSettings(prefsManager: PrefsManager): Map<String, RearCardOrderSetting> =
+        RearCardPriorityManager.parse(
+            prefsManager.getString(
+                ConfigKeys.REAR_WIDGET_CARD_ORDER_DATA,
+                "{}"
+            )
+        )
+
+    fun saveCardOrderSettings(
+        prefsManager: PrefsManager,
+        settings: Map<String, RearCardOrderSetting>
+    ) {
+        prefsManager.putString(
+            ConfigKeys.REAR_WIDGET_CARD_ORDER_DATA,
+            RearCardPriorityManager.encode(settings)
+        )
     }
 
     fun saveCards(
@@ -72,7 +92,10 @@ object RearWidgetManagerRepository {
         allowLockedEdits: Boolean = false,
     ) {
         val oldCards = loadCards(prefsManager)
-        val mergedCards = mergeLockedCards(oldCards, cards, allowLockedEdits)
+        val mergedCards = RearCardPriorityManager.sorted(
+            mergeLockedCards(oldCards, cards, allowLockedEdits),
+            loadCardOrderSettings(prefsManager),
+        )
         prefsManager.putString(
             ConfigKeys.REAR_WIDGET_CARD_DATA,
             RearWidgetConfigCodec.encodeCards(mergedCards),

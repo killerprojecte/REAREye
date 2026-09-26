@@ -17,7 +17,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.rounded.EditNote
@@ -33,24 +36,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
+import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigFields
+import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigRepository
 import hk.uwu.reareye.repository.rearwidget.RearCardConfig
 import hk.uwu.reareye.repository.rearwidget.RearWidgetConfigCodec
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.reareye.ui.components.OverlayDialog
-import hk.uwu.reareye.ui.components.RearBadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
-import hk.uwu.reareye.ui.components.card.SuperCard
 import hk.uwu.reareye.ui.components.motion.ArtRevealItem
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager
@@ -60,7 +63,6 @@ import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Button
@@ -89,6 +91,12 @@ private const val REAR_WIDGET_DEBUG_TAG = "RearWidgetDebug"
 fun BusinessManagerScreen(
     prefsManager: PrefsManager,
     onBack: () -> Unit,
+    onOpenBusinessExtra: (String) -> Unit = {},
+    embedded: Boolean = false,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    onOpenCard: (String) -> Unit = {},
+    actionRequest: ConfigDashboardAction? = null,
+    onActionHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val layoutDirection = LocalLayoutDirection.current
@@ -97,6 +105,7 @@ fun BusinessManagerScreen(
     val hazeStyle = rememberAcrylicHazeStyle()
     val scope = rememberCoroutineScope()
     val widgets = remember { mutableStateListOf<RearBusinessConfig>() }
+    val cards = remember { mutableStateListOf<RearCardConfig>() }
     var widgetsLoaded by remember { mutableStateOf(false) }
     var dataCardsVisible by remember { mutableStateOf(false) }
     val remotePrefsStatusRevision = rememberRemotePrefsStatusRevision()
@@ -113,6 +122,8 @@ fun BusinessManagerScreen(
     var draftCardBusiness by remember { mutableStateOf("") }
     var draftCardPriorityText by remember { mutableStateOf("500") }
     var draftCardSticky by remember { mutableStateOf(true) }
+    var draftHideTimeTip by remember { mutableStateOf(false) }
+    var expandedBusinessId by remember { mutableStateOf<String?>(null) }
 
     fun debugLog(message: String) {
         if (prefsManager.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
@@ -131,14 +142,17 @@ fun BusinessManagerScreen(
             return@LaunchedEffect
         }
 
-        delay(220)
         val loadedWidgets = withContext(Dispatchers.IO) {
             RearWidgetManagerRepository.loadBusinesses(prefsManager)
         }
+        val loadedCards = withContext(Dispatchers.IO) {
+            RearWidgetManagerRepository.loadCards(prefsManager)
+        }
         widgets.clear()
         widgets.addAll(loadedWidgets)
+        cards.clear()
+        cards.addAll(loadedCards)
         widgetsLoaded = true
-        delay(90)
         dataCardsVisible = true
         withContext(Dispatchers.IO) {
             RearWidgetManagerRepository.refreshRuntimeFromPrefs(context, prefsManager)
@@ -156,7 +170,15 @@ fun BusinessManagerScreen(
         editingId = null
         draftWidget = ""
         draftFilePath = ""
+        draftHideTimeTip = false
         showDialog.value = true
+    }
+
+    LaunchedEffect(actionRequest, widgetsLoaded) {
+        if (actionRequest == ConfigDashboardAction.ADD_COMPONENT && widgetsLoaded) {
+            openCreateDialog()
+            onActionHandled()
+        }
     }
 
     fun openEditDialog(item: RearBusinessConfig) {
@@ -176,6 +198,9 @@ fun BusinessManagerScreen(
         editingId = item.id
         draftWidget = item.business
         draftFilePath = item.filePath
+        draftHideTimeTip = !RearBusinessExtraConfigRepository
+            .getConfigForBusiness(prefsManager, item.business)
+            .getShowTimeTipOrDefault()
         showDialog.value = true
     }
 
@@ -242,6 +267,13 @@ fun BusinessManagerScreen(
             storeReleasePublishedAt = editingBusiness?.storeReleasePublishedAt,
             storeInstalledAt = editingBusiness?.storeInstalledAt,
         )
+
+        RearBusinessExtraConfigRepository.updateConfigForBusiness(
+            prefsManager = prefsManager,
+            business = widget,
+        ) { extra ->
+            extra.withBoolean(RearBusinessExtraConfigFields.HIDE_TIME_TIP, draftHideTimeTip)
+        }
 
         editingId?.let { id ->
             val oldIndex = widgets.indexOfFirst { it.id == id }
@@ -330,7 +362,7 @@ fun BusinessManagerScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            if (!embedded) TopAppBar(
                 modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
                 color = Color.Transparent,
                 title = stringResource(R.string.rear_widget_business_manager),
@@ -350,7 +382,10 @@ fun BusinessManagerScreen(
                 actions = {
                     IconButton(
                         onClick = { if (widgetsLoaded) openCreateDialog() }) {
-                        Icon(imageVector = Icons.Filled.Add, contentDescription = null)
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = stringResource(R.string.rear_widget_add_business),
+                        )
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -360,56 +395,21 @@ fun BusinessManagerScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .scrollEndHaptic()
                 .overScrollVertical()
                 .rearAcrylicSource(hazeState)
                 .padding(horizontal = 12.dp),
             contentPadding = PaddingValues(
-                top = paddingValues.calculateTopPadding() + 12.dp,
-                bottom = paddingValues.calculateBottomPadding() + 12.dp,
+                top = if (embedded) {
+                    contentPadding.calculateTopPadding()
+                } else {
+                    paddingValues.calculateTopPadding() + contentPadding.calculateTopPadding()
+                },
+                bottom = paddingValues.calculateBottomPadding() + contentPadding.calculateBottomPadding() + 12.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             overscrollEffect = null,
         ) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .padding(bottom = 12.dp)
-                        .fillMaxWidth()
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        SuperCard(
-                            title = stringResource(R.string.rear_widget_business_file_mode_title),
-                            summary = stringResource(R.string.rear_widget_business_file_mode_hint),
-                            onClick = {},
-                            bottomAction = {
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    if (widgetsLoaded) {
-                                        RearBadgeGroup(
-                                            badges = listOf(rearWidgetComponentCountBadge(widgets.size)),
-                                        )
-                                    }
-                                    Button(
-                                        onClick = { if (widgetsLoaded) openCreateDialog() },
-                                        enabled = widgetsLoaded,
-                                        colors = ButtonDefaults.buttonColorsPrimary(),
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Add,
-                                            contentDescription = null,
-                                            modifier = Modifier.padding(end = 6.dp),
-                                        )
-                                        Text(text = stringResource(R.string.rear_widget_add_business))
-                                    }
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-
             if (!dataCardsVisible) {
                 item {
                     Card(
@@ -438,6 +438,9 @@ fun BusinessManagerScreen(
                     key = { _, item -> item.id },
                     contentType = { _, _ -> "business_item" },
                 ) { _, item ->
+                    val relatedCards = cards.filter { card ->
+                        card.business == item.business
+                    }
                     ModuleStyleManagerCard(
                         title = item.business,
                         summaryLines = listOf(item.filePath),
@@ -474,10 +477,17 @@ fun BusinessManagerScreen(
                                         tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.82f),
                                     )
                                 }
-                                if (!item.downloadedFromStore) {
+                                if (relatedCards.isNotEmpty()) {
                                     ModuleStyleIconAction(
-                                        icon = Icons.Filled.Add,
-                                        onClick = { openRegisterCardDialog(item) },
+                                        icon = if (expandedBusinessId == item.id) {
+                                            Icons.Filled.KeyboardArrowDown
+                                        } else {
+                                            Icons.AutoMirrored.Filled.KeyboardArrowRight
+                                        },
+                                        onClick = {
+                                            expandedBusinessId =
+                                                if (expandedBusinessId == item.id) null else item.id
+                                        },
                                     )
                                 }
                             }
@@ -493,6 +503,62 @@ fun BusinessManagerScreen(
                             )
                         },
                     )
+                    if (expandedBusinessId == item.id && relatedCards.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp),
+                        ) {
+                            Column {
+                                relatedCards.forEach { card ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Text(
+                                            text = card.title,
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        IconButton(
+                                            minHeight = 35.dp,
+                                            minWidth = 35.dp,
+                                            onClick = { onOpenCard(card.id) },
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                                contentDescription = stringResource(R.string.rear_widget_action_jump),
+                                            )
+                                        }
+                                        IconButton(
+                                            minHeight = 35.dp,
+                                            minWidth = 35.dp,
+                                            onClick = {
+                                                cards.remove(card)
+                                                scope.launch(Dispatchers.IO) {
+                                                    RearWidgetManagerRepository.saveCards(
+                                                        context,
+                                                        prefsManager,
+                                                        cards.toList(),
+                                                    )
+                                                }
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = MiuixIcons.Delete,
+                                                tint = Color(0xFFD32F2F),
+                                                contentDescription = stringResource(R.string.rear_widget_action_delete),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -564,6 +630,12 @@ fun BusinessManagerScreen(
                 )
                 Text(stringResource(R.string.rear_widget_pick_file))
             }
+            SwitchPreference(
+                title = stringResource(R.string.rear_widget_business_hide_time_tip),
+                summary = stringResource(R.string.rear_widget_business_hide_time_tip_desc),
+                checked = draftHideTimeTip,
+                onCheckedChange = { draftHideTimeTip = it },
+            )
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
