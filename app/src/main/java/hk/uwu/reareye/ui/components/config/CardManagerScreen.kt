@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -33,6 +34,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -58,6 +60,9 @@ import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
 import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.reareye.ui.components.config.draggable.library.draggable.DraggableItem
+import hk.uwu.reareye.ui.components.config.draggable.library.draggable.rememberDraggableLazyListState
+import hk.uwu.reareye.ui.components.config.draggable.longPressDraggable
 import hk.uwu.reareye.ui.components.config.template.TemplateConfigRouteTransition
 import hk.uwu.reareye.ui.components.config.template.WidgetTemplateConfigScreen
 import hk.uwu.reareye.ui.components.motion.ArtRevealItem
@@ -127,8 +132,6 @@ fun CardManagerScreen(
     var cardsLoaded by remember { mutableStateOf(false) }
     var dataCardsVisible by remember { mutableStateOf(false) }
     var runtimeRefreshTick by remember { mutableIntStateOf(0) }
-    val dragState = rememberRearLongPressDragState()
-    var dragOrigin by remember { mutableStateOf<List<RearCardConfig>>(emptyList()) }
     val cardOrderSettings = remember { mutableStateMapOf<String, RearCardOrderSetting>() }
     var highlightedCardId by remember { mutableStateOf<String?>(null) }
     val remotePrefsStatusRevision = rememberRemotePrefsStatusRevision()
@@ -226,18 +229,24 @@ fun CardManagerScreen(
         }
     }
 
-    fun cancelCardDrag() {
-        if (dragOrigin.isNotEmpty()) {
-            cards.clear()
-            cards.addAll(dragOrigin)
-        }
-        dragOrigin = emptyList()
-    }
-
-    fun finishCardDrag() {
-        if (dragState.draggedId != null) persistCardOrder()
-        dragOrigin = emptyList()
-    }
+    val draggableState = rememberDraggableLazyListState(
+        state = listState,
+        onSwap = { from, to ->
+            val fromId = from.key as? String ?: return@rememberDraggableLazyListState
+            val toId = to.key as? String ?: return@rememberDraggableLazyListState
+            val fromIndex = cards.indexOfFirst { it.id == fromId }
+            val toIndex = cards.indexOfFirst { it.id == toId }
+            if (fromIndex >= 0 && toIndex >= 0 && fromIndex != toIndex) {
+                val moved = cards.removeAt(fromIndex)
+                cards.add(toIndex, moved)
+            }
+        },
+        isItemLocked = { item ->
+            val key = item.key as? String
+            key == null || cards.none { it.id == key }
+        },
+        onDragFinished = { persistCardOrder() },
+    )
 
     fun openCreateDialog() {
         editingCardId = null
@@ -576,29 +585,26 @@ fun CardManagerScreen(
                             )
                         }
                         val isHighlighted = highlightedCardId == item.id
+                        DraggableItem(
+                            key = item.id,
+                            state = draggableState,
+                        ) { isDragging, hoveredItemKey ->
                         ModuleStyleManagerCard(
                             modifier = Modifier
-                                .rearDragVisual(item.id, dragState)
-                                .rearLongPressDrag(
-                                    id = item.id,
-                                    state = dragState,
-                                    listState = listState,
-                                    scope = scope,
-                                    layoutKeyToId = { key -> key as? String },
-                                    onMove = { fromId, toId ->
-                                        val fromIndex = cards.indexOfFirst { it.id == fromId }
-                                        val toIndex = cards.indexOfFirst { it.id == toId }
-                                        if (fromIndex >= 0 && toIndex >= 0 && fromIndex != toIndex) {
-                                            val moved = cards.removeAt(fromIndex)
-                                            cards.add(toIndex, moved)
-                                        }
-                                    },
-                                    onDragStart = { dragOrigin = cards.toList() },
-                                    onDragEnd = { finishCardDrag() },
-                                    onDragCancel = { cancelCardDrag() },
+                                .longPressDraggable(draggableState, item.id)
+                                .then(
+                                    if (isDragging) {
+                                        Modifier.shadow(
+                                            elevation = 12.dp,
+                                            shape = RoundedCornerShape(20.dp),
+                                            clip = false,
+                                        )
+                                    } else Modifier
                                 ),
                             backgroundColor = if (isHighlighted) {
                                 MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+                            } else if (hoveredItemKey == item.id) {
+                                MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
                             } else null,
                             title = item.title,
                             badges = buildList {
@@ -700,6 +706,7 @@ fun CardManagerScreen(
                                 }
                             },
                         )
+                        }
                     }
                 }
 

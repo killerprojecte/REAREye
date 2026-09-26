@@ -34,11 +34,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -60,6 +60,9 @@ import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
 import hk.uwu.reareye.ui.components.card.ModuleStyleTextAction
 import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.reareye.ui.components.config.draggable.library.draggable.DraggableItem
+import hk.uwu.reareye.ui.components.config.draggable.library.draggable.rememberDraggableLazyListState
+import hk.uwu.reareye.ui.components.config.draggable.longPressDraggable
 import hk.uwu.reareye.ui.components.rememberRearWallpaperPreviewBitmap
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.widgetapi.RearWallpaperScheduleEntry
@@ -498,12 +501,26 @@ private fun RearWallpaperManagementList(
         wallpaperCount = wallpapers.size,
     )
     val listState = rememberLazyListState()
-    val dragScope = rememberCoroutineScope()
     val orderedSchedule = remember { mutableStateListOf<RearWallpaperScheduleEntry>() }
-    val dragState = rememberRearLongPressDragState()
-    var dragOriginSchedule by remember { mutableStateOf<List<RearWallpaperScheduleEntry>>(emptyList()) }
+    val draggableState = rememberDraggableLazyListState(
+        state = listState,
+        onSwap = { from, to ->
+            val fromId = from.key?.toString()?.removePrefix("rotation-")?.toIntOrNull()
+                ?: return@rememberDraggableLazyListState
+            val toId = to.key?.toString()?.removePrefix("rotation-")?.toIntOrNull()
+                ?: return@rememberDraggableLazyListState
+            val fromIndex = orderedSchedule.indexOfFirst { it.wallpaperId == fromId }
+            val toIndex = orderedSchedule.indexOfFirst { it.wallpaperId == toId }
+            if (fromIndex >= 0 && toIndex >= 0 && fromIndex != toIndex) {
+                val moved = orderedSchedule.removeAt(fromIndex)
+                orderedSchedule.add(toIndex, moved)
+            }
+        },
+        isItemLocked = { item -> !item.key.toString().startsWith("rotation-") },
+        onDragFinished = { onScheduleChange(orderedSchedule.toList()) },
+    )
     LaunchedEffect(schedule.toList()) {
-        if (dragState.draggedId == null) {
+        if (draggableState.draggingItemIndex == null) {
             orderedSchedule.clear()
             orderedSchedule.addAll(schedule)
         }
@@ -511,14 +528,6 @@ private fun RearWallpaperManagementList(
     val scheduledIds = orderedSchedule.mapTo(HashSet()) { it.wallpaperId }
     val remainingWallpapers = wallpapers.filterNot { it.wallpaperId in scheduledIds }
     val wallpaperMap = wallpapers.associateBy { it.wallpaperId }
-
-    fun moveDraggedItem(draggingId: Int, targetId: Int) {
-        val from = orderedSchedule.indexOfFirst { it.wallpaperId == draggingId }
-        val to = orderedSchedule.indexOfFirst { it.wallpaperId == targetId }
-        if (from < 0 || to < 0 || from == to) return
-        val item = orderedSchedule.removeAt(from)
-        orderedSchedule.add(to, item)
-    }
 
     LazyColumn(
         modifier = Modifier
@@ -534,7 +543,6 @@ private fun RearWallpaperManagementList(
         ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         overscrollEffect = null,
-        userScrollEnabled = dragState.draggedId == null,
     ) {
         item(key = "wallpaper-overview") {
             Card(
@@ -569,6 +577,10 @@ private fun RearWallpaperManagementList(
         if (orderedSchedule.isNotEmpty()) {
             items(orderedSchedule, key = { "rotation-${it.wallpaperId}" }) { entry ->
                 val wallpaper = wallpaperMap[entry.wallpaperId]
+                DraggableItem(
+                    key = "rotation-${entry.wallpaperId}",
+                    state = draggableState,
+                ) { isDragging, hoveredItemKey ->
                 WallpaperManageCard(
                     wallpaper = wallpaper,
                     storeSource = wallpaper?.let { storeWallpaperSources[it.wallpaperId] },
@@ -586,32 +598,18 @@ private fun RearWallpaperManagementList(
                     onGeneratePreview = { wallpaper?.let(onGeneratePreview) },
                     onDelete = { wallpaper?.let(onDelete) },
                     dragModifier = Modifier
-                        .rearDragVisual(entry.wallpaperId, dragState)
-                        .rearLongPressDrag(
-                            id = entry.wallpaperId,
-                            state = dragState,
-                            listState = listState,
-                            scope = dragScope,
-                            layoutKeyToId = { key ->
-                                key.toString().removePrefix("rotation-")
-                                    .toIntOrNull()
-                                    ?.takeIf { key.toString().startsWith("rotation-") }
-                            },
-                            onMove = { fromId, toId ->
-                                moveDraggedItem(fromId as Int, toId as Int)
-                            },
-                            onDragStart = { dragOriginSchedule = orderedSchedule.toList() },
-                            onDragCancel = {
-                                orderedSchedule.clear()
-                                orderedSchedule.addAll(dragOriginSchedule)
-                                dragOriginSchedule = emptyList()
-                            },
-                            onDragEnd = {
-                                onScheduleChange(orderedSchedule.toList())
-                                dragOriginSchedule = emptyList()
-                            },
+                        .longPressDraggable(draggableState, "rotation-${entry.wallpaperId}")
+                        .then(
+                            if (isDragging) {
+                                Modifier.shadow(
+                                    elevation = 12.dp,
+                                    shape = RoundedCornerShape(20.dp),
+                                    clip = false,
+                                )
+                            } else Modifier
                         ),
                 )
+                }
             }
         }
 

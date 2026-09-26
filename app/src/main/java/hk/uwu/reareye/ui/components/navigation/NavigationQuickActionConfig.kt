@@ -6,7 +6,6 @@ const val NavigationQuickActionComponentManagerId = "config_manager_business"
 const val NavigationQuickActionCardManagerId = "config_manager_card"
 const val NavigationQuickActionWallpaperManagerId = "config_manager_wallpaper"
 const val NavigationQuickActionSceneRouteManagerId = "config_manager_scene_route"
-const val NavigationQuickActionBusinessExtraManagerId = "config_manager_business_extra"
 const val NavigationQuickActionBoundsManagerId = "config_manager_bounds"
 const val NavigationQuickActionLyricsManagerId = "config_manager_lyrics"
 
@@ -20,7 +19,6 @@ val AvailableNavigationQuickActionIds = listOf(
     NavigationQuickActionCardManagerId,
     NavigationQuickActionWallpaperManagerId,
     NavigationQuickActionSceneRouteManagerId,
-    NavigationQuickActionBusinessExtraManagerId,
     NavigationQuickActionBoundsManagerId,
     NavigationQuickActionLyricsManagerId,
 )

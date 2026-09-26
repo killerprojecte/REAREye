@@ -40,7 +40,6 @@ import androidx.compose.material.icons.rounded.BorderStyle
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Cottage
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Menu
@@ -398,7 +397,6 @@ private fun rememberNavigationQuickActions(): List<NavigationQuickAction> {
     val cardManagerLabel = stringResource(R.string.navigation_quick_card_manager)
     val wallpaperManagerLabel = stringResource(R.string.rear_wallpaper_manager)
     val sceneRouteManagerLabel = stringResource(R.string.rear_widget_scene_route_manager)
-    val businessExtraManagerLabel = stringResource(R.string.rear_widget_business_extra_manager)
     val boundsManagerLabel = stringResource(R.string.custom_bounds_compat_manager)
     val lyricsManagerLabel = stringResource(R.string.navigation_quick_lyrics_manager)
 
@@ -407,7 +405,6 @@ private fun rememberNavigationQuickActions(): List<NavigationQuickAction> {
         cardManagerLabel,
         wallpaperManagerLabel,
         sceneRouteManagerLabel,
-        businessExtraManagerLabel,
         boundsManagerLabel,
         lyricsManagerLabel,
     ) {
@@ -435,12 +432,6 @@ private fun rememberNavigationQuickActions(): List<NavigationQuickAction> {
                 label = sceneRouteManagerLabel,
                 icon = Icons.Rounded.Route,
                 target = NavigationQuickTarget.ConfigManager(ConfigType.ManagerType.SCENE_ROUTE),
-            ),
-            NavigationQuickAction(
-                id = NavigationQuickActionBusinessExtraManagerId,
-                label = businessExtraManagerLabel,
-                icon = Icons.Rounded.Extension,
-                target = NavigationQuickTarget.ConfigManager(ConfigType.ManagerType.BUSINESS_EXTRA),
             ),
             NavigationQuickAction(
                 id = NavigationQuickActionBoundsManagerId,

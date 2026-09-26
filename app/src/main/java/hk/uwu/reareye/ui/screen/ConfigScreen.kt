@@ -110,6 +110,7 @@ private sealed interface ConfigRoute {
     data object BusinessExtraManager : ConfigRoute
     data class BusinessExtraDetail(val business: String) : ConfigRoute
     data object CustomBoundsCompatManager : ConfigRoute
+    data object LyricsManager : ConfigRoute
 }
 
 private const val NAV_BAR_EXIT_DURATION_MS = 220L
@@ -154,12 +155,6 @@ fun ConfigScreen(
     val context = LocalContext.current
     val prefsManager = remember { context.getPrefsManager() }
 
-    fun findLyricsCategoryRoute(): ConfigRoute? {
-        return findConfigCategoryByTitleRes(REAREyeConfig, R.string.subcategory_lyrics)?.let(
-            ConfigRoute::Category
-        )
-    }
-
     fun managerRoute(managerType: ConfigType.ManagerType?): ConfigRoute? {
         return when (managerType) {
             ConfigType.ManagerType.REAR_WALLPAPER -> ConfigRoute.RearWallpaperManager
@@ -168,18 +163,13 @@ fun ConfigScreen(
             ConfigType.ManagerType.CARD -> ConfigRoute.CardManager
             ConfigType.ManagerType.BUSINESS_EXTRA -> ConfigRoute.BusinessExtraManager
             ConfigType.ManagerType.BOUNDS -> ConfigRoute.CustomBoundsCompatManager
-            ConfigType.ManagerType.LYRICS -> findLyricsCategoryRoute()
+            ConfigType.ManagerType.LYRICS -> ConfigRoute.LyricsManager
             null -> null
         }
     }
 
     var routeStack by remember {
-        mutableStateOf(
-            listOf(
-                ConfigRoute.Root,
-                managerRoute(quickManagerTarget)
-            ).filterNotNull()
-        )
+        mutableStateOf(listOf<ConfigRoute>(ConfigRoute.Root))
     }
     var dashboardTabIndex by rememberSaveable { mutableStateOf(0) }
     var moreScrollIndex by rememberSaveable { mutableStateOf(0) }
@@ -310,13 +300,54 @@ fun ConfigScreen(
         openManagerRoute((item.type as? ConfigType.Manager)?.managerType)
     }
 
+    fun openQuickManagerTarget(managerType: ConfigType.ManagerType) {
+        when (managerType) {
+            // These managers now live directly in the dashboard. Keeping the route at Root
+            // avoids opening the legacy full-screen manager on top of the new workflow.
+            ConfigType.ManagerType.CARD -> {
+                dashboardTabIndex = 0
+                routeStack = listOf(ConfigRoute.Root)
+                onAppListModeChange(false)
+            }
+
+            ConfigType.ManagerType.BUSINESS,
+            ConfigType.ManagerType.BUSINESS_EXTRA -> {
+                dashboardTabIndex = 1
+                routeStack = listOf(ConfigRoute.Root)
+                onAppListModeChange(false)
+            }
+
+            ConfigType.ManagerType.REAR_WALLPAPER -> {
+                dashboardTabIndex = 2
+                routeStack = listOf(ConfigRoute.Root)
+                onAppListModeChange(false)
+            }
+
+            // These entries are still dedicated pages, but their parent is the More tab so
+            // returning from them lands in the same part of the redesigned configuration.
+            ConfigType.ManagerType.SCENE_ROUTE -> {
+                dashboardTabIndex = 3
+                routeStack = listOf(ConfigRoute.Root, ConfigRoute.SceneRouteManager)
+                onAppListModeChange(true)
+            }
+
+            ConfigType.ManagerType.BOUNDS -> {
+                dashboardTabIndex = 3
+                routeStack = listOf(ConfigRoute.Root, ConfigRoute.CustomBoundsCompatManager)
+                onAppListModeChange(true)
+            }
+
+            ConfigType.ManagerType.LYRICS -> {
+                dashboardTabIndex = 3
+                routeStack = listOf(ConfigRoute.Root, ConfigRoute.LyricsManager)
+                onAppListModeChange(false)
+            }
+        }
+    }
+
     LaunchedEffect(quickManagerTarget) {
         val managerType = quickManagerTarget ?: return@LaunchedEffect
-        val route = managerRoute(managerType) ?: return@LaunchedEffect
-        routeStack = listOf(ConfigRoute.Root, route)
-        if (route.isOverlayRoute()) {
-            onAppListModeChange(true)
-        }
+        openQuickManagerTarget(managerType)
         onQuickManagerTargetHandled()
     }
 
@@ -329,6 +360,7 @@ fun ConfigScreen(
                     title = when (currentRoute) {
                         ConfigRoute.Root -> stringResource(R.string.configuration_title)
                         ConfigRoute.Favorites -> stringResource(R.string.config_favorites_title)
+                        ConfigRoute.LyricsManager -> stringResource(R.string.subcategory_lyrics)
                         is ConfigRoute.Category -> stringResource(currentRoute.category.titleRes)
                         else -> stringResource(R.string.configuration_title)
                     },
@@ -449,6 +481,9 @@ fun ConfigScreen(
                                 bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
                             ),
                             onOpenCard = onCardRequested,
+                            onOpenBusinessExtra = { business ->
+                                openOverlayRoute(ConfigRoute.BusinessExtraDetail(business))
+                            },
                             actionRequest = actionRequest,
                             onActionHandled = onActionHandled,
                         )
@@ -492,6 +527,38 @@ fun ConfigScreen(
                         toggleFavoriteNode(node)
                     },
                 )
+
+                ConfigRoute.LyricsManager -> {
+                    val lyricsCategory = findConfigCategoryByTitleRes(
+                        REAREyeConfig,
+                        R.string.subcategory_lyrics,
+                    )
+                    ConfigNodeList(
+                        nodes = lyricsCategory?.children.orEmpty(),
+                        prefsManager = prefsManager,
+                        contentPadding = PaddingValues(
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
+                        ),
+                        scrollBehavior = scrollBehavior,
+                        modifier = Modifier.rearAcrylicSource(hazeState),
+                        onOpenCategory = { category ->
+                            routeStack = routeStack + ConfigRoute.Category(category)
+                        },
+                        onOpenAppList = { item ->
+                            openOverlayRoute(ConfigRoute.AppList(item))
+                        },
+                        onOpenManager = { item -> openManagerItem(item) },
+                        onPreferenceChanged = handlePreferenceChanged,
+                        favoriteNodeIds = favoriteNodeIds,
+                        resolveFavoriteNodeId = { node ->
+                            favoriteNodeIndex.nodeIdLookup[node]
+                        },
+                        onToggleFavorite = { node ->
+                            toggleFavoriteNode(node)
+                        },
+                    )
+                }
 
                 ConfigRoute.Favorites -> ConfigNodeList(
                     nodes = favoriteNodes,

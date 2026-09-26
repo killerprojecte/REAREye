@@ -105,6 +105,25 @@ class MainActivity : ComponentActivity() {
                     if (!remotePrefsManager.isRemoteReady()) {
                         null
                     } else {
+                        val rawQuickActionIds = remotePrefsManager.getString(
+                            ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS
+                        )
+                        val normalizedQuickActionIds = parseNavigationQuickActionIds(
+                            rawQuickActionIds
+                        ).toList()
+                        // Drop quick actions removed by a newer configuration model while
+                        // preserving the user's remaining order during upgrade.
+                        if (rawQuickActionIds.isNotBlank()) {
+                            val normalizedValue = encodeNavigationQuickActionIds(
+                                normalizedQuickActionIds
+                            )
+                            if (rawQuickActionIds != normalizedValue) {
+                                remotePrefsManager.putString(
+                                    ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS,
+                                    normalizedValue,
+                                )
+                            }
+                        }
                         RemoteUiSettings(
                             themeModeValue = remotePrefsManager.getInt(
                                 ConfigKeys.MODULE_THEME_MODE,
@@ -114,9 +133,7 @@ class MainActivity : ComponentActivity() {
                                 ConfigKeys.MODULE_NAVIGATION_BAR_MODE,
                                 ModuleNavigationBarMode.default.value,
                             ),
-                            navigationQuickActionIds = parseNavigationQuickActionIds(
-                                remotePrefsManager.getString(ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS)
-                            ).toList(),
+                            navigationQuickActionIds = normalizedQuickActionIds,
                             launcherHidden = remotePrefsManager.getBoolean(
                                 ConfigKeys.MODULE_HIDE_LAUNCHER_ENTRY,
                                 false,
@@ -331,7 +348,13 @@ class MainActivity : ComponentActivity() {
                                             is NavigationQuickTarget.ConfigManager -> {
                                                 pendingConfigQuickManagerTarget = target.managerType
                                                 pendingQuickActionTransition = true
-                                                configInAppListMode = true
+                                                // Dashboard managers stay inside the new configuration
+                                                // workbench and keep the navigation bar visible. Only
+                                                // dedicated More pages use the full-screen overlay mode.
+                                                configInAppListMode = target.managerType in setOf(
+                                                    ConfigType.ManagerType.SCENE_ROUTE,
+                                                    ConfigType.ManagerType.BOUNDS,
+                                                )
                                                 currentScreen = "config"
                                             }
                                         }
