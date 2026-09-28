@@ -397,6 +397,7 @@
     <string name="rear_store_uninstall_success">Uninstalled %1$s</string>
     <string name="rear_store_uninstall_failed">Uninstall failed: %1$s</string>
     <string name="rear_store_open_repository">Open Repository</string>
+    <string name="rear_store_open_detail">Open in Rear Store</string>
     <string name="rear_store_uninstall_action">Uninstall</string>
     <string name="rear_store_install_info_title">Install Info</string>
     <string name="rear_store_uninstall_card_title">Uninstall Current Widget</string>

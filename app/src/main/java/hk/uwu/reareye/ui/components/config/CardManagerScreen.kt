@@ -45,6 +45,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.rounded.Storefront
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
 import hk.uwu.reareye.repository.rearwidget.RearCardConfig
@@ -116,6 +118,7 @@ fun CardManagerScreen(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     focusCardId: String? = null,
     onFocusCardHandled: () -> Unit = {},
+    onOpenStoreDetail: (String) -> Unit = {},
     actionRequest: ConfigDashboardAction? = null,
     onActionHandled: () -> Unit = {},
 ) {
@@ -667,6 +670,16 @@ fun CardManagerScreen(
                                         icon = Icons.Rounded.EditNote,
                                         onClick = { openEditDialog(item) },
                                     )
+                                    item.storeWidgetId
+                                        ?.trim()
+                                        ?.takeIf { it.isNotEmpty() }
+                                        ?.let { storeWidgetId ->
+                                            ModuleStyleIconAction(
+                                                icon = MaterialSymbols.Rounded.Storefront,
+                                                contentDescription = stringResource(R.string.rear_store_open_detail),
+                                                onClick = { onOpenStoreDetail(storeWidgetId) },
+                                            )
+                                        }
                                     if (hasTemplateConfig) {
                                         ModuleStyleDeleteAction(
                                             icon = Icons.Filled.Tune,

@@ -173,6 +173,7 @@ fun ModuleStyleIconAction(
     @SuppressLint("ModifierParameter")
     modifier: Modifier = Modifier.size(20.dp),
     icon: ImageVector,
+    contentDescription: String? = null,
     backgroundColor: Color = MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
     contentColor: Color? = null,
     onClick: () -> Unit,
@@ -189,7 +190,7 @@ fun ModuleStyleIconAction(
         Icon(
             imageVector = icon,
             tint = actionIconTint,
-            contentDescription = null,
+            contentDescription = contentDescription,
             modifier = modifier,
         )
     }

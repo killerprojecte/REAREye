@@ -32,7 +32,7 @@ object RearWidgetManagerRepository {
             ConfigKeys.REAR_WIDGET_BUSINESS_DATA,
             RearWidgetConfigCodec.EMPTY_ARRAY,
         )
-        return RearWidgetConfigCodec.parseBusinesses(raw)
+        return RearWidgetConfigCodec.parseBusinesses(raw).sortedBy { it.id }
     }
 
     fun saveBusinesses(
@@ -43,7 +43,10 @@ object RearWidgetManagerRepository {
     ) {
         val oldBusinesses = loadBusinesses(prefsManager)
         val mergedBusinesses = mergeLockedBusinesses(oldBusinesses, businesses, allowLockedEdits)
-        val preparedBusinesses = prepareBusinessesInManagedDir(context, mergedBusinesses)
+        val preparedBusinesses = prepareBusinessesInManagedDir(
+            context,
+            mergedBusinesses.sortedBy { it.id },
+        ).sortedBy { it.id }
         cacheBusinessTemplatesInPrefs(prefsManager, oldBusinesses, preparedBusinesses)
         prefsManager.putString(
             ConfigKeys.REAR_WIDGET_BUSINESS_DATA,

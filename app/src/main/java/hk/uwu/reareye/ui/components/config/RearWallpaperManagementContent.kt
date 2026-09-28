@@ -47,6 +47,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.rounded.Storefront
 import dev.chrisbanes.haze.HazeState
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearstore.RearStoreInstalledWallpaper
@@ -106,6 +108,7 @@ fun RearWallpaperManagementContent(
     onUpdateMetadata: (RearWallpaperInfo, RearWallpaperMetadataOptions, Uri?) -> Unit,
     onEditTemplate: (RearWallpaperInfo) -> Unit,
     onGeneratePreview: (RearWallpaperInfo) -> Unit,
+    onOpenStoreDetail: (String) -> Unit,
     onDelete: (RearWallpaperInfo) -> Unit,
 ) {
     var showImportDialog by remember { mutableStateOf(false) }
@@ -246,6 +249,7 @@ fun RearWallpaperManagementContent(
         onEditMetadata = { editTarget = it },
         onEditTemplate = onEditTemplate,
         onGeneratePreview = onGeneratePreview,
+        onOpenStoreDetail = onOpenStoreDetail,
         onDelete = { deleteTarget = it },
     )
 
@@ -492,6 +496,7 @@ private fun RearWallpaperManagementList(
     onEditMetadata: (RearWallpaperInfo) -> Unit,
     onEditTemplate: (RearWallpaperInfo) -> Unit,
     onGeneratePreview: (RearWallpaperInfo) -> Unit,
+    onOpenStoreDetail: (String) -> Unit,
     onDelete: (RearWallpaperInfo) -> Unit,
 ) {
     val currentWallpaperName = wallpapers.firstOrNull { it.wallpaperId == currentWallpaperId }?.name
@@ -596,6 +601,7 @@ private fun RearWallpaperManagementList(
                     onEditMetadata = { wallpaper?.let(onEditMetadata) },
                     onEditTemplate = { wallpaper?.let(onEditTemplate) },
                     onGeneratePreview = { wallpaper?.let(onGeneratePreview) },
+                    onOpenStoreDetail = onOpenStoreDetail,
                     onDelete = { wallpaper?.let(onDelete) },
                     dragModifier = Modifier
                         .longPressDraggable(draggableState, "rotation-${entry.wallpaperId}")
@@ -648,6 +654,7 @@ private fun RearWallpaperManagementList(
                 onEditMetadata = { onEditMetadata(wallpaper) },
                 onEditTemplate = { onEditTemplate(wallpaper) },
                 onGeneratePreview = { onGeneratePreview(wallpaper) },
+                onOpenStoreDetail = onOpenStoreDetail,
                 onDelete = { onDelete(wallpaper) },
             )
         }
@@ -667,6 +674,7 @@ private fun WallpaperManageCard(
     onEditMetadata: () -> Unit,
     onEditTemplate: () -> Unit,
     onGeneratePreview: () -> Unit,
+    onOpenStoreDetail: (String) -> Unit,
     onDelete: () -> Unit,
     dragModifier: Modifier = Modifier,
 ) {
@@ -699,6 +707,16 @@ private fun WallpaperManageCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                storeSource?.widgetId
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { storeWidgetId ->
+                        ModuleStyleIconAction(
+                            icon = MaterialSymbols.Rounded.Storefront,
+                            contentDescription = stringResource(R.string.rear_store_open_detail),
+                            onClick = { onOpenStoreDetail(storeWidgetId) },
+                        )
+                    }
                 ModuleStyleIconAction(
                     modifier = Modifier
                         .size(20.dp)

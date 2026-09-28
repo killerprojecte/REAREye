@@ -151,6 +151,7 @@ fun ConfigScreen(
     onAppListModeChange: (Boolean) -> Unit = {},
     onThemeModeChange: (Int) -> Unit = {},
     onNavigationBarModeChange: (Int) -> Unit = {},
+    onOpenRearStoreDetail: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val prefsManager = remember { context.getPrefsManager() }
@@ -468,6 +469,7 @@ fun ConfigScreen(
                             ),
                             focusCardId = focusCardId,
                             onFocusCardHandled = onFocusHandled,
+                            onOpenStoreDetail = onOpenRearStoreDetail,
                             actionRequest = actionRequest,
                             onActionHandled = onActionHandled,
                         )
@@ -481,6 +483,7 @@ fun ConfigScreen(
                                 bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
                             ),
                             onOpenCard = onCardRequested,
+                            onOpenStoreDetail = onOpenRearStoreDetail,
                             onOpenBusinessExtra = { business ->
                                 openOverlayRoute(ConfigRoute.BusinessExtraDetail(business))
                             },
@@ -496,6 +499,7 @@ fun ConfigScreen(
                             contentPadding = PaddingValues(
                                 bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
                             ),
+                            onOpenStoreDetail = onOpenRearStoreDetail,
                             actionRequest = actionRequest,
                             onActionHandled = onActionHandled,
                         )
@@ -597,11 +601,13 @@ fun ConfigScreen(
                 ConfigRoute.RearWallpaperManager -> RearWallpaperManagerScreen(
                     prefsManager = prefsManager,
                     onBack = { closeOverlayRoute() },
+                    onOpenStoreDetail = onOpenRearStoreDetail,
                 )
 
                 ConfigRoute.BusinessManager -> BusinessManagerScreen(
                     prefsManager = prefsManager,
                     onBack = { closeOverlayRoute() },
+                    onOpenStoreDetail = onOpenRearStoreDetail,
                     onOpenBusinessExtra = { business ->
                         routeStack = routeStack + ConfigRoute.BusinessExtraDetail(business)
                     },
@@ -615,6 +621,7 @@ fun ConfigScreen(
                 ConfigRoute.CardManager -> CardManagerScreen(
                     prefsManager = prefsManager,
                     onBack = { closeOverlayRoute() },
+                    onOpenStoreDetail = onOpenRearStoreDetail,
                 )
 
                 ConfigRoute.BusinessExtraManager -> BusinessExtraConfigManagerScreen(

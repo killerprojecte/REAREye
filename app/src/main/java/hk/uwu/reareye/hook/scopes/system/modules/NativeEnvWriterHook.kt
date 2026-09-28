@@ -51,6 +51,8 @@ class NativeEnvWriterHook : RoxyHooker() {
                         Boolean::class.javaPrimitiveType!!, // bindMountAppStorageDirs
                         Boolean::class.javaPrimitiveType!!, // bindMountOverrideSysprops
                         String::class.java, // binary
+                        String::class.java, // searchPath
+                        String::class.java, // libraryPermittedPath
                         String::class.java, // envs
                         Long::class.javaPrimitiveType!! // seq
                     )

@@ -397,6 +397,7 @@
     <string name="rear_store_uninstall_success">已卸载 %1$s</string>
     <string name="rear_store_uninstall_failed">卸载失败：%1$s</string>
     <string name="rear_store_open_repository">打开仓库</string>
+    <string name="rear_store_open_detail">在 Rear Store 中查看</string>
     <string name="rear_store_uninstall_action">卸载</string>
     <string name="rear_store_install_info_title">安装信息</string>
     <string name="rear_store_uninstall_card_title">卸载当前组件</string>

@@ -172,6 +172,7 @@ class MainActivity : ComponentActivity() {
                 mutableStateOf<ConfigType.ManagerType?>(null)
             }
             var pendingQuickActionTransition by remember { mutableStateOf(false) }
+            var pendingRearStoreWidgetId by remember { mutableStateOf<String?>(null) }
             var navigationQuickActionIds by remember {
                 mutableStateOf(settings.navigationQuickActionIds)
             }
@@ -267,7 +268,13 @@ class MainActivity : ComponentActivity() {
                                         presetPackRefreshToken = presetPackRefreshToken,
                                     )
 
-                                    "store" -> RearStoreScreen(bottomInnerPadding = stableBottomInset)
+                                    "store" -> RearStoreScreen(
+                                        bottomInnerPadding = stableBottomInset,
+                                        initialWidgetId = pendingRearStoreWidgetId,
+                                        onInitialWidgetHandled = {
+                                            pendingRearStoreWidgetId = null
+                                        },
+                                    )
 
                                     "config" -> ConfigScreen(
                                         bottomInnerPadding = stableBottomInset,
@@ -281,6 +288,11 @@ class MainActivity : ComponentActivity() {
                                         onThemeModeChange = { themeModeValue = it },
                                         onNavigationBarModeChange = {
                                             navigationBarModeValue = it
+                                        },
+                                        onOpenRearStoreDetail = { widgetId ->
+                                            pendingRearStoreWidgetId = widgetId
+                                            configInAppListMode = false
+                                            currentScreen = "store"
                                         },
                                     )
 

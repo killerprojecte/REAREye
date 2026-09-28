@@ -777,10 +777,16 @@ private fun buildVisibleStoreItems(
 }
 
 @Composable
-fun RearStoreScreen(bottomInnerPadding: Dp = 0.dp) {
+fun RearStoreScreen(
+    bottomInnerPadding: Dp = 0.dp,
+    initialWidgetId: String? = null,
+    onInitialWidgetHandled: () -> Unit = {},
+) {
     val context = LocalContext.current
     val prefsManager = remember { context.getPrefsManager() }
-    val selectedWidgetIdState = remember { mutableStateOf<String?>(null) }
+    val selectedWidgetIdState = remember {
+        mutableStateOf(initialWidgetId?.trim()?.takeIf { it.isNotEmpty() })
+    }
     val selectedWidgetId = selectedWidgetIdState.value
     var installedWidgets by remember {
         mutableStateOf<Map<String, RearStoreInstalledWidget>>(
@@ -803,6 +809,13 @@ fun RearStoreScreen(bottomInnerPadding: Dp = 0.dp) {
 
     LaunchedEffect(Unit) {
         reloadInstalledWidgets()
+    }
+
+    LaunchedEffect(initialWidgetId) {
+        val targetWidgetId = initialWidgetId?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return@LaunchedEffect
+        selectedWidgetIdState.value = targetWidgetId
+        onInitialWidgetHandled()
     }
 
     BackHandler(enabled = selectedWidgetId != null) {

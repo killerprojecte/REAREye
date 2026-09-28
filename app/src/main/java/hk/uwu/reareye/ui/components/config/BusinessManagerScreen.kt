@@ -13,17 +13,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,6 +39,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.rounded.Add_card
+import com.composables.icons.materialsymbols.rounded.Delete
+import com.composables.icons.materialsymbols.rounded.Edit_note
+import com.composables.icons.materialsymbols.rounded.Expand_more
+import com.composables.icons.materialsymbols.rounded.Open_in_new
+import com.composables.icons.materialsymbols.rounded.Storefront
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigFields
@@ -95,6 +99,7 @@ fun BusinessManagerScreen(
     embedded: Boolean = false,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     onOpenCard: (String) -> Unit = {},
+    onOpenStoreDetail: (String) -> Unit = {},
     actionRequest: ConfigDashboardAction? = null,
     onActionHandled: () -> Unit = {},
 ) {
@@ -286,6 +291,7 @@ fun BusinessManagerScreen(
         } else {
             widgets.add(config)
         }
+        widgets.sortBy { it.id }
 
         persist()
         showDialog.value = false
@@ -467,7 +473,8 @@ fun BusinessManagerScreen(
                             ) {
                                 if (item.renameable) {
                                     ModuleStyleIconAction(
-                                        icon = Icons.Rounded.EditNote,
+                                        icon = MaterialSymbols.Rounded.Edit_note,
+                                        contentDescription = stringResource(R.string.rear_widget_edit_business),
                                         onClick = { openEditDialog(item) },
                                     )
                                 } else {
@@ -477,13 +484,33 @@ fun BusinessManagerScreen(
                                         tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.82f),
                                     )
                                 }
+                                if (!item.downloadedFromStore) {
+                                    ModuleStyleIconAction(
+                                        icon = MaterialSymbols.Rounded.Add_card,
+                                        contentDescription = stringResource(R.string.rear_widget_add_card),
+                                        onClick = { openRegisterCardDialog(item) },
+                                    )
+                                }
+                                item.storeWidgetId
+                                    ?.trim()
+                                    ?.takeIf { it.isNotEmpty() }
+                                    ?.let { storeWidgetId ->
+                                        ModuleStyleIconAction(
+                                            icon = MaterialSymbols.Rounded.Storefront,
+                                            contentDescription = stringResource(R.string.rear_store_open_detail),
+                                            onClick = { onOpenStoreDetail(storeWidgetId) },
+                                        )
+                                    }
                                 if (relatedCards.isNotEmpty()) {
                                     ModuleStyleIconAction(
-                                        icon = if (expandedBusinessId == item.id) {
-                                            Icons.Filled.KeyboardArrowDown
-                                        } else {
-                                            Icons.AutoMirrored.Filled.KeyboardArrowRight
-                                        },
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .graphicsLayer {
+                                                rotationZ =
+                                                    if (expandedBusinessId == item.id) 180f else 0f
+                                            },
+                                        icon = MaterialSymbols.Rounded.Expand_more,
+                                        contentDescription = stringResource(R.string.rear_widget_action_related_cards),
                                         onClick = {
                                             expandedBusinessId =
                                                 if (expandedBusinessId == item.id) null else item.id
@@ -524,19 +551,15 @@ fun BusinessManagerScreen(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
-                                        IconButton(
-                                            minHeight = 35.dp,
-                                            minWidth = 35.dp,
+                                        ModuleStyleIconAction(
+                                            icon = MaterialSymbols.Rounded.Open_in_new,
+                                            contentDescription = stringResource(R.string.rear_widget_action_jump),
                                             onClick = { onOpenCard(card.id) },
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                                contentDescription = stringResource(R.string.rear_widget_action_jump),
-                                            )
-                                        }
-                                        IconButton(
-                                            minHeight = 35.dp,
-                                            minWidth = 35.dp,
+                                        )
+                                        ModuleStyleIconAction(
+                                            icon = MaterialSymbols.Rounded.Delete,
+                                            contentDescription = stringResource(R.string.rear_widget_action_delete),
+                                            contentColor = Color(0xFFD32F2F),
                                             onClick = {
                                                 cards.remove(card)
                                                 scope.launch(Dispatchers.IO) {
@@ -547,13 +570,7 @@ fun BusinessManagerScreen(
                                                     )
                                                 }
                                             },
-                                        ) {
-                                            Icon(
-                                                imageVector = MiuixIcons.Delete,
-                                                tint = Color(0xFFD32F2F),
-                                                contentDescription = stringResource(R.string.rear_widget_action_delete),
-                                            )
-                                        }
+                                        )
                                     }
                                 }
                             }

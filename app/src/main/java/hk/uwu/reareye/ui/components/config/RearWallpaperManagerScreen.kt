@@ -50,6 +50,7 @@ fun RearWallpaperManagerScreen(
     onBack: () -> Unit,
     embedded: Boolean = false,
     contentPadding: PaddingValues = PaddingValues(0.dp),
+    onOpenStoreDetail: (String) -> Unit = {},
     actionRequest: ConfigDashboardAction? = null,
     onActionHandled: () -> Unit = {},
 ) {
@@ -343,6 +344,7 @@ fun RearWallpaperManagerScreen(
                 onUpdateMetadata = ::updateWallpaperMetadata,
                 onEditTemplate = { activeTemplateWallpaperId = it.wallpaperId },
                 onGeneratePreview = ::generateWallpaperPreview,
+                onOpenStoreDetail = onOpenStoreDetail,
                 onDelete = ::deleteWallpaper,
             )
         }
