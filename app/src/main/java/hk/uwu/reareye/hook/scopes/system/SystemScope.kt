@@ -1,8 +1,6 @@
 package hk.uwu.reareye.hook.scopes.system
 
 import hk.uwu.reareye.generated.AppProperties
-import hk.uwu.reareye.hook.core.HookModule
-import hk.uwu.reareye.hook.core.YLog
 import hk.uwu.reareye.hook.scopes.Scope
 import hk.uwu.reareye.hook.scopes.system.modules.BackgroundWhitelistModule
 import hk.uwu.reareye.hook.scopes.system.modules.CustomBoundsCompatModule
@@ -14,10 +12,12 @@ import hk.uwu.reareye.hook.scopes.system.modules.ExternalDisplayLaunchUnlockModu
 import hk.uwu.reareye.hook.scopes.system.modules.NativeEnvWriterHook
 import hk.uwu.reareye.hook.scopes.system.modules.RearScreenActivityWhitelistModule
 import hk.uwu.reareye.hook.scopes.system.modules.misc.GMSUnlockModule
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 
-class SystemScope : Scope {
-
-    override val hooks: List<HookModule> = buildList {
+class SystemScope : RoxyHooker(), Scope {
+    override fun PackageScope.onHook() = buildList<RoxyHooker> {
         add(GMSUnlockModule())
         add(ExternalDisplayLaunchUnlockModule())
         if (AppProperties.IS_PUBLIC_BETA) {
@@ -26,19 +26,15 @@ class SystemScope : Scope {
             add(NativeEnvWriterHook())
         }
         if (isRearDevice) {
-            addAll(
-                listOf(
-                    RearScreenActivityWhitelistModule(),
-                    BackgroundWhitelistModule(),
-                    DisableRearScreenCoverHook(),
-                    DisableSubScreenDoubleTapSleepHook(),
-                    DisableSubScreenDoubleTapWakeHook(),
-                    DisableSubScreenHighLoadModeHook(),
-                    CustomBoundsCompatModule()
-                )
-            )
+            add(RearScreenActivityWhitelistModule())
+            add(BackgroundWhitelistModule())
+            add(DisableRearScreenCoverHook())
+            add(DisableSubScreenDoubleTapSleepHook())
+            add(DisableSubScreenDoubleTapWakeHook())
+            add(DisableSubScreenHighLoadModeHook())
+            add(CustomBoundsCompatModule())
         } else {
-            YLog.debug("This device is not support rear screen, skip load some features that this device is not supported")
+            YLog.debug("This device does not support a rear screen; skipping system rear-screen hooks")
         }
-    }
+    }.forEach(::loadHooker)
 }

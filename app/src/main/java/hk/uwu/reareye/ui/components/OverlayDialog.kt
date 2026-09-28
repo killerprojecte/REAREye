@@ -52,7 +52,6 @@ import top.yukonga.miuix.kmp.anim.folmeSpring
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.layout.DialogDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.miuixShape
 
 @Composable
 fun OverlayDialog(
@@ -109,7 +108,8 @@ fun OverlayDialog(
             WindowInsets.displayCutout.asPaddingValues().calculateTopPadding(),
         )
         val imeBottomInset = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-        val shape = miuixShape(if (isLargeScreen) 28.dp else 32.dp)
+        val shape =
+            androidx.compose.foundation.shape.RoundedCornerShape(if (isLargeScreen) 28.dp else 32.dp)
 
         LaunchedEffect(show, isLargeScreen) {
             if (show) {

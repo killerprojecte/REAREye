@@ -11,8 +11,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import hk.uwu.reareye.hook.core.ModuleActivationState
-import hk.uwu.reareye.hook.core.XposedModuleStatus
+import hk.uwu.reareye.hook.support.ModuleActivationState
+import hk.uwu.reareye.hook.support.XposedModuleStatus
 
 /**
  * 监听 libxposed service 绑定、死亡和页面恢复事件，驱动一次性的远程偏好重载。

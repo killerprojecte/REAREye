@@ -49,7 +49,10 @@ fun ModuleStyleManagerCard(
     leftAction: @Composable () -> Unit,
     rightAction: @Composable () -> Unit,
 ) {
-    val cardModifier = modifier.padding(bottom = bottomPadding)
+    // Keep the inter-card gap outside the shadowed surface while dragging.
+    val cardModifier = Modifier
+        .padding(bottom = bottomPadding)
+        .then(modifier)
 
     val headerContent: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

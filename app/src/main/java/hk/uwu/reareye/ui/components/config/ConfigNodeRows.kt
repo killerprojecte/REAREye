@@ -44,14 +44,14 @@ import hk.uwu.reareye.ui.config.validateRearStoreCustomDomain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.basic.DropdownDefaults
+import top.yukonga.miuix.kmp.basic.DropdownImpl
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Slider
-import top.yukonga.miuix.kmp.basic.SpinnerDefaults
-import top.yukonga.miuix.kmp.basic.SpinnerEntry
-import top.yukonga.miuix.kmp.basic.SpinnerItemImpl
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
@@ -242,7 +242,7 @@ fun MaskMultiSelectConfigInput(
         options.map { context.getString(it.titleRes) }
     }
     val optionEntries = remember(item.key, optionTitles) {
-        optionTitles.map { SpinnerEntry(title = it) }
+        optionTitles.map { DropdownItem(title = it) }
     }
 
     val selectedLabels = options
@@ -283,12 +283,12 @@ fun MaskMultiSelectConfigInput(
         ) {
             ListPopupColumn {
                 options.forEachIndexed { index, option ->
-                    SpinnerItemImpl(
-                        entry = optionEntries[index],
-                        entryCount = options.size,
+                    DropdownImpl(
+                        item = optionEntries[index],
+                        optionSize = options.size,
                         isSelected = (selectedMask and option.maskValue) != 0,
                         index = index,
-                        spinnerColors = SpinnerDefaults.spinnerColors(),
+                        dropdownColors = DropdownDefaults.dropdownColors(),
                         onSelectedIndexChange = {
                             val nextMask = selectedMask xor option.maskValue
                             showModePopup.value = false
@@ -326,7 +326,7 @@ fun EnumSingleSelectConfigInput(
         options.map { context.getString(it.titleRes) }
     }
     val optionEntries = remember(item.key, optionTitles) {
-        optionTitles.map { SpinnerEntry(title = it) }
+        optionTitles.map { DropdownItem(title = it) }
     }
 
     val selectedLabel = options
@@ -362,12 +362,12 @@ fun EnumSingleSelectConfigInput(
         ) {
             ListPopupColumn {
                 options.forEachIndexed { index, option ->
-                    SpinnerItemImpl(
-                        entry = optionEntries[index],
-                        entryCount = options.size,
+                    DropdownImpl(
+                        item = optionEntries[index],
+                        optionSize = options.size,
                         isSelected = selectedValue == option.value,
                         index = index,
-                        spinnerColors = SpinnerDefaults.spinnerColors(),
+                        dropdownColors = DropdownDefaults.dropdownColors(),
                         onSelectedIndexChange = {
                             showEnumPopup.value = false
                             popupScope.launch {
@@ -408,7 +408,7 @@ fun RearStoreApiConfigInput(
         StoreApiProvider.selectableEntries.map { context.getString(it.titleRes) }
     }
     val optionEntries = remember(optionTitles) {
-        optionTitles.map { SpinnerEntry(title = it) }
+        optionTitles.map { DropdownItem(title = it) }
     }
     val selectedLabel = optionTitles[StoreApiProvider.selectableEntries.indexOf(provider)]
     val description = item.descriptionRes?.let { stringResource(it) }
@@ -456,12 +456,12 @@ fun RearStoreApiConfigInput(
             ) {
                 ListPopupColumn {
                     StoreApiProvider.selectableEntries.forEachIndexed { index, option ->
-                        SpinnerItemImpl(
-                            entry = optionEntries[index],
-                            entryCount = StoreApiProvider.selectableEntries.size,
+                        DropdownImpl(
+                            item = optionEntries[index],
+                            optionSize = StoreApiProvider.selectableEntries.size,
                             isSelected = provider == option,
                             index = index,
-                            spinnerColors = SpinnerDefaults.spinnerColors(),
+                            dropdownColors = DropdownDefaults.dropdownColors(),
                             onSelectedIndexChange = {
                                 showApiPopup.value = false
                                 popupScope.launch {

@@ -79,6 +79,9 @@ import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.DropdownDefaults
+import top.yukonga.miuix.kmp.basic.DropdownImpl
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.ListPopupDefaults
@@ -86,9 +89,6 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
-import top.yukonga.miuix.kmp.basic.SpinnerDefaults
-import top.yukonga.miuix.kmp.basic.SpinnerEntry
-import top.yukonga.miuix.kmp.basic.SpinnerItemImpl
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
@@ -836,8 +836,8 @@ internal fun ConfigNodeRowWithFavoriteMenu(
                 renderInRootScaffold = true,
             ) {
                 ListPopupColumn {
-                    SpinnerItemImpl(
-                        entry = SpinnerEntry(
+                    DropdownImpl(
+                        item = DropdownItem(
                             icon = { iconModifier ->
                                 FavoritePopupIcon(
                                     isFavorite = isFavorite,
@@ -853,10 +853,10 @@ internal fun ConfigNodeRowWithFavoriteMenu(
                                 }
                             )
                         ),
-                        entryCount = 1,
+                        optionSize = 1,
                         isSelected = false,
                         index = 0,
-                        spinnerColors = SpinnerDefaults.spinnerColors(),
+                        dropdownColors = DropdownDefaults.dropdownColors(),
                         onSelectedIndexChange = {
                             onToggleFavorite(node)
                         },

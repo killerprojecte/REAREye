@@ -1,7 +1,6 @@
-package hk.uwu.reareye.hook.core
+package hk.uwu.reareye.hook.support
 
 import android.content.SharedPreferences
-import android.os.ParcelFileDescriptor
 import java.io.File
 import java.io.InputStream
 
@@ -72,7 +71,7 @@ interface HookPrefs {
     /**
      * 判断当前偏好是否已经连接到远程 service。
      *
-     * 本地 SharedPreferences 适配默认视为已就绪；libxposed 远程适配会在 service 未绑定时返回
+     * 非远程实现默认视为已就绪；libxposed 远程适配会在 service 未绑定时返回
      * false，使 UI 不会把 service 不可用时的空默认值当作最终配置。
      */
     fun isRemoteReady(): Boolean = true
@@ -151,271 +150,6 @@ interface HookPrefsEditor {
 
     /** 异步提交。 */
     fun apply()
-}
-
-/**
- * SharedPreferences 适配实现。
- *
- * 该实现同时用于 libxposed getRemotePreferences 返回的偏好和模块 UI 本地偏好，
- * 统一复制 StringSet/Map，避免调用方修改底层缓存。
- */
-class SharedPreferencesHookPrefs(
-    private val delegate: SharedPreferences,
-) : HookPrefs {
-    override fun getString(key: String, defaultValue: String): String =
-        delegate.getString(key, defaultValue) ?: defaultValue
-
-    override fun getStringSet(key: String, defaultValue: Set<String>): Set<String> =
-        delegate.getStringSet(key, defaultValue)?.toSet() ?: defaultValue.toSet()
-
-    override fun getInt(key: String, defaultValue: Int): Int = delegate.getInt(key, defaultValue)
-
-    override fun getLong(key: String, defaultValue: Long): Long =
-        delegate.getLong(key, defaultValue)
-
-    override fun getFloat(key: String, defaultValue: Float): Float =
-        delegate.getFloat(key, defaultValue)
-
-    override fun getBoolean(key: String, defaultValue: Boolean): Boolean =
-        delegate.getBoolean(key, defaultValue)
-
-    override fun contains(key: String): Boolean = delegate.contains(key)
-
-    override fun all(): Map<String, Any?> = delegate.all.mapValues { (_, value) ->
-        when (value) {
-            is Set<*> -> value.toSet()
-            else -> value
-        }
-    }
-
-    override fun edit(): HookPrefsEditor = SharedPreferencesHookPrefsEditor(delegate.edit())
-
-    /** 暴露给需要 SharedPreferences API 的适配点，核心 Hook 不直接依赖它。 */
-    fun sharedPreferences(): SharedPreferences = delegate
-}
-
-/**
- * Hook 进程中的只读远程偏好视图。
- *
- * libxposed 的远程偏好对象本身带有 SharedPreferences.Editor 能力，但目标进程只能读取
- * UI/service 发布的配置。编辑器在第一次写入时记录并抛出异常，避免业务模块悄悄把运行时状态
- * 写回远程配置；需要持久化的配置必须经 UI/service/Binder 完成。
- */
-class ReadOnlyHookPrefs(
-    private val delegate: HookPrefs,
-    private val name: String,
-    private val remoteFileProvider: (String) -> ParcelFileDescriptor,
-    private val logger: HookLogger,
-) : HookPrefs {
-    override fun getString(key: String, defaultValue: String): String =
-        delegate.getString(key, defaultValue)
-
-    override fun getStringSet(key: String, defaultValue: Set<String>): Set<String> =
-        delegate.getStringSet(key, defaultValue)
-
-    override fun getInt(key: String, defaultValue: Int): Int = delegate.getInt(key, defaultValue)
-
-    override fun getLong(key: String, defaultValue: Long): Long =
-        delegate.getLong(key, defaultValue)
-
-    override fun getFloat(key: String, defaultValue: Float): Float =
-        delegate.getFloat(key, defaultValue)
-
-    override fun getBoolean(key: String, defaultValue: Boolean): Boolean =
-        delegate.getBoolean(key, defaultValue)
-
-    override fun contains(key: String): Boolean = delegate.contains(key)
-
-    override fun all(): Map<String, Any?> = delegate.all().mapValues { (_, value) ->
-        when (value) {
-            is Set<*> -> value.toSet()
-            else -> value
-        }
-    }
-
-    override fun copyRemoteFileTo(name: String, destination: File): Boolean {
-        val safeName = runCatching { RemoteFileName.requireValid(name) }
-            .onFailure { logger.error("Rejected invalid remote file read name: $name", it) }
-            .getOrNull() ?: return false
-        if (destination.isDirectory) {
-            val failure =
-                IllegalArgumentException("RemoteFile destination is a directory: ${destination.absolutePath}")
-            logger.error("Unable to copy remote file to directory: name=$safeName", failure)
-            return false
-        }
-        return runCatching {
-            destination.parentFile?.mkdirs()
-            ParcelFileDescriptor.AutoCloseInputStream(remoteFileProvider(safeName)).use { input ->
-                destination.outputStream().use { output ->
-                    input.copyTo(output)
-                    output.flush()
-                }
-            }
-            true
-        }.onFailure {
-            runCatching { if (destination.exists()) destination.delete() }
-                .onFailure { cleanupFailure ->
-                    logger.warn(
-                        "Unable to remove failed remote file destination: ${destination.absolutePath}",
-                        cleanupFailure
-                    )
-                }
-            logger.error(
-                "Unable to copy remote file: name=$safeName destination=${destination.absolutePath}",
-                it
-            )
-        }.getOrDefault(false)
-    }
-
-    override fun writeRemoteFile(name: String, bytes: ByteArray): Boolean =
-        rejectRemoteFileWrite("writeRemoteFile($name)")
-
-    override fun writeRemoteFile(name: String, source: InputStream, expectedSize: Long): Boolean =
-        rejectRemoteFileWrite("writeRemoteFile($name)")
-
-    override fun deleteRemoteFile(name: String): Boolean =
-        rejectRemoteFileWrite("deleteRemoteFile($name)")
-
-    private fun rejectRemoteFileWrite(operation: String): Nothing {
-        val violation = IllegalStateException(
-            "Hook process cannot modify remote files: name=$name operation=$operation",
-        )
-        logger.error("Rejected remote file write: name=$name operation=$operation", violation)
-        throw violation
-    }
-
-    override fun edit(): HookPrefsEditor = ReadOnlyHookPrefsEditor(name)
-}
-
-private class ReadOnlyHookPrefsEditor(
-    private val name: String,
-) : HookPrefsEditor {
-    private fun reject(operation: String): Nothing {
-        val violation = IllegalStateException(
-            "Hook process cannot modify remote preferences: name=$name operation=$operation"
-        )
-        YLog.error("Rejected remote preference write: name=$name operation=$operation", violation)
-        throw violation
-    }
-
-    override fun putString(key: String, value: String?): HookPrefsEditor =
-        reject("putString($key)")
-
-    override fun putStringSet(key: String, value: Set<String>?): HookPrefsEditor =
-        reject("putStringSet($key)")
-
-    override fun putInt(key: String, value: Int): HookPrefsEditor = reject("putInt($key)")
-
-    override fun putLong(key: String, value: Long): HookPrefsEditor = reject("putLong($key)")
-
-    override fun putFloat(key: String, value: Float): HookPrefsEditor = reject("putFloat($key)")
-
-    override fun putBoolean(key: String, value: Boolean): HookPrefsEditor =
-        reject("putBoolean($key)")
-
-    override fun remove(key: String): HookPrefsEditor = reject("remove($key)")
-
-    override fun clear(): HookPrefsEditor = reject("clear")
-
-    override fun commit(): Boolean = reject("commit")
-
-    override fun apply() = reject("apply")
-}
-
-/**
- * Hook 宿主不提供远程偏好能力时的显式降级视图。
- *
- * 读取只能返回调用方给出的默认值，绝不伪造已有配置；任何写入都会记录目标诊断并立即失败。
- */
-internal class UnavailableHookPrefs(
-    private val name: String,
-    private val target: String,
-    private val framework: String,
-    private val logger: HookLogger,
-) : HookPrefs {
-    override fun getString(key: String, defaultValue: String): String = defaultValue
-
-    override fun getStringSet(key: String, defaultValue: Set<String>): Set<String> =
-        defaultValue.toSet()
-
-    override fun getInt(key: String, defaultValue: Int): Int = defaultValue
-
-    override fun getLong(key: String, defaultValue: Long): Long = defaultValue
-
-    override fun getFloat(key: String, defaultValue: Float): Float = defaultValue
-
-    override fun getBoolean(key: String, defaultValue: Boolean): Boolean = defaultValue
-
-    override fun contains(key: String): Boolean = false
-
-    override fun all(): Map<String, Any?> = emptyMap()
-
-    override fun writeRemoteFile(name: String, bytes: ByteArray): Boolean =
-        unavailableRemoteFile("write", name, bytes.size)
-
-    override fun deleteRemoteFile(name: String): Boolean = unavailableRemoteFile("delete", name, 0)
-
-    override fun copyRemoteFileTo(name: String, destination: File): Boolean = unavailableRemoteFile(
-        "read",
-        name,
-        destination.absolutePath.length,
-    )
-
-    private fun unavailableRemoteFile(operation: String, name: String, size: Int): Nothing {
-        val failure = IllegalStateException(
-            "Remote file capability unavailable: name=$name operation=$operation framework={$framework}",
-        )
-        logger.error(
-            "Rejected remote file operation: name=$name operation=$operation size=$size " +
-                    "target=$target framework={$framework}",
-            failure,
-        )
-        throw failure
-    }
-
-    override fun edit(): HookPrefsEditor =
-        UnavailableHookPrefsEditor(name, target, framework, logger)
-}
-
-private class UnavailableHookPrefsEditor(
-    private val name: String,
-    private val target: String,
-    private val framework: String,
-    private val logger: HookLogger,
-) : HookPrefsEditor {
-    private fun reject(operation: String): Nothing {
-        val failure = IllegalStateException(
-            "Remote preferences unavailable: name=$name target=$target operation=$operation framework={$framework}"
-        )
-        logger.error(
-            "Rejected preference write because remote capability is unavailable: " +
-                    "name=$name target=$target operation=$operation framework={$framework}",
-            failure,
-        )
-        throw failure
-    }
-
-    override fun putString(key: String, value: String?): HookPrefsEditor = reject("putString($key)")
-
-    override fun putStringSet(key: String, value: Set<String>?): HookPrefsEditor =
-        reject("putStringSet($key)")
-
-    override fun putInt(key: String, value: Int): HookPrefsEditor = reject("putInt($key)")
-
-    override fun putLong(key: String, value: Long): HookPrefsEditor = reject("putLong($key)")
-
-    override fun putFloat(key: String, value: Float): HookPrefsEditor = reject("putFloat($key)")
-
-    override fun putBoolean(key: String, value: Boolean): HookPrefsEditor =
-        reject("putBoolean($key)")
-
-    override fun remove(key: String): HookPrefsEditor = reject("remove($key)")
-
-    override fun clear(): HookPrefsEditor = reject("clear")
-
-    override fun commit(): Boolean = reject("commit")
-
-    override fun apply() = reject("apply")
 }
 
 /**
@@ -599,3 +333,7 @@ private class SharedPreferencesHookPrefsEditor(
         delegate.apply()
     }
 }
+
+
+
+

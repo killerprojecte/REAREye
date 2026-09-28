@@ -42,7 +42,6 @@
 -dontwarn io.github.libxposed.annotation.**
 -dontwarn java.lang.reflect.AnnotatedType
 -keep class hk.uwu.reareye.hook.HookEntry { *; }
--keep class hk.uwu.reareye.hook.core.** { *; }
 
 # --- DexKit 2.2 ABI/native entry ---
 -keepclasseswithmembers,includedescriptorclasses class org.luckypray.dexkit.** {

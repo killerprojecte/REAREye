@@ -1,7 +1,7 @@
 package hk.uwu.reareye.ui.config
 
 import android.content.Context
-import hk.uwu.reareye.hook.core.YLog
+import hk.uwu.reareye.hook.support.YLog
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.nio.charset.StandardCharsets

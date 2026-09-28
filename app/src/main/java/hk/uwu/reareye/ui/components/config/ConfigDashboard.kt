@@ -1,5 +1,9 @@
 package hk.uwu.reareye.ui.components.config
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,13 +26,14 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -48,7 +53,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
-import top.yukonga.miuix.kmp.basic.TabRow
+import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -154,6 +159,7 @@ fun ConfigDashboard(
         stringResource(R.string.config_tab_wallpapers),
         stringResource(R.string.config_tab_more),
     )
+    val tabTransition = updateTransition(selectedTab, label = "ConfigDashboardTabs")
 
     Column(
         modifier = Modifier
@@ -213,7 +219,7 @@ fun ConfigDashboard(
             },
             scrollBehavior = scrollBehavior,
         )
-        TabRow(
+        TabRowWithContour(
             tabs = tabs,
             selectedTabIndex = selectedTab.ordinal,
             onTabSelected = ::selectTab,
@@ -234,48 +240,69 @@ fun ConfigDashboard(
         ) {
             DashboardTab.entries.forEach { tab ->
                 if (loadedTabMask and (1 shl tab.ordinal) == 0) return@forEach
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(if (selectedTab == tab) 1f else 0f)
-                        .alpha(if (selectedTab == tab) 1f else 0f),
-                ) {
-                    when (tab) {
-                        DashboardTab.CARDS -> cardContent(
-                            focusCardId,
-                            { focusCardId = null },
-                            pendingAction.takeIf { selectedTab == DashboardTab.CARDS },
-                        ) { pendingAction = null }
-
-                        DashboardTab.COMPONENTS -> componentContent(
-                            { cardId ->
-                                focusCardId = cardId
-                                selectTab(DashboardTab.CARDS.ordinal)
+                key(tab) {
+                    val tabAlpha by tabTransition.animateFloat(
+                        transitionSpec = { tween(durationMillis = 220) },
+                        label = "${tab.name}Alpha",
+                    ) { if (it == tab) 1f else 0f }
+                    val tabSlide by tabTransition.animateFloat(
+                        transitionSpec = {
+                            tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                        },
+                        label = "${tab.name}Slide",
+                    ) { selected ->
+                        when {
+                            selected == tab -> 0f
+                            selected.ordinal < tab.ordinal -> 24f
+                            else -> -24f
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(if (selectedTab == tab) 1f else 0f)
+                            .graphicsLayer {
+                                alpha = tabAlpha
+                                translationX = tabSlide.dp.toPx()
                             },
-                            pendingAction.takeIf { selectedTab == DashboardTab.COMPONENTS },
-                        ) { pendingAction = null }
+                    ) {
+                        when (tab) {
+                            DashboardTab.CARDS -> cardContent(
+                                focusCardId,
+                                { focusCardId = null },
+                                pendingAction.takeIf { selectedTab == DashboardTab.CARDS },
+                            ) { pendingAction = null }
 
-                        DashboardTab.WALLPAPERS -> wallpaperContent(
-                            pendingAction.takeIf { selectedTab == DashboardTab.WALLPAPERS },
-                        ) { pendingAction = null }
+                            DashboardTab.COMPONENTS -> componentContent(
+                                { cardId ->
+                                    focusCardId = cardId
+                                    selectTab(DashboardTab.CARDS.ordinal)
+                                },
+                                pendingAction.takeIf { selectedTab == DashboardTab.COMPONENTS },
+                            ) { pendingAction = null }
 
-                        DashboardTab.MORE -> MoreTab(
-                            nodes = nodes,
-                            prefsManager = prefsManager,
-                            bottomPadding = contentPadding.calculateBottomPadding(),
-                            onOpenCategory = onOpenCategory,
-                            onOpenAppList = onOpenAppList,
-                            onOpenManager = onOpenManager,
-                            onPreferenceChanged = onPreferenceChanged,
-                            onOpenFavoriteCategory = onOpenFavoriteCategory,
-                            favoriteNodeCount = favoriteNodeCount,
-                            favoriteNodeIds = favoriteNodeIds,
-                            resolveFavoriteNodeId = resolveFavoriteNodeId,
-                            onToggleFavorite = onToggleFavorite,
-                            initialScrollIndex = moreScrollIndex,
-                            initialScrollOffset = moreScrollOffset,
-                            onScrollChanged = onMoreScrollChanged,
-                        )
+                            DashboardTab.WALLPAPERS -> wallpaperContent(
+                                pendingAction.takeIf { selectedTab == DashboardTab.WALLPAPERS },
+                            ) { pendingAction = null }
+
+                            DashboardTab.MORE -> MoreTab(
+                                nodes = nodes,
+                                prefsManager = prefsManager,
+                                bottomPadding = contentPadding.calculateBottomPadding(),
+                                onOpenCategory = onOpenCategory,
+                                onOpenAppList = onOpenAppList,
+                                onOpenManager = onOpenManager,
+                                onPreferenceChanged = onPreferenceChanged,
+                                onOpenFavoriteCategory = onOpenFavoriteCategory,
+                                favoriteNodeCount = favoriteNodeCount,
+                                favoriteNodeIds = favoriteNodeIds,
+                                resolveFavoriteNodeId = resolveFavoriteNodeId,
+                                onToggleFavorite = onToggleFavorite,
+                                initialScrollIndex = moreScrollIndex,
+                                initialScrollOffset = moreScrollOffset,
+                                onScrollChanged = onMoreScrollChanged,
+                            )
+                        }
                     }
                 }
             }

@@ -242,4 +242,3 @@ private fun JSONArray?.toStringList(): List<String> {
 }
 
 private fun ByteArray.toHex(): String = joinToString("") { byte -> "%02x".format(byte) }
-

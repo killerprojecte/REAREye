@@ -35,4 +35,3 @@ internal class CancelDragAnimation {
         key = null
     }
 }
-

@@ -6,8 +6,10 @@ import android.util.Log
 import android.util.Size
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookPrefs
+import hk.uwu.reareye.hook.support.hookSystemContext
 import hk.uwu.reareye.hook.utils.DexKitMethodInjectionPoint
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveDexKitClassValue
@@ -15,6 +17,8 @@ import hk.uwu.reareye.hook.utils.resolveDexKitFieldValue
 import hk.uwu.reareye.hook.utils.resolveDexKitMethodInjectionPoint
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 import org.luckypray.dexkit.DexKitBridge
 import org.luckypray.dexkit.DexKitCacheBridge
 import org.luckypray.dexkit.annotations.DexKitExperimentalApi
@@ -23,7 +27,7 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(DexKitExperimentalApi::class)
-class UnlockVideoRestrictionsHook : YukiBaseHooker() {
+class UnlockVideoRestrictionsHook : RoxyHooker() {
     companion object {
         private const val VIDEO_EDIT_PLAY_CREATED_METHOD_CACHE_KEY =
             "TM_VIDEO_EDIT_PLAY_CREATED_METHOD"
@@ -78,19 +82,19 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
 
     @OptIn(ExperimentalAtomicApi::class)
     @SuppressLint("ResourceType")
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadApp("com.android.thememanager") {
             val versionCode = resolveHookPackageVersionCode(
-                systemContext,
-                appInfo.packageName,
-                appInfo.sourceDir,
+                hookSystemContext,
+                hookAppInfo.packageName,
+                hookAppInfo.sourceDir,
             )
-            val bridge = trackResource(
+            val bridge = runtime.manage(
                 createDexKitCacheBridge(
-                packageName = appInfo.packageName,
+                    packageName = hookAppInfo.packageName,
                 packageVersionCode = versionCode,
-                sourceDir = appInfo.sourceDir,
-                dataDir = appInfo.dataDir,
+                    sourceDir = hookAppInfo.sourceDir,
+                    dataDir = hookAppInfo.dataDir,
                 )
             )
             val durationCropCacheKey = "DURATION_CROP_CLZ"
@@ -396,13 +400,14 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
 
             checkDepthClz.firstMethod {
                 name = checkDepthPoint.methodName
-            }.hook().after {
-                if (!prefs.getBoolean(
+            }.hook {
+                after {
+                    if (!hookPrefs.getBoolean(
                         ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS,
                         true
                     )
                 ) return@after
-                val ref = instance.asResolver()
+                    val ref = instance!!.asResolver()
                 val videoCfg = ref.firstField {
                     name = $$"$videoConfig"
                 }.get() ?: return@after
@@ -415,18 +420,20 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
                 } else {
                     state.store(false)
                 }
+                }
             }
 
             // 修补视频编辑器
             videoEditRef.firstMethod {
                 name = videoEditPoint.methodName
                 returnType = Void.TYPE
-            }.hook().replaceUnit {
-                if (!prefs.getBoolean(ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS, true)) {
-                    invokeOriginal()
+            }.hook {
+                replaceUnit {
+                    if (!hookPrefs.getBoolean(ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS, true)) {
+                        callOriginal()
                     return@replaceUnit
                 }
-                val iRef = instance.asResolver()
+                    val iRef = instance!!.asResolver()
                 val playViewRef = iRef.firstField {
                     name = playViewFieldName
                 }.get()!!.asResolver()
@@ -449,14 +456,14 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
                     name = timelineGetInstancePoint.methodName
                     returnType = timelineClz
                 }.invoke()!!
-                sInstance.asResolver().firstMethod {
+                    sInstance!!.asResolver().firstMethod {
                     name = timelineAttachTexturePoint.methodName
                     returnType = Void.TYPE
                 }.invoke(playViewRef.firstMethod {
                     name = "getTextureView"
                 }.invoke(), videoConfig)
                 val duration: Long =
-                    sInstance.asResolver().firstMethod {
+                    sInstance!!.asResolver().firstMethod {
                         name = timelineGetDurationPoint.methodName
                     }.invoke() as Long
                 val activity = instance<Activity>()
@@ -483,19 +490,21 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
                     duration,
                     duration
                 )
-                sInstance.asResolver().firstMethod {
+                    sInstance!!.asResolver().firstMethod {
                     name = timelinePreparePoint.methodName
                     parameters(Int::class.java)
                 }.invoke(currentTrimIn.toInt())
                 state.store(true)
+                }
             }
 
             // 修补帧率限制
             fpsLimitClz.firstMethod {
                 name = fpsLimitPoint.methodName
-            }.hook().replaceUnit {
-                if (!prefs.getBoolean(ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS, true)) {
-                    invokeOriginal()
+            }.hook {
+                replaceUnit {
+                    if (!hookPrefs.getBoolean(ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS, true)) {
+                        callOriginal()
                     return@replaceUnit
                 }
                 val strF7l8 =
@@ -503,7 +512,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
                         returnType = String::class.java
                         parameterCount = 0
                     }.invoke() as String
-                val iVEA = instance.asResolver().firstField { type = videoEditClz }.get()!!
+                    val iVEA = instance!!.asResolver().firstField { type = videoEditClz }.get()!!
                 val iRef = iVEA.asResolver()
                 val yObj = iRef.firstField { name = videoUriFieldName }.get()
                 val cFieldRef = iRef.firstField { name = exportPathFieldName }
@@ -559,17 +568,19 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
                     iRef.firstField { name = trimOutFieldName }.get(),
                     toqVar
                 )
+                }
             }
 
             editorCfgBuilderClz.firstMethod {
                 name = editorConfigBuildPoint.methodName
-            }.hook().before {
-                if (!prefs.getBoolean(
+            }.hook {
+                before {
+                    if (!hookPrefs.getBoolean(
                         ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS,
                         true
                     )
                 ) return@before
-                val ref = instance.asResolver()
+                    val ref = instance!!.asResolver()
                 val isCallFromRearScreen = ref.field {
                     type = Boolean::class.java
                 }.all { it.get() == true }
@@ -582,11 +593,12 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
                         type = Int::class.java
                     }.set(120)
                 }
+                }
             }
         }
     }
 
-    private fun resolveVideoEditPlayCreatedMethod(
+    private fun PackageScope.resolveVideoEditPlayCreatedMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveDexKitMethodInjectionPoint(
@@ -606,7 +618,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         } ?: error("Failed to find video edit play created method")
     }
 
-    private fun resolveVideoEditFpsLimitMethod(
+    private fun PackageScope.resolveVideoEditFpsLimitMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveDexKitMethodInjectionPoint(
@@ -628,7 +640,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         } ?: error("Failed to find edit fps limit method")
     }
 
-    private fun resolveVideoEditorConfigBuildMethod(
+    private fun PackageScope.resolveVideoEditorConfigBuildMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveDexKitMethodInjectionPoint(
@@ -648,7 +660,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         } ?: error("Failed to find video editor config build method")
     }
 
-    private fun resolveVideoDepthCheckMethod(
+    private fun PackageScope.resolveVideoDepthCheckMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveDexKitMethodInjectionPoint(
@@ -673,7 +685,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         } ?: error("Failed to find depth check method")
     }
 
-    private fun computeExportOutputSize(
+    private fun PackageScope.computeExportOutputSize(
         originWidth: Int,
         originHeight: Int,
         maxWidth: Int
@@ -700,7 +712,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         } ?: error("Failed to find method for $cacheKey")
     }
 
-    private fun resolveVideoTimelineGetInstanceMethod(
+    private fun PackageScope.resolveVideoTimelineGetInstanceMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
@@ -720,7 +732,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveVideoTimelineAttachTextureMethod(
+    private fun PackageScope.resolveVideoTimelineAttachTextureMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
@@ -744,7 +756,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveVideoTimelineGetDurationMethod(
+    private fun PackageScope.resolveVideoTimelineGetDurationMethod(
         clz: String,
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
@@ -766,7 +778,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveVideoTimelinePrepareMethod(
+    private fun PackageScope.resolveVideoTimelinePrepareMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
@@ -787,7 +799,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveVideoTimelineExportMethod(
+    private fun PackageScope.resolveVideoTimelineExportMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
@@ -811,7 +823,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveVideoToastTextMethod(
+    private fun PackageScope.resolveVideoToastTextMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
@@ -845,7 +857,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveVideoOperationCurrentTimeMethod(
+    private fun PackageScope.resolveVideoOperationCurrentTimeMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
@@ -867,7 +879,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveVideoClipFrameLoadMethod(
+    private fun PackageScope.resolveVideoClipFrameLoadMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
@@ -888,7 +900,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveVideoHashStringMethod(
+    private fun PackageScope.resolveVideoHashStringMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
@@ -920,7 +932,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveVideoExportConfigSetFpsMethod(
+    private fun PackageScope.resolveVideoExportConfigSetFpsMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
@@ -953,7 +965,7 @@ class UnlockVideoRestrictionsHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveVideoGsonSerializeMethod(
+    private fun PackageScope.resolveVideoGsonSerializeMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(

@@ -52,4 +52,3 @@ internal class DefaultAutoscroller(
         return nonLinearInterpolator * BASE_SPEED * speedFactor
     }
 }
-

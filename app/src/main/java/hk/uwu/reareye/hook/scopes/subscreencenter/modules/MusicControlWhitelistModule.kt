@@ -4,33 +4,37 @@ import android.media.MediaMetadata
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
 import com.highcapable.kavaref.condition.type.Modifiers
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookPrefs
+import hk.uwu.reareye.hook.support.hookSystemContext
 import hk.uwu.reareye.hook.utils.SmartAssistantRegistry
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 import org.luckypray.dexkit.annotations.DexKitExperimentalApi
 
 @OptIn(DexKitExperimentalApi::class)
-class MusicControlWhitelistModule : YukiBaseHooker() {
+class MusicControlWhitelistModule : RoxyHooker() {
     companion object {
         private const val TAG = "MusicControlWhitelist"
     }
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadApp("com.xiaomi.subscreencenter") {
             val versionCode = resolveHookPackageVersionCode(
-                systemContext,
-                appInfo.packageName,
-                appInfo.sourceDir,
+                hookSystemContext,
+                hookAppInfo.packageName,
+                hookAppInfo.sourceDir,
             )
-            val bridge = trackResource(
+            val bridge = runtime.manage(
                 createDexKitCacheBridge(
-                packageName = appInfo.packageName,
+                    packageName = hookAppInfo.packageName,
                 packageVersionCode = versionCode,
-                sourceDir = appInfo.sourceDir,
-                dataDir = appInfo.dataDir,
+                    sourceDir = hookAppInfo.sourceDir,
+                    dataDir = hookAppInfo.dataDir,
                 )
             )
             val registry = SmartAssistantRegistry(bridge) { className -> className.toClass() }
@@ -38,8 +42,9 @@ class MusicControlWhitelistModule : YukiBaseHooker() {
             snapshotPoint.className.toClass().resolve().firstMethod {
                 name = snapshotPoint.methodName
                 parameterCount = 0
-            }.hook().after {
-                if (!prefs.getBoolean(ConfigKeys.HOOK_MUSIC_CONTROLS_WHITELIST, true)) {
+            }.hook {
+                after {
+                    if (!hookPrefs.getBoolean(ConfigKeys.HOOK_MUSIC_CONTROLS_WHITELIST, true)) {
                     return@after
                 }
                 val snapshot = result ?: return@after
@@ -48,12 +53,14 @@ class MusicControlWhitelistModule : YukiBaseHooker() {
                 if (rawMap === java.util.Collections.EMPTY_MAP) return@after
                 val map = unwrapMutableMap(rawMap)
                 runCatching {
-                    prefs.getStringSet(ConfigKeys.MUSIC_CONTROLS_WHITELIST_APPS).forEach { app ->
+                    hookPrefs.getStringSet(ConfigKeys.MUSIC_CONTROLS_WHITELIST_APPS)
+                        .forEach { app ->
                         map[app] = "music"
                     }
                 }.onFailure { YLog.error("[$TAG] Cannot update app registry", it) }
                     .getOrThrow()
                 YLog.debug("Hooked SubscreenCenter whitelist $map")
+                }
             }
 
             val musicControlListenerClz =
@@ -62,13 +69,14 @@ class MusicControlWhitelistModule : YukiBaseHooker() {
                 name = "onClientMetadataUpdate"
                 returnType = Void.TYPE
                 parameters(MediaMetadata::class.java)
-            }.hook().after {
-                if (!prefs.getBoolean(
+            }.hook {
+                after {
+                    if (!hookPrefs.getBoolean(
                         ConfigKeys.HOOK_MUSIC_CONTROLS_FORCE_UPDATE,
                         false,
                     )
                 ) return@after
-                val i = instance.asResolver().firstField {
+                    val i = instance!!.asResolver().firstField {
                     name = "this$0"
                 }.get() ?: return@after
                 val mRoot = i.asResolver().firstField {
@@ -78,15 +86,16 @@ class MusicControlWhitelistModule : YukiBaseHooker() {
                 mRoot.asResolver().firstMethod {
                     name = "requestUpdate"
                 }.invoke()
-                if (prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+                    if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
                     YLog.debug("Request render controller to update metadata")
+                }
                 }
             }
         }
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun unwrapMutableMap(any: Any): MutableMap<Any, Any?> {
+    private fun PackageScope.unwrapMutableMap(any: Any): MutableMap<Any, Any?> {
         var current: Any = any
         repeat(32) {
             val map = current as? MutableMap<Any?, Any?>

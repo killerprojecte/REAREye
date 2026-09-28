@@ -1,7 +1,7 @@
 package hk.uwu.reareye.repository.rearwidget
 
-import hk.uwu.reareye.hook.core.HookPrefs
-import hk.uwu.reareye.hook.core.HookPrefsEditor
+import hk.uwu.reareye.hook.support.HookPrefs
+import hk.uwu.reareye.hook.support.HookPrefsEditor
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigRepository.getShowTimeTipForBusiness
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager

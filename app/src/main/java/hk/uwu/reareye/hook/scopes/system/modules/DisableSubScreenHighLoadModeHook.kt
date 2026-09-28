@@ -1,12 +1,14 @@
 package hk.uwu.reareye.hook.scopes.system.modules
 
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookPrefs
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 
-class DisableSubScreenHighLoadModeHook : YukiBaseHooker() {
-    override fun onHook() {
+class DisableSubScreenHighLoadModeHook : RoxyHooker() {
+    override fun PackageScope.onHook() {
         loadSystem {
             val dualScreenCoverManagerRef = "com.android.server.power.DualScreenCoverManager"
                 .toClass()
@@ -16,25 +18,27 @@ class DisableSubScreenHighLoadModeHook : YukiBaseHooker() {
                 name = "updateHighLoadSceneMode"
                 parameters(Int::class.java, Boolean::class.java)
                 returnType = Void.TYPE
-            }.hook().replaceUnit {
+            }.hook {
+                replaceUnit {
                 val value = args(1).boolean()
                 if (!value) {
-                    invokeOriginal(*args)
+                    callOriginal(*args)
                     return@replaceUnit
                 }
 
                 val packageName = instance.mainDisplayForegroundPackageName()
-                if (packageName in prefs.getStringSet(
+                    if (packageName in hookPrefs.getStringSet(
                         ConfigKeys.SUBSCREEN_HIGH_LOAD_MODE_DISABLED_APPS,
                     )
                 ) {
                     result = null
-                    if (prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+                        if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
                         YLog.debug("Skip subscreen high load mode package=$packageName")
                     }
                     return@replaceUnit
                 }
-                invokeOriginal(*args)
+                    callOriginal(*args)
+                }
             }
         }
     }

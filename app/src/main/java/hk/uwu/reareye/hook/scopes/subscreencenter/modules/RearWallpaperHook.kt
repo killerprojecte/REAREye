@@ -29,8 +29,11 @@ import androidx.core.net.toUri
 import androidx.core.view.isEmpty
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.ReloadableReceiverRegistration
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookPrefs
+import hk.uwu.reareye.hook.support.hookSystemContext
 import hk.uwu.reareye.hook.utils.DexKitMethodInjectionPoint
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveDexKitClassValue
@@ -44,6 +47,9 @@ import hk.uwu.reareye.widgetapi.IRearWallpaperApiService
 import hk.uwu.reareye.widgetapi.RearWallpaperApiContract
 import hk.uwu.reareye.widgetapi.RearWallpaperScheduleCodec
 import hk.uwu.reareye.widgetapi.RearWidgetTemplateConfigState
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
+import hk.uwu.roxyhook.android.lifecycle.lifecycle
 import org.json.JSONArray
 import org.json.JSONObject
 import org.luckypray.dexkit.DexKitBridge
@@ -59,16 +65,16 @@ import java.security.MessageDigest
 import java.util.Collections
 import java.util.IdentityHashMap
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 
 @OptIn(DexKitExperimentalApi::class)
-class RearWallpaperHook : YukiBaseHooker() {
+class RearWallpaperHook : RoxyHooker() {
 
     companion object {
         private const val TAG = "REAREye-RearWallpaper"
@@ -200,11 +206,13 @@ class RearWallpaperHook : YukiBaseHooker() {
         val applied: Boolean,
     )
 
-    private val bootstrapReceiverRegistered = AtomicBoolean(false)
-    private val bootstrapReceiverLock = Any()
-
-    @Volatile
-    private var bootstrapReceiverContext: Context? = null
+    private val bootstrapReceiverRegistration = ReloadableReceiverRegistration(
+        label = "rear wallpaper bootstrap receiver",
+        logger = { message, throwable ->
+            if (throwable == null) YLog.error(message) else YLog.error(message, throwable)
+        },
+    )
+    private val apiConnections = ConcurrentHashMap.newKeySet<IRearWallpaperApiConnection>()
     private var hostContext: Context? = null
     private var mainPanel: Any? = null
     private var mainHandler: Handler? = null
@@ -223,14 +231,14 @@ class RearWallpaperHook : YukiBaseHooker() {
     @Volatile
     private var cachedScheduleConfig: ScheduleConfig? = null
 
-    override fun saveReloadState(): Bundle = Bundle().apply {
+    fun saveReloadState(): Bundle = Bundle().apply {
         cachedSelectedWallpaperId?.let { putInt(RELOAD_STATE_SELECTED_WALLPAPER_ID, it) }
         cachedNextSwitchAtMillis
             .takeIf { it != Long.MIN_VALUE }
             ?.let { putLong(RELOAD_STATE_NEXT_SWITCH_AT, it) }
     }
 
-    override fun restoreReloadState(state: Bundle) {
+    fun restoreReloadState(state: Bundle) {
         cachedSelectedWallpaperId = if (state.containsKey(RELOAD_STATE_SELECTED_WALLPAPER_ID)) {
             state.getInt(RELOAD_STATE_SELECTED_WALLPAPER_ID)
         } else {
@@ -259,11 +267,8 @@ class RearWallpaperHook : YukiBaseHooker() {
         return fieldName
     }
 
-    override fun onReloadingPreflight(): Boolean {
-        if (bootstrapReceiverRegistered.get() &&
-            bootstrapReceiverContext == null &&
-            hostContext == null
-        ) {
+    override fun onHotReloadPreflight(): Boolean {
+        if (!bootstrapReceiverRegistration.isConsistent()) {
             YLog.error("Rear wallpaper reload preflight failed: bootstrap receiver has no host context")
             return false
         }
@@ -274,97 +279,67 @@ class RearWallpaperHook : YukiBaseHooker() {
         return true
     }
 
-    override fun onReloading(): Boolean {
+    override fun onHotReloadQuiesce() {
+        check(releaseForReload()) {
+            "$TAG failed to release reload resources"
+        }
+    }
+
+    private fun releaseForReload(): Boolean {
+        invalidateApiConnections()
         val schedulerCleanupSucceeded = stopScheduler()
         val callbackCleanupSucceeded = cancelPendingCallbacks()
         var success = schedulerCleanupSucceeded && callbackCleanupSucceeded
-        var receiverCleanupSucceeded = true
-        synchronized(bootstrapReceiverLock) {
-            if (bootstrapReceiverRegistered.get()) {
-                // Use the exact Context instance that performed registration. The host context can
-                // be replaced when attachBaseContext runs again before a hot reload.
-                val context = bootstrapReceiverContext ?: hostContext
-                if (context == null) {
-                    receiverCleanupSucceeded = false
-                    success = false
-                    YLog.error("Failed to unregister rear wallpaper bootstrap receiver: hostContext=null")
-                } else {
-                    val unregistered = runCatching {
-                        context.unregisterReceiver(hookBootstrapReceiver)
-                        true
-                    }.fold(
-                        onSuccess = { true },
-                        onFailure = { throwable ->
-                            // Android reports an already-removed receiver as
-                            // IllegalArgumentException. Cleanup is idempotent, so the desired
-                            // state has already been reached in this case.
-                            if (throwable is IllegalArgumentException) {
-                                YLog.warn(
-                                    "Rear wallpaper bootstrap receiver was already unregistered during reload"
-                                )
-                                true
-                            } else {
-                                YLog.error(
-                                    "Failed to unregister rear wallpaper bootstrap receiver",
-                                    throwable,
-                                )
-                                false
-                            }
-                        },
-                    )
-                    if (unregistered) {
-                        bootstrapReceiverRegistered.set(false)
-                        bootstrapReceiverContext = null
-                    } else {
-                        receiverCleanupSucceeded = false
-                        success = false
-                    }
-                }
-            } else {
-                bootstrapReceiverRegistered.set(false)
-                bootstrapReceiverContext = null
-            }
+        val receiverCleanupSucceeded = bootstrapReceiverRegistration.unregister { context ->
+            context.unregisterReceiver(hookBootstrapReceiver)
         }
+        success = success && receiverCleanupSucceeded
         if (receiverCleanupSucceeded) hostContext = null
         mainPanel = null
         if (schedulerCleanupSucceeded && callbackCleanupSucceeded) mainHandler = null
         dexKitBridge = null
+        hookBinder = null
         return success
     }
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadApp("com.xiaomi.subscreencenter") {
             val versionCode = resolveHookPackageVersionCode(
-                context = systemContext,
-                packageName = appInfo.packageName,
-                sourceDir = appInfo.sourceDir,
+                context = hookSystemContext,
+                packageName = hookAppInfo.packageName,
+                sourceDir = hookAppInfo.sourceDir,
             )
             val bridge = createDexKitCacheBridge(
-                packageName = appInfo.packageName,
+                packageName = hookAppInfo.packageName,
                 packageVersionCode = versionCode,
-                sourceDir = appInfo.sourceDir,
-                dataDir = appInfo.dataDir,
+                sourceDir = hookAppInfo.sourceDir,
+                dataDir = hookAppInfo.dataDir,
             )
-            dexKitBridge = trackResource(bridge)
+            dexKitBridge = runtime.manage(bridge)
+            hookBinder = createHookBinder()
+            hookBootstrapReceiver = createBootstrapReceiver()
             val launcherRef = "com.xiaomi.subscreencenter.SubScreenLauncher".toClass().resolve()
 
-            onAppLifecycle {
-                attachBaseContext {
-                    val context = appContext ?: (args.getOrNull(0) as? Context)
-                    hostContext = context?.applicationContext ?: context
+            this.lifecycle {
+                onAttach(replay = true) {
+                    hostContext = application.applicationContext ?: application
                     registerHookBootstrapReceiver()
+                    recoverExistingHostState()
+                    refreshSchedule(forceApply = true)
                 }
             }
 
             launcherRef.firstMethod {
                 name = "onCreate"
                 parameterCount = 1
-            }.hook().after {
+            }.hook {
+                after {
                 runCatching {
                     capturePanels(instance)
                     refreshSchedule(forceApply = true)
                 }.onFailure {
                     YLog.warn(it)
+                }
                 }
             }
             val saveSelectionPoint =
@@ -403,41 +378,50 @@ class RearWallpaperHook : YukiBaseHooker() {
             launcherRef.firstMethod {
                 name = "onResume"
                 parameterCount = 0
-            }.hook().after {
+            }.hook {
+                after {
                 runCatching {
                     capturePanels(instance)
                     refreshSchedule(forceApply = true)
                 }.onFailure {
                     YLog.warn(it)
                 }
+                }
             }
 
             launcherRef.firstMethod {
                 name = "onPause"
                 parameterCount = 0
-            }.hook().before {
+            }.hook {
+                before {
                 debugLog("launcher onPause keep scheduler nextAt=${readNextSwitchAt()}")
+                }
             }
 
             launcherRef.firstMethod {
                 name = "onDestroy"
                 parameterCount = 0
-            }.hook().before {
+            }.hook {
+                before {
                 stopScheduler()
                 mainPanel = null
                 mainHandler = null
+                }
             }
 
             saveSelectionPoint.className.toClass().resolve().firstMethod {
                 name = saveSelectionPoint.methodName
                 parameterCount = 0
-            }.hook().after {
+            }.hook {
+                after {
                 updateSelectedWallpaperIdFromPanel(instance)
+                }
             }
         }
     }
 
-    private val hookBinder = object : IRearWallpaperApiService.Stub() {
+    private var hookBinder: IRearWallpaperApiService.Stub? = null
+    private fun PackageScope.createHookBinder() = object : IRearWallpaperApiService.Stub() {
         override fun getCatalog(): Bundle {
             enforceCallerPermission()
             return buildCatalogBundle()
@@ -535,7 +519,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveMainPanelSaveSelectionMethod(
+    private fun PackageScope.resolveMainPanelSaveSelectionMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveDexKitMethodInjectionPoint(
@@ -556,14 +540,16 @@ class RearWallpaperHook : YukiBaseHooker() {
         } ?: error("DexKit failed to resolve save selection method")
     }
 
-    private val hookBootstrapReceiver = object : BroadcastReceiver() {
+    private lateinit var hookBootstrapReceiver: BroadcastReceiver
+    private fun PackageScope.createBootstrapReceiver() = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (!reloadGenerationGate.isOpen()) return
+            if (runtime.isClosed) return
             if (intent?.action != RearWallpaperApiContract.ACTION_REQUEST_HOOK_SERVICE) return
             val callbackBinder = intent
                 .getBundleExtra(RearWallpaperApiContract.Extras.BUNDLE)
                 ?.getBinder(RearWallpaperApiContract.Extras.BINDER)
             val callback = IRearWallpaperApiConnection.Stub.asInterface(callbackBinder)
+            callback?.let(apiConnections::add)
             val forceSync =
                 intent.getBooleanExtra(RearWallpaperApiContract.Extras.FORCE_SYNC, false)
             if (forceSync) {
@@ -571,35 +557,39 @@ class RearWallpaperHook : YukiBaseHooker() {
             }
             runCatching {
                 callback?.onServiceConnected(hookBinder)
-            }.onFailure(YLog::error)
+            }.onFailure { throwable ->
+                callback?.let(apiConnections::remove)
+                YLog.error(throwable)
+            }
         }
     }
 
-    private fun registerHookBootstrapReceiver() {
-        synchronized(bootstrapReceiverLock) {
-            if (bootstrapReceiverRegistered.get()) return
-            val ctx = hostContext ?: return
-            runCatching {
+    private fun invalidateApiConnections() {
+        apiConnections.forEach { connection ->
+            runCatching { connection.onServiceConnected(null) }
+                .onFailure {
+                    YLog.warn("Failed to invalidate rear wallpaper client during reload", it)
+                }
+        }
+        apiConnections.clear()
+    }
+
+    private fun PackageScope.registerHookBootstrapReceiver() {
+        val ctx = hostContext ?: return
+        bootstrapReceiverRegistration.register(ctx) { registrationContext ->
                 ContextCompat.registerReceiver(
-                    ctx,
+                    registrationContext,
                     hookBootstrapReceiver,
                     IntentFilter(RearWallpaperApiContract.ACTION_REQUEST_HOOK_SERVICE),
                     RearWallpaperApiContract.SERVICE_PERMISSION,
                     null,
                     ContextCompat.RECEIVER_EXPORTED,
                 )
-                bootstrapReceiverContext = ctx
-                bootstrapReceiverRegistered.set(true)
-            }.onFailure {
-                bootstrapReceiverContext = null
-                bootstrapReceiverRegistered.set(false)
-                YLog.error(it)
-            }
         }
     }
 
-    private fun enforceCallerPermission() {
-        reloadGenerationGate.requireOpen()
+    private fun PackageScope.enforceCallerPermission() {
+        check(!runtime.isClosed) { "Roxy runtime is closed" }
         val ctx = hostContext
         val uid = Binder.getCallingUid()
         if (uid == Process.myUid()) return
@@ -618,7 +608,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun buildCatalogBundle(): Bundle {
+    private fun PackageScope.buildCatalogBundle(): Bundle {
         val entries = loadWallpaperEntries()
         val currentIndex = readCurrentSelectionIndex(entries.lastIndex)
         val currentWallpaperId = entries.getOrNull(currentIndex)?.wallpaperId
@@ -665,7 +655,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun capturePanels(launcherInstance: Any?) {
+    private fun PackageScope.capturePanels(launcherInstance: Any?) {
         val resolver = launcherInstance?.asResolver() ?: return
         mainPanel = runCatching {
             resolver.firstField { name = resolveLauncherMainPanelFieldName() }.get()
@@ -675,7 +665,34 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun refreshSchedule(forceApply: Boolean) {
+    /** Recover an already-created launcher after a classloader reload without replaying lifecycle. */
+    private fun PackageScope.recoverExistingHostState(): Boolean {
+        if (mainPanel != null && mainHandler != null) return true
+        val activityThread = runCatching {
+            val type = Class.forName("android.app.ActivityThread", false, javaClass.classLoader)
+            type.getDeclaredMethod("currentActivityThread")
+                .apply { isAccessible = true }
+                .invoke(null)
+        }.getOrNull() ?: return false
+        val records = runCatching {
+            activityThread.javaClass.getDeclaredField("mActivities")
+                .apply { isAccessible = true }
+                .get(activityThread) as? Map<*, *>
+        }.getOrNull() ?: return false
+        records.values.forEach { record ->
+            val activity = runCatching {
+                record?.javaClass?.getDeclaredField("activity")
+                    ?.apply { isAccessible = true }
+                    ?.get(record)
+            }.getOrNull() ?: return@forEach
+            if (!activity.javaClass.name.endsWith("SubScreenLauncher")) return@forEach
+            capturePanels(activity)
+            if (mainPanel != null || mainHandler != null) return true
+        }
+        return mainPanel != null || mainHandler != null
+    }
+
+    private fun PackageScope.refreshSchedule(forceApply: Boolean) {
         stopScheduler()
         val scheduleConfig = readScheduleConfig()
         if (!scheduleConfig.enabled) {
@@ -750,7 +767,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         scheduleAt(nextAt)
     }
 
-    private fun scheduleAt(triggerAt: Long) {
+    private fun PackageScope.scheduleAt(triggerAt: Long) {
         stopScheduler()
         val handler = mainHandler ?: return
         val delayMs = (triggerAt - System.currentTimeMillis()).coerceAtLeast(0L)
@@ -764,7 +781,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun postTracked(
+    private fun PackageScope.postTracked(
         handler: Handler,
         delayMs: Long = 0L,
         onDropped: (() -> Unit)? = null,
@@ -773,7 +790,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         lateinit var runnable: Runnable
         runnable = Runnable {
             try {
-                if (reloadGenerationGate.isOpen()) {
+                if (!runtime.isClosed) {
                     action()
                 } else {
                     onDropped?.invoke()
@@ -798,7 +815,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return runnable.takeIf { posted }
     }
 
-    private fun postTrackedView(
+    private fun PackageScope.postTrackedView(
         view: View,
         delayMs: Long = 0L,
         onDropped: (() -> Unit)? = null,
@@ -807,7 +824,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         lateinit var runnable: Runnable
         runnable = Runnable {
             try {
-                if (reloadGenerationGate.isOpen()) {
+                if (!runtime.isClosed) {
                     action()
                 } else {
                     onDropped?.invoke()
@@ -888,13 +905,12 @@ class RearWallpaperHook : YukiBaseHooker() {
             YLog.error("Failed to remove rear wallpaper scheduler task", it)
         }.getOrDefault(false)
         if (removed) {
-            debugLog("stopScheduler removed pending task")
             schedulerTask = null
         }
         return removed
     }
 
-    private fun loadResolvedSchedule(
+    private fun PackageScope.loadResolvedSchedule(
         entries: List<WallpaperEntry> = loadWallpaperEntries(),
         scheduleConfig: ScheduleConfig = readScheduleConfig(),
     ): List<ResolvedScheduleItem> {
@@ -911,7 +927,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun switchWallpaperInternal(wallpaperId: Int): SwitchResult {
+    private fun PackageScope.switchWallpaperInternal(wallpaperId: Int): SwitchResult {
         val entries = loadWallpaperEntries()
         val target = entries.firstOrNull { it.wallpaperId == wallpaperId }
             ?: return SwitchResult(exists = false, applied = false)
@@ -928,7 +944,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return result
     }
 
-    private fun switchToResolved(
+    private fun PackageScope.switchToResolved(
         item: ResolvedScheduleItem,
         entries: List<WallpaperEntry>
     ): SwitchResult {
@@ -952,7 +968,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return SwitchResult(exists = true, applied = applied)
     }
 
-    private fun isMainPanelEditing(): Boolean {
+    private fun PackageScope.isMainPanelEditing(): Boolean {
         val panel = mainPanel ?: return false
         return runCatching {
             panel.asResolver().firstField {
@@ -961,7 +977,11 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.getOrDefault(false)
     }
 
-    private fun dispatchSelection(panel: Any, widgets: List<Any>, index: Int): Boolean {
+    private fun PackageScope.dispatchSelection(
+        panel: Any,
+        widgets: List<Any>,
+        index: Int
+    ): Boolean {
         val action: () -> Unit = {
             runCatching {
                 val selectPoint = resolveMainPanelSelectMethod()
@@ -971,12 +991,11 @@ class RearWallpaperHook : YukiBaseHooker() {
                 }.invoke(index, widgets)
                 debugLog("dispatchSelection success panel=${panel.javaClass.name} index=$index widgets=${widgets.size}")
             }.onFailure(YLog::error)
-            Unit
         }
         val handler = mainHandler
         return if (handler != null) {
             postTracked(handler, action = action) != null
-        } else if (reloadGenerationGate.isOpen()) {
+        } else if (!runtime.isClosed) {
             action()
             true
         } else {
@@ -984,7 +1003,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun updateSelectedWallpaperIdFromPanel(panel: Any?) {
+    private fun PackageScope.updateSelectedWallpaperIdFromPanel(panel: Any?) {
         val resolver = panel?.asResolver() ?: return
         runCatching {
             val index = resolver.firstField {
@@ -993,13 +1012,13 @@ class RearWallpaperHook : YukiBaseHooker() {
             val specs = resolver.firstField {
                 name = resolveMainPanelWidgetListFieldName()
             }.get() as? List<*> ?: return
-            val selectedId = specs.getOrNull(index)?.wallpaperSpecId() ?: return
+            val selectedId = specs.getOrNull(index)?.let { wallpaperSpecId(it) } ?: return
             persistSelectedWallpaperId(selectedId)
             debugLog("updateSelectedWallpaperIdFromPanel index=$index wallpaperId=$selectedId")
         }.onFailure(YLog::warn)
     }
 
-    private fun loadWallpaperEntries(): List<WallpaperEntry> {
+    private fun PackageScope.loadWallpaperEntries(): List<WallpaperEntry> {
         val specList = loadWallpaperSpecs()
         if (specList.isEmpty()) return emptyList()
 
@@ -1009,12 +1028,12 @@ class RearWallpaperHook : YukiBaseHooker() {
             specList.forEach { spec ->
                 val widget = createWallpaperWidget(spec) ?: return@forEach
 
-                val wallpaperId = spec.wallpaperSpecId()
+                val wallpaperId = wallpaperSpecId(spec)
                 if (wallpaperId == null) {
                     debugLog("loadWallpaperEntries skip spec with unresolved wallpaperId class=${spec.javaClass.name}")
                     return@forEach
                 }
-                val extras = spec.wallpaperSpecExtras()
+                val extras = wallpaperSpecExtras(spec)
                 val runtimeRecord = runtimeRecords[wallpaperId]
                 val templatePath = runtimeRecord?.resLocalPath
                     ?.takeIf { hasEditableTemplateConfig(it) }
@@ -1060,7 +1079,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun createWallpaperWidget(spec: Any): Any? {
+    private fun PackageScope.createWallpaperWidget(spec: Any): Any? {
         return runCatching {
             val factoryPoint = resolveWidgetFactoryMethod()
             factoryPoint.className.toClass().resolve().firstMethod {
@@ -1070,7 +1089,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.onFailure(YLog::warn).getOrNull()
     }
 
-    private fun hasEditableTemplateConfig(templatePath: String?): Boolean {
+    private fun PackageScope.hasEditableTemplateConfig(templatePath: String?): Boolean {
         val normalized = templatePath?.takeIf { it.isNotBlank() } ?: return false
         return WidgetTemplateConfigRepository.loadSchema(normalized)
             ?.items
@@ -1078,7 +1097,7 @@ class RearWallpaperHook : YukiBaseHooker() {
             ?: false
     }
 
-    private fun resolveWallpaperPreviewPath(
+    private fun PackageScope.resolveWallpaperPreviewPath(
         widget: Any,
         extras: Bundle?,
         localeSuffix: String?,
@@ -1095,8 +1114,8 @@ class RearWallpaperHook : YukiBaseHooker() {
             .distinct()
             .toList()
 
-        preferredCandidates.firstOrNull(::isReadablePreviewPath)?.let { return it }
-        extractStringFields(widget).firstOrNull(::isReadablePreviewPath)?.let { return it }
+        preferredCandidates.firstOrNull({ isReadablePreviewPath(it) })?.let { return it }
+        extractStringFields(widget).firstOrNull({ isReadablePreviewPath(it) })?.let { return it }
 
         val packagePath = templatePath?.takeIf { it.isNotBlank() }
             ?: extractMamlWidgetTemplatePath(widget)
@@ -1112,19 +1131,19 @@ class RearWallpaperHook : YukiBaseHooker() {
         return null
     }
 
-    private fun explicitTemplatePreviewPaths(templatePath: String): List<String> {
+    private fun PackageScope.explicitTemplatePreviewPaths(templatePath: String): List<String> {
         val schema = WidgetTemplateConfigRepository.loadSchema(templatePath) ?: return emptyList()
         return WidgetTemplateConfigRepository.imagePreviewValues(schema)
     }
 
-    private fun extractMamlWidgetTemplatePath(widget: Any): String? {
+    private fun PackageScope.extractMamlWidgetTemplatePath(widget: Any): String? {
         return extractStringFields(widget).firstOrNull { candidate ->
             val file = File(candidate)
             file.isFile && WidgetTemplateConfigRepository.loadSchema(file.absolutePath) != null
         }
     }
 
-    private fun resolveWallpaperTemplatePath(wallpaperId: Int): String? {
+    private fun PackageScope.resolveWallpaperTemplatePath(wallpaperId: Int): String? {
         readRuntimeRecords()
             .firstOrNull { it.wallpaperId == wallpaperId }
             ?.resLocalPath
@@ -1132,16 +1151,16 @@ class RearWallpaperHook : YukiBaseHooker() {
             ?.let { return it }
 
         loadWallpaperSpecs().forEach { spec ->
-            if (spec.wallpaperSpecId() != wallpaperId) return@forEach
+            if (wallpaperSpecId(spec) != wallpaperId) return@forEach
             extractMamlWidgetTemplatePath(spec)?.let { return it }
             createWallpaperWidget(spec)
-                ?.let(::extractMamlWidgetTemplatePath)
+                ?.let({ extractMamlWidgetTemplatePath(it) })
                 ?.let { return it }
         }
         return null
     }
 
-    private fun extractMamlWidgetConfigPath(widget: Any): String? {
+    private fun PackageScope.extractMamlWidgetConfigPath(widget: Any): String? {
         return extractStringFields(widget).firstOrNull { candidate ->
             val file = File(candidate)
             file.isFile && file.name.endsWith(".json", ignoreCase = true) &&
@@ -1149,7 +1168,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun extractStringFields(target: Any): List<String> {
+    private fun PackageScope.extractStringFields(target: Any): List<String> {
         val values = ArrayList<String>()
         var current: Class<*>? = target.javaClass
         while (current != null && current != Any::class.java) {
@@ -1179,7 +1198,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return values.distinct()
     }
 
-    private fun resolveWidgetFactoryMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveWidgetFactoryMethod(): DexKitMethodInjectionPoint {
         val bridge = dexKitBridge ?: error("DexKit bridge is not ready for widget factory")
         val point = resolveDexKitMethodInjectionPoint(
             bridge = bridge,
@@ -1204,11 +1223,11 @@ class RearWallpaperHook : YukiBaseHooker() {
         return point
     }
 
-    private fun resolveWidgetClassName(): String {
+    private fun PackageScope.resolveWidgetClassName(): String {
         return resolveWidgetFactoryMethod().className
     }
 
-    private fun resolveWallpaperSpecClassName(): String {
+    private fun PackageScope.resolveWallpaperSpecClassName(): String {
         val point = resolveWidgetFactoryMethod()
         return runCatching {
             point.className.toClass().resolve().firstMethod {
@@ -1219,7 +1238,7 @@ class RearWallpaperHook : YukiBaseHooker() {
             ?: error("DexKit failed to resolve wallpaper spec class")
     }
 
-    private fun resolveWallpaperSpecIdFieldName(): String {
+    private fun PackageScope.resolveWallpaperSpecIdFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = WALLPAPER_SPEC_ID_FIELD_CACHE_KEY,
         ) {
@@ -1242,7 +1261,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveWallpaperSpecExtrasFieldName(): String {
+    private fun PackageScope.resolveWallpaperSpecExtrasFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = WALLPAPER_SPEC_EXTRAS_FIELD_CACHE_KEY,
         ) {
@@ -1264,9 +1283,10 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveMainPanelClassName(): String = resolveMainPanelSelectMethod().className
+    private fun PackageScope.resolveMainPanelClassName(): String =
+        resolveMainPanelSelectMethod().className
 
-    private fun resolveLauncherMainPanelFieldName(): String {
+    private fun PackageScope.resolveLauncherMainPanelFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = LAUNCHER_MAIN_PANEL_FIELD_CACHE_KEY,
         ) {
@@ -1280,7 +1300,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveLauncherMainHandlerFieldName(): String {
+    private fun PackageScope.resolveLauncherMainHandlerFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = LAUNCHER_MAIN_HANDLER_FIELD_CACHE_KEY,
         ) {
@@ -1294,7 +1314,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveMainPanelEditModeFieldName(): String {
+    private fun PackageScope.resolveMainPanelEditModeFieldName(): String {
         val mainPanelClass = resolveMainPanelClassName()
         return resolveCachedFieldName(
             cacheKey = MAIN_PANEL_EDIT_MODE_FIELD_CACHE_KEY,
@@ -1322,7 +1342,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveMainPanelResumedFieldName(): String {
+    private fun PackageScope.resolveMainPanelResumedFieldName(): String {
         val mainPanelClass = resolveMainPanelClassName()
         return resolveCachedFieldName(
             cacheKey = MAIN_PANEL_RESUMED_FIELD_CACHE_KEY,
@@ -1350,7 +1370,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveMainPanelAodFieldName(): String {
+    private fun PackageScope.resolveMainPanelAodFieldName(): String {
         val mainPanelClass = resolveMainPanelClassName()
         return resolveCachedFieldName(
             cacheKey = MAIN_PANEL_AOD_FIELD_CACHE_KEY,
@@ -1372,7 +1392,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveMainPanelSelectedIndexFieldName(): String {
+    private fun PackageScope.resolveMainPanelSelectedIndexFieldName(): String {
         val mainPanelClass = resolveMainPanelClassName()
         return resolveCachedFieldName(
             cacheKey = MAIN_PANEL_SELECTED_INDEX_FIELD_CACHE_KEY,
@@ -1395,7 +1415,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveMainPanelWidgetListFieldName(): String {
+    private fun PackageScope.resolveMainPanelWidgetListFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = MAIN_PANEL_WIDGET_LIST_FIELD_CACHE_KEY,
         ) {
@@ -1409,7 +1429,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveWidgetIdFieldName(): String {
+    private fun PackageScope.resolveWidgetIdFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SUBSCREEN_WIDGET_ID_FIELD_CACHE_KEY,
         ) {
@@ -1424,7 +1444,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveWidgetSpecFieldName(): String {
+    private fun PackageScope.resolveWidgetSpecFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SUBSCREEN_WIDGET_SPEC_FIELD_CACHE_KEY,
         ) {
@@ -1438,7 +1458,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveWidgetExtrasFieldName(): String {
+    private fun PackageScope.resolveWidgetExtrasFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SUBSCREEN_WIDGET_EXTRAS_FIELD_CACHE_KEY,
         ) {
@@ -1452,7 +1472,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveWidgetHostFieldName(): String {
+    private fun PackageScope.resolveWidgetHostFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SUBSCREEN_WIDGET_HOST_FIELD_CACHE_KEY,
         ) {
@@ -1466,7 +1486,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveWidgetPreviewModeFieldName(): String {
+    private fun PackageScope.resolveWidgetPreviewModeFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SUBSCREEN_WIDGET_PREVIEW_MODE_FIELD_CACHE_KEY,
         ) {
@@ -1488,7 +1508,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolvePrefStoreInstanceFieldName(): String {
+    private fun PackageScope.resolvePrefStoreInstanceFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = PREF_STORE_INSTANCE_FIELD_CACHE_KEY,
         ) {
@@ -1507,7 +1527,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveDeviceConfigRenderSizeFieldName(): String {
+    private fun PackageScope.resolveDeviceConfigRenderSizeFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = DEVICE_CONFIG_RENDER_SIZE_FIELD_CACHE_KEY,
         ) {
@@ -1522,7 +1542,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveDeviceConfigLocaleSuffixFieldName(): String {
+    private fun PackageScope.resolveDeviceConfigLocaleSuffixFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = DEVICE_CONFIG_LOCALE_SUFFIX_FIELD_CACHE_KEY,
         ) {
@@ -1545,7 +1565,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveWidgetSetEditModeMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveWidgetSetEditModeMethod(): DexKitMethodInjectionPoint {
         val widgetClass = resolveWidgetClassName()
         YLog.debug("Widget class $widgetClass")
         val mainPanelClass = resolveMainPanelClassName()
@@ -1578,7 +1598,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return point
     }
 
-    private fun resolveWidgetCreateViewMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveWidgetCreateViewMethod(): DexKitMethodInjectionPoint {
         val widgetClass = resolveWidgetClassName()
         val bridge = dexKitBridge ?: error("DexKit bridge is not ready for widget create view")
         val point = resolveDexKitMethodInjectionPoint(
@@ -1608,7 +1628,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return point
     }
 
-    private fun resolveWidgetSetAodMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveWidgetSetAodMethod(): DexKitMethodInjectionPoint {
         val widgetClass = resolveWidgetClassName()
         val bridge = dexKitBridge ?: error("DexKit bridge is not ready for widget aod method")
         val point = resolveDexKitMethodInjectionPoint(
@@ -1636,7 +1656,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return point
     }
 
-    private fun resolveWidgetResumeMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveWidgetResumeMethod(): DexKitMethodInjectionPoint {
         val widgetClass = resolveWidgetClassName()
         val mainPanelClass = resolveMainPanelClassName()
         val bridge = dexKitBridge ?: error("DexKit bridge is not ready for widget resume method")
@@ -1677,7 +1697,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return point
     }
 
-    private fun resolveWidgetCleanupMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveWidgetCleanupMethod(): DexKitMethodInjectionPoint {
         val widgetClass = resolveWidgetClassName()
         val mainPanelClass = resolveMainPanelClassName()
         val setEditModePoint = resolveWidgetSetEditModeMethod()
@@ -1719,7 +1739,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return point
     }
 
-    private fun invokeWidgetCleanup(targetWidget: Any) {
+    private fun PackageScope.invokeWidgetCleanup(targetWidget: Any) {
         val point = resolveWidgetCleanupMethod()
         targetWidget.asResolver().firstMethod {
             superclass()
@@ -1728,7 +1748,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.invoke()
     }
 
-    private fun invokeWidgetSetEditMode(targetWidget: Any, editMode: Boolean) {
+    private fun PackageScope.invokeWidgetSetEditMode(targetWidget: Any, editMode: Boolean) {
         val point = resolveWidgetSetEditModeMethod()
         targetWidget.asResolver().firstMethod {
             superclass()
@@ -1737,7 +1757,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.invoke(editMode)
     }
 
-    private fun invokeWidgetCreateView(targetWidget: Any, context: Context): View? {
+    private fun PackageScope.invokeWidgetCreateView(targetWidget: Any, context: Context): View? {
         val point = resolveWidgetCreateViewMethod()
         return targetWidget.asResolver().firstMethod {
             superclass()
@@ -1746,7 +1766,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.invoke<View?>(context)
     }
 
-    private fun invokeWidgetSetAodState(targetWidget: Any, inAod: Boolean) {
+    private fun PackageScope.invokeWidgetSetAodState(targetWidget: Any, inAod: Boolean) {
         val point = resolveWidgetSetAodMethod()
         targetWidget.asResolver().firstMethod {
             superclass()
@@ -1755,7 +1775,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.invoke(inAod)
     }
 
-    private fun invokeWidgetResume(targetWidget: Any) {
+    private fun PackageScope.invokeWidgetResume(targetWidget: Any) {
         val point = resolveWidgetResumeMethod()
         targetWidget.asResolver().firstMethod {
             superclass()
@@ -1764,7 +1784,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.invoke()
     }
 
-    private fun resolveMainPanelSelectMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveMainPanelSelectMethod(): DexKitMethodInjectionPoint {
         val bridge =
             dexKitBridge ?: error("DexKit bridge is not ready for main panel select method")
         val point = resolveDexKitMethodInjectionPoint(
@@ -1789,7 +1809,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return point
     }
 
-    private fun resolvePrefStore(): Any? {
+    private fun PackageScope.resolvePrefStore(): Any? {
         return runCatching {
             resolvePrefStoreClass().toClass().resolve().firstField {
                 name = resolvePrefStoreInstanceFieldName()
@@ -1797,7 +1817,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun resolvePrefStoreLoadSpecsMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolvePrefStoreLoadSpecsMethod(): DexKitMethodInjectionPoint {
         val prefStoreClass = resolvePrefStoreInstanceClassName()
         val bridge = dexKitBridge ?: error("DexKit bridge is not ready for pref store load method")
         return resolveDexKitMethodInjectionPoint(
@@ -1817,7 +1837,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         } ?: error("DexKit failed to resolve pref store load method")
     }
 
-    private fun resolvePrefStoreReadValueMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolvePrefStoreReadValueMethod(): DexKitMethodInjectionPoint {
         val prefStoreClass = resolvePrefStoreInstanceClassName()
         val bridge = dexKitBridge ?: error("DexKit bridge is not ready for pref store read method")
         return resolveDexKitMethodInjectionPoint(
@@ -1841,7 +1861,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         } ?: error("DexKit failed to resolve pref store read method")
     }
 
-    private fun resolvePrefStoreWriteValueMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolvePrefStoreWriteValueMethod(): DexKitMethodInjectionPoint {
         val prefStoreClass = resolvePrefStoreInstanceClassName()
         val bridge = dexKitBridge ?: error("DexKit bridge is not ready for pref store write method")
         return resolveDexKitMethodInjectionPoint(
@@ -1869,7 +1889,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         } ?: error("DexKit failed to resolve pref store write method")
     }
 
-    private fun readPrefStoreWallpaperSpecs(store: Any): List<Any> {
+    private fun PackageScope.readPrefStoreWallpaperSpecs(store: Any): List<Any> {
         val point = resolvePrefStoreLoadSpecsMethod()
         return store.asResolver().firstMethod {
             name = point.methodName
@@ -1877,7 +1897,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.invoke(false) as? List<Any> ?: emptyList()
     }
 
-    private fun readPrefStoreValue(
+    private fun PackageScope.readPrefStoreValue(
         store: Any,
         type: Class<*>,
         defaultValue: Any?,
@@ -1890,7 +1910,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.invoke(type, defaultValue, key)
     }
 
-    private fun writePrefStoreValue(store: Any, value: Any, key: String) {
+    private fun PackageScope.writePrefStoreValue(store: Any, value: Any, key: String) {
         val point = resolvePrefStoreWriteValueMethod()
         store.asResolver().firstMethod {
             name = point.methodName
@@ -1898,7 +1918,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.invoke(value, key)
     }
 
-    private fun resolvePrefStoreClass(): String {
+    private fun PackageScope.resolvePrefStoreClass(): String {
         val bridge = dexKitBridge ?: error("DexKit bridge is not ready for pref store class")
         val className = resolveDexKitFieldValue(
             bridge = bridge,
@@ -1932,12 +1952,12 @@ class RearWallpaperHook : YukiBaseHooker() {
         return className
     }
 
-    private fun resolvePrefStoreInstanceClassName(): String {
+    private fun PackageScope.resolvePrefStoreInstanceClassName(): String {
         return resolvePrefStoreClass().toClass()
             .getDeclaredField(resolvePrefStoreInstanceFieldName()).type.name
     }
 
-    private fun resolveWallpaperRuntimeListMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveWallpaperRuntimeListMethod(): DexKitMethodInjectionPoint {
         val bridge =
             dexKitBridge ?: error("DexKit bridge is not ready for wallpaper runtime method")
         val point = resolveDexKitMethodInjectionPoint(
@@ -1964,7 +1984,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return point
     }
 
-    private fun resolveDeviceConfigClass(): String {
+    private fun PackageScope.resolveDeviceConfigClass(): String {
         val bridge = dexKitBridge ?: error("DexKit bridge is not ready for device config class")
         val className = resolveDexKitClassValue(
             bridge = bridge,
@@ -1983,11 +2003,11 @@ class RearWallpaperHook : YukiBaseHooker() {
         return className
     }
 
-    private fun loadWallpaperSpecs(): List<Any> {
+    private fun PackageScope.loadWallpaperSpecs(): List<Any> {
         val prefStore = resolvePrefStore()
 
         val persisted = runCatching {
-            prefStore?.let(::readPrefStoreWallpaperSpecs)
+            prefStore?.let({ readPrefStoreWallpaperSpecs(it) })
         }.getOrNull().orEmpty()
 
         val runtime = runCatching {
@@ -2016,7 +2036,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
 
         val runtimeById = runtime.mapNotNull { spec ->
-            spec.wallpaperSpecId()?.let { id -> id to spec }
+            wallpaperSpecId(spec)?.let { id -> id to spec }
         }.toMap()
         val importedRuntimeIds = readRuntimeRecords()
             .asSequence()
@@ -2032,11 +2052,11 @@ class RearWallpaperHook : YukiBaseHooker() {
                 if (seenIds.add(id)) add(spec)
             }
             persisted.forEach { spec ->
-                val id = spec.wallpaperSpecId() ?: return@forEach
+                val id = wallpaperSpecId(spec) ?: return@forEach
                 if (seenIds.add(id)) add(spec)
             }
             runtime.forEach { spec ->
-                val id = spec.wallpaperSpecId() ?: return@forEach
+                val id = wallpaperSpecId(spec) ?: return@forEach
                 if (seenIds.add(id)) add(spec)
             }
         }
@@ -2048,7 +2068,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return merged
     }
 
-    private fun normalizeSelectedWallpaperIndex(
+    private fun PackageScope.normalizeSelectedWallpaperIndex(
         merged: List<Any>,
         persisted: List<Any>,
         runtime: List<Any>,
@@ -2057,11 +2077,11 @@ class RearWallpaperHook : YukiBaseHooker() {
         val rawIndex = readRawSelectionIndex()
         val cachedSelectedId = readSelectedWallpaperId()
         val selectedId = cachedSelectedId
-            ?: persisted.getOrNull(rawIndex)?.wallpaperSpecId()
-            ?: runtime.getOrNull(rawIndex)?.wallpaperSpecId()
-            ?: merged.getOrNull(rawIndex.coerceIn(0, merged.lastIndex))?.wallpaperSpecId()
+            ?: persisted.getOrNull(rawIndex)?.let { wallpaperSpecId(it) }
+            ?: runtime.getOrNull(rawIndex)?.let { wallpaperSpecId(it) }
+            ?: merged.getOrNull(rawIndex.coerceIn(0, merged.lastIndex))?.let { wallpaperSpecId(it) }
             ?: return
-        val normalizedIndex = merged.indexOfFirst { it.wallpaperSpecId() == selectedId }
+        val normalizedIndex = merged.indexOfFirst { wallpaperSpecId(it) == selectedId }
         if (normalizedIndex < 0) {
             if (cachedSelectedId == selectedId) clearSelectedWallpaperId()
             return
@@ -2073,7 +2093,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         persistSelectedWallpaperId(selectedId)
     }
 
-    private fun readRawSelectionIndex(): Int {
+    private fun PackageScope.readRawSelectionIndex(): Int {
         return runCatching {
             val store = resolvePrefStore() ?: return@runCatching 0
             readPrefStoreValue(
@@ -2085,30 +2105,33 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.getOrDefault(0)
     }
 
-    private fun readCurrentSelectionIndex(maxIndex: Int): Int {
+    private fun PackageScope.readCurrentSelectionIndex(maxIndex: Int): Int {
         val index = readRawSelectionIndex()
         if (maxIndex < 0) return -1
         return index.coerceIn(0, maxIndex)
     }
 
-    private fun persistSelectionIndex(index: Int) {
+    private fun PackageScope.persistSelectionIndex(index: Int) {
         runCatching {
             val store = resolvePrefStore() ?: return
             writePrefStoreValue(store, index, "user_select")
         }.onFailure(YLog::error)
     }
 
-    private fun readSelectedWallpaperId(): Int? = cachedSelectedWallpaperId
+    private fun PackageScope.readSelectedWallpaperId(): Int? = cachedSelectedWallpaperId
 
-    private fun persistSelectedWallpaperId(wallpaperId: Int) {
+    private fun PackageScope.persistSelectedWallpaperId(wallpaperId: Int) {
         cachedSelectedWallpaperId = wallpaperId
     }
 
-    private fun clearSelectedWallpaperId() {
+    private fun PackageScope.clearSelectedWallpaperId() {
         cachedSelectedWallpaperId = null
     }
 
-    private fun resetNextSwitchAtForCurrent(wallpaperId: Int, entries: List<WallpaperEntry>) {
+    private fun PackageScope.resetNextSwitchAtForCurrent(
+        wallpaperId: Int,
+        entries: List<WallpaperEntry>
+    ) {
         if (!readScheduleConfig().enabled) {
             persistNextSwitchAt(0L)
             debugLog("resetNextSwitchAtForCurrent disabled wallpaperId=$wallpaperId")
@@ -2127,20 +2150,20 @@ class RearWallpaperHook : YukiBaseHooker() {
         scheduleAt(nextAt)
     }
 
-    private fun readNextSwitchAt(): Long = cachedNextSwitchAtMillis.takeIf {
+    private fun PackageScope.readNextSwitchAt(): Long = cachedNextSwitchAtMillis.takeIf {
         it != Long.MIN_VALUE
     } ?: 0L
 
-    private fun persistNextSwitchAt(timestamp: Long) {
+    private fun PackageScope.persistNextSwitchAt(timestamp: Long) {
         cachedNextSwitchAtMillis = timestamp
         debugLog("persistNextSwitchAt=$timestamp")
     }
 
-    private fun readScheduleConfig(): ScheduleConfig {
+    private fun PackageScope.readScheduleConfig(): ScheduleConfig {
         cachedScheduleConfig?.let { return it }
         val config = ScheduleConfig(
-            enabled = prefs.getBoolean(ConfigKeys.REAR_WALLPAPER_SCHEDULE_ENABLED, false),
-            scheduleData = prefs.getString(
+            enabled = hookPrefs.getBoolean(ConfigKeys.REAR_WALLPAPER_SCHEDULE_ENABLED, false),
+            scheduleData = hookPrefs.getString(
                 ConfigKeys.REAR_WALLPAPER_SCHEDULE_DATA,
                 RearWallpaperScheduleCodec.EMPTY_ARRAY,
             ).ifBlank { RearWallpaperScheduleCodec.EMPTY_ARRAY },
@@ -2149,7 +2172,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return config
     }
 
-    private fun updateScheduleConfig(enabled: Boolean, scheduleData: String?) {
+    private fun PackageScope.updateScheduleConfig(enabled: Boolean, scheduleData: String?) {
         cachedScheduleConfig = ScheduleConfig(
             enabled = enabled,
             scheduleData = scheduleData?.takeIf { it.isNotBlank() }
@@ -2157,7 +2180,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         )
     }
 
-    private fun importWallpaperPackageInternal(
+    private fun PackageScope.importWallpaperPackageInternal(
         packageFd: ParcelFileDescriptor?,
         displayNameHint: String?,
         previewUri: String?,
@@ -2251,7 +2274,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun updateWallpaperMetadataInternal(
+    private fun PackageScope.updateWallpaperMetadataInternal(
         wallpaperId: Int,
         previewUri: String?,
         options: Bundle?,
@@ -2335,7 +2358,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun updateWallpaperPackageInternal(
+    private fun PackageScope.updateWallpaperPackageInternal(
         wallpaperId: Int,
         packageFd: ParcelFileDescriptor?,
         displayNameHint: String?,
@@ -2454,7 +2477,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun generateWallpaperPreviewInternal(wallpaperId: Int): Bundle {
+    private fun PackageScope.generateWallpaperPreviewInternal(wallpaperId: Int): Bundle {
         return runCatching {
             synchronized(runtimeLock) {
                 val runtimeArray = readRuntimeArray()
@@ -2524,7 +2547,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun deleteWallpaperInternal(wallpaperId: Int): Bundle {
+    private fun PackageScope.deleteWallpaperInternal(wallpaperId: Int): Bundle {
         return runCatching {
             synchronized(runtimeLock) {
                 val runtimeArray = readRuntimeArray()
@@ -2562,7 +2585,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveWallpaperTemplateConfigStateModel(
+    private fun PackageScope.resolveWallpaperTemplateConfigStateModel(
         wallpaperId: Int,
         currentOneConfigJson: String?,
     ): RearWidgetTemplateConfigState? {
@@ -2591,7 +2614,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         )
     }
 
-    private fun saveWallpaperTemplateConfigInternal(
+    private fun PackageScope.saveWallpaperTemplateConfigInternal(
         wallpaperId: Int,
         oneConfigJson: String?,
     ): Bundle {
@@ -2653,7 +2676,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun saveExistingWallpaperTemplateConfig(
+    private fun PackageScope.saveExistingWallpaperTemplateConfig(
         entry: WallpaperEntry?,
         oneConfigJson: String?,
     ): Bundle {
@@ -2685,7 +2708,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return operationResult(true, wallpaperId = target.wallpaperId)
     }
 
-    private fun operationResult(
+    private fun PackageScope.operationResult(
         success: Boolean,
         error: String? = null,
         wallpaperId: Int? = null,
@@ -2700,7 +2723,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun copyParcelFileDescriptorToFileLimited(
+    private fun PackageScope.copyParcelFileDescriptorToFileLimited(
         descriptor: ParcelFileDescriptor,
         target: File,
     ): Long {
@@ -2730,7 +2753,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return total
     }
 
-    private fun copyPreviewImageFromUri(
+    private fun PackageScope.copyPreviewImageFromUri(
         context: Context,
         uri: Uri,
         targetDir: File,
@@ -2763,7 +2786,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return target.absolutePath
     }
 
-    private fun writeBytesAtomically(target: File, bytes: ByteArray) {
+    private fun PackageScope.writeBytesAtomically(target: File, bytes: ByteArray) {
         target.parentFile?.mkdirs()
         val tempFile = File(target.parentFile, "${target.name}.tmp")
         tempFile.outputStream().use { output -> output.write(bytes) }
@@ -2775,7 +2798,10 @@ class RearWallpaperHook : YukiBaseHooker() {
         ensureReadable(target)
     }
 
-    private fun captureWallpaperPreviewToFile(wallpaperId: Int, targetFile: File): String {
+    private fun PackageScope.captureWallpaperPreviewToFile(
+        wallpaperId: Int,
+        targetFile: File
+    ): String {
         debugLog("captureWallpaperPreviewToFile start wallpaperId=$wallpaperId target=${targetFile.absolutePath}")
         return runCatching {
             captureWallpaperPreviewOffscreenToFile(wallpaperId, targetFile)
@@ -2792,7 +2818,10 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun captureWallpaperPreviewOffscreenToFile(wallpaperId: Int, targetFile: File): String {
+    private fun PackageScope.captureWallpaperPreviewOffscreenToFile(
+        wallpaperId: Int,
+        targetFile: File
+    ): String {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             throw IllegalStateException("preview capture must not run on the main thread")
         }
@@ -3012,7 +3041,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun cloneWallpaperWidgetForPreview(sourceWidget: Any): Any {
+    private fun PackageScope.cloneWallpaperWidgetForPreview(sourceWidget: Any): Any {
         val spec = sourceWidget.asResolver().firstField {
             superclass()
             name = resolveWidgetSpecFieldName()
@@ -3022,7 +3051,7 @@ class RearWallpaperHook : YukiBaseHooker() {
             ?: throw IllegalStateException("failed to create offscreen wallpaper widget")
     }
 
-    private fun resolvePreviewRenderSize(panel: View): Point {
+    private fun PackageScope.resolvePreviewRenderSize(panel: View): Point {
         val panelWidth = panel.width
         val panelHeight = panel.height
         if (panelWidth > 0 && panelHeight > 0) return Point(panelWidth, panelHeight)
@@ -3039,7 +3068,10 @@ class RearWallpaperHook : YukiBaseHooker() {
         return Point(width, height)
     }
 
-    private fun captureWallpaperPreviewBySwitchToFile(wallpaperId: Int, targetFile: File): String {
+    private fun PackageScope.captureWallpaperPreviewBySwitchToFile(
+        wallpaperId: Int,
+        targetFile: File
+    ): String {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             throw IllegalStateException("preview capture must not run on the main thread")
         }
@@ -3105,7 +3137,7 @@ class RearWallpaperHook : YukiBaseHooker() {
                             )
                         }
                         if (currentIndex >= 0) persistSelectionIndex(currentIndex)
-                        currentWallpaperId?.let(::persistSelectedWallpaperId)
+                        currentWallpaperId?.let({ persistSelectedWallpaperId(it) })
                     }.onFailure(YLog::warn)
                     latch.countDown()
                 }
@@ -3134,7 +3166,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun invokePanelSelection(panel: Any, widgets: List<Any>, index: Int) {
+    private fun PackageScope.invokePanelSelection(panel: Any, widgets: List<Any>, index: Int) {
         val selectPoint = resolveMainPanelSelectMethod()
         panel.asResolver().firstMethod {
             name = selectPoint.methodName
@@ -3142,7 +3174,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.invoke(widgets, index)
     }
 
-    private fun captureViewBitmap(view: View): Bitmap {
+    private fun PackageScope.captureViewBitmap(view: View): Bitmap {
         val width = view.width
         val height = view.height
         if (width <= 0 || height <= 0) {
@@ -3168,7 +3200,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return false
     }
 
-    private fun validateMamlPackage(file: File) {
+    private fun PackageScope.validateMamlPackage(file: File) {
         if (!file.isFile || file.length() <= 0L) {
             throw IllegalArgumentException("package file is empty")
         }
@@ -3181,7 +3213,10 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun extractPreviewFromPackage(packageFile: File, targetDir: File): String? {
+    private fun PackageScope.extractPreviewFromPackage(
+        packageFile: File,
+        targetDir: File
+    ): String? {
         return runCatching {
             val previewPath = explicitTemplatePreviewPaths(packageFile.absolutePath)
                 .firstNotNullOfOrNull { resolvePackagePreviewPath(packageFile.absolutePath, it) }
@@ -3199,7 +3234,10 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun resolvePackagePreviewPath(packagePath: String, previewPath: String): String? {
+    private fun PackageScope.resolvePackagePreviewPath(
+        packagePath: String,
+        previewPath: String
+    ): String? {
         val packageFile = File(packagePath)
         if (!packageFile.exists()) return null
 
@@ -3238,7 +3276,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun findZipEntry(zip: ZipFile, name: String): ZipEntry? {
+    private fun PackageScope.findZipEntry(zip: ZipFile, name: String): ZipEntry? {
         val normalized = name.trim().replace('\\', '/').removePrefix("/")
         if (normalized.isBlank()) return null
         return zip.getEntry(normalized)
@@ -3252,11 +3290,11 @@ class RearWallpaperHook : YukiBaseHooker() {
         return runCatching { JSONObject(file.readText()) }.getOrNull()
     }
 
-    private fun readPackageMetadata(packageFile: File): MetadataValues? {
+    private fun PackageScope.readPackageMetadata(packageFile: File): MetadataValues? {
         return readEmbeddedMetadata(packageFile) ?: readDescriptionMetadata(packageFile)
     }
 
-    private fun readEmbeddedMetadata(packageFile: File): MetadataValues? {
+    private fun PackageScope.readEmbeddedMetadata(packageFile: File): MetadataValues? {
         return runCatching {
             ZipFile(packageFile).use { zip ->
                 val entry = zip.getEntry("metadata.mrm") ?: return null
@@ -3267,7 +3305,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun readDescriptionMetadata(packageFile: File): MetadataValues? {
+    private fun PackageScope.readDescriptionMetadata(packageFile: File): MetadataValues? {
         return runCatching {
             ZipFile(packageFile).use { zip ->
                 val entry = zip.getEntry("description.xml") ?: return null
@@ -3310,7 +3348,10 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun readLocaleXmlValues(root: org.w3c.dom.Element, tag: String): Map<String, String> {
+    private fun PackageScope.readLocaleXmlValues(
+        root: org.w3c.dom.Element,
+        tag: String
+    ): Map<String, String> {
         val result = LinkedHashMap<String, String>()
         val nodes = root.getElementsByTagName(tag)
         for (i in 0 until nodes.length) {
@@ -3323,13 +3364,13 @@ class RearWallpaperHook : YukiBaseHooker() {
         return result
     }
 
-    private fun readFirstXmlText(root: org.w3c.dom.Element, tag: String): String? {
+    private fun PackageScope.readFirstXmlText(root: org.w3c.dom.Element, tag: String): String? {
         val nodes = root.getElementsByTagName(tag)
         if (nodes.length <= 0) return null
         return nodes.item(0)?.textContent?.trim()?.takeIf { it.isNotBlank() }
     }
 
-    private fun resolveMetadataValues(
+    private fun PackageScope.resolveMetadataValues(
         options: Bundle?,
         source: MetadataValues?,
         displayNameHint: String,
@@ -3379,7 +3420,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         )
     }
 
-    private fun buildMetadataJson(
+    private fun PackageScope.buildMetadataJson(
         base: JSONObject?,
         resId: String,
         packageFile: File,
@@ -3424,7 +3465,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return json
     }
 
-    private fun buildRuntimeItem(
+    private fun PackageScope.buildRuntimeItem(
         resId: String,
         applyId: String,
         packagePath: String,
@@ -3467,7 +3508,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun applyMetadataToRuntimeItem(
+    private fun PackageScope.applyMetadataToRuntimeItem(
         item: JSONObject,
         metadataPath: String,
         previewPath: String?,
@@ -3494,14 +3535,14 @@ class RearWallpaperHook : YukiBaseHooker() {
         item.put("updateTime", System.currentTimeMillis())
     }
 
-    private fun localeObject(fallback: String, zhCn: String): JSONObject {
+    private fun PackageScope.localeObject(fallback: String, zhCn: String): JSONObject {
         return JSONObject().apply {
             put("fallback", fallback)
             put("zh_CN", zhCn.ifBlank { fallback })
         }
     }
 
-    private fun previewMap(previewPath: String?): JSONObject {
+    private fun PackageScope.previewMap(previewPath: String?): JSONObject {
         val map = JSONObject()
         if (!previewPath.isNullOrBlank()) {
             map.put("fallback", JSONArray().put(previewPath))
@@ -3510,7 +3551,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return map
     }
 
-    private fun previewEntries(previewPath: String?): JSONArray {
+    private fun PackageScope.previewEntries(previewPath: String?): JSONArray {
         val array = JSONArray()
         if (!previewPath.isNullOrBlank()) {
             array.put(
@@ -3523,7 +3564,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return array
     }
 
-    private fun readRuntimeRecords(): List<RuntimeWallpaperRecord> {
+    private fun PackageScope.readRuntimeRecords(): List<RuntimeWallpaperRecord> {
         val array = readRuntimeArray()
         return buildList {
             for (i in 0 until array.length()) {
@@ -3533,7 +3574,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun readRuntimeArray(): JSONArray {
+    private fun PackageScope.readRuntimeArray(): JSONArray {
         val file = resolveRuntimeFile()
         if (!file.isFile) return JSONArray()
         val text = runCatching { file.readText() }.getOrDefault("")
@@ -3544,13 +3585,13 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun writeRuntimeArray(array: JSONArray) {
+    private fun PackageScope.writeRuntimeArray(array: JSONArray) {
         val file = resolveRuntimeFile()
         writeTextAtomically(file, array.toString(2))
         ensureReadable(file)
     }
 
-    private fun maxRuntimePosition(array: JSONArray): Int {
+    private fun PackageScope.maxRuntimePosition(array: JSONArray): Int {
         var max = -1
         for (i in 0 until array.length()) {
             max = maxOf(max, array.optJSONObject(i)?.optInt("position", -1) ?: -1)
@@ -3558,7 +3599,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return max
     }
 
-    private fun findRuntimeItemIndex(array: JSONArray, wallpaperId: Int): Int {
+    private fun PackageScope.findRuntimeItemIndex(array: JSONArray, wallpaperId: Int): Int {
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i) ?: continue
             val resId = item.optNonBlankString("resId") ?: continue
@@ -3667,7 +3708,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun deleteImportedFiles(record: RuntimeWallpaperRecord) {
+    private fun PackageScope.deleteImportedFiles(record: RuntimeWallpaperRecord) {
         val root = resolveRuntimeRoot().canonicalFile
         val candidates = listOfNotNull(
             record.resLocalPath?.let(::File)?.parentFile,
@@ -3686,7 +3727,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun refreshRuntimePanels() {
+    private fun PackageScope.refreshRuntimePanels() {
         val entries = loadWallpaperEntries()
         if (entries.isEmpty()) return
         val currentIndex = readCurrentSelectionIndex(entries.lastIndex).coerceAtLeast(0)
@@ -3696,23 +3737,23 @@ class RearWallpaperHook : YukiBaseHooker() {
         refreshSchedule(forceApply = true)
     }
 
-    private fun resolveRuntimeRoot(): File {
+    private fun PackageScope.resolveRuntimeRoot(): File {
         return File("/data/system/theme_magic/users/${currentUserId()}/rearScreen")
     }
 
-    private fun resolveRuntimeFile(): File {
+    private fun PackageScope.resolveRuntimeFile(): File {
         return File(resolveRuntimeRoot(), "runtime.json")
     }
 
-    private fun resolveTemplateConfigFile(record: RuntimeWallpaperRecord): File {
+    private fun PackageScope.resolveTemplateConfigFile(record: RuntimeWallpaperRecord): File {
         return File(File(resolveRuntimeRoot(), "${record.resId}_${record.applyId}"), "editConfig")
     }
 
-    private fun currentUserId(): Int {
+    private fun PackageScope.currentUserId(): Int {
         return (Process.myUid() / 100000).coerceAtLeast(0)
     }
 
-    private fun readOneConfigJson(path: String?): String? {
+    private fun PackageScope.readOneConfigJson(path: String?): String? {
         val file = path?.takeIf { it.isNotBlank() }?.let(::File) ?: return null
         if (!file.isFile) return null
         return runCatching { file.readText().trim() }
@@ -3721,7 +3762,7 @@ class RearWallpaperHook : YukiBaseHooker() {
             ?.takeIf { WidgetTemplateConfigRepository.decodeOneConfig(it) != null }
     }
 
-    private fun writeTextAtomically(target: File, text: String) {
+    private fun PackageScope.writeTextAtomically(target: File, text: String) {
         target.parentFile?.mkdirs()
         val tempFile = File(target.parentFile, "${target.name}.tmp")
         tempFile.writeText(text)
@@ -3733,7 +3774,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         ensureReadable(target)
     }
 
-    private fun sha256(file: File): String {
+    private fun PackageScope.sha256(file: File): String {
         return runCatching {
             val digest = MessageDigest.getInstance("SHA-256")
             file.inputStream().use { input ->
@@ -3748,17 +3789,17 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.getOrDefault("${file.length()}_${file.lastModified()}")
     }
 
-    private fun ensureReadableRecursive(file: File) {
+    private fun PackageScope.ensureReadableRecursive(file: File) {
         if (file.isDirectory) {
             ensureReadable(file)
-            file.listFiles()?.forEach(::ensureReadableRecursive)
+            file.listFiles()?.forEach({ ensureReadableRecursive(it) })
             return
         }
         ensureReadable(file)
     }
 
     @SuppressLint("SetWorldReadable")
-    private fun ensureReadable(file: File) {
+    private fun PackageScope.ensureReadable(file: File) {
         file.setReadable(true, false)
         file.parentFile?.setReadable(true, false)
         file.parentFile?.setExecutable(true, false)
@@ -3814,8 +3855,8 @@ class RearWallpaperHook : YukiBaseHooker() {
         return toString().replace("-", "").take(12)
     }
 
-    private fun Any.wallpaperSpecId(): Int? {
-        val spec = wallpaperSpecObject() ?: return null
+    private fun PackageScope.wallpaperSpecId(target: Any): Int? {
+        val spec = wallpaperSpecObject(target) ?: return null
         return runCatching {
             spec.asResolver().firstField {
                 name = resolveWallpaperSpecIdFieldName()
@@ -3823,8 +3864,8 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun Any.wallpaperSpecExtras(): Bundle? {
-        val spec = wallpaperSpecObject() ?: return null
+    private fun PackageScope.wallpaperSpecExtras(target: Any): Bundle? {
+        val spec = wallpaperSpecObject(target) ?: return null
         return runCatching {
             spec.asResolver().firstField {
                 name = resolveWallpaperSpecExtrasFieldName()
@@ -3832,51 +3873,51 @@ class RearWallpaperHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun Any.wallpaperSpecObject(): Any? {
-        if (javaClass.name == resolveWallpaperSpecClassName()) return this
+    private fun PackageScope.wallpaperSpecObject(target: Any): Any? {
+        if (target.javaClass.name == resolveWallpaperSpecClassName()) return target
         return runCatching {
-            asResolver().firstField {
+            target.asResolver().firstField {
                 superclass()
                 name = resolveWidgetSpecFieldName()
             }.get<Any?>()
         }.getOrNull()
     }
 
-    private fun readMainPanelEditMode(panel: Any): Boolean {
+    private fun PackageScope.readMainPanelEditMode(panel: Any): Boolean {
         return runCatching {
             panel.asResolver().firstField { name = resolveMainPanelEditModeFieldName() }
                 .get() as? Boolean
         }.getOrNull() ?: false
     }
 
-    private fun readMainPanelResumedState(panel: Any): Boolean {
+    private fun PackageScope.readMainPanelResumedState(panel: Any): Boolean {
         return runCatching {
             panel.asResolver().firstField { name = resolveMainPanelResumedFieldName() }
                 .get() as? Boolean
         }.getOrNull() ?: false
     }
 
-    private fun readMainPanelAodState(panel: Any): Boolean {
+    private fun PackageScope.readMainPanelAodState(panel: Any): Boolean {
         return runCatching {
             panel.asResolver().firstField { name = resolveMainPanelAodFieldName() }
                 .get() as? Boolean
         }.getOrNull() ?: false
     }
 
-    private fun debugLog(message: String) {
-        if (prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+    private fun PackageScope.debugLog(message: String) {
+        if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
             YLog.debug("[$TAG] $message")
         }
     }
 
-    private fun debugFailure(message: String, error: Throwable) {
-        if (prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+    private fun PackageScope.debugFailure(message: String, error: Throwable) {
+        if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
             YLog.debug("[$TAG] $message")
             YLog.warn(error)
         }
     }
 
-    private fun describeViewState(view: View?): String {
+    private fun PackageScope.describeViewState(view: View?): String {
         if (view == null) return "<null>"
         return buildString {
             append(view.javaClass.simpleName)
@@ -3904,14 +3945,14 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun throwableMessage(error: Throwable, fallback: String): String {
+    private fun PackageScope.throwableMessage(error: Throwable, fallback: String): String {
         return error.message?.trim()?.takeIf { it.isNotBlank() }
             ?: error.cause?.message?.trim()?.takeIf { it.isNotBlank() }
             ?: error.javaClass.simpleName.takeIf { it.isNotBlank() }
             ?: fallback
     }
 
-    private fun loadPreviewBytes(previewPath: String?): ByteArray? {
+    private fun PackageScope.loadPreviewBytes(previewPath: String?): ByteArray? {
         val path = previewPath?.takeIf { it.isNotBlank() } ?: return null
         decodeZipPreviewPath(path)?.let { (packagePath, entryName) ->
             val packageFile = File(packagePath)
@@ -3943,7 +3984,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return bitmap.toCompressedPreviewBytes(Bitmap.CompressFormat.JPEG, 90)
     }
 
-    private fun compressPreviewBytes(bytes: ByteArray): ByteArray? {
+    private fun PackageScope.compressPreviewBytes(bytes: ByteArray): ByteArray? {
         if (bytes.isEmpty() || bytes.size > MAX_PREVIEW_BYTES) return null
         val bounds = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
@@ -3974,7 +4015,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         }
     }
 
-    private fun isReadablePreviewPath(path: String): Boolean {
+    private fun PackageScope.isReadablePreviewPath(path: String): Boolean {
         val file = File(path)
         if (!file.isFile || file.length() <= 0L) return false
         val bounds = BitmapFactory.Options().apply {
@@ -3984,7 +4025,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return bounds.outWidth > 0 && bounds.outHeight > 0
     }
 
-    private fun computeInSampleSize(width: Int, height: Int, maxSize: Int): Int {
+    private fun PackageScope.computeInSampleSize(width: Int, height: Int, maxSize: Int): Int {
         var sample = 1
         var targetWidth = width
         var targetHeight = height
@@ -3996,7 +4037,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return sample.coerceAtLeast(1)
     }
 
-    private fun buildPreviewSignature(previewPath: String?): String {
+    private fun PackageScope.buildPreviewSignature(previewPath: String?): String {
         decodeZipPreviewPath(previewPath.orEmpty())?.let { (packagePath, entryName) ->
             val file = File(packagePath)
             if (file.isFile) {
@@ -4010,11 +4051,11 @@ class RearWallpaperHook : YukiBaseHooker() {
         return "missing"
     }
 
-    private fun encodeZipPreviewPath(packagePath: String, entryName: String): String {
+    private fun PackageScope.encodeZipPreviewPath(packagePath: String, entryName: String): String {
         return ZIP_PREVIEW_PREFIX + packagePath + ZIP_PREVIEW_SEPARATOR + entryName
     }
 
-    private fun decodeZipPreviewPath(path: String): Pair<String, String>? {
+    private fun PackageScope.decodeZipPreviewPath(path: String): Pair<String, String>? {
         if (!path.startsWith(ZIP_PREVIEW_PREFIX)) return null
         val payload = path.removePrefix(ZIP_PREVIEW_PREFIX)
         val separatorIndex = payload.lastIndexOf(ZIP_PREVIEW_SEPARATOR)
@@ -4025,7 +4066,7 @@ class RearWallpaperHook : YukiBaseHooker() {
         return packagePath to entryName
     }
 
-    private fun readLocalePreviewSuffix(): String? {
+    private fun PackageScope.readLocalePreviewSuffix(): String? {
         return runCatching {
             resolveDeviceConfigClass().toClass().resolve().firstField {
                 name = resolveDeviceConfigLocaleSuffixFieldName()

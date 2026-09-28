@@ -1,9 +1,9 @@
 package hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget
 
 import android.os.Bundle
-import hk.uwu.reareye.hook.core.YLog
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.RearWidgetRuntimeStore.cardNoticeCompositeIndex
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.RearWidgetRuntimeStore.disableBusinessDisplay
+import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.reareye.widgetapi.RearWidgetActiveNotice
 import hk.uwu.reareye.widgetapi.RearWidgetBusinessSpec
 import hk.uwu.reareye.widgetapi.RearWidgetNoticeOptions

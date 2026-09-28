@@ -1,4 +1,4 @@
-package hk.uwu.reareye.hook.core
+package hk.uwu.reareye.hook.support
 
 import android.annotation.SuppressLint
 import android.content.SharedPreferences
@@ -440,3 +440,7 @@ object XposedModuleStatus {
     private fun isValidRunningTarget(target: HookedTarget): Boolean =
         target.state != HookedTarget.State.FAILED
 }
+
+
+
+

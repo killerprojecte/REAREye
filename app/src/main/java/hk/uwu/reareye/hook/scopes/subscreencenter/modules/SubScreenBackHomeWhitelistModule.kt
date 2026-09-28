@@ -2,19 +2,23 @@ package hk.uwu.reareye.hook.scopes.subscreencenter.modules
 
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookPrefs
+import hk.uwu.reareye.hook.support.hookSystemContext
 import hk.uwu.reareye.hook.utils.DexKitMethodInjectionPoint
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveDexKitFieldValue
 import hk.uwu.reareye.hook.utils.resolveDexKitMethodInjectionPoint
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 import org.luckypray.dexkit.DexKitCacheBridge
 import org.luckypray.dexkit.annotations.DexKitExperimentalApi
 
 @OptIn(DexKitExperimentalApi::class)
-class SubScreenBackHomeWhitelistModule : YukiBaseHooker() {
+class SubScreenBackHomeWhitelistModule : RoxyHooker() {
     companion object {
         private const val SUBSCREEN_HOME_TO_FRONT_METHOD_CACHE_KEY =
             "SSC_BACK_HOME_HOME_TO_FRONT_METHOD"
@@ -23,19 +27,19 @@ class SubScreenBackHomeWhitelistModule : YukiBaseHooker() {
         private const val AOD_REASON = "aod"
     }
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadApp("com.xiaomi.subscreencenter") {
             val versionCode = resolveHookPackageVersionCode(
-                systemContext,
-                appInfo.packageName,
-                appInfo.sourceDir,
+                hookSystemContext,
+                hookAppInfo.packageName,
+                hookAppInfo.sourceDir,
             )
-            val bridge = trackResource(
+            val bridge = runtime.manage(
                 createDexKitCacheBridge(
-                packageName = appInfo.packageName,
+                    packageName = hookAppInfo.packageName,
                 packageVersionCode = versionCode,
-                sourceDir = appInfo.sourceDir,
-                dataDir = appInfo.dataDir,
+                    sourceDir = hookAppInfo.sourceDir,
+                    dataDir = hookAppInfo.dataDir,
                 )
             )
             val homeToFrontPoint = resolveSubScreenHomeToFrontMethod(bridge)
@@ -48,28 +52,29 @@ class SubScreenBackHomeWhitelistModule : YukiBaseHooker() {
                 name = homeToFrontPoint.methodName
                 returnType = Void.TYPE
                 parameters(String::class.java)
-            }.hook().replaceUnit {
+            }.hook {
+                replaceUnit {
                 val reason = args(0).cast<String>()
-                val whitelist = prefs.getStringSet(
+                    val whitelist = hookPrefs.getStringSet(
                     ConfigKeys.SUBSCREEN_LOCK_BACK_HOME_WHITELIST_APPS,
                 )
                 if (reason != AOD_REASON || whitelist.isEmpty()) {
-                    invokeOriginal(*args)
+                    callOriginal(*args)
                     return@replaceUnit
                 }
 
-                val foregroundPackage = instance.asResolver().firstField {
+                    val foregroundPackage = instance!!.asResolver().firstField {
                     name = foregroundPackageFieldName
                     type = String::class.java
                 }.get<String>()
-                val moreDebug = prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
+                    val moreDebug = hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
                 if (moreDebug) {
                     YLog.debug(
                         "Handle subscreen home return reason=$reason package=$foregroundPackage",
                     )
                 }
                 if (foregroundPackage == null || foregroundPackage !in whitelist) {
-                    invokeOriginal(*args)
+                    callOriginal(*args)
                     return@replaceUnit
                 }
 
@@ -78,11 +83,12 @@ class SubScreenBackHomeWhitelistModule : YukiBaseHooker() {
                         "Skip SubScreen home return reason=$reason package=$foregroundPackage",
                     )
                 }
+                }
             }
         }
     }
 
-    private fun resolveSubScreenHomeToFrontMethod(
+    private fun PackageScope.resolveSubScreenHomeToFrontMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveDexKitMethodInjectionPoint(
@@ -104,7 +110,7 @@ class SubScreenBackHomeWhitelistModule : YukiBaseHooker() {
         } ?: error("DexKit failed to resolve SubScreen home-to-front method")
     }
 
-    private fun resolveForegroundPackageFieldName(
+    private fun PackageScope.resolveForegroundPackageFieldName(
         bridge: DexKitCacheBridge.RecyclableBridge,
         homeToFrontPoint: DexKitMethodInjectionPoint,
     ): String {

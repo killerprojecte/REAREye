@@ -19,6 +19,8 @@ import androidx.compose.foundation.style.MutableStyleState
 import androidx.compose.foundation.style.Style
 import androidx.compose.foundation.style.StyleScope
 import androidx.compose.foundation.style.StyleStateKey
+import androidx.compose.foundation.style.animate
+import androidx.compose.foundation.style.scale
 import androidx.compose.foundation.style.styleable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,15 +53,15 @@ private var MutableStyleState.artRevealPhase
         this[artRevealPhaseKey] = value
     }
 
-private fun StyleScope.artRevealHidden(value: Style) {
+private fun StyleScope.artRevealHidden(value: () -> Unit) {
     state(artRevealPhaseKey, value) { key, styleState -> styleState[key] == ArtRevealPhase.Hidden }
 }
 
-private fun StyleScope.artRevealPrimed(value: Style) {
+private fun StyleScope.artRevealPrimed(value: () -> Unit) {
     state(artRevealPhaseKey, value) { key, styleState -> styleState[key] == ArtRevealPhase.Primed }
 }
 
-private fun StyleScope.artRevealVisible(value: Style) {
+private fun StyleScope.artRevealVisible(value: () -> Unit) {
     state(artRevealPhaseKey, value) { key, styleState -> styleState[key] == ArtRevealPhase.Visible }
 }
 

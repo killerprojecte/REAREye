@@ -56,4 +56,3 @@ internal class IntStateHijacker(
      */
     val intValueDirect: Int get() = state.intValue
 }
-

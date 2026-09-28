@@ -116,4 +116,3 @@ class LazyStateHijacker(
         indexField.set(scrollPositionObj, mutableIntState)
     }
 }
-

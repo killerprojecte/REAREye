@@ -9,19 +9,21 @@ import android.graphics.Rect
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
 import hk.uwu.reareye.BuildConfig
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookPrefs
 import hk.uwu.reareye.repository.bounds.CustomBoundsCompatAppConfig
 import hk.uwu.reareye.repository.bounds.CustomBoundsCompatConfigCodec
 import hk.uwu.reareye.repository.bounds.CustomBoundsFillMode
 import hk.uwu.reareye.repository.bounds.CustomBoundsMode
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-class CustomBoundsCompatModule : YukiBaseHooker() {
-    override fun onHook() {
+class CustomBoundsCompatModule : RoxyHooker() {
+    override fun PackageScope.onHook() {
         loadSystem {
             val activityRecordImplClass = runCatching {
                 "com.android.server.wm.ActivityRecordImpl".toClass()
@@ -41,8 +43,9 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
             activityRecordImplRef.firstMethod {
                 name = "resolveOverrideConfiguration"
                 parameterCount = 2
-            }.hook().after {
-                val moreDebug = prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
+            }.hook {
+                after {
+                    val moreDebug = hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
                 val parentConfig = args(0).cast<Configuration>() ?: return@after
                 val resolvedConfig = args(1).cast<Configuration>() ?: return@after
                 val activityRecord = instance.field<Any>("mAr") ?: run {
@@ -54,7 +57,7 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
                     return@after
                 }
                 val config = CustomBoundsCompatHookConfig.find(
-                    raw = prefs.getString(
+                    raw = hookPrefs.getString(
                         ConfigKeys.CUSTOM_BOUNDS_COMPAT_CONFIG_DATA,
                         CustomBoundsCompatConfigCodec.EMPTY_ARRAY,
                     ),
@@ -129,11 +132,12 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
                         "[$TAG] apply package=$packageName displayId=$displayId parent=$parentBounds bounds=$compatBounds mode=${config.mode} ratio=${config.aspectRatio} insets=${config.insetLeft},${config.insetTop},${config.insetRight},${config.insetBottom} gravity=${config.gravity} scale=${config.scale} dpi=${config.densityDpi} rotation=${config.rotationDegrees} fill=${config.fillEnabled}/${config.fillMode}"
                     )
                 }
+                }
             }
         }
     }
 
-    private fun prepareFlipSplashColor(
+    private fun PackageScope.prepareFlipSplashColor(
         activityRecordImpl: Any?,
         activityRecord: Any?,
         bounds: Rect,
@@ -165,7 +169,7 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         }
     }
 
-    private fun applyTaskFillColor(
+    private fun PackageScope.applyTaskFillColor(
         activityRecordImpl: Any?,
         activityRecord: Any?,
         config: CustomBoundsCompatAppConfig,
@@ -211,22 +215,23 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         }
     }
 
-    private fun resolveFillColor(
+    private fun PackageScope.resolveFillColor(
         activityRecordImpl: Any?,
         config: CustomBoundsCompatAppConfig,
     ): Int? {
         return when (config.fillMode) {
-            CustomBoundsFillMode.CUSTOM -> config.fillColorArgb.takeIf(::isUsableFillColor)
+            CustomBoundsFillMode.CUSTOM -> config.fillColorArgb.takeIf({ isUsableFillColor(it) })
             CustomBoundsFillMode.AUTO -> resolveBySystemFlipLogic(activityRecordImpl)
         }
     }
 
-    private fun resolveBySystemFlipLogic(activityRecordImpl: Any?): Int? = runCatching {
+    private fun PackageScope.resolveBySystemFlipLogic(activityRecordImpl: Any?): Int? =
+        runCatching {
         activityRecordImpl ?: return@runCatching null
-        activityRecordImpl.field<Int>("mSplashBgColor")?.takeIf(::isUsableFillColor)
+            activityRecordImpl.field<Int>("mSplashBgColor")?.takeIf({ isUsableFillColor(it) })
     }.getOrNull()
 
-    private fun computeSplashColorDirect(
+    private fun PackageScope.computeSplashColorDirect(
         activityRecordImpl: Any?,
         activityRecord: Any?,
         activityInfo: ActivityInfo,
@@ -236,10 +241,10 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
     ): SplashColorResult {
         val details = if (collectDetails) mutableListOf<String>() else null
         fun detailsText(): String? = details?.joinToString(";")
-        val systemContext = activityRecord.systemContext()
-            ?: activityRecordImpl.systemContext()
+        val hookSystemContext = activityRecord.hookSystemContext()
+            ?: activityRecordImpl.hookSystemContext()
             ?: return SplashColorResult(null, "none", detailsText())
-        val packageContext = createPackageContextForActivity(systemContext, activityInfo)
+        val packageContext = createPackageContextForActivity(hookSystemContext, activityInfo)
             ?: return SplashColorResult(null, "none", detailsText())
         val resolvedTheme = when {
             theme != 0 -> theme
@@ -276,14 +281,15 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         val source: String,
     )
 
-    private fun resolveThemeColorByMiuiUtils(
+    private fun PackageScope.resolveThemeColorByMiuiUtils(
         context: Context,
         packageName: String,
         activityRecordImpl: Any?,
         themeColorUtilsClass: Class<*>?,
     ): ColorCandidate? = runCatching {
         themeColorUtilsClass ?: return@runCatching null
-        val attrsClass = $$"com.android.server.wm.ThemeColorUtils$SplashScreenWindowAttrs".toClass(
+        val attrsClass = Class.forName(
+            $$"com.android.server.wm.ThemeColorUtils$SplashScreenWindowAttrs", false,
             requireNotNull(themeColorUtilsClass.classLoader) {
                 "ThemeColorUtils class loader is unavailable"
             }
@@ -309,8 +315,8 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         ColorCandidate(color, "miuiThemeColorUtils")
     }.getOrNull()
 
-    private fun createPackageContextForActivity(
-        systemContext: Context,
+    private fun PackageScope.createPackageContextForActivity(
+        hookSystemContext: Context,
         activityInfo: ActivityInfo,
     ): Context? {
         return runCatching {
@@ -322,20 +328,20 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
             val userHandle = userHandleClass.getDeclaredMethod("of", Int::class.javaPrimitiveType)
                 .apply { isAccessible = true }
                 .invoke(null, userId)
-            systemContext.javaClass.getMethod(
+            hookSystemContext.javaClass.getMethod(
                 "createPackageContextAsUser",
                 String::class.java,
                 Int::class.javaPrimitiveType,
                 userHandleClass,
             ).invoke(
-                systemContext,
+                hookSystemContext,
                 activityInfo.packageName,
                 Context.CONTEXT_RESTRICTED,
                 userHandle
             ) as? Context
         }.getOrElse {
             runCatching {
-                systemContext.createPackageContext(
+                hookSystemContext.createPackageContext(
                     activityInfo.packageName,
                     Context.CONTEXT_RESTRICTED
                 )
@@ -343,7 +349,7 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         }
     }
 
-    private fun setThemeColorCache(
+    private fun PackageScope.setThemeColorCache(
         themeColorUtilsClass: Class<*>,
         packageName: String,
         color: Int,
@@ -357,13 +363,16 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         }
     }
 
-    private fun describeFlipColorState(activityRecordImpl: Any?, activityRecord: Any?): String {
+    private fun PackageScope.describeFlipColorState(
+        activityRecordImpl: Any?,
+        activityRecord: Any?
+    ): String {
         val splashBgColor = activityRecordImpl.field<Int>("mSplashBgColor")
         val flipCutoutColor = activityRecordImpl.field<Int>("mFlipCutoutColor")
         val taskDescription = activityRecord.field<Any>("taskDescription")
         val navigationBarColor = taskDescription.call<Int>("getNavigationBarColor")
-        val systemContext = activityRecord.systemContext()
-        val nightMode = systemContext?.resources?.configuration?.isNightModeActive
+        val hookSystemContext = activityRecord.hookSystemContext()
+        val nightMode = hookSystemContext?.resources?.configuration?.isNightModeActive
         return "splash=${splashBgColor?.toArgbHex() ?: "null"} " +
                 "flip=${flipCutoutColor?.toArgbHex() ?: "null"} " +
                 "taskDescription=${taskDescription != null} " +
@@ -371,7 +380,11 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
                 "night=$nightMode"
     }
 
-    private fun setTaskSurfaceColor(transaction: Any?, surfaceControl: Any?, colorInt: Int) {
+    private fun PackageScope.setTaskSurfaceColor(
+        transaction: Any?,
+        surfaceControl: Any?,
+        colorInt: Int
+    ) {
         val color = Color.valueOf(colorInt)
         transaction.call<Unit>(
             "setColor",
@@ -380,24 +393,27 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         )
     }
 
-    private fun unsetTaskSurfaceColor(transaction: Any?, surfaceControl: Any?) {
+    private fun PackageScope.unsetTaskSurfaceColor(transaction: Any?, surfaceControl: Any?) {
         transaction.call<Unit>("unsetColor", surfaceControl)
     }
 
-    private fun requestTraversal(activityRecord: Any?) {
+    private fun PackageScope.requestTraversal(activityRecord: Any?) {
         activityRecord
             .field<Any>("mWmService")
             ?.field<Any>("mWindowPlacerLocked")
             ?.call<Unit>("requestTraversal")
     }
 
-    private fun isUsableFillColor(color: Int): Boolean =
+    private fun PackageScope.isUsableFillColor(color: Int): Boolean =
         color != 0 && (color ushr 24) != 0
 
     private fun Int.toArgbHex(): String =
         "#" + Integer.toHexString(this).padStart(8, '0').uppercase()
 
-    private fun computeInsetsBounds(parentBounds: Rect, config: CustomBoundsCompatAppConfig): Rect {
+    private fun PackageScope.computeInsetsBounds(
+        parentBounds: Rect,
+        config: CustomBoundsCompatAppConfig
+    ): Rect {
         val left = parentBounds.left + config.insetLeft
         val top = parentBounds.top + config.insetTop
         val right = (parentBounds.right - config.insetRight).coerceAtLeast(left + 1)
@@ -405,7 +421,7 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         return Rect(left, top, right, bottom)
     }
 
-    private fun computeCompatBounds(
+    private fun PackageScope.computeCompatBounds(
         parentBounds: Rect,
         aspectRatio: Float,
         gravity: Int,
@@ -447,7 +463,7 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         )
     }
 
-    private fun applyResolvedConfiguration(
+    private fun PackageScope.applyResolvedConfiguration(
         config: Configuration,
         bounds: Rect,
         densityDpi: Int,
@@ -468,7 +484,7 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         updateScreenDp(config, bounds)
     }
 
-    private fun updateScreenDp(config: Configuration, bounds: Rect) {
+    private fun PackageScope.updateScreenDp(config: Configuration, bounds: Rect) {
         if (bounds.isEmpty || config.densityDpi <= 0) return
 
         val density = config.densityDpi / 160f
@@ -498,7 +514,11 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         }
     }
 
-    private fun reduceScreenLayout(screenLayout: Int, longSizeDp: Int, shortSizeDp: Int): Int? {
+    private fun PackageScope.reduceScreenLayout(
+        screenLayout: Int,
+        longSizeDp: Int,
+        shortSizeDp: Int
+    ): Int? {
         return runCatching {
             val resolver = Configuration::class.java.resolve()
             val reset = resolver.firstMethod {
@@ -512,7 +532,8 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun getWindowConfigurationBounds(config: Configuration): Rect? = runCatching {
+    private fun PackageScope.getWindowConfigurationBounds(config: Configuration): Rect? =
+        runCatching {
         config.asResolver()
             .firstField { name = "windowConfiguration" }
             .get<Any>()
@@ -536,7 +557,7 @@ class CustomBoundsCompatModule : YukiBaseHooker() {
         }
     }
 
-    private fun Any?.systemContext(): Context? =
+    private fun Any?.hookSystemContext(): Context? =
         field<Any>("mAtmService")?.field("mContext")
             ?: field<Any>("mWmService")?.field("mContext")
 

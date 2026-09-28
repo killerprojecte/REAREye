@@ -8,14 +8,21 @@ import com.hchen.superlyricapi.SuperLyricData
 import com.hchen.superlyricapi.SuperLyricHelper
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookAppContext
+import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookPrefs
+import hk.uwu.reareye.hook.support.hookSystemContext
+import hk.uwu.reareye.hook.support.instanceClass
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveDexKitClassValue
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
 import hk.uwu.reareye.lyrics.LyricParser
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.LyricProvider
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
+import hk.uwu.roxyhook.android.lifecycle.lifecycle
 import io.github.proify.lyricon.central.BridgeCentral
 import io.github.proify.lyricon.lyric.model.Song
 import io.github.proify.lyricon.subscriber.ActivePlayerListener
@@ -42,7 +49,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(DexKitExperimentalApi::class)
-class LyriconHook : YukiBaseHooker() {
+class LyriconHook : RoxyHooker() {
     private val lyricParser = LyricParser()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainScope by lazy(LazyThreadSafetyMode.NONE) {
@@ -70,7 +77,13 @@ class LyriconHook : YukiBaseHooker() {
     @Volatile
     var superLyricStub: ISuperLyricReceiver.Stub? = null
 
-    override fun onReloading(): Boolean {
+    override fun onHotReloadQuiesce() {
+        check(releaseForReload()) {
+            "LyriconHook failed to release reload resources"
+        }
+    }
+
+    private fun releaseForReload(): Boolean {
         var success = true
         monitor?.let { subscriber ->
             var subscriberSuccess = true
@@ -171,13 +184,13 @@ class LyriconHook : YukiBaseHooker() {
         }
     }
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadApp("com.android.systemui") {
-            onAppLifecycle {
+            this.lifecycle {
                 onCreate {
-                    val context = appContext ?: return@onCreate
+                    val context = hookAppContext ?: this.context
                     if (LyricProvider.fromValue(
-                            prefs.getInt(
+                            hookPrefs.getInt(
                                 ConfigKeys.LYRIC_PROVIDER,
                                 ConfigKeys.LYRIC_PROVIDER_DEFAULT
                             )
@@ -200,11 +213,11 @@ class LyriconHook : YukiBaseHooker() {
         }
 
         loadApp("com.xiaomi.subscreencenter") {
-            onAppLifecycle {
+            this.lifecycle {
                 onCreate {
-                    val context = appContext ?: return@onCreate
+                    val context = hookAppContext ?: this.context
                     when (LyricProvider.fromValue(
-                        prefs.getInt(
+                        hookPrefs.getInt(
                             ConfigKeys.LYRIC_PROVIDER,
                             ConfigKeys.LYRIC_PROVIDER_DEFAULT
                         )
@@ -233,11 +246,15 @@ class LyriconHook : YukiBaseHooker() {
                                 override fun onLyric(publisher: String, data: SuperLyricData) {
                                     scope.launch {
                                         runCatching {
-                                            if (prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+                                            if (hookPrefs.getBoolean(
+                                                    ConfigKeys.MORE_DEBUG,
+                                                    false
+                                                )
+                                            ) {
                                                 YLog.debug("onSuperLyric ${data.lyric} ${data.translation}")
                                             }
                                             if (data.hasLyric()) {
-                                                val mode = prefs.getInt(
+                                                val mode = hookPrefs.getInt(
                                                     ConfigKeys.SUPER_LYRIC_DISPLAY_MODE,
                                                     ConfigKeys.SUPER_LYRIC_DISPLAY_MODE_DEFAULT
                                                 )
@@ -291,16 +308,16 @@ class LyriconHook : YukiBaseHooker() {
             }
 
             val versionCode = resolveHookPackageVersionCode(
-                systemContext,
-                appInfo.packageName,
-                appInfo.sourceDir,
+                hookSystemContext,
+                hookAppInfo.packageName,
+                hookAppInfo.sourceDir,
             )
-            val bridge = trackResource(
+            val bridge = runtime.manage(
                 createDexKitCacheBridge(
-                packageName = appInfo.packageName,
+                    packageName = hookAppInfo.packageName,
                 packageVersionCode = versionCode,
-                sourceDir = appInfo.sourceDir,
-                dataDir = appInfo.dataDir,
+                    sourceDir = hookAppInfo.sourceDir,
+                    dataDir = hookAppInfo.dataDir,
                 )
             )
             val progressUpdateClz =
@@ -308,7 +325,7 @@ class LyriconHook : YukiBaseHooker() {
 
             val clz = "com.miui.maml.elements.MusicControlScreenElement".toClass()
             val ref = clz.resolve()
-            ref.constructor().build().hookAll {
+            ref.constructor().build().hook {
                 after {
                     elements.addIfAbsent(instance)
                     if (latestLyricLrc.isNotEmpty()) {
@@ -321,83 +338,93 @@ class LyriconHook : YukiBaseHooker() {
 
             ref.firstMethod {
                 name = "resetLyric"
-            }.hook().replaceUnit {
-                val iRef = instance.asResolver()
+            }.hook {
+                replaceUnit {
+                    val iRef = instance!!.asResolver()
                 val mMetadata = iRef.firstField { name = "mMetadata" }.get<MediaMetadata>()
-                if (mMetadata != null && stateOf(instance).oldMediaId == mMetadata.description.mediaId) {
+                    if (mMetadata != null && stateOf(instance!!).oldMediaId == mMetadata.description.mediaId) {
                     YLog.debug("Reject reset lyric while media id is not changed")
                     return@replaceUnit
                 } else {
-                    clearManagedLyricState(instance)
-                    invokeOriginal()
+                        clearManagedLyricState(instance!!)
+                        callOriginal()
+                    }
                 }
             }
 
             ref.firstMethod {
                 name = "updateLyricVar"
                 parameters(Long::class.java)
-            }.hook().replaceUnit {
-                if (!isManagedFullLyric(instance)) {
-                    invokeOriginal(*args)
+            }.hook {
+                replaceUnit {
+                    if (!isManagedFullLyric(instance!!)) {
+                        callOriginal(*args)
                     return@replaceUnit
                 }
-                updateLyricVarsDiff(instance, args(0).cast<Long>() ?: 0L)
+                    updateLyricVarsDiff(instance!!, args(0).cast<Long>() ?: 0L)
+                }
             }
 
             ref.firstMethod {
                 name = "startProgressUpdate"
                 parameters(Boolean::class.java, Long::class.java)
-            }.hook().replaceUnit {
-                if (!isManagedFullLyric(instance)) {
-                    invokeOriginal(*args)
+            }.hook {
+                replaceUnit {
+                    if (!isManagedFullLyric(instance!!)) {
+                        callOriginal(*args)
                     return@replaceUnit
                 }
                 val isPlaying = args(0).boolean()
                 if (isPlaying) {
-                    val state = stateOf(instance)
+                    val state = stateOf(instance!!)
                     state.lastLineIndex = Int.MIN_VALUE
                     state.pendingSnapshot = null
-                    ensurePreTickerRegistered(instance)
-                    if (queueCurrentLyricSnapshot(instance)) {
-                        instance.asResolver().firstMethod {
+                    ensurePreTickerRegistered(instance!!)
+                    if (queueCurrentLyricSnapshot(instance!!)) {
+                        instance!!.asResolver().firstMethod {
                             name = "requestUpdate"
                             superclass()
                         }.invoke()
                     }
                 }
                 scheduleManagedProgressTick(
-                    element = instance,
+                    element = instance!!,
                     isPlaying = isPlaying,
                     delayMs = args(1).cast<Long>() ?: 0L
                 )
+                }
             }
 
             val seClz = "com.miui.maml.elements.ScreenElement".toClass().resolve()
             seClz.firstMethod {
                 name = "show"
                 parameters(Boolean::class.java)
-            }.hook().after {
+            }.hook {
+                after {
                 if (instanceClass == clz && !args(0).boolean()) {
                     YLog.debug("Release music control instance: $instance")
-                    clearManagedLyricState(instance)
-                    elements.remove(instance)
-                    removeStateOf(instance)
+                    clearManagedLyricState(instance!!)
+                    elements.remove(instance!!)
+                    removeStateOf(instance!!)
+                }
                 }
             }
 
 
             progressUpdateClz.toClass().resolve().firstMethod {
                 name = "run"
-            }.hook().replaceUnit {
-                val element = instance.readFieldValue("this$0") ?: run {
-                    invokeOriginal()
+            }.hook {
+                replaceUnit {
+                    val element = instance!!.readFieldValue("this$0") ?: run {
+                        callOriginal()
                     return@replaceUnit
                 }
                 if (!isManagedFullLyric(element)) {
-                    invokeOriginal()
+                    callOriginal()
                     return@replaceUnit
                 }
                 runManagedProgressTick(element)
+                }
             }
 
             val musicControlListenerClz =
@@ -409,21 +436,24 @@ class LyriconHook : YukiBaseHooker() {
             }.hook {
                 replaceUnit {
                     val metadata = args(0).cast<MediaMetadata>()
-                    val i = instance.asResolver().firstField {
+                    val i = instance!!.asResolver().firstField {
                         name = "this$0"
                     }.get()
                     if (i == null) {
-                        invokeOriginal(metadata)
+                        callOriginal(metadata)
                         return@replaceUnit
                     }
                     elements.addIfAbsent(i)
-                    val moreDebug = prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
+                    val moreDebug = hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
                     val removeNativeLyric =
-                        prefs.getBoolean(ConfigKeys.HOOK_REMOVE_NATIVE_LYRIC_SUPPORT, false)
+                        hookPrefs.getBoolean(ConfigKeys.HOOK_REMOVE_NATIVE_LYRIC_SUPPORT, false)
                     val skipTitleOnlyUpdate =
-                        prefs.getBoolean(ConfigKeys.HOOK_SKIP_UNCHANGED_MEDIA_TITLE_UPDATE, false)
+                        hookPrefs.getBoolean(
+                            ConfigKeys.HOOK_SKIP_UNCHANGED_MEDIA_TITLE_UPDATE,
+                            false
+                        )
                     if (!removeNativeLyric && !skipTitleOnlyUpdate) {
-                        invokeOriginal(metadata)
+                        callOriginal(metadata)
                         return@replaceUnit
                     }
                     val metadataForUpdate = if (
@@ -456,12 +486,18 @@ class LyriconHook : YukiBaseHooker() {
                             return@replaceUnit
                         }
                     }
-                    invokeOriginal(metadataForUpdate)
+                    callOriginal(metadataForUpdate)
                 }
+            }
 
+            musicControlListenerClz.firstMethod {
+                name = "onClientMetadataUpdate"
+                returnType = Void.TYPE
+                parameters(MediaMetadata::class.java)
+            }.hook {
                 after {
                     val metadata = args(0).cast<MediaMetadata>()
-                    val i = instance.asResolver().firstField {
+                    val i = instance!!.asResolver().firstField {
                         name = "this$0"
                     }.get() ?: return@after
                     scope.launch {
@@ -472,11 +508,11 @@ class LyriconHook : YukiBaseHooker() {
         }
     }
 
-    private fun checkLyricState(metadata: MediaMetadata?, instance: Any) {
-        val moreDebug = prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
-        val iRef = instance.asResolver()
+    private fun PackageScope.checkLyricState(metadata: MediaMetadata?, instance: Any) {
+        val moreDebug = hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
+        val iRef = instance!!.asResolver()
         val mLyric = iRef.firstField { name = "mLyric" }.get()
-        val state = stateOf(instance)
+        val state = stateOf(instance!!)
         val lrc = state.tempLrc
         if (mLyric == null) {
             if (lrc != null || latestLyricLrc.isNotEmpty()) {
@@ -508,7 +544,7 @@ class LyriconHook : YukiBaseHooker() {
         }
     }
 
-    private fun shouldSkipTitleOnlyMetadataUpdate(
+    private fun PackageScope.shouldSkipTitleOnlyMetadataUpdate(
         previousMetadata: MediaMetadata?,
         nextMetadata: MediaMetadata?
     ): Boolean {
@@ -526,14 +562,14 @@ class LyriconHook : YukiBaseHooker() {
         return true
     }
 
-    private fun buildMetadataCompareToken(metadata: MediaMetadata): MetadataCompareToken {
+    private fun PackageScope.buildMetadataCompareToken(metadata: MediaMetadata): MetadataCompareToken {
         return MetadataCompareToken(
             mediaId = metadata.description.mediaId,
             title = resolveTrackTitle(metadata)
         )
     }
 
-    private fun resolveTrackTitle(metadata: MediaMetadata): String? {
+    private fun PackageScope.resolveTrackTitle(metadata: MediaMetadata): String? {
         val customTitle = metadata.getString(METADATA_CUSTOM_TITLE).normalizedMetadataText()
         return if (customTitle.isNullOrEmpty()) {
             metadata.getString(METADATA_TITLE).normalizedMetadataText()
@@ -546,18 +582,18 @@ class LyriconHook : YukiBaseHooker() {
         return this?.trim()
     }
 
-    private fun isPackageInstalled(context: Context, pkg: String): Boolean {
+    private fun PackageScope.isPackageInstalled(context: Context, pkg: String): Boolean {
         return runCatching {
             val pm = context.packageManager
             pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
         }.isSuccess
     }
 
-    private fun createLyricListener(): ActivePlayerListener {
+    private fun PackageScope.createLyricListener(): ActivePlayerListener {
         return object : ActivePlayerListener {
             override fun onActiveProviderChanged(providerInfo: ProviderInfo?) {
                 currentProvider = providerInfo
-                if (prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+                if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
                     YLog.debug("onProviderChanged $currentProvider")
                 }
             }
@@ -569,17 +605,17 @@ class LyriconHook : YukiBaseHooker() {
                         song.id
                         val lrc = lyricParser.toLrc(
                             song = song,
-                            displayMode = prefs.getInt(
+                            displayMode = hookPrefs.getInt(
                                 ConfigKeys.LYRIC_DISPLAY_MODE,
                                 ConfigKeys.LYRIC_DISPLAY_MODE_DEFAULT,
                             ),
-                            showArtistBeforeFirstLine = prefs.getBoolean(
+                            showArtistBeforeFirstLine = hookPrefs.getBoolean(
                                 ConfigKeys.LYRIC_SHOW_ARTIST_BEFORE_FIRST_LINE,
                                 false,
                             ),
                         )
                         latestLyricLrc = normalizeForMiuiParser(lrc)
-                        if (prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+                        if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
                             YLog.debug("REAREye getSongLRC $latestLyricLrc")
                             YLog.debug("onSongChanged converted LRC length=${latestLyricLrc.length}")
                             YLog.debug("current instance size ${elements.size}")
@@ -611,10 +647,10 @@ class LyriconHook : YukiBaseHooker() {
             override fun onReceiveText(text: String?) {
                 scope.launch {
                     runCatching {
-                        if (prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+                        if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
                             YLog.debug("onSendText $text")
                         }
-                        val mode = prefs.getInt(
+                        val mode = hookPrefs.getInt(
                             ConfigKeys.SUPER_LYRIC_DISPLAY_MODE,
                             ConfigKeys.SUPER_LYRIC_DISPLAY_MODE_DEFAULT
                         )
@@ -649,14 +685,14 @@ class LyriconHook : YukiBaseHooker() {
         }
     }
 
-    private fun updateFallbackLyric(text: String) {
+    private fun PackageScope.updateFallbackLyric(text: String) {
         elements.forEach { element ->
             stateOf(element).tempLyricLine = text
             updateFallbackLine(element, text)
         }
     }
 
-    private fun updateFallbackLine(element: Any, text: String) {
+    private fun PackageScope.updateFallbackLine(element: Any, text: String) {
         clearManagedLyricState(element)
         val ref = element.asResolver()
         val mLyric = ref.firstField { name = "mLyric" }.get()
@@ -669,13 +705,13 @@ class LyriconHook : YukiBaseHooker() {
         }.invoke(text)
     }
 
-    private fun updateLyric(
+    private fun PackageScope.updateLyric(
         element: Any,
         lrc: String,
         force: Boolean = true,
         checkId: Boolean = false
     ) {
-        val moreDebug = prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
+        val moreDebug = hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
         if (moreDebug) {
             YLog.debug("handle instance: $element")
         }
@@ -732,7 +768,7 @@ class LyriconHook : YukiBaseHooker() {
         }
     }
 
-    private fun runManagedProgressTick(element: Any) {
+    private fun PackageScope.runManagedProgressTick(element: Any) {
         if (!isTakeOverBuiltinLyricHandlingEnabled()) {
             clearManagedLyricState(element)
             return
@@ -782,7 +818,11 @@ class LyriconHook : YukiBaseHooker() {
         scheduleManagedProgressTick(element, true, delay)
     }
 
-    private fun scheduleManagedProgressTick(element: Any, isPlaying: Boolean, delayMs: Long) {
+    private fun PackageScope.scheduleManagedProgressTick(
+        element: Any,
+        isPlaying: Boolean,
+        delayMs: Long
+    ) {
         cancelManagedProgressJob(element)
         if (!isPlaying) return
         val safeDelay = delayMs.coerceAtLeast(0L)
@@ -795,7 +835,7 @@ class LyriconHook : YukiBaseHooker() {
         stateOf(element).managedProgressJob = job
     }
 
-    private fun updateLyricVarsDiff(element: Any, position: Long): Boolean {
+    private fun PackageScope.updateLyricVarsDiff(element: Any, position: Long): Boolean {
         val lyric = element.readFieldValue("mLyric") ?: return false
         val cache = getOrBuildLyricCache(element, lyric) ?: return false
         val currentIndex = findLineIndex(cache.times, position)
@@ -810,7 +850,7 @@ class LyriconHook : YukiBaseHooker() {
         return true
     }
 
-    private fun buildLyricSnapshot(
+    private fun PackageScope.buildLyricSnapshot(
         lyric: Any,
         cache: LyricCache,
         currentIndex: Int,
@@ -829,7 +869,7 @@ class LyriconHook : YukiBaseHooker() {
         )
     }
 
-    private fun applyPendingLyricSnapshot(element: Any) {
+    private fun PackageScope.applyPendingLyricSnapshot(element: Any) {
         val state = stateOf(element)
         val snapshot = state.pendingSnapshot ?: return
         setIndexedVariable(element.readFieldValue("mLyricCurrentVar"), snapshot.currentText)
@@ -847,7 +887,7 @@ class LyriconHook : YukiBaseHooker() {
         state.pendingSnapshot = null
     }
 
-    private fun getOrBuildLyricCache(element: Any, lyric: Any): LyricCache? {
+    private fun PackageScope.getOrBuildLyricCache(element: Any, lyric: Any): LyricCache? {
         val state = stateOf(element)
         val cachedLyric = state.cachedLyric
         if (cachedLyric === lyric) {
@@ -869,7 +909,7 @@ class LyriconHook : YukiBaseHooker() {
         return LyricCache(times, lines)
     }
 
-    private fun isManagedFullLyric(element: Any): Boolean {
+    private fun PackageScope.isManagedFullLyric(element: Any): Boolean {
         val state = stateOf(element)
         if (!isTakeOverBuiltinLyricHandlingEnabled()) {
             if (state.managedFullLyric) {
@@ -880,11 +920,11 @@ class LyriconHook : YukiBaseHooker() {
         return state.managedFullLyric
     }
 
-    private fun isTakeOverBuiltinLyricHandlingEnabled(): Boolean {
-        return prefs.getBoolean(ConfigKeys.HOOK_TAKE_OVER_BUILTIN_LYRIC_HANDLING, true)
+    private fun PackageScope.isTakeOverBuiltinLyricHandlingEnabled(): Boolean {
+        return hookPrefs.getBoolean(ConfigKeys.HOOK_TAKE_OVER_BUILTIN_LYRIC_HANDLING, true)
     }
 
-    private fun clearManagedLyricState(element: Any) {
+    private fun PackageScope.clearManagedLyricState(element: Any) {
         cancelManagedProgressJob(element)
         stateOf(element).apply {
             managedFullLyric = false
@@ -897,13 +937,13 @@ class LyriconHook : YukiBaseHooker() {
         unregisterPreTicker(element)
     }
 
-    private fun cancelManagedProgressJob(element: Any) {
+    private fun PackageScope.cancelManagedProgressJob(element: Any) {
         val state = stateOf(element)
         state.managedProgressJob?.cancel()
         state.managedProgressJob = null
     }
 
-    private fun setIndexedVariable(target: Any?, value: Any?) {
+    private fun PackageScope.setIndexedVariable(target: Any?, value: Any?) {
         if (target == null) return
         val ref = target.asResolver()
         when (value) {
@@ -925,7 +965,7 @@ class LyriconHook : YukiBaseHooker() {
         }
     }
 
-    private fun ensurePreTickerRegistered(element: Any) {
+    private fun PackageScope.ensurePreTickerRegistered(element: Any) {
         val state = stateOf(element)
         if (state.preTicker != null) return
         val root = element.readSuperFieldValue("mRoot") ?: return
@@ -965,7 +1005,13 @@ class LyriconHook : YukiBaseHooker() {
         val removed = runCatching {
             root.asResolver().firstMethod {
                 name = "removePreTicker"
-                parameters("com.miui.maml.elements.ITicker".toClass())
+                parameters(
+                    Class.forName(
+                        "com.miui.maml.elements.ITicker",
+                        false,
+                        root.javaClass.classLoader
+                    )
+                )
             }.invoke(ticker)
             true
         }.onFailure {
@@ -975,7 +1021,7 @@ class LyriconHook : YukiBaseHooker() {
         return removed
     }
 
-    private fun queueCurrentLyricSnapshot(element: Any): Boolean {
+    private fun PackageScope.queueCurrentLyricSnapshot(element: Any): Boolean {
         val musicController = element.readFieldValue("mMusicController") ?: return false
         val position = (musicController.invokeMethod("getPosition") as? Long) ?: return false
         if (position < 0) return false
@@ -997,7 +1043,7 @@ class LyriconHook : YukiBaseHooker() {
         }.get()
     }
 
-    private fun removeStateOf(element: Any) {
+    private fun PackageScope.removeStateOf(element: Any) {
         synchronized(managedElementStates) {
             managedElementStates.remove(element)
         }
@@ -1011,7 +1057,7 @@ class LyriconHook : YukiBaseHooker() {
         return asResolver().firstMethod { this.name = name }.invoke(*args)
     }
 
-    private fun computeNextTickDelay(
+    private fun PackageScope.computeNextTickDelay(
         times: IntArray,
         position: Long,
         fallbackInterval: Long
@@ -1025,7 +1071,11 @@ class LyriconHook : YukiBaseHooker() {
         return minOf(fallbackInterval, nextLineDelay)
     }
 
-    private fun computeLineProgress(times: IntArray, currentIndex: Int, position: Long): Double {
+    private fun PackageScope.computeLineProgress(
+        times: IntArray,
+        currentIndex: Int,
+        position: Long
+    ): Double {
         if (times.isEmpty() || currentIndex < 0) return 0.0
         if (currentIndex >= times.lastIndex) {
             return ((position - times.last().toLong()) / LAST_LINE_DURATION_MS.toDouble())
@@ -1038,7 +1088,7 @@ class LyriconHook : YukiBaseHooker() {
             .coerceIn(0.0, 1.0)
     }
 
-    private fun findLineIndex(times: IntArray, position: Long): Int {
+    private fun PackageScope.findLineIndex(times: IntArray, position: Long): Int {
         if (times.isEmpty() || position < times.first().toLong()) return -1
         var left = 0
         var right = times.lastIndex
@@ -1053,7 +1103,7 @@ class LyriconHook : YukiBaseHooker() {
         return right
     }
 
-    private fun normalizeForMiuiParser(rawLrc: String): String {
+    private fun PackageScope.normalizeForMiuiParser(rawLrc: String): String {
         if (rawLrc.isEmpty()) return rawLrc
         return rawLrc
             .replace("\r\n", "\n")
@@ -1150,7 +1200,7 @@ class LyriconHook : YukiBaseHooker() {
     }
 
 
-    private fun resolveMusicControlScreenElementProgressUpdateRunnableClassName(
+    private fun PackageScope.resolveMusicControlScreenElementProgressUpdateRunnableClassName(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): String {
         return resolveDexKitClassValue(

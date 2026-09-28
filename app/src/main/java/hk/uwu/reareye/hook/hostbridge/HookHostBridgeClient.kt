@@ -5,7 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.IBinder
 import android.os.IInterface
-import hk.uwu.reareye.hook.core.YLog
+import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.reareye.internal.hostbridge.IHookHostBridgeBootstrap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit

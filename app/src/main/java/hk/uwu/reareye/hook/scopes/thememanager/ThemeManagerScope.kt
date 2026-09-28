@@ -1,7 +1,5 @@
 package hk.uwu.reareye.hook.scopes.thememanager
 
-import hk.uwu.reareye.hook.core.HookModule
-import hk.uwu.reareye.hook.core.YLog
 import hk.uwu.reareye.hook.preset.PresetPackFilesHook
 import hk.uwu.reareye.hook.scopes.Scope
 import hk.uwu.reareye.hook.scopes.thememanager.modules.AiGeneratedAppDeviceHook
@@ -9,22 +7,24 @@ import hk.uwu.reareye.hook.scopes.thememanager.modules.RearWallpaperThemeManager
 import hk.uwu.reareye.hook.scopes.thememanager.modules.UnlockTemplateMaximumLimitHook
 import hk.uwu.reareye.hook.scopes.thememanager.modules.UnlockVideoRestrictionsHook
 import hk.uwu.reareye.hook.scopes.thememanager.modules.UnmuteVideoWallpaperHook
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 
-class ThemeManagerScope : Scope {
-    override val hooks: List<HookModule> = buildList {
-        if (isRearDevice) {
-            addAll(
-                listOf(
-                    UnlockVideoRestrictionsHook(),
-                    UnlockTemplateMaximumLimitHook(),
-                    UnmuteVideoWallpaperHook(),
-                    RearWallpaperThemeManagerSyncHook(),
-                    AiGeneratedAppDeviceHook(),
-                    PresetPackFilesHook(),
-                )
-            )
-        } else {
-            YLog.debug("This device is not support rear screen, skip load some features that this device is not supported")
+class ThemeManagerScope : RoxyHooker(), Scope {
+    override fun PackageScope.onHook() {
+        if (!isRearDevice) {
+            YLog.debug("This device does not support a rear screen; skipping ThemeManager hooks")
+            return
         }
+
+        listOf(
+            UnlockVideoRestrictionsHook(),
+            UnlockTemplateMaximumLimitHook(),
+            UnmuteVideoWallpaperHook(),
+            RearWallpaperThemeManagerSyncHook(),
+            AiGeneratedAppDeviceHook(),
+            PresetPackFilesHook(),
+        ).forEach(::loadHooker)
     }
 }

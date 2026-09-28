@@ -2,11 +2,14 @@ package hk.uwu.reareye.hook.scopes.thememanager.modules
 
 import android.util.Pair
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookSystemContext
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveDexKitClassValue
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 import org.luckypray.dexkit.DexKitCacheBridge
 import org.luckypray.dexkit.annotations.DexKitExperimentalApi
 import java.io.File
@@ -15,17 +18,21 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
 @OptIn(DexKitExperimentalApi::class)
-class UnmuteVideoWallpaperHook : YukiBaseHooker() {
-    override fun onHook() {
+class UnmuteVideoWallpaperHook : RoxyHooker() {
+    override fun PackageScope.onHook() {
         loadApp("com.android.thememanager") {
             val versionCode =
-                resolveHookPackageVersionCode(systemContext, appInfo.packageName, appInfo.sourceDir)
-            val bridge = trackResource(
+                resolveHookPackageVersionCode(
+                    hookSystemContext,
+                    hookAppInfo.packageName,
+                    hookAppInfo.sourceDir
+                )
+            val bridge = runtime.manage(
                 createDexKitCacheBridge(
-                packageName = appInfo.packageName,
+                    packageName = hookAppInfo.packageName,
                 packageVersionCode = versionCode,
-                sourceDir = appInfo.sourceDir,
-                dataDir = appInfo.dataDir,
+                    sourceDir = hookAppInfo.sourceDir,
+                    dataDir = hookAppInfo.dataDir,
                 )
             )
             val durationCropMatchResult = resolveDemuxerClassName(bridge)
@@ -35,7 +42,8 @@ class UnmuteVideoWallpaperHook : YukiBaseHooker() {
 
             ref.firstMethod {
                 parameters(File::class.java, File::class.java, File::class.java)
-            }.hook().replaceAny {
+            }.hook {
+                replaceAny {
                 val input = args(0).cast<File>()!!
                 val output = args(1).cast<File>()!!
                 YLog.debug("Input path: ${input.absolutePath} length: ${input.length() / 1024.0}")
@@ -49,12 +57,13 @@ class UnmuteVideoWallpaperHook : YukiBaseHooker() {
                     )
                     return@replaceAny Pair(output, null)
                 }
-                return@replaceAny invokeOriginal(*args)
+                    return@replaceAny callOriginal(*args)
+                }
             }
         }
     }
 
-    private fun resolveDemuxerClassName(
+    private fun PackageScope.resolveDemuxerClassName(
         bridge: DexKitCacheBridge.RecyclableBridge
     ): String? {
         return resolveDexKitClassValue(

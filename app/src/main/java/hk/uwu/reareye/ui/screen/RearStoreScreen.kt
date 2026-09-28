@@ -145,6 +145,9 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.DropdownDefaults
+import top.yukonga.miuix.kmp.basic.DropdownImpl
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -154,9 +157,6 @@ import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SpinnerDefaults
-import top.yukonga.miuix.kmp.basic.SpinnerEntry
-import top.yukonga.miuix.kmp.basic.SpinnerItemImpl
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.basic.Text
@@ -968,12 +968,12 @@ private fun RearStoreRootContent(
                                 renderInRootScaffold = true,
                                 content = {
                                     ListPopupColumn {
-                                        SpinnerItemImpl(
-                                            entry = SpinnerEntry(title = stringResource(R.string.rear_store_prioritize_updates)),
-                                            entryCount = 5,
+                                        DropdownImpl(
+                                            item = DropdownItem(title = stringResource(R.string.rear_store_prioritize_updates)),
+                                            optionSize = 5,
                                             isSelected = prioritizeUpdates,
                                             index = 0,
-                                            spinnerColors = SpinnerDefaults.spinnerColors(),
+                                            dropdownColors = DropdownDefaults.dropdownColors(),
                                             onSelectedIndexChange = {
                                                 prioritizeUpdates = !prioritizeUpdates
                                             },
@@ -982,45 +982,45 @@ private fun RearStoreRootContent(
                                             thickness = 0.5.dp,
                                             color = MiuixTheme.colorScheme.outline.copy(alpha = 0.35f),
                                         )
-                                        SpinnerItemImpl(
-                                            entry = SpinnerEntry(title = stringResource(R.string.rear_store_sort_by_updated_at)),
-                                            entryCount = 5,
+                                        DropdownImpl(
+                                            item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_updated_at)),
+                                            optionSize = 5,
                                             isSelected = sortMode == RearStoreSortMode.UPDATED_AT,
                                             index = 1,
-                                            spinnerColors = SpinnerDefaults.spinnerColors(),
+                                            dropdownColors = DropdownDefaults.dropdownColors(),
                                             onSelectedIndexChange = {
                                                 showSortMenu.value = false
                                                 sortMode = RearStoreSortMode.UPDATED_AT
                                             },
                                         )
-                                        SpinnerItemImpl(
-                                            entry = SpinnerEntry(title = stringResource(R.string.rear_store_sort_by_installed_at)),
-                                            entryCount = 5,
+                                        DropdownImpl(
+                                            item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_installed_at)),
+                                            optionSize = 5,
                                             isSelected = sortMode == RearStoreSortMode.INSTALLED_AT,
                                             index = 2,
-                                            spinnerColors = SpinnerDefaults.spinnerColors(),
+                                            dropdownColors = DropdownDefaults.dropdownColors(),
                                             onSelectedIndexChange = {
                                                 showSortMenu.value = false
                                                 sortMode = RearStoreSortMode.INSTALLED_AT
                                             },
                                         )
-                                        SpinnerItemImpl(
-                                            entry = SpinnerEntry(title = stringResource(R.string.rear_store_sort_by_name)),
-                                            entryCount = 5,
+                                        DropdownImpl(
+                                            item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_name)),
+                                            optionSize = 5,
                                             isSelected = sortMode == RearStoreSortMode.NAME,
                                             index = 3,
-                                            spinnerColors = SpinnerDefaults.spinnerColors(),
+                                            dropdownColors = DropdownDefaults.dropdownColors(),
                                             onSelectedIndexChange = {
                                                 showSortMenu.value = false
                                                 sortMode = RearStoreSortMode.NAME
                                             },
                                         )
-                                        SpinnerItemImpl(
-                                            entry = SpinnerEntry(title = stringResource(R.string.rear_store_sort_by_stars)),
-                                            entryCount = 5,
+                                        DropdownImpl(
+                                            item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_stars)),
+                                            optionSize = 5,
                                             isSelected = sortMode == RearStoreSortMode.STARS,
                                             index = 4,
-                                            spinnerColors = SpinnerDefaults.spinnerColors(),
+                                            dropdownColors = DropdownDefaults.dropdownColors(),
                                             onSelectedIndexChange = {
                                                 showSortMenu.value = false
                                                 sortMode = RearStoreSortMode.STARS

@@ -3,8 +3,9 @@ package hk.uwu.reareye.hook.scopes.thememanager.modules
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
 import com.highcapable.kavaref.condition.type.Modifiers
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -19,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
  * requests through the same ParamInterceptor. The hook therefore matches those paths at
  * the final parameter map, while leaving the rest of ThemeManager untouched.
  */
-class AiGeneratedAppDeviceHook : YukiBaseHooker() {
+class AiGeneratedAppDeviceHook : RoxyHooker() {
     private val relatedHeaderRequest = ThreadLocal.withInitial { false }
     private val legacyDownloadConnection = ThreadLocal.withInitial { false }
     private val populatedListings = ConcurrentHashMap.newKeySet<String>()
@@ -47,7 +48,7 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         private const val CACHE_CONTROL_VALUE = "no-cache"
     }
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadApp("com.android.thememanager") {
             val requestClass = "okhttp3.Request".toClass()
             val requestBuilderClass = "okhttp3.Request\$Builder".toClass()
@@ -219,9 +220,9 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
             // Retrofit serializes them. Rewrite the snapshot itself as well as URL headers.
             /*aiUserInfoClass.resolve().firstConstructor {
                 parameterCount = 0
-            }.hook().after {
+            }.hook { after {
                 rewriteAiUserInfo(instance)
-            }*/
+            } }*/
 
             // AI app downloads use the legacy OnlineService/RequestUrl path instead of
             // Retrofit, so ParamInterceptor never sees them. RequestUrl.k() has already
@@ -310,7 +311,7 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun chainRequest(chain: Any?, requestClass: Class<*>): Any? {
+    private fun PackageScope.chainRequest(chain: Any?, requestClass: Class<*>): Any? {
         if (chain == null) return null
         return runCatching {
             chain.asResolver().firstMethod {
@@ -320,7 +321,7 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun addNoCacheHeaders(
+    private fun PackageScope.addNoCacheHeaders(
         request: Any,
         requestClass: Class<*>,
         requestBuilderClass: Class<*>,
@@ -343,7 +344,7 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun requestUrl(request: Any, httpUrlClass: Class<*>): String? {
+    private fun PackageScope.requestUrl(request: Any, httpUrlClass: Class<*>): String? {
         val url = runCatching {
             request.asResolver().firstMethod {
                 parameterCount = 0
@@ -353,7 +354,10 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         return url
     }
 
-    private fun isAiGeneratedRelatedRequest(request: Any, httpUrlClass: Class<*>): Boolean {
+    private fun PackageScope.isAiGeneratedRelatedRequest(
+        request: Any,
+        httpUrlClass: Class<*>
+    ): Boolean {
         val path = requestPath(request, httpUrlClass) ?: return false
         return isListingPath(path) ||
                 isAiThemeDetailRequest(request, httpUrlClass) ||
@@ -361,11 +365,11 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
                 path.endsWith(AI_CHECK_UPDATE_ENDPOINT)
     }
 
-    private fun requestPath(request: Any, httpUrlClass: Class<*>): String? {
+    private fun PackageScope.requestPath(request: Any, httpUrlClass: Class<*>): String? {
         return requestUrl(request, httpUrlClass)?.substringBefore('?')?.substringBefore('#')
     }
 
-    private fun isListingPath(path: String): Boolean {
+    private fun PackageScope.isListingPath(path: String): Boolean {
         return path.endsWith(AI_PAGE_ENDPOINT) || path.contains(SUBJECT_PAGE_PREFIX)
     }
 
@@ -374,17 +378,17 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
      * Restrict matching to ids observed in the AI listing response so ordinary ThemeManager
      * details are never sent with the AI device profile.
      */
-    private fun isAiThemeDetailPath(path: String): Boolean {
+    private fun PackageScope.isAiThemeDetailPath(path: String): Boolean {
         val productId = themeProductId(path) ?: return false
         return productId.isNotEmpty() && productId in aiProductIds
     }
 
-    private fun isAiThemeDetailRequest(request: Any, httpUrlClass: Class<*>): Boolean {
+    private fun PackageScope.isAiThemeDetailRequest(request: Any, httpUrlClass: Class<*>): Boolean {
         val path = requestPath(request, httpUrlClass) ?: return false
         return isAiThemeDetailPath(path)
     }
 
-    private fun themeProductId(path: String): String? {
+    private fun PackageScope.themeProductId(path: String): String? {
         val prefix = when {
             path.contains(NATIVE_THEME_PAGE_PREFIX) -> NATIVE_THEME_PAGE_PREFIX
             path.contains(THEME_PAGE_PREFIX) -> THEME_PAGE_PREFIX
@@ -393,11 +397,14 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         return path.substringAfter(prefix).substringBefore('/').trim().ifEmpty { null }
     }
 
-    private fun isThemeDetailPath(path: String): Boolean {
+    private fun PackageScope.isThemeDetailPath(path: String): Boolean {
         return path.contains(NATIVE_THEME_PAGE_PREFIX) || path.contains(THEME_PAGE_PREFIX)
     }
 
-    private fun responseHasProducts(response: Any?, responseBodyClass: Class<*>): Boolean {
+    private fun PackageScope.responseHasProducts(
+        response: Any?,
+        responseBodyClass: Class<*>
+    ): Boolean {
         if (response == null) return false
         return runCatching {
             val peekBody = response.asResolver().firstMethod {
@@ -415,7 +422,7 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         }.getOrDefault(false)
     }
 
-    private fun containsProducts(value: Any?): Boolean {
+    private fun PackageScope.containsProducts(value: Any?): Boolean {
         return when (value) {
             is JSONObject -> {
                 val keys = value.keys()
@@ -436,7 +443,7 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun collectAiProductIds(products: JSONArray) {
+    private fun PackageScope.collectAiProductIds(products: JSONArray) {
         for (index in 0 until products.length()) {
             val product = products.optJSONObject(index) ?: continue
             listOf("uuid", "productUuid", "productId", "packId", "onlineId", "id").forEach { key ->
@@ -446,14 +453,14 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun rewriteIncremental(previousVer: String): String {
+    private fun PackageScope.rewriteIncremental(previousVer: String): String {
         val parts = previousVer.split(".").toMutableList()
         if (parts.size <= 2) return previousVer
         parts[2] = INCREMENTAL_VALUE
         return parts.joinToString(".")
     }
 
-    private fun spoofUserAgent(userAgent: String): String {
+    private fun PackageScope.spoofUserAgent(userAgent: String): String {
         // Android's Dalvik UA is normally: Android <release>; <model> Build/<id>.
         // Preserve the rest of the UA, including Android release and client tokens.
         val modelPattern = Regex("(?i)(Android\\s+[^;)]*;\\s*)([^;)]*?)(\\s+Build/)")
@@ -462,7 +469,7 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun rewriteAiUserInfo(userInfo: Any?) {
+    private fun PackageScope.rewriteAiUserInfo(userInfo: Any?) {
         if (userInfo == null) return
         runCatching {
             val cls = userInfo.javaClass
@@ -477,7 +484,7 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun spoofLegacyDownloadPair(pair: Any, pairClass: Class<*>) {
+    private fun PackageScope.spoofLegacyDownloadPair(pair: Any, pairClass: Class<*>) {
         runCatching {
             val baseUrl = pairClass.getField("first").get(pair)?.toString().orEmpty()
             if (!baseUrl.substringBefore('?').contains(AI_DOWNLOAD_PREFIX)) return@runCatching
@@ -504,7 +511,7 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun isLegacyDownloadConnection(connection: Any?): Boolean {
+    private fun PackageScope.isLegacyDownloadConnection(connection: Any?): Boolean {
         if (connection == null) return false
         return runCatching {
             val urlField =
@@ -516,7 +523,7 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         }.getOrDefault(false)
     }
 
-    private fun debugRequest(
+    private fun PackageScope.debugRequest(
         request: Any,
         httpUrlClass: Class<*>,
         headersClass: Class<*>,
@@ -539,7 +546,7 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         }.onFailure { YLog.debug("[$TAG] request.body unavailable: $it") }
     }
 
-    private fun debugResponse(
+    private fun PackageScope.debugResponse(
         response: Any?,
         headersClass: Class<*>,
         responseBodyClass: Class<*>,
@@ -574,7 +581,7 @@ class AiGeneratedAppDeviceHook : YukiBaseHooker() {
         }.onFailure { YLog.debug("[$TAG] $label.body unavailable: $it") }
     }
 
-    private fun debug(label: String, value: String) {
+    private fun PackageScope.debug(label: String, value: String) {
         val text = value.ifEmpty { "<empty>" }
         val chunks = text.chunked(2000)
         chunks.forEachIndexed { index, chunk ->

@@ -4,12 +4,16 @@ import android.content.Context
 import android.service.notification.StatusBarNotification
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookAppContext
+import hk.uwu.reareye.hook.support.hookPrefs
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
+import hk.uwu.roxyhook.android.lifecycle.lifecycle
 import java.util.concurrent.ConcurrentHashMap
 
-class SystemUiNotificationBridgeHook : YukiBaseHooker() {
+class SystemUiNotificationBridgeHook : RoxyHooker() {
     companion object {
         private const val SYSTEM_UI_PACKAGE = "com.android.systemui"
         private const val TAG = "REAREye-NotifBridge"
@@ -21,23 +25,22 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
     @Volatile
     private var hostContext: Context? = null
 
-    override fun onReloading(): Boolean {
+    override fun onHotReloadQuiesce() {
         val unbound = routeClient.unbind()
         if (!unbound) {
-            YLog.error("[$TAG] route bridge unbind failed during reload")
+            throw IllegalStateException("$TAG failed to unbind route bridge during reload")
         }
         activeSnapshots.clear()
         hostContext = null
-        return unbound
     }
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadApp(SYSTEM_UI_PACKAGE) {
             debugLog("loadApp process=$processName package=$packageName")
 
-            onAppLifecycle {
+            this.lifecycle {
                 onCreate {
-                    val context = appContext ?: return@onCreate
+                    val context = hookAppContext ?: this.context
                     hostContext = context.applicationContext ?: context
                     debugLog(
                         "onCreate hostContext=${hostContext?.packageName} action=${NotificationRouteBridgeContract.Action.REQUEST_BINDER} target=${NotificationRouteBridgeContract.HOOK_HOST_PACKAGE}"
@@ -52,11 +55,13 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
                         .resolve()
                 runnableClz.firstMethod {
                     name = "run"
-                }.hook().after {
-                    val sbn = instance.asResolver().firstField {
+                }.hook {
+                    after {
+                        val sbn = instance!!.asResolver().firstField {
                         type(StatusBarNotification::class.java)
                     }.get<StatusBarNotification>()
                     handleNotificationPosted(sbn)
+                    }
                 }
             }.onFailure {
                 debugLog("hook onNotificationPosted failed err=${it.message}")
@@ -70,16 +75,18 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
                         .resolve()
                 runnableClz.firstMethod {
                     name = "run"
-                }.hook().after {
-                    val sbn = instance.asResolver().firstField {
+                }.hook {
+                    after {
+                        val sbn = instance!!.asResolver().firstField {
                         type(StatusBarNotification::class.java)
                     }.get<StatusBarNotification>()
                     handleNotificationRemoved(
                         sbn = sbn,
-                        removeReason = instance.asResolver().lastField {
+                        removeReason = instance!!.asResolver().lastField {
                             type(Int::class.java)
                         }.get<Int>() ?: 1,
                     )
+                    }
                 }
             }.onFailure {
                 debugLog("hook onNotificationRemoved failed err=${it.message}")
@@ -89,7 +96,7 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
         }
     }
 
-    private fun bindRouteBridge(reason: String): Boolean {
+    private fun PackageScope.bindRouteBridge(reason: String): Boolean {
         val context = hostContext ?: run {
             debugLog("route bridge bind skipped reason=$reason hostContext=null")
             return false
@@ -114,7 +121,7 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
         return ok
     }
 
-    private fun handleNotificationPosted(sbn: StatusBarNotification?) {
+    private fun PackageScope.handleNotificationPosted(sbn: StatusBarNotification?) {
         val current = sbn ?: return
         val snapshot = NotificationRouteSnapshot.fromStatusBarNotification(current)
         if (snapshot == null) {
@@ -133,7 +140,10 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
         dispatchPosted(snapshot, reason = "live_post")
     }
 
-    private fun handleNotificationRemoved(sbn: StatusBarNotification?, removeReason: Int) {
+    private fun PackageScope.handleNotificationRemoved(
+        sbn: StatusBarNotification?,
+        removeReason: Int
+    ) {
         val current = sbn ?: return
         val snapshot = NotificationRouteSnapshot.identityKeyFor(current)
             ?.let(activeSnapshots::remove)
@@ -150,7 +160,7 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
         dispatchRemoved(snapshot, removeReason, reason = "live_remove")
     }
 
-    private fun dispatchPosted(snapshot: NotificationRouteSnapshot, reason: String) {
+    private fun PackageScope.dispatchPosted(snapshot: NotificationRouteSnapshot, reason: String) {
         bindRouteBridge(reason)
         val ok = routeClient.dispatch(
             NotificationRouteBridgeContract.Subchannel.NOTIFICATION_POSTED,
@@ -161,7 +171,7 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
         }
     }
 
-    private fun dispatchRemoved(
+    private fun PackageScope.dispatchRemoved(
         snapshot: NotificationRouteSnapshot,
         removeReason: Int,
         reason: String,
@@ -176,8 +186,8 @@ class SystemUiNotificationBridgeHook : YukiBaseHooker() {
         }
     }
 
-    private fun debugLog(message: String) {
-        if (prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+    private fun PackageScope.debugLog(message: String) {
+        if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
             YLog.debug("[$TAG] $message")
         }
     }

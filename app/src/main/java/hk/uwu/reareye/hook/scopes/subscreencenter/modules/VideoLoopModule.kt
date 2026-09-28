@@ -1,49 +1,59 @@
 package hk.uwu.reareye.hook.scopes.subscreencenter.modules
 
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookPrefs
+import hk.uwu.reareye.hook.support.hookSystemContext
 import hk.uwu.reareye.hook.utils.DexKitMethodInjectionPoint
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveDexKitMethodInjectionPoint
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 import org.luckypray.dexkit.DexKitCacheBridge
 import org.luckypray.dexkit.annotations.DexKitExperimentalApi
 
 @OptIn(DexKitExperimentalApi::class)
-class VideoLoopModule : YukiBaseHooker() {
+class VideoLoopModule : RoxyHooker() {
     companion object {
         private const val VIDEO_ELEMENT_GET_LOOPING_CACHE_KEY =
             "SSC_VIDEO_ELEMENT_GET_LOOPING_METHOD"
         private const val FALLBACK_VIDEO_ELEMENT_CLASS = "com.miui.maml.elements.video.VideoElement"
     }
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadApp("com.xiaomi.subscreencenter") {
             val versionCode =
-                resolveHookPackageVersionCode(systemContext, appInfo.packageName, appInfo.sourceDir)
-            val bridge = trackResource(
+                resolveHookPackageVersionCode(
+                    hookSystemContext,
+                    hookAppInfo.packageName,
+                    hookAppInfo.sourceDir
+                )
+            val bridge = runtime.manage(
                 createDexKitCacheBridge(
-                packageName = appInfo.packageName,
+                    packageName = hookAppInfo.packageName,
                 packageVersionCode = versionCode,
-                sourceDir = appInfo.sourceDir,
-                dataDir = appInfo.dataDir,
+                    sourceDir = hookAppInfo.sourceDir,
+                    dataDir = hookAppInfo.dataDir,
                 )
             )
             val point = resolveVideoElementGetLoopingMethod(bridge)
             val videoElRef = point.className.toClass().resolve()
             videoElRef.firstMethod {
                 name = point.methodName
-            }.hook().replaceAny {
-                if (prefs.getBoolean(ConfigKeys.HOOK_VIDEO_LOOPING, false)) {
+            }.hook {
+                replaceAny {
+                    if (hookPrefs.getBoolean(ConfigKeys.HOOK_VIDEO_LOOPING, false)) {
                     return@replaceAny true
                 }
-                return@replaceAny invokeOriginal()
+                    return@replaceAny callOriginal()
+                }
             }
         }
     }
 
-    private fun resolveVideoElementGetLoopingMethod(
+    private fun PackageScope.resolveVideoElementGetLoopingMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint {
         return resolveDexKitMethodInjectionPoint(
