@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,6 +70,7 @@ import hk.uwu.reareye.ui.components.config.draggable.longPressDraggable
 import hk.uwu.reareye.ui.components.rememberRearWallpaperPreviewBitmap
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.widgetapi.RearWallpaperScheduleEntry
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.Button
@@ -503,11 +505,8 @@ private fun RearWallpaperManagementList(
 ) {
     val currentWallpaperName = wallpapers.firstOrNull { it.wallpaperId == currentWallpaperId }?.name
         ?: stringResource(R.string.rear_wallpaper_current_none)
-    val overviewBadges = rearWallpaperManagementOverviewBadges(
-        currentWallpaperName = currentWallpaperName,
-        wallpaperCount = wallpapers.size,
-    )
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     val orderedSchedule = remember { mutableStateListOf<RearWallpaperScheduleEntry>() }
     val draggableState = rememberDraggableLazyListState(
         state = listState,
@@ -535,6 +534,33 @@ private fun RearWallpaperManagementList(
     val scheduledIds = orderedSchedule.mapTo(HashSet()) { it.wallpaperId }
     val remainingWallpapers = wallpapers.filterNot { it.wallpaperId in scheduledIds }
     val wallpaperMap = wallpapers.associateBy { it.wallpaperId }
+    val currentWallpaperListIndex = currentWallpaperId?.let { wallpaperId ->
+        val scheduleIndex = orderedSchedule.indexOfFirst { it.wallpaperId == wallpaperId }
+        if (scheduleIndex >= 0) {
+            2 + scheduleIndex
+        } else {
+            val libraryIndex = remainingWallpapers.indexOfFirst { it.wallpaperId == wallpaperId }
+            if (libraryIndex >= 0) {
+                2 + orderedSchedule.size +
+                        (if (loading) 1 else 0) +
+                        (if (!loading && wallpapers.isEmpty()) 1 else 0) +
+                        libraryIndex
+            } else {
+                null
+            }
+        }
+    }
+    val overviewBadges = rearWallpaperManagementOverviewBadges(
+        currentWallpaperName = currentWallpaperName,
+        wallpaperCount = wallpapers.size,
+        onCurrentClick = currentWallpaperListIndex?.let { targetIndex ->
+            {
+                scope.launch {
+                    listState.animateScrollToItem(targetIndex)
+                }
+            }
+        },
+    )
 
     LazyColumn(
         modifier = Modifier

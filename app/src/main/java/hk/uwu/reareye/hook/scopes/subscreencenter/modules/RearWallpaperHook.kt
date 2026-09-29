@@ -287,6 +287,7 @@ class RearWallpaperHook : RoxyHooker() {
 
     private fun releaseForReload(): Boolean {
         invalidateApiConnections()
+        SubscreenWidgetRenderHostRegistry.clear(mainPanel)
         val schedulerCleanupSucceeded = stopScheduler()
         val callbackCleanupSucceeded = cancelPendingCallbacks()
         var success = schedulerCleanupSucceeded && callbackCleanupSucceeded
@@ -404,6 +405,7 @@ class RearWallpaperHook : RoxyHooker() {
             }.hook {
                 before {
                 stopScheduler()
+                    SubscreenWidgetRenderHostRegistry.clear(mainPanel)
                 mainPanel = null
                 mainHandler = null
                 }
@@ -663,6 +665,11 @@ class RearWallpaperHook : RoxyHooker() {
         mainHandler = runCatching {
             resolver.firstField { name = resolveLauncherMainHandlerFieldName() }.get() as? Handler
         }.getOrNull()
+        val panel = mainPanel as? ViewGroup
+        val handler = mainHandler
+        if (panel != null && handler != null) {
+            SubscreenWidgetRenderHostRegistry.update(panel.context, panel, handler)
+        }
     }
 
     /** Recover an already-created launcher after a classloader reload without replaying lifecycle. */
@@ -2819,6 +2826,46 @@ class RearWallpaperHook : RoxyHooker() {
     }
 
     private fun PackageScope.captureWallpaperPreviewOffscreenToFile(
+        wallpaperId: Int,
+        targetFile: File
+    ): String {
+        val panel = mainPanel as? View
+            ?: throw IllegalStateException("main panel is not ready")
+        val host = SubscreenWidgetRenderHostRegistry.snapshot()
+            ?: throw IllegalStateException("offscreen render host is not ready")
+        val entry = loadWallpaperEntries().firstOrNull { it.wallpaperId == wallpaperId }
+            ?: throw IllegalArgumentException("wallpaper is not in current list")
+        val widget = cloneWallpaperWidgetForPreview(entry.widget)
+        return SubscreenWidgetOffscreenRenderer.renderToFile(
+            host = host,
+            widget = widget,
+            targetFile = targetFile,
+            renderSize = resolvePreviewRenderSize(panel),
+            editMode = readMainPanelEditMode(panel),
+            controller = SubscreenWidgetRuntimeController(
+                attachHost = { target, renderHost ->
+                    target.asResolver().firstField {
+                        superclass()
+                        name = resolveWidgetHostFieldName()
+                    }.set(renderHost)
+                },
+                setEditMode = { target, enabled -> invokeWidgetSetEditMode(target, enabled) },
+                setPreviewMode = { target, enabled ->
+                    target.asResolver().firstField {
+                        superclass()
+                        name = resolveWidgetPreviewModeFieldName()
+                    }.set(enabled)
+                },
+                createView = { target, context -> invokeWidgetCreateView(target, context) },
+                setAodState = { target, inAod -> invokeWidgetSetAodState(target, inAod) },
+                resume = { target -> invokeWidgetResume(target) },
+                cleanup = { target -> invokeWidgetCleanup(target) },
+            ),
+            debug = { message -> debugLog("offscreen preview wallpaperId=$wallpaperId $message") },
+        )
+    }
+
+    private fun PackageScope.captureWallpaperPreviewOffscreenLegacyToFile(
         wallpaperId: Int,
         targetFile: File
     ): String {

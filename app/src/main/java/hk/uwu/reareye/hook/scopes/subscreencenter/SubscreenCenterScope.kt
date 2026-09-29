@@ -12,6 +12,7 @@ import hk.uwu.reareye.hook.scopes.subscreencenter.modules.VideoProgressResumeMod
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.VideoVolumeHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.lyrics.LyriconHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.ExtraTimeTipHook
+import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.RearAppHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.RearWidgetHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.SystemUiNotificationBridgeHook
 import hk.uwu.reareye.hook.support.YLog
@@ -34,6 +35,7 @@ class SubscreenCenterScope : RoxyHooker(), Scope {
             VideoProgressResumeModule(),
             RearWallpaperHook(),
             RearWidgetHook(),
+            RearAppHook(),
             SystemUiNotificationBridgeHook(),
             LyriconHook(),
             VideoVolumeHook(),

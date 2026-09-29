@@ -20,6 +20,11 @@ private enum class RearWidgetManagerBadgeKind {
     Locked,
     TemplateDefault,
     TemplateCustom,
+    AppCard,
+    RearEye,
+    External,
+    ReadOnly,
+    Component,
 }
 
 @Composable
@@ -38,6 +43,11 @@ private fun rememberRearWidgetBadgePalette(kind: RearWidgetManagerBadgeKind) =
             RearWidgetManagerBadgeKind.Locked -> Color(0xFF475569)
             RearWidgetManagerBadgeKind.TemplateDefault -> Color(0xFF0EA5E9)
             RearWidgetManagerBadgeKind.TemplateCustom -> Color(0xFF14B8A6)
+            RearWidgetManagerBadgeKind.AppCard -> Color(0xFF8B5CF6)
+            RearWidgetManagerBadgeKind.RearEye -> Color(0xFF2563EB)
+            RearWidgetManagerBadgeKind.External -> Color(0xFF64748B)
+            RearWidgetManagerBadgeKind.ReadOnly -> Color(0xFF475569)
+            RearWidgetManagerBadgeKind.Component -> Color(0xFF10B981)
         }
     )
 
@@ -171,5 +181,45 @@ internal fun rearWidgetTemplateStatusBadge(hasCustomConfig: Boolean): RearBadgeI
                 RearWidgetManagerBadgeKind.TemplateDefault
             }
         ),
+    )
+}
+
+@Composable
+internal fun rearWidgetAppCardBadge(): RearBadgeItem {
+    return RearBadgeItem(
+        text = stringResource(R.string.rear_widget_badge_app),
+        palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.AppCard),
+    )
+}
+
+@Composable
+internal fun rearWidgetRearEyeBadge(): RearBadgeItem {
+    return RearBadgeItem(
+        text = stringResource(R.string.rear_widget_badge_reareye),
+        palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.RearEye),
+    )
+}
+
+@Composable
+internal fun rearWidgetExternalBadge(): RearBadgeItem {
+    return RearBadgeItem(
+        text = stringResource(R.string.rear_widget_badge_external),
+        palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.External),
+    )
+}
+
+@Composable
+internal fun rearWidgetReadOnlyBadge(): RearBadgeItem {
+    return RearBadgeItem(
+        text = stringResource(R.string.rear_widget_badge_read_only),
+        palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.ReadOnly),
+    )
+}
+
+@Composable
+internal fun rearWidgetComponentBadge(component: String): RearBadgeItem {
+    return RearBadgeItem(
+        text = stringResource(R.string.rear_widget_badge_component, component),
+        palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.Component),
     )
 }

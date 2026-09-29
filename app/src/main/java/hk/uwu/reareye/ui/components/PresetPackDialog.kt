@@ -4,9 +4,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -18,11 +20,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.presetpack.PresetPackInstalled
 import hk.uwu.reareye.repository.presetpack.PresetPackManifest
@@ -32,8 +37,6 @@ import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -92,6 +95,11 @@ fun rememberPresetPackHomeSnapshot(refreshToken: Any? = Unit): PresetPackHomeSna
                 },
             )
         }
+        // Apply local changes immediately; a slow update check must not keep a stale notice visible.
+        snapshot = snapshot.copy(
+            local = local,
+            latest = snapshot.latest.takeIf { local.status == PresetPackLocalStatus.READY },
+        )
         val latest = if (local.status == PresetPackLocalStatus.READY) {
             withContext(Dispatchers.IO) {
                 runCatching { PresetPackRepository(context, prefs).checkLatest() }.getOrNull()
@@ -194,24 +202,41 @@ fun PresetPackStatusCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.defaultColors(color = background),
+        insideMargin = PaddingValues(16.dp),
         onClick = onClick,
         pressFeedbackType = PressFeedbackType.Tilt,
         showIndication = true,
     ) {
-        BasicComponent(
-            title = title,
-            titleColor = BasicComponentDefaults.titleColor(color = titleTint),
-            summary = summary,
-            summaryColor = BasicComponentDefaults.summaryColor(color = summaryTint),
-            startAction = {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = iconTint,
-                    modifier = Modifier.padding(end = 6.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(32.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = title,
+                    color = titleTint,
+                    fontSize = 18.sp,
+                    lineHeight = 24.sp,
+                    fontWeight = FontWeight.SemiBold,
                 )
-            },
-        )
+                Text(
+                    text = summary,
+                    color = summaryTint,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                )
+            }
+        }
     }
 }
 

@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -25,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -49,6 +52,7 @@ import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.rounded.Deployed_code
 import com.composables.icons.materialsymbols.rounded.Storefront
 import hk.uwu.reareye.R
+import hk.uwu.reareye.repository.rearwidget.RearAppCardRepository
 import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
 import hk.uwu.reareye.repository.rearwidget.RearCardConfig
 import hk.uwu.reareye.repository.rearwidget.RearCardOrderSetting
@@ -89,6 +93,7 @@ import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
@@ -137,6 +142,17 @@ fun CardManagerScreen(
     var cardsLoaded by remember { mutableStateOf(false) }
     var dataCardsVisible by remember { mutableStateOf(false) }
     var runtimeRefreshTick by remember { mutableIntStateOf(0) }
+    val cardPagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
+    val selectedCardTab by remember {
+        derivedStateOf {
+            if (cardPagerState.isScrollInProgress) {
+                cardPagerState.targetPage
+            } else {
+                cardPagerState.currentPage
+            }
+        }
+    }
+    var appRefreshRevision by remember { mutableIntStateOf(0) }
     val cardOrderSettings = remember { mutableStateMapOf<String, RearCardOrderSetting>() }
     var highlightedCardId by remember { mutableStateOf<String?>(null) }
     val remotePrefsStatusRevision = rememberRemotePrefsStatusRevision()
@@ -187,13 +203,14 @@ fun CardManagerScreen(
         val index = cards.indexOfFirst { it.id == id }
         if (index < 0) return@LaunchedEffect
         highlightedCardId = id
-        listState.animateScrollToItem(index + if (embedded) 0 else 1)
+        listState.animateScrollToItem(index + if (embedded) 1 else 2)
         delay(1600)
         highlightedCardId = null
         onFocusCardHandled()
     }
 
     val showDialog = remember { mutableStateOf(false) }
+    var dialogSessionId by remember { mutableIntStateOf(0) }
     var editingCardId by remember { mutableStateOf<String?>(null) }
     var draftCardId by remember { mutableStateOf(RearWidgetConfigCodec.newCardId()) }
     val activeTemplateCardId = remember { mutableStateOf<String?>(null) }
@@ -204,6 +221,9 @@ fun CardManagerScreen(
     var draftAutomaticPriority by remember { mutableStateOf(true) }
     var draftSticky by remember { mutableStateOf(true) }
     var draftOneConfigJson by remember { mutableStateOf<String?>(null) }
+    var addModeTab by remember { mutableIntStateOf(0) }
+    var appDraftTitle by remember { mutableStateOf("") }
+    var selectedBusinessIndex by remember { mutableIntStateOf(0) }
 
     fun persist() {
         val nextCards = cards.toList()
@@ -253,8 +273,9 @@ fun CardManagerScreen(
         onDragFinished = { persistCardOrder() },
     )
 
-    fun openCreateDialog() {
+    fun openCreateDialog(mode: Int = selectedCardTab) {
         editingCardId = null
+        addModeTab = mode.coerceIn(0, 1)
         draftCardId = RearWidgetConfigCodec.newCardId()
         draftTitle = ""
         draftPackageName = "hk.uwu.reareye"
@@ -263,12 +284,18 @@ fun CardManagerScreen(
         draftAutomaticPriority = true
         draftSticky = true
         draftOneConfigJson = null
+        appDraftTitle = ""
+        selectedBusinessIndex = selectedBusinessIndex.coerceIn(
+            0,
+            businesses.lastIndex.coerceAtLeast(0),
+        )
+        dialogSessionId++
         showDialog.value = true
     }
 
-    LaunchedEffect(actionRequest) {
+    LaunchedEffect(actionRequest, cardsLoaded) {
         if (actionRequest == ConfigDashboardAction.ADD_CARD && cardsLoaded) {
-            openCreateDialog()
+            openCreateDialog(selectedCardTab)
             onActionHandled()
         }
     }
@@ -288,6 +315,7 @@ fun CardManagerScreen(
         draftAutomaticPriority = cardOrderSettings[item.id]?.automatic ?: true
         draftSticky = item.sticky
         draftOneConfigJson = item.oneConfigJson
+        dialogSessionId++
         showDialog.value = true
     }
 
@@ -430,6 +458,46 @@ fun CardManagerScreen(
         ).show()
     }
 
+    @SuppressLint("LocalContextGetResourceValueCall")
+    fun submitAppCardDialog() {
+        val title = appDraftTitle.trim()
+        val business = businesses.getOrNull(selectedBusinessIndex)?.business.orEmpty()
+        if (title.isBlank() || business.isBlank()) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.rear_widget_form_invalid),
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                RearAppCardRepository.register(
+                    context = context,
+                    prefsManager = prefsManager,
+                    title = title,
+                    componentBusiness = business,
+                )
+            }
+            Toast.makeText(
+                context,
+                if (result.success) {
+                    context.getString(R.string.rear_widget_app_registered)
+                } else {
+                    result.error.orEmpty().ifBlank {
+                        context.getString(R.string.rear_widget_app_operation_failed)
+                    }
+                },
+                Toast.LENGTH_SHORT,
+            ).show()
+            if (result.success) {
+                showDialog.value = false
+                cardPagerState.animateScrollToPage(1)
+                appRefreshRevision++
+            }
+        }
+    }
+
     TemplateConfigRouteTransition(
         target = activeTemplateCard,
         contentKey = { it?.id ?: "card-manager" },
@@ -476,36 +544,89 @@ fun CardManagerScreen(
                         }
                     },
                     actions = {
-                        IconButton(
-                            onClick = { if (cardsLoaded) openCreateDialog() }) {
-                            Icon(imageVector = Icons.Filled.Add, contentDescription = null)
+                        key(selectedCardTab) {
+                            if (selectedCardTab == 0) {
+                                IconButton(
+                                    onClick = {
+                                        if (cardsLoaded) openCreateDialog(0)
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Add,
+                                        contentDescription = stringResource(R.string.rear_widget_add_card),
+                                    )
+                                }
+                            } else {
+                                IconButton(
+                                    onClick = {
+                                        if (cardsLoaded) openCreateDialog(1)
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Add,
+                                        contentDescription = stringResource(R.string.rear_widget_add_app_card),
+                                    )
+                                }
+                            }
                         }
                     },
                     scrollBehavior = scrollBehavior,
                 )
             },
         ) { paddingValues ->
-            LazyColumn(
-                state = listState,
+            val pageTopPadding = if (embedded) {
+                contentPadding.calculateTopPadding()
+            } else {
+                paddingValues.calculateTopPadding() + contentPadding.calculateTopPadding()
+            }
+            val pageBottomPadding =
+                paddingValues.calculateBottomPadding() + contentPadding.calculateBottomPadding() + 12.dp
+            val pageStartPadding = contentPadding.calculateLeftPadding(layoutDirection)
+            val pageEndPadding = contentPadding.calculateRightPadding(layoutDirection)
+
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .scrollEndHaptic()
-                    .overScrollVertical()
                     .rearAcrylicSource(hazeState)
-                    .padding(horizontal = 12.dp),
-                contentPadding = PaddingValues(
-                    top = if (embedded) {
-                        contentPadding.calculateTopPadding()
-                    } else {
-                        paddingValues.calculateTopPadding() + contentPadding.calculateTopPadding()
-                    },
-                    bottom = paddingValues.calculateBottomPadding() + contentPadding.calculateBottomPadding() + 12.dp,
-                    start = contentPadding.calculateLeftPadding(layoutDirection),
-                    end = contentPadding.calculateRightPadding(layoutDirection),
-                ),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                overscrollEffect = null,
+                    .padding(top = pageTopPadding),
             ) {
+                TabRowWithContour(
+                    tabs = listOf(
+                        stringResource(R.string.rear_widget_card_tab_normal),
+                        stringResource(R.string.rear_widget_card_tab_app),
+                    ),
+                    selectedTabIndex = selectedCardTab,
+                    onTabSelected = { page ->
+                        scope.launch { cardPagerState.animateScrollToPage(page) }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+                )
+                HorizontalPager(
+                    state = cardPagerState,
+                    beyondViewportPageCount = 1,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { clip = true },
+                ) { activeTab ->
+                    if (activeTab == 0) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .scrollEndHaptic()
+                                .overScrollVertical()
+                                .rearAcrylicSource(hazeState)
+                                .padding(horizontal = 12.dp),
+                            contentPadding = PaddingValues(
+                                bottom = pageBottomPadding,
+                                start = pageStartPadding,
+                                end = pageEndPadding,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            overscrollEffect = null,
+                        ) {
                 if (!embedded) item {
                     Card(
                         modifier = Modifier
@@ -530,7 +651,7 @@ fun CardManagerScreen(
                                             )
                                         }
                                         Button(
-                                            onClick = { if (cardsLoaded) openCreateDialog() },
+                                            onClick = { if (cardsLoaded) openCreateDialog(0) },
                                             enabled = cardsLoaded,
                                             colors = ButtonDefaults.buttonColorsPrimary(),
                                             modifier = Modifier.fillMaxWidth(),
@@ -748,114 +869,157 @@ fun CardManagerScreen(
                         }
                     }
                 }
+                        }
+                    } else {
+                        RearAppCardManagementContent(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .scrollEndHaptic()
+                                .overScrollVertical()
+                                .padding(horizontal = 12.dp),
+                            contentPadding = PaddingValues(
+                                bottom = pageBottomPadding,
+                                start = pageStartPadding,
+                                end = pageEndPadding,
+                            ),
+                            refreshRevision = appRefreshRevision,
+                        )
+                    }
+                }
             }
         }
 
-        OverlayDialog(
-            show = showDialog.value,
-            title = stringResource(
-                if (editingCardId == null) R.string.rear_widget_add_card else R.string.rear_widget_edit_card,
-            ),
-            onDismissRequest = { showDialog.value = false },
-        ) {
+        key(dialogSessionId) {
+            RearCardCreateDialog(
+                show = showDialog.value && editingCardId == null,
+                mode = addModeTab,
+                onModeChange = { addModeTab = it },
+                businesses = businesses,
+                normalTitle = draftTitle,
+                onNormalTitleChange = { draftTitle = it },
+                normalPackageName = draftPackageName,
+                onNormalPackageNameChange = { draftPackageName = it },
+                normalBusiness = draftBusiness,
+                onNormalBusinessChange = { draftBusiness = it },
+                normalPriorityText = draftPriorityText,
+                onNormalPriorityTextChange = { draftPriorityText = it },
+                normalAutomaticPriority = draftAutomaticPriority,
+                onNormalAutomaticPriorityChange = { draftAutomaticPriority = it },
+                normalSticky = draftSticky,
+                onNormalStickyChange = { draftSticky = it },
+                appTitle = appDraftTitle,
+                onAppTitleChange = { appDraftTitle = it },
+                selectedAppBusinessIndex = selectedBusinessIndex,
+                onSelectedAppBusinessIndexChange = { selectedBusinessIndex = it },
+                onConfirmNormal = ::submitDialog,
+                onConfirmApp = ::submitAppCardDialog,
+                onDismissRequest = { showDialog.value = false },
+            )
+
             val editingCard = editingCardId?.let { id -> cards.firstOrNull { it.id == id } }
             val lockedCard = editingCard?.takeIf { !it.renameable }
-            DialogFormColumn {
-                if (lockedCard == null) {
-                    TextField(
-                        value = draftTitle,
-                        onValueChange = { draftTitle = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = stringResource(R.string.rear_widget_card_title),
-                        singleLine = true,
-                    )
-                    TextField(
-                        value = draftPackageName,
-                        onValueChange = { draftPackageName = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = stringResource(R.string.rear_widget_target_package),
-                        singleLine = true,
-                    )
-                    TextField(
-                        value = draftBusiness,
-                        onValueChange = { draftBusiness = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = stringResource(R.string.rear_widget_business_name),
-                        singleLine = true,
-                    )
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
+            OverlayDialog(
+                show = showDialog.value && editingCard != null,
+                title = stringResource(R.string.rear_widget_edit_card),
+                onDismissRequest = { showDialog.value = false },
+            ) {
+                DialogFormColumn {
+                    if (lockedCard == null) {
+                        TextField(
+                            value = draftTitle,
+                            onValueChange = { draftTitle = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.rear_widget_card_title),
+                            singleLine = true,
+                        )
+                        TextField(
+                            value = draftPackageName,
+                            onValueChange = { draftPackageName = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.rear_widget_target_package),
+                            singleLine = true,
+                        )
+                        TextField(
+                            value = draftBusiness,
+                            onValueChange = { draftBusiness = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.rear_widget_business_name),
+                            singleLine = true,
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                text = stringResource(R.string.rear_widget_card_locked_summary),
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = stringResource(
-                                    R.string.rear_widget_card_summary,
-                                    lockedCard.packageName,
-                                    lockedCard.business,
-                                    lockedCard.priority,
-                                ),
-                                fontSize = 12.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            )
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.rear_widget_card_locked_summary),
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 14.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = stringResource(
+                                        R.string.rear_widget_card_summary,
+                                        lockedCard.packageName,
+                                        lockedCard.business,
+                                        lockedCard.priority,
+                                    ),
+                                    fontSize = 12.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                )
+                            }
                         }
                     }
-                }
-                SwitchPreference(
-                    title = stringResource(R.string.rear_widget_priority_mode_auto),
-                    summary = stringResource(
-                        if (draftAutomaticPriority) R.string.rear_widget_priority_auto_desc
-                        else R.string.rear_widget_priority_manual_desc,
-                    ),
-                    checked = draftAutomaticPriority,
-                    onCheckedChange = { draftAutomaticPriority = it },
-                )
-                TextField(
-                    value = draftPriorityText,
-                    onValueChange = { draftPriorityText = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.rear_widget_default_priority),
-                    enabled = !draftAutomaticPriority,
-                    singleLine = true,
-                )
-                if (lockedCard == null) {
                     SwitchPreference(
-                        title = stringResource(R.string.rear_widget_card_sticky),
-                        summary = stringResource(R.string.rear_widget_card_sticky_desc),
-                        checked = draftSticky,
-                        onCheckedChange = { draftSticky = it },
+                        title = stringResource(R.string.rear_widget_priority_mode_auto),
+                        summary = stringResource(
+                            if (draftAutomaticPriority) R.string.rear_widget_priority_auto_desc
+                            else R.string.rear_widget_priority_manual_desc,
+                        ),
+                        checked = draftAutomaticPriority,
+                        onCheckedChange = { draftAutomaticPriority = it },
                     )
-                }
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Button(
-                        onClick = { submitDialog() },
-                        colors = ButtonDefaults.buttonColorsPrimary(),
+                    TextField(
+                        value = draftPriorityText,
+                        onValueChange = { draftPriorityText = it },
                         modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(stringResource(R.string.rear_widget_confirm))
+                        label = stringResource(R.string.rear_widget_default_priority),
+                        enabled = !draftAutomaticPriority,
+                        singleLine = true,
+                    )
+                    if (lockedCard == null) {
+                        SwitchPreference(
+                            title = stringResource(R.string.rear_widget_card_sticky),
+                            summary = stringResource(R.string.rear_widget_card_sticky_desc),
+                            checked = draftSticky,
+                            onCheckedChange = { draftSticky = it },
+                        )
                     }
-                    Button(
-                        onClick = { showDialog.value = false },
-                        modifier = Modifier.fillMaxWidth()
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text(stringResource(R.string.rear_widget_cancel))
+                        Button(
+                            onClick = { submitDialog() },
+                            colors = ButtonDefaults.buttonColorsPrimary(),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.rear_widget_confirm))
+                        }
+                        Button(
+                            onClick = { showDialog.value = false },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.rear_widget_cancel))
+                        }
                     }
                 }
             }

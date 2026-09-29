@@ -19,12 +19,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +36,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
@@ -40,6 +45,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -49,9 +55,12 @@ import androidx.core.view.WindowCompat
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.anim.DecelerateEasing
 import top.yukonga.miuix.kmp.anim.folmeSpring
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.layout.DialogDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+internal val LocalOverlayDialogBounds = staticCompositionLocalOf { IntRect.Zero }
 
 @Composable
 fun OverlayDialog(
@@ -110,6 +119,7 @@ fun OverlayDialog(
         val imeBottomInset = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
         val shape =
             androidx.compose.foundation.shape.RoundedCornerShape(if (isLargeScreen) 28.dp else 32.dp)
+        var dialogBounds by remember { mutableStateOf(IntRect.Zero) }
 
         LaunchedEffect(show, isLargeScreen) {
             if (show) {
@@ -148,82 +158,102 @@ fun OverlayDialog(
             }
         }
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (enableWindowDim) {
-                val baseColor = MiuixTheme.colorScheme.windowDimming
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = Color.Transparent,
+        ) { _ ->
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (enableWindowDim) {
+                    val baseColor = MiuixTheme.colorScheme.windowDimming
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .drawBehind {
+                                drawRect(baseColor.copy(alpha = baseColor.alpha * dimProgress.value))
+                            },
+                    )
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .drawBehind {
-                            drawRect(baseColor.copy(alpha = baseColor.alpha * dimProgress.value))
-                        },
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(currentOnDismissRequest) {
-                        detectTapGestures { currentOnDismissRequest?.invoke() }
-                    }
-                    .then(
-                        if (defaultWindowInsetsPadding) {
-                            Modifier.padding(top = safeTopInset, bottom = imeBottomInset)
-                        } else {
-                            Modifier
+                        .pointerInput(currentOnDismissRequest) {
+                            detectTapGestures { currentOnDismissRequest?.invoke() }
                         }
-                    )
-                    .padding(horizontal = outsideMargin.width, vertical = outsideMargin.height),
-            ) {
-                Column(
-                    modifier = modifier
-                        .align(if (isLargeScreen) Alignment.Center else Alignment.BottomCenter)
-                        .graphicsLayer {
-                            val progress = animationProgress.value
-                            if (isLargeScreen) {
-                                val scale = 0.8f + 0.2f * progress
-                                scaleX = scale
-                                scaleY = scale
-                                alpha = progress
+                        .then(
+                            if (defaultWindowInsetsPadding) {
+                                Modifier.padding(top = safeTopInset, bottom = imeBottomInset)
                             } else {
-                                translationY = (1f - progress) * windowHeightPx
-                                alpha = 1f
+                                Modifier
                             }
-                        }
-                        .fillMaxWidth()
-                        .widthIn(max = 420.dp)
-                        .heightIn(max = if (isLargeScreen) windowHeight * (2f / 3f) else windowHeight * 0.86f)
-                        .pointerInput(Unit) {
-                            detectTapGestures { }
-                        }
-                        .clip(shape)
-                        .background(backgroundColor)
-                        .padding(horizontal = insideMargin.width, vertical = insideMargin.height),
+                        )
+                        .padding(horizontal = outsideMargin.width, vertical = outsideMargin.height),
                 ) {
-                    title?.let {
-                        Text(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp),
-                            text = it,
-                            fontSize = MiuixTheme.textStyles.title4.fontSize,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center,
-                            color = titleColor,
-                        )
+                    Column(
+                        modifier = modifier
+                            .align(if (isLargeScreen) Alignment.Center else Alignment.BottomCenter)
+                            .onGloballyPositioned { coordinates ->
+                                val position = coordinates.positionInWindow()
+                                val nextBounds = IntRect(
+                                    left = position.x.toInt(),
+                                    top = position.y.toInt(),
+                                    right = position.x.toInt() + coordinates.size.width,
+                                    bottom = position.y.toInt() + coordinates.size.height,
+                                )
+                                if (dialogBounds != nextBounds) dialogBounds = nextBounds
+                            }
+                            .graphicsLayer {
+                                val progress = animationProgress.value
+                                if (isLargeScreen) {
+                                    val scale = 0.8f + 0.2f * progress
+                                    scaleX = scale
+                                    scaleY = scale
+                                    alpha = progress
+                                } else {
+                                    translationY = (1f - progress) * windowHeightPx
+                                    alpha = 1f
+                                }
+                            }
+                            .fillMaxWidth()
+                            .widthIn(max = 420.dp)
+                            .heightIn(max = if (isLargeScreen) windowHeight * (2f / 3f) else windowHeight * 0.86f)
+                            .pointerInput(Unit) {
+                                detectTapGestures { }
+                            }
+                            .clip(shape)
+                            .background(backgroundColor)
+                            .padding(
+                                horizontal = insideMargin.width,
+                                vertical = insideMargin.height
+                            ),
+                    ) {
+                        title?.let {
+                            Text(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 12.dp),
+                                text = it,
+                                fontSize = MiuixTheme.textStyles.title4.fontSize,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                color = titleColor,
+                            )
+                        }
+                        summary?.let {
+                            Text(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 12.dp),
+                                text = it,
+                                fontSize = MiuixTheme.textStyles.body1.fontSize,
+                                textAlign = TextAlign.Center,
+                                color = summaryColor,
+                            )
+                        }
+                        CompositionLocalProvider(LocalOverlayDialogBounds provides dialogBounds) {
+                            content()
+                        }
                     }
-                    summary?.let {
-                        Text(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp),
-                            text = it,
-                            fontSize = MiuixTheme.textStyles.body1.fontSize,
-                            textAlign = TextAlign.Center,
-                            color = summaryColor,
-                        )
-                    }
-                    content()
                 }
             }
         }

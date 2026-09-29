@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,14 +48,18 @@ import com.composables.icons.materialsymbols.rounded.Expand_more
 import com.composables.icons.materialsymbols.rounded.Open_in_new
 import com.composables.icons.materialsymbols.rounded.Storefront
 import hk.uwu.reareye.R
+import hk.uwu.reareye.repository.rearwidget.RearAppCardRepository
 import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigFields
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigRepository
 import hk.uwu.reareye.repository.rearwidget.RearCardConfig
+import hk.uwu.reareye.repository.rearwidget.RearCardOrderSetting
+import hk.uwu.reareye.repository.rearwidget.RearCardPriorityManager
 import hk.uwu.reareye.repository.rearwidget.RearWidgetConfigCodec
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.reareye.ui.components.OverlayDialog
+import hk.uwu.reareye.ui.components.RearBadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
@@ -66,6 +71,7 @@ import hk.uwu.reareye.ui.theme.rearAcrylicEffect
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
+import hk.uwu.reareye.widgetapi.RearAppCardInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -115,6 +121,7 @@ fun BusinessManagerScreen(
     val listState = rememberLazyListState()
     val widgets = remember { mutableStateListOf<RearBusinessConfig>() }
     val cards = remember { mutableStateListOf<RearCardConfig>() }
+    val appCards = remember { mutableStateListOf<RearAppCardInfo>() }
     var widgetsLoaded by remember { mutableStateOf(false) }
     var dataCardsVisible by remember { mutableStateOf(false) }
     val remotePrefsStatusRevision = rememberRemotePrefsStatusRevision()
@@ -130,7 +137,11 @@ fun BusinessManagerScreen(
     var draftCardPackageName by remember { mutableStateOf("hk.uwu.reareye") }
     var draftCardBusiness by remember { mutableStateOf("") }
     var draftCardPriorityText by remember { mutableStateOf("500") }
+    var draftCardAutomaticPriority by remember { mutableStateOf(true) }
     var draftCardSticky by remember { mutableStateOf(true) }
+    var registerCardMode by remember { mutableIntStateOf(0) }
+    var draftAppCardTitle by remember { mutableStateOf("") }
+    var selectedAppBusinessIndex by remember { mutableIntStateOf(0) }
     var draftHideTimeTip by remember { mutableStateOf(false) }
     var expandedBusinessId by remember { mutableStateOf<String?>(null) }
     var highlightedBusinessId by remember { mutableStateOf<String?>(null) }
@@ -167,6 +178,11 @@ fun BusinessManagerScreen(
         withContext(Dispatchers.IO) {
             RearWidgetManagerRepository.refreshRuntimeFromPrefs(context, prefsManager)
         }
+        val loadedAppCards = withContext(Dispatchers.IO) {
+            RearAppCardRepository.loadCatalog(context)
+        }
+        appCards.clear()
+        appCards.addAll(loadedAppCards)
     }
 
     fun persist() {
@@ -232,12 +248,17 @@ fun BusinessManagerScreen(
     }
 
     fun openRegisterCardDialog(item: RearBusinessConfig) {
+        registerCardMode = 0
         draftCardId = RearWidgetConfigCodec.newCardId()
         draftCardTitle = item.business
         draftCardPackageName = "hk.uwu.reareye"
         draftCardBusiness = item.business
         draftCardPriorityText = item.defaultPriority.toString()
+        draftCardAutomaticPriority = true
         draftCardSticky = true
+        draftAppCardTitle = item.business
+        selectedAppBusinessIndex = widgets.indexOfFirst { it.business == item.business }
+            .coerceAtLeast(0)
         showRegisterCardDialog.value = true
     }
 
@@ -336,23 +357,35 @@ fun BusinessManagerScreen(
             return
         }
 
-        val nextCards = RearWidgetManagerRepository.loadCards(prefsManager)
-            .toMutableList()
+        val card = RearCardConfig(
+            id = draftCardId,
+            title = draftCardTitle.trim().ifBlank { business },
+            packageName = packageName,
+            business = business,
+            enabled = true,
+            sticky = draftCardSticky,
+            priority = draftCardPriorityText.toIntOrNull() ?: 500,
+        )
+        val nextCards = RearWidgetManagerRepository.loadCards(prefsManager).toMutableList().apply {
+            add(card)
+        }
+        val nextSettings = RearWidgetManagerRepository.loadCardOrderSettings(prefsManager)
+            .toMutableMap()
             .apply {
-                add(
-                    RearCardConfig(
-                        id = draftCardId,
-                        title = draftCardTitle.trim().ifBlank { business },
-                        packageName = packageName,
-                        business = business,
-                        enabled = true,
-                        sticky = draftCardSticky,
-                        priority = draftCardPriorityText.toIntOrNull() ?: 500,
-                    )
+                this[card.id] = RearCardOrderSetting(
+                    automatic = draftCardAutomaticPriority,
+                    position = nextCards.lastIndex,
                 )
             }
+        val reorderedCards = RearCardPriorityManager.assignAutomaticPriorities(
+            cards = nextCards,
+            settings = nextSettings,
+        )
+        cards.clear()
+        cards.addAll(reorderedCards)
         scope.launch(Dispatchers.IO) {
-            RearWidgetManagerRepository.saveCards(context, prefsManager, nextCards)
+            RearWidgetManagerRepository.saveCardOrderSettings(prefsManager, nextSettings)
+            RearWidgetManagerRepository.saveCards(context, prefsManager, reorderedCards)
         }
         showRegisterCardDialog.value = false
         Toast.makeText(
@@ -360,6 +393,48 @@ fun BusinessManagerScreen(
             context.getString(R.string.rear_widget_card_saved),
             Toast.LENGTH_SHORT
         ).show()
+    }
+
+    fun submitRegisterAppCardDialog() {
+        val title = draftAppCardTitle.trim()
+        val business = widgets.getOrNull(selectedAppBusinessIndex)?.business.orEmpty()
+        if (title.isBlank() || business.isBlank()) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.rear_widget_form_invalid),
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                RearAppCardRepository.register(
+                    context = context,
+                    prefsManager = prefsManager,
+                    title = title,
+                    componentBusiness = business,
+                )
+            }
+            Toast.makeText(
+                context,
+                if (result.success) {
+                    context.getString(R.string.rear_widget_app_registered)
+                } else {
+                    result.error.orEmpty().ifBlank {
+                        context.getString(R.string.rear_widget_app_operation_failed)
+                    }
+                },
+                Toast.LENGTH_SHORT,
+            ).show()
+            if (result.success) {
+                val refreshed = withContext(Dispatchers.IO) {
+                    RearAppCardRepository.loadCatalog(context)
+                }
+                appCards.clear()
+                appCards.addAll(refreshed)
+                showRegisterCardDialog.value = false
+            }
+        }
     }
 
     val picker = rememberLauncherForActivityResult(
@@ -469,6 +544,9 @@ fun BusinessManagerScreen(
                     val relatedCards = cards.filter { card ->
                         card.business == item.business
                     }
+                    val relatedAppCards = appCards.filter { appCard ->
+                        appCard.ownedByRearEye && appCard.componentBusiness == item.business
+                    }
                     val isHighlighted = highlightedBusinessId == item.id
                     ModuleStyleManagerCard(
                         backgroundColor = if (isHighlighted) {
@@ -525,7 +603,7 @@ fun BusinessManagerScreen(
                                     contentDescription = stringResource(R.string.rear_widget_add_card),
                                     onClick = { openRegisterCardDialog(item) },
                                 )
-                                if (relatedCards.isNotEmpty()) {
+                                if (relatedCards.isNotEmpty() || relatedAppCards.isNotEmpty()) {
                                     ModuleStyleIconAction(
                                         modifier = Modifier
                                             .size(20.dp)
@@ -554,7 +632,10 @@ fun BusinessManagerScreen(
                             )
                         },
                     )
-                    if (expandedBusinessId == item.id && relatedCards.isNotEmpty()) {
+                    if (
+                        expandedBusinessId == item.id &&
+                        (relatedCards.isNotEmpty() || relatedAppCards.isNotEmpty())
+                    ) {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -594,6 +675,25 @@ fun BusinessManagerScreen(
                                                     )
                                                 }
                                             },
+                                        )
+                                    }
+                                }
+                                relatedAppCards.forEach { appCard ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Text(
+                                            text = appCard.title.ifBlank { appCard.appId },
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        RearBadgeGroup(
+                                            badges = listOf(rearWidgetAppCardBadge()),
                                         )
                                     }
                                 }
@@ -695,64 +795,29 @@ fun BusinessManagerScreen(
         }
     }
 
-    OverlayDialog(
+    RearCardCreateDialog(
         show = showRegisterCardDialog.value,
-        title = stringResource(R.string.rear_widget_add_card),
+        mode = registerCardMode,
+        onModeChange = { registerCardMode = it },
+        businesses = widgets,
+        normalTitle = draftCardTitle,
+        onNormalTitleChange = { draftCardTitle = it },
+        normalPackageName = draftCardPackageName,
+        onNormalPackageNameChange = { draftCardPackageName = it },
+        normalBusiness = draftCardBusiness,
+        onNormalBusinessChange = { draftCardBusiness = it },
+        normalPriorityText = draftCardPriorityText,
+        onNormalPriorityTextChange = { draftCardPriorityText = it },
+        normalAutomaticPriority = draftCardAutomaticPriority,
+        onNormalAutomaticPriorityChange = { draftCardAutomaticPriority = it },
+        normalSticky = draftCardSticky,
+        onNormalStickyChange = { draftCardSticky = it },
+        appTitle = draftAppCardTitle,
+        onAppTitleChange = { draftAppCardTitle = it },
+        selectedAppBusinessIndex = selectedAppBusinessIndex,
+        onSelectedAppBusinessIndexChange = { selectedAppBusinessIndex = it },
+        onConfirmNormal = ::submitRegisterCardDialog,
+        onConfirmApp = ::submitRegisterAppCardDialog,
         onDismissRequest = { showRegisterCardDialog.value = false },
-    ) {
-        DialogFormColumn {
-            TextField(
-                value = draftCardTitle,
-                onValueChange = { draftCardTitle = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_widget_card_title),
-                singleLine = true,
-            )
-            TextField(
-                value = draftCardPackageName,
-                onValueChange = { draftCardPackageName = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_widget_target_package),
-                singleLine = true,
-            )
-            TextField(
-                value = draftCardBusiness,
-                onValueChange = { draftCardBusiness = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_widget_business_name),
-                singleLine = true,
-            )
-            TextField(
-                value = draftCardPriorityText,
-                onValueChange = { draftCardPriorityText = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_widget_default_priority),
-                singleLine = true,
-            )
-            SwitchPreference(
-                title = stringResource(R.string.rear_widget_card_sticky),
-                summary = stringResource(R.string.rear_widget_card_sticky_desc),
-                checked = draftCardSticky,
-                onCheckedChange = { draftCardSticky = it },
-            )
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = { submitRegisterCardDialog() },
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.rear_widget_confirm))
-                }
-                Button(
-                    onClick = { showRegisterCardDialog.value = false },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.rear_widget_cancel))
-                }
-            }
-        }
-    }
+    )
 }

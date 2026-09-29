@@ -62,9 +62,10 @@ internal fun rearWallpaperStatusBadges(
 internal fun rearWallpaperManagementOverviewBadges(
     currentWallpaperName: String,
     wallpaperCount: Int,
+    onCurrentClick: (() -> Unit)? = null,
 ): List<RearBadgeItem> {
     return buildList {
-        add(rearWallpaperCurrentNameBadge(currentWallpaperName))
+        add(rearWallpaperCurrentNameBadge(currentWallpaperName, onCurrentClick))
         add(rearWallpaperCountBadge(wallpaperCount))
     }
 }
@@ -148,10 +149,14 @@ internal fun rearWallpaperCurrentBadge(): RearBadgeItem {
 }
 
 @Composable
-internal fun rearWallpaperCurrentNameBadge(currentWallpaperName: String): RearBadgeItem {
+internal fun rearWallpaperCurrentNameBadge(
+    currentWallpaperName: String,
+    onClick: (() -> Unit)? = null,
+): RearBadgeItem {
     return RearBadgeItem(
         text = stringResource(R.string.rear_wallpaper_badge_current_name, currentWallpaperName),
         palette = rememberRearWallpaperBadgePalette(RearWallpaperBadgeKind.CurrentName),
+        onClick = onClick,
     )
 }
 

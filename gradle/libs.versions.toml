@@ -39,6 +39,7 @@ android-library = { id = "com.android.library", version.ref = "agp" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
 [libraries]
+androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 roxy-libxposed = { group = "com.github.NekoStash.RoxyHook", name = "roxy-libxposed", version.ref = "roxyhook" }
 roxy-annotations = { group = "com.github.NekoStash.RoxyHook", name = "roxy-annotations", version.ref = "roxyhook" }
 roxy-ksp = { group = "com.github.NekoStash.RoxyHook", name = "roxy-ksp", version.ref = "roxyhook" }
