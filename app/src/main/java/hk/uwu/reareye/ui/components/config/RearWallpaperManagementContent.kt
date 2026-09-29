@@ -42,6 +42,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -83,6 +84,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import kotlin.math.roundToInt
 
 private const val MANAGE_PREVIEW_RATIO = 1.6f
 
@@ -90,7 +92,7 @@ private const val MANAGE_PREVIEW_RATIO = 1.6f
 fun RearWallpaperManagementContent(
     paddingValues: PaddingValues,
     scrollBehavior: ScrollBehavior,
-    hazeState: HazeState,
+    hazeState: HazeState?,
     wallpapers: List<RearWallpaperInfo>,
     storeWallpaperSources: Map<Int, RearStoreInstalledWallpaper>,
     currentWallpaperId: Int?,
@@ -479,7 +481,7 @@ fun RearWallpaperManagementContent(
 private fun RearWallpaperManagementList(
     paddingValues: PaddingValues,
     scrollBehavior: ScrollBehavior,
-    hazeState: HazeState,
+    hazeState: HazeState?,
     wallpapers: List<RearWallpaperInfo>,
     storeWallpaperSources: Map<Int, RearStoreInstalledWallpaper>,
     currentWallpaperId: Int?,
@@ -539,7 +541,13 @@ private fun RearWallpaperManagementList(
             .fillMaxSize()
             .scrollEndHaptic()
             .overScrollVertical()
-            .rearAcrylicSource(hazeState)
+            .then(
+                if (hazeState != null) {
+                    Modifier.rearAcrylicSource(hazeState)
+                } else {
+                    Modifier
+                }
+            )
             .padding(horizontal = 12.dp),
         state = listState,
         contentPadding = PaddingValues(
@@ -693,6 +701,7 @@ private fun WallpaperManageCard(
             inSchedule = inSchedule,
             intervalLabel = intervalLabel,
         ),
+        scrollActionsHorizontally = true,
         headerVerticalAlignment = Alignment.Top,
         trailing = {
             ManagedWallpaperPreview(
@@ -707,6 +716,13 @@ private fun WallpaperManageCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                ModuleStyleIconAction(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .semantics { contentDescription = rotationAction },
+                    icon = if (inSchedule) Icons.Rounded.Sync else Icons.Rounded.SyncDisabled,
+                    onClick = onToggleSchedule,
+                )
                 storeSource?.widgetId
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
@@ -717,13 +733,6 @@ private fun WallpaperManageCard(
                             onClick = { onOpenStoreDetail(storeWidgetId) },
                         )
                     }
-                ModuleStyleIconAction(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .semantics { contentDescription = rotationAction },
-                    icon = if (inSchedule) Icons.Rounded.Sync else Icons.Rounded.SyncDisabled,
-                    onClick = onToggleSchedule,
-                )
                 ModuleStyleTextAction(
                     icon = Icons.Filled.Check,
                     text = stringResource(R.string.rear_wallpaper_set_now),
@@ -1113,7 +1122,18 @@ private fun ManagedWallpaperPreview(
     cachePath: String?,
     modifier: Modifier = Modifier,
 ) {
-    val bitmap = rememberRearWallpaperPreviewBitmap(cachePath)
+    val density = LocalDensity.current
+    val requestedWidthPx = remember(density) {
+        with(density) { 104.dp.roundToPx() }
+    }
+    val requestedHeightPx = remember(requestedWidthPx) {
+        (requestedWidthPx / MANAGE_PREVIEW_RATIO).roundToInt().coerceAtLeast(1)
+    }
+    val bitmap = rememberRearWallpaperPreviewBitmap(
+        cachePath = cachePath,
+        requestedWidthPx = requestedWidthPx,
+        requestedHeightPx = requestedHeightPx,
+    )
     val iconTint = Color.White.copy(alpha = 0.82f)
 
     Box(

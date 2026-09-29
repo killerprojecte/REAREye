@@ -39,13 +39,14 @@ class SystemUiNotificationBridgeHook : RoxyHooker() {
             debugLog("loadApp process=$processName package=$packageName")
 
             this.lifecycle {
-                onCreate {
+                // Rebind from the restored attach event after the old generation unbinds.
+                onAttach(replay = true) {
                     val context = hookAppContext ?: this.context
                     hostContext = context.applicationContext ?: context
                     debugLog(
-                        "onCreate hostContext=${hostContext?.packageName} action=${NotificationRouteBridgeContract.Action.REQUEST_BINDER} target=${NotificationRouteBridgeContract.HOOK_HOST_PACKAGE}"
+                        "onAttach hostContext=${hostContext?.packageName} action=${NotificationRouteBridgeContract.Action.REQUEST_BINDER} target=${NotificationRouteBridgeContract.HOOK_HOST_PACKAGE}"
                     )
-                    bindRouteBridge("app_create")
+                    bindRouteBridge("app_attach")
                 }
             }
 
@@ -161,7 +162,6 @@ class SystemUiNotificationBridgeHook : RoxyHooker() {
     }
 
     private fun PackageScope.dispatchPosted(snapshot: NotificationRouteSnapshot, reason: String) {
-        bindRouteBridge(reason)
         val ok = routeClient.dispatch(
             NotificationRouteBridgeContract.Subchannel.NOTIFICATION_POSTED,
             snapshot.toBundle(),
@@ -176,7 +176,6 @@ class SystemUiNotificationBridgeHook : RoxyHooker() {
         removeReason: Int,
         reason: String,
     ) {
-        bindRouteBridge(reason)
         val ok = routeClient.dispatch(
             NotificationRouteBridgeContract.Subchannel.NOTIFICATION_REMOVED,
             snapshot.toRemovalBundle(removeReason),

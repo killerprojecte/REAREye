@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -44,13 +45,32 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 
+@Stable
+class RearWallpaperManagerState internal constructor() {
+    internal val wallpapers = mutableStateListOf<RearWallpaperInfo>()
+    internal val schedule = mutableStateListOf<RearWallpaperScheduleEntry>()
+    internal val storeWallpaperSources = mutableStateMapOf<Int, RearStoreInstalledWallpaper>()
+    internal val currentWallpaperId = mutableStateOf<Int?>(null)
+    internal val loading = mutableStateOf(true)
+    internal val refreshing = mutableStateOf(false)
+    internal val scheduleEnabled = mutableStateOf(false)
+    internal val catalogInitialized = mutableStateOf(false)
+}
+
+@Composable
+fun rememberRearWallpaperManagerState(): RearWallpaperManagerState {
+    return remember { RearWallpaperManagerState() }
+}
+
 @Composable
 fun RearWallpaperManagerScreen(
     prefsManager: PrefsManager,
+    state: RearWallpaperManagerState? = null,
     onBack: () -> Unit,
     embedded: Boolean = false,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     onOpenStoreDetail: (String) -> Unit = {},
+    onEditTemplate: ((RearWallpaperInfo) -> Unit)? = null,
     actionRequest: ConfigDashboardAction? = null,
     onActionHandled: () -> Unit = {},
 ) {
@@ -59,13 +79,15 @@ fun RearWallpaperManagerScreen(
     val scrollBehavior = MiuixScrollBehavior()
     val hazeState = rememberAcrylicHazeState()
     val hazeStyle = rememberAcrylicHazeStyle()
-    val wallpapers = remember { mutableStateListOf<RearWallpaperInfo>() }
-    val schedule = remember { mutableStateListOf<RearWallpaperScheduleEntry>() }
-    val storeWallpaperSources = remember { mutableStateMapOf<Int, RearStoreInstalledWallpaper>() }
-    var currentWallpaperId by remember { mutableStateOf<Int?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var refreshing by remember { mutableStateOf(false) }
-    var scheduleEnabled by remember { mutableStateOf(false) }
+    val retainedState = state ?: rememberRearWallpaperManagerState()
+    val wallpapers = retainedState.wallpapers
+    val schedule = retainedState.schedule
+    val storeWallpaperSources = retainedState.storeWallpaperSources
+    var currentWallpaperId by retainedState.currentWallpaperId
+    var loading by retainedState.loading
+    var refreshing by retainedState.refreshing
+    var scheduleEnabled by retainedState.scheduleEnabled
+    var catalogInitialized by retainedState.catalogInitialized
     var activeTemplateWallpaperId by remember { mutableStateOf<Int?>(null) }
     var localImportRequest by remember { mutableStateOf(false) }
 
@@ -112,6 +134,7 @@ fun RearWallpaperManagerScreen(
                 storeWallpaperSources.clear()
                 storeWallpaperSources.putAll(sources)
                 currentWallpaperId = catalog.currentWallpaperId
+                catalogInitialized = true
                 if (showSuccessToast) toast(R.string.rear_wallpaper_refresh_success)
             }.onFailure {
                 Toast.makeText(
@@ -269,10 +292,12 @@ fun RearWallpaperManagerScreen(
     }
 
     LaunchedEffect(Unit) {
-        schedule.clear()
-        schedule.addAll(RearWallpaperRepository.loadSchedule(prefsManager))
-        scheduleEnabled = RearWallpaperRepository.isScheduleEnabled(prefsManager)
-        refreshCatalog()
+        if (!catalogInitialized) {
+            schedule.clear()
+            schedule.addAll(RearWallpaperRepository.loadSchedule(prefsManager))
+            scheduleEnabled = RearWallpaperRepository.isScheduleEnabled(prefsManager)
+            refreshCatalog()
+        }
     }
 
     LaunchedEffect(actionRequest) {
@@ -310,7 +335,7 @@ fun RearWallpaperManagerScreen(
                     bottom = padding.calculateBottomPadding() + contentPadding.calculateBottomPadding(),
                 ),
                 scrollBehavior = scrollBehavior,
-                hazeState = hazeState,
+                hazeState = if (embedded) null else hazeState,
                 wallpapers = wallpapers,
                 storeWallpaperSources = storeWallpaperSources,
                 currentWallpaperId = currentWallpaperId,
@@ -342,7 +367,13 @@ fun RearWallpaperManagerScreen(
                 onSetCurrent = ::switchWallpaper,
                 onImport = ::importWallpaperPackage,
                 onUpdateMetadata = ::updateWallpaperMetadata,
-                onEditTemplate = { activeTemplateWallpaperId = it.wallpaperId },
+                onEditTemplate = { wallpaper ->
+                    if (onEditTemplate != null) {
+                        onEditTemplate(wallpaper)
+                    } else {
+                        activeTemplateWallpaperId = wallpaper.wallpaperId
+                    }
+                },
                 onGeneratePreview = ::generateWallpaperPreview,
                 onOpenStoreDetail = onOpenStoreDetail,
                 onDelete = ::deleteWallpaper,

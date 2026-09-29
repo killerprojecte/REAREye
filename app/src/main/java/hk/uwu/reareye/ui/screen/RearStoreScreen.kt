@@ -122,7 +122,6 @@ import hk.uwu.reareye.ui.components.RearSearchBar
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.SuperCard
 import hk.uwu.reareye.ui.components.config.WallpaperMetadataFields
-import hk.uwu.reareye.ui.components.motion.ArtRevealItem
 import hk.uwu.reareye.ui.components.rememberRearAccentBadgePalette
 import hk.uwu.reareye.ui.components.webview.ScrollWebView
 import hk.uwu.reareye.ui.config.ConfigKeys
@@ -1519,26 +1518,22 @@ private fun RearStoreDetailContent(
             overscrollEffect = null,
         ) {
             item {
-                ArtRevealItem(visible = true, delayMillis = 18) {
-                    RearStoreDetailHeroCard(
-                        detail = widgetDetail,
-                        installedWidget = installedWidget,
-                        latestReleaseTag = latestReleaseTag,
-                        updateAvailable = updateAvailable,
-                        metadataType = widgetDetail.displayMetadataType(),
-                    )
-                }
+                RearStoreDetailHeroCard(
+                    detail = widgetDetail,
+                    installedWidget = installedWidget,
+                    latestReleaseTag = latestReleaseTag,
+                    updateAvailable = updateAvailable,
+                    metadataType = widgetDetail.displayMetadataType(),
+                )
             }
 
             item {
-                ArtRevealItem(visible = true, delayMillis = 30) {
-                    TabRowWithContour(
-                        tabs = tabs,
-                        selectedTabIndex = selectedTab.ordinal,
-                        onTabSelected = { selectedTab = RearStoreDetailTab.entries[it] },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                TabRowWithContour(
+                    tabs = tabs,
+                    selectedTabIndex = selectedTab.ordinal,
+                    onTabSelected = { selectedTab = RearStoreDetailTab.entries[it] },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
             item {
@@ -1825,7 +1820,11 @@ private fun RearStoreDetailTabContent(
 
                     else -> RearStoreReadmeCard(
                         markdown = widgetDetail.readme?.content.orEmpty(),
-                        repoBaseUrl = widgetDetail.repository?.url,
+                        repoBaseUrl = widgetDetail.readme?.htmlUrl
+                            ?.substringBeforeLast('/', missingDelimiterValue = "")
+                            ?.takeIf(String::isNotBlank)
+                            ?.plus('/')
+                            ?: widgetDetail.repository?.url,
                         webViewCache = webViewCache,
                     )
                 }
@@ -2789,6 +2788,7 @@ private fun RearStoreReadmeCard(
     Card(modifier = Modifier.fillMaxWidth()) {
         BasicComponent(
             onClick = null,
+            insideMargin = PaddingValues(0.dp),
             content = {
                 MarkdownCardBody(
                     markdown = markdown,
@@ -2879,13 +2879,11 @@ private fun MarkdownCardBody(
     }
     val webViewHeightPx = remember(webViewKey) { mutableIntStateOf(1) }
     val webViewHeightDp = (webViewHeightPx.intValue / density.density).dp
-    val nestedScrollInterop = rememberNestedScrollInteropConnection()
 
     AndroidView(
         modifier = Modifier
             .fillMaxWidth()
-            .height(webViewHeightDp)
-            .nestedScroll(nestedScrollInterop),
+            .height(webViewHeightDp),
         factory = { viewContext ->
             webViewCache.getOrPut(webViewKey) {
                 createGithubMarkdownWebView(
@@ -2967,6 +2965,7 @@ private fun createGithubMarkdownWebView(
         setBackgroundColor(backgroundColor)
         isVerticalScrollBarEnabled = false
         isHorizontalScrollBarEnabled = false
+        isNestedScrollingEnabled = false
         overScrollMode = View.OVER_SCROLL_NEVER
         settings.apply {
             domStorageEnabled = true
@@ -2983,9 +2982,19 @@ private fun createGithubMarkdownWebView(
             override fun onPageFinished(view: WebView, url: String?) {
                 super.onPageFinished(view, url)
                 view.publishMarkdownContentHeight(onContentHeightChanged)
+                listOf(120L, 350L, 800L, 1_600L).forEach { delayMillis ->
+                    view.postDelayed(
+                        { view.publishMarkdownContentHeight(onContentHeightChanged) },
+                        delayMillis,
+                    )
+                }
+            }
+
+            override fun onLoadResource(view: WebView, url: String?) {
+                super.onLoadResource(view, url)
                 view.postDelayed(
                     { view.publishMarkdownContentHeight(onContentHeightChanged) },
-                    120,
+                    60,
                 )
             }
 
@@ -3006,38 +3015,37 @@ private fun createGithubMarkdownWebView(
                 view: WebView,
                 request: WebResourceRequest,
             ): WebResourceResponse? {
-                if (!request.url.scheme.orEmpty().startsWith("http")) return null
+                val sourceUrl = request.url
+                if (!sourceUrl.host.equals("github.com", ignoreCase = true)) return null
+                val encodedPath = sourceUrl.encodedPath.orEmpty()
+                if (!encodedPath.contains("/blob/")) return null
+                val rawUrl = sourceUrl.buildUpon()
+                    .encodedPath(encodedPath.replaceFirst("/blob/", "/raw/"))
+                    .build()
                 return runCatching {
                     val headers = Headers.Builder().apply {
                         request.requestHeaders.forEach { (key, value) -> add(key, value) }
                     }.build()
                     val networkRequest = Request.Builder()
-                        .url(request.url.toString())
+                        .url(rawUrl.toString())
                         .headers(headers)
                         .method(request.method, null)
                         .build()
                     rearStoreAvatarHttpClient.newCall(networkRequest).execute().use { response ->
-                        val header = response.header("content-type") ?: "text/plain; charset=utf-8"
-                        val contentTypes = header.split(";\\s*")
-                        val mimeType =
-                            contentTypes.getOrNull(0)?.trim().orEmpty().ifEmpty { "text/plain" }
-                        val charset = contentTypes.getOrNull(1)
-                            ?.substringAfter('=')
-                            ?.trim()
-                            .orEmpty()
-                            .ifEmpty { "utf-8" }
+                        if (!response.isSuccessful) return@use null
                         val body = response.body
-                        WebResourceResponse(mimeType, charset, ByteArrayInputStream(body.bytes()))
+                        val contentType = body.contentType()
+                        val mimeType = contentType
+                            ?.let { it.type + "/" + it.subtype }
+                            ?: "application/octet-stream"
+                        val charset = contentType?.charset()?.name() ?: "utf-8"
+                        WebResourceResponse(
+                            mimeType,
+                            charset,
+                            ByteArrayInputStream(body.bytes()),
+                        )
                     }
-                }.getOrElse { error ->
-                    WebResourceResponse(
-                        "text/plain",
-                        "utf-8",
-                        ByteArrayInputStream(
-                            error.stackTraceToString().toByteArray(StandardCharsets.UTF_8)
-                        ),
-                    )
-                }
+                }.getOrNull()
             }
         }
     }

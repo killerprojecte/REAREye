@@ -146,12 +146,16 @@ import kotlin.math.roundToInt
 
 @Composable
 fun WidgetTemplateConfigScreenContent(
+    modifier: Modifier = Modifier,
     business: String,
     sourceFilePath: String,
     cardStorageKey: String,
     currentConfigJson: String?,
     onBack: () -> Unit,
     onSave: (String?) -> Unit,
+    embedded: Boolean = false,
+    allowContentPresentation: Boolean = true,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     titleText: String? = null,
     loadingText: String? = null,
     unavailableText: String? = null,
@@ -187,18 +191,27 @@ fun WidgetTemplateConfigScreenContent(
         val state = withContext(Dispatchers.IO) {
             stateResolver(context, business, sourceFilePath, currentConfigJson)
         }
-        schema = state?.templateSchemaJson?.let(WidgetTemplateConfigRepository::decodeSchema)
-        workingConfig = state?.oneConfigJson
-            ?.let(WidgetTemplateConfigRepository::decodeOneConfig)
-            ?: RearWidgetOneConfig()
+        val decodedState = withContext(Dispatchers.Default) {
+            val decodedSchema = state?.templateSchemaJson
+                ?.let(WidgetTemplateConfigRepository::decodeSchema)
+            val decodedConfig = state?.oneConfigJson
+                ?.let(WidgetTemplateConfigRepository::decodeOneConfig)
+                ?: RearWidgetOneConfig()
+            decodedSchema to decodedConfig
+        }
+        schema = decodedState.first
+        workingConfig = decodedState.second
         loading = false
     }
 
     val resolvedSchema = schema
     val resolvedConfig = workingConfig
     TemplateVarConfigScreenScaffold(
+        modifier = modifier,
         title = titleText ?: stringResource(R.string.rear_widget_card_template_title),
-        loading = loading,
+        embedded = embedded,
+        contentPadding = contentPadding,
+        loading = loading || !allowContentPresentation,
         schema = resolvedSchema,
         config = resolvedConfig,
         hasEditableItems = resolvedSchema?.items?.isNotEmpty() == true,

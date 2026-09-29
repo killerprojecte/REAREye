@@ -318,7 +318,7 @@ class NativeEnvWriterHook : RoxyHooker() {
         private const val PACKAGE_INDEX = 1
         private const val ABI_INDEX = 8
         private const val BINARY_INDEX = 20
-        private const val ENVS_INDEX = 21
+        private const val ENVS_INDEX = 23
 
         private const val MODULE_ENV_FILE = "reareye_%s.env"
         private const val MODULE_ID_WEATHER = "weather"

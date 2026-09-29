@@ -2,10 +2,13 @@ package hk.uwu.reareye.ui.components.config.template
 
 import android.annotation.SuppressLint
 import android.widget.Toast
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperInfo
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperRepository
@@ -35,7 +38,11 @@ fun WidgetTemplateConfigScreen(
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
 fun RearWallpaperTemplateConfigScreen(
+    modifier: Modifier = Modifier,
     wallpaper: RearWallpaperInfo,
+    embedded: Boolean = false,
+    allowContentPresentation: Boolean = true,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     onBack: () -> Unit,
     onSaved: () -> Unit,
 ) {
@@ -46,10 +53,14 @@ fun RearWallpaperTemplateConfigScreen(
     val unavailableText = stringResource(R.string.rear_wallpaper_template_unavailable)
 
     WidgetTemplateConfigScreenContent(
+        modifier = modifier,
         business = "",
         sourceFilePath = "wallpaper:${wallpaper.wallpaperId}",
         cardStorageKey = "wallpaper_${wallpaper.wallpaperId}",
         currentConfigJson = null,
+        embedded = embedded,
+        allowContentPresentation = allowContentPresentation,
+        contentPadding = contentPadding,
         titleText = titleText,
         loadingText = loadingText,
         unavailableText = unavailableText,

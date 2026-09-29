@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.rounded.Deployed_code
 import com.composables.icons.materialsymbols.rounded.Storefront
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
@@ -118,6 +119,7 @@ fun CardManagerScreen(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     focusCardId: String? = null,
     onFocusCardHandled: () -> Unit = {},
+    onOpenComponent: (String) -> Unit = {},
     onOpenStoreDetail: (String) -> Unit = {},
     actionRequest: ConfigDashboardAction? = null,
     onActionHandled: () -> Unit = {},
@@ -576,6 +578,10 @@ fun CardManagerScreen(
                         contentType = { _, _ -> "card_item" },
                     ) { _, item ->
                         val normalizedBusiness = normalizeTemplateBusinessName(item.business)
+                        val matchingBusiness = businesses.firstOrNull { business ->
+                            business.business == item.business ||
+                                    normalizeTemplateBusinessName(business.business) == normalizedBusiness
+                        }
                         val hasTemplateConfig =
                             templateAvailability[item.business] == true ||
                                     templateAvailability[normalizedBusiness] == true ||
@@ -680,6 +686,13 @@ fun CardManagerScreen(
                                                 onClick = { onOpenStoreDetail(storeWidgetId) },
                                             )
                                         }
+                                    matchingBusiness?.let { business ->
+                                        ModuleStyleIconAction(
+                                            icon = MaterialSymbols.Rounded.Deployed_code,
+                                            contentDescription = stringResource(R.string.rear_widget_action_open_component),
+                                            onClick = { onOpenComponent(business.business) },
+                                        )
+                                    }
                                     if (hasTemplateConfig) {
                                         ModuleStyleDeleteAction(
                                             icon = Icons.Filled.Tune,

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -40,7 +41,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
-import com.composables.icons.materialsymbols.rounded.Add_card
 import com.composables.icons.materialsymbols.rounded.Delete
 import com.composables.icons.materialsymbols.rounded.Edit_note
 import com.composables.icons.materialsymbols.rounded.Expand_more
@@ -67,6 +67,7 @@ import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Button
@@ -98,6 +99,8 @@ fun BusinessManagerScreen(
     onOpenBusinessExtra: (String) -> Unit = {},
     embedded: Boolean = false,
     contentPadding: PaddingValues = PaddingValues(0.dp),
+    focusBusiness: String? = null,
+    onFocusBusinessHandled: () -> Unit = {},
     onOpenCard: (String) -> Unit = {},
     onOpenStoreDetail: (String) -> Unit = {},
     actionRequest: ConfigDashboardAction? = null,
@@ -109,6 +112,7 @@ fun BusinessManagerScreen(
     val hazeState = rememberAcrylicHazeState()
     val hazeStyle = rememberAcrylicHazeStyle()
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
     val widgets = remember { mutableStateListOf<RearBusinessConfig>() }
     val cards = remember { mutableStateListOf<RearCardConfig>() }
     var widgetsLoaded by remember { mutableStateOf(false) }
@@ -129,6 +133,7 @@ fun BusinessManagerScreen(
     var draftCardSticky by remember { mutableStateOf(true) }
     var draftHideTimeTip by remember { mutableStateOf(false) }
     var expandedBusinessId by remember { mutableStateOf<String?>(null) }
+    var highlightedBusinessId by remember { mutableStateOf<String?>(null) }
 
     fun debugLog(message: String) {
         if (prefsManager.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
@@ -186,6 +191,23 @@ fun BusinessManagerScreen(
         }
     }
 
+    LaunchedEffect(focusBusiness, widgetsLoaded) {
+        val requestedBusiness = focusBusiness?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        if (!widgetsLoaded) return@LaunchedEffect
+
+        val targetIndex = widgets.indexOfFirst { it.business == requestedBusiness }
+        if (targetIndex < 0) {
+            onFocusBusinessHandled()
+            return@LaunchedEffect
+        }
+
+        highlightedBusinessId = widgets[targetIndex].id
+        listState.animateScrollToItem(targetIndex)
+        delay(1_600)
+        highlightedBusinessId = null
+        onFocusBusinessHandled()
+    }
+
     fun openEditDialog(item: RearBusinessConfig) {
         if (item.downloadedFromStore) {
             debugLog(
@@ -210,7 +232,6 @@ fun BusinessManagerScreen(
     }
 
     fun openRegisterCardDialog(item: RearBusinessConfig) {
-        if (item.downloadedFromStore) return
         draftCardId = RearWidgetConfigCodec.newCardId()
         draftCardTitle = item.business
         draftCardPackageName = "hk.uwu.reareye"
@@ -399,6 +420,7 @@ fun BusinessManagerScreen(
         },
     ) { paddingValues ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .scrollEndHaptic()
@@ -447,7 +469,11 @@ fun BusinessManagerScreen(
                     val relatedCards = cards.filter { card ->
                         card.business == item.business
                     }
+                    val isHighlighted = highlightedBusinessId == item.id
                     ModuleStyleManagerCard(
+                        backgroundColor = if (isHighlighted) {
+                            MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+                        } else null,
                         title = item.business,
                         summaryLines = listOf(item.filePath),
                         badges = buildList {
@@ -484,13 +510,6 @@ fun BusinessManagerScreen(
                                         tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.82f),
                                     )
                                 }
-                                if (!item.downloadedFromStore) {
-                                    ModuleStyleIconAction(
-                                        icon = MaterialSymbols.Rounded.Add_card,
-                                        contentDescription = stringResource(R.string.rear_widget_add_card),
-                                        onClick = { openRegisterCardDialog(item) },
-                                    )
-                                }
                                 item.storeWidgetId
                                     ?.trim()
                                     ?.takeIf { it.isNotEmpty() }
@@ -501,6 +520,11 @@ fun BusinessManagerScreen(
                                             onClick = { onOpenStoreDetail(storeWidgetId) },
                                         )
                                     }
+                                ModuleStyleIconAction(
+                                    icon = Icons.Filled.Add,
+                                    contentDescription = stringResource(R.string.rear_widget_add_card),
+                                    onClick = { openRegisterCardDialog(item) },
+                                )
                                 if (relatedCards.isNotEmpty()) {
                                     ModuleStyleIconAction(
                                         modifier = Modifier

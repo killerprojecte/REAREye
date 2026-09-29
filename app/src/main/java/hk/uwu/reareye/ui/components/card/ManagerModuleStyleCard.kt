@@ -1,13 +1,16 @@
 package hk.uwu.reareye.ui.components.card
 
 import android.annotation.SuppressLint
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +43,7 @@ fun ModuleStyleManagerCard(
     trailing: @Composable (() -> Unit)? = null,
     headerVerticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
     showActions: Boolean = true,
+    scrollActionsHorizontally: Boolean = false,
     backgroundColor: Color? = null,
     contentColor: Color? = null,
     titleColor: Color = contentColor ?: MiuixTheme.colorScheme.onSurface,
@@ -53,6 +57,7 @@ fun ModuleStyleManagerCard(
     val cardModifier = Modifier
         .padding(bottom = bottomPadding)
         .then(modifier)
+    val actionScrollState = rememberScrollState()
 
     val headerContent: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -109,6 +114,26 @@ fun ModuleStyleManagerCard(
             }
         }
     }
+    val actionsContent: @Composable () -> Unit = {
+        if (scrollActionsHorizontally) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(actionScrollState),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                leftAction()
+                rightAction()
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                leftAction()
+                Spacer(Modifier.weight(1f))
+                rightAction()
+            }
+        }
+    }
 
     if (onCardClick != null) {
         Card(
@@ -131,11 +156,7 @@ fun ModuleStyleManagerCard(
                     color = dividerColor,
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    leftAction()
-                    Spacer(Modifier.weight(1f))
-                    rightAction()
-                }
+                actionsContent()
             }
         }
     } else {
@@ -158,11 +179,7 @@ fun ModuleStyleManagerCard(
                     color = dividerColor,
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    leftAction()
-                    Spacer(Modifier.weight(1f))
-                    rightAction()
-                }
+                actionsContent()
             }
         }
     }
