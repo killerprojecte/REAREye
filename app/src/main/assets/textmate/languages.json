@@ -1,0 +1,8 @@
+[
+  {
+    "grammar": "textmate/lua/lua.tmLanguage.json",
+    "name": "lua",
+    "scopeName": "source.lua",
+    "languageConfiguration": "textmate/lua/language-configuration.json"
+  }
+]

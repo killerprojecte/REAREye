@@ -29,6 +29,9 @@ dexkit = "2.3.0"
 foundation-layout = "1.12.1"
 mmkv = "2.4.2"
 compose-icons = "2.2.1"
+sora-editor = "0.23.6"
+monarch-language-pack = "1.0.2"
+luajava = "4.1.0"
 
 [plugins]
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
@@ -91,3 +94,8 @@ compose-icons-material-symbols-sharp-cmp = { group = "com.composables", name = "
 compose-icons-material-symbols-outlined-filled-cmp = { group = "com.composables", name = "icons-material-symbols-outlined-filled-cmp", version.ref = "compose-icons" }
 compose-icons-material-symbols-rounded-filled-cmp = { group = "com.composables", name = "icons-material-symbols-rounded-filled-cmp", version.ref = "compose-icons" }
 compose-icons-material-symbols-sharp-filled-cmp = { group = "com.composables", name = "icons-material-symbols-sharp-filled-cmp", version.ref = "compose-icons" }
+sora-editor = { group = "io.github.Rosemoe.sora-editor", name = "editor", version.ref = "sora-editor" }
+sora-language-monarch = { group = "io.github.Rosemoe.sora-editor", name = "language-monarch", version.ref = "sora-editor" }
+monarch-language-pack = { module = "io.github.dingyi222666.monarch:monarch-language-pack", version.ref = "monarch-language-pack" }
+luajava-luajit = { group = "party.iroiro.luajava", name = "luajit", version.ref = "luajava" }
+luajava-android = { group = "party.iroiro.luajava", name = "android", version.ref = "luajava" }

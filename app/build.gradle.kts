@@ -245,6 +245,7 @@ aboutLibraries {
         allowedLicenses.addAll(
             "Apache-2.0",
             "LGPL",
+            "LGPL v2.1",
             "GNU Lesser General Public License v2.1",
             "BSD-2-Clause",
             "BSD-3-Clause",
@@ -252,7 +253,8 @@ aboutLibraries {
             "MIT",
             "EPL-1.0",
             "GPL-3.0-only",
-            "GNU Lesser General Public License v3.0"
+            "GNU Lesser General Public License v3.0",
+            "Go License"
         )
     }
     library {
@@ -327,6 +329,10 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.gson)
+    implementation(libs.sora.editor)
+    implementation(libs.sora.language.monarch)
+    implementation(libs.monarch.language.pack)
+    implementation(project(":rear-script-runtime"))
     implementation(libs.lyricon.provider)
     implementation(libs.lyricon.central)
     implementation(libs.lyricon.subscriber)

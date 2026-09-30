@@ -872,6 +872,8 @@ fun CardManagerScreen(
                         }
                     } else {
                         RearAppCardManagementContent(
+                            prefsManager = prefsManager,
+                            onOpenStoreDetail = onOpenStoreDetail,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .scrollEndHaptic()
@@ -882,7 +884,7 @@ fun CardManagerScreen(
                                 start = pageStartPadding,
                                 end = pageEndPadding,
                             ),
-                            refreshRevision = appRefreshRevision,
+                            refreshRevision = appRefreshRevision + runtimeRefreshTick,
                         )
                     }
                 }

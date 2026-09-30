@@ -31,8 +31,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.rounded.Storefront
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearAppCardRepository
+import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
+import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.reareye.ui.components.OverlayDialog
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
@@ -41,6 +45,7 @@ import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
 import hk.uwu.reareye.ui.components.config.draggable.library.draggable.DraggableItem
 import hk.uwu.reareye.ui.components.config.draggable.library.draggable.rememberDraggableLazyListState
 import hk.uwu.reareye.ui.components.config.draggable.longPressDraggable
+import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.widgetapi.RearAppCardInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -60,6 +65,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
 internal fun RearAppCardManagementContent(
+    prefsManager: PrefsManager,
+    onOpenStoreDetail: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     refreshRevision: Int = 0,
@@ -68,6 +75,7 @@ internal fun RearAppCardManagementContent(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val cards = remember { mutableStateListOf<RearAppCardInfo>() }
+    val businesses = remember { mutableStateListOf<RearBusinessConfig>() }
     var loading by remember { mutableStateOf(true) }
     var errorText by remember { mutableStateOf<String?>(null) }
     var editingCard by remember { mutableStateOf<RearAppCardInfo?>(null) }
@@ -83,8 +91,13 @@ internal fun RearAppCardManagementContent(
             val loaded = withContext(Dispatchers.IO) {
                 RearAppCardRepository.loadCatalog(context)
             }
+            val loadedBusinesses = withContext(Dispatchers.IO) {
+                RearWidgetManagerRepository.loadBusinesses(prefsManager)
+            }
             cards.clear()
             cards.addAll(loaded)
+            businesses.clear()
+            businesses.addAll(loadedBusinesses)
             loading = false
         }
     }
@@ -144,7 +157,7 @@ internal fun RearAppCardManagementContent(
         },
     )
 
-    LaunchedEffect(refreshRevision) { reload() }
+    LaunchedEffect(refreshRevision, prefsManager) { reload() }
 
     LazyColumn(
         state = listState,
@@ -185,6 +198,12 @@ internal fun RearAppCardManagementContent(
             contentType = { _, _ -> "app_card_item" },
         ) { _, card ->
             val itemKey = "app_card_" + card.appId
+            val relatedBusiness = card.componentBusiness?.let { component ->
+                businesses.firstOrNull { it.business == component }
+            }
+            val storeWidgetId = relatedBusiness?.storeWidgetId
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
             DraggableItem(
                 key = itemKey,
                 state = draggableState,
@@ -228,6 +247,14 @@ internal fun RearAppCardManagementContent(
                         }
                         card.componentBusiness?.let { component ->
                             add(rearWidgetComponentBadge(component))
+                            relatedBusiness?.let { business ->
+                                addAll(
+                                    rearWidgetSourceBadges(
+                                        downloadedFromStore = business.downloadedFromStore,
+                                        storeWidgetId = business.storeWidgetId,
+                                    )
+                                )
+                            }
                         }
                     },
                     onCardClick = if (card.canRename) {
@@ -293,6 +320,15 @@ internal fun RearAppCardManagementContent(
                                     imageVector = Icons.Outlined.Lock,
                                     contentDescription = null,
                                     tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                )
+                            }
+                            storeWidgetId?.let { widgetId ->
+                                ModuleStyleIconAction(
+                                    icon = MaterialSymbols.Rounded.Storefront,
+                                    contentDescription = stringResource(
+                                        R.string.rear_store_open_detail,
+                                    ),
+                                    onClick = { onOpenStoreDetail(widgetId) },
                                 )
                             }
                         }

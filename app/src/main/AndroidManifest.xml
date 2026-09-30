@@ -55,6 +55,12 @@
             android:exported="true"
             tools:ignore="ExportedContentProvider" />
 
+        <provider
+            android:name=".script.ScriptDataProvider"
+            android:authorities="hk.uwu.reareye.script"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+
         <service
             android:name=".service.SwitchToRearTileService"
             android:exported="true"

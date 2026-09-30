@@ -693,8 +693,30 @@ fun BusinessManagerScreen(
                                             overflow = TextOverflow.Ellipsis,
                                         )
                                         RearBadgeGroup(
-                                            badges = listOf(rearWidgetAppCardBadge()),
+                                            badges = buildList {
+                                                add(rearWidgetAppCardBadge())
+                                                addAll(
+                                                    rearWidgetSourceBadges(
+                                                        downloadedFromStore = item.downloadedFromStore,
+                                                        storeWidgetId = item.storeWidgetId,
+                                                    )
+                                                )
+                                            },
                                         )
+                                        item.storeWidgetId
+                                            ?.trim()
+                                            ?.takeIf { it.isNotEmpty() }
+                                            ?.let { storeWidgetId ->
+                                                ModuleStyleIconAction(
+                                                    icon = MaterialSymbols.Rounded.Storefront,
+                                                    contentDescription = stringResource(
+                                                        R.string.rear_store_open_detail,
+                                                    ),
+                                                    onClick = {
+                                                        onOpenStoreDetail(storeWidgetId)
+                                                    },
+                                                )
+                                            }
                                     }
                                 }
                             }

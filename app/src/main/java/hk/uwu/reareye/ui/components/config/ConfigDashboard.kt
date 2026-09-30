@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
@@ -67,6 +68,7 @@ internal fun ConfigDashboard(
     scrollBehavior: ScrollBehavior,
     modifier: Modifier = Modifier,
     onOpenCategory: (ConfigCategory) -> Unit,
+    onOpenScriptManagement: () -> Unit,
     onMoreSearchRequested: () -> Unit,
     onOpenFavoriteCategory: () -> Unit,
     favoriteNodeCount: Int,
@@ -250,6 +252,7 @@ internal fun ConfigDashboard(
                                 categories = moreCategories,
                                 bottomPadding = contentPadding.calculateBottomPadding(),
                                 onOpenCategory = onOpenCategory,
+                                onOpenScriptManagement = onOpenScriptManagement,
                                 onOpenFavoriteCategory = onOpenFavoriteCategory,
                                 favoriteNodeCount = favoriteNodeCount,
                                 initialScrollIndex = moreScrollIndex,
@@ -269,6 +272,7 @@ private fun MoreTab(
     categories: List<MoreCategory>,
     bottomPadding: Dp,
     onOpenCategory: (ConfigCategory) -> Unit,
+    onOpenScriptManagement: () -> Unit,
     onOpenFavoriteCategory: () -> Unit,
     favoriteNodeCount: Int,
     initialScrollIndex: Int,
@@ -309,6 +313,22 @@ private fun MoreTab(
                         )
                     },
                     onClick = onOpenFavoriteCategory,
+                )
+            }
+        }
+        item(key = "more_script_management") {
+            MoreSurface {
+                ArrowPreference(
+                    title = stringResource(R.string.config_more_scripts_title),
+                    summary = stringResource(R.string.config_more_scripts_desc),
+                    startAction = {
+                        Icon(
+                            Icons.Rounded.Code,
+                            contentDescription = null,
+                            tint = MiuixTheme.colorScheme.primary
+                        )
+                    },
+                    onClick = onOpenScriptManagement,
                 )
             }
         }

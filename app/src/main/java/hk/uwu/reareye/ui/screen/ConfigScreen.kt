@@ -64,6 +64,7 @@ import hk.uwu.reareye.ui.components.config.SceneRouteManagerScreen
 import hk.uwu.reareye.ui.components.config.buildMoreCategories
 import hk.uwu.reareye.ui.components.config.rememberRearWallpaperManagerState
 import hk.uwu.reareye.ui.components.config.template.RearWallpaperTemplateConfigScreen
+import hk.uwu.reareye.ui.components.script.ScriptManagementScreen
 import hk.uwu.reareye.ui.config.ConfigCategory
 import hk.uwu.reareye.ui.config.ConfigGroup
 import hk.uwu.reareye.ui.config.ConfigItem
@@ -115,6 +116,7 @@ private sealed interface ConfigRoute {
     data class BusinessExtraDetail(val business: String) : ConfigRoute
     data object CustomBoundsCompatManager : ConfigRoute
     data object LyricsManager : ConfigRoute
+    data object ScriptManagement : ConfigRoute
     data class WallpaperTemplate(val wallpaper: RearWallpaperInfo) : ConfigRoute
 }
 
@@ -411,6 +413,10 @@ fun ConfigScreen(
                         dashboardTabIndex = 3
                         routeStack = routeStack + ConfigRoute.Category(category)
                     },
+                    onOpenScriptManagement = {
+                        dashboardTabIndex = 3
+                        routeStack = routeStack + ConfigRoute.ScriptManagement
+                    },
                     onMoreSearchRequested = {
                         moreSearchQuery = ""
                         moreSearchSessionActive = true
@@ -653,6 +659,11 @@ fun ConfigScreen(
                 ConfigRoute.CustomBoundsCompatManager -> CustomBoundsCompatManagerScreen(
                     prefsManager = prefsManager,
                     onBack = { closeOverlayRoute() },
+                )
+
+                ConfigRoute.ScriptManagement -> ScriptManagementScreen(
+                    onBack = ::navigateBack,
+                    bottomInnerPadding = bottomInnerPadding,
                 )
             }
         }

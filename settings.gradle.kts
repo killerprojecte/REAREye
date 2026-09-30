@@ -89,4 +89,5 @@ rootProject.name = "REAREye"
 
 include(":app")
 include(":rear-widget-api")
+include(":rear-script-runtime")
 
