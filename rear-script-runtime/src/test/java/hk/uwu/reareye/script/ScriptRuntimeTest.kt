@@ -1,6 +1,8 @@
 package hk.uwu.reareye.script
 
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -58,6 +60,52 @@ class ScriptRuntimeTest {
         project.root.resolve("data.txt").writeText("data")
         ScriptRuntime().open(project)
             .use { assertEquals("module:data", it.execute("value", emptyMap(), emptyMap()).data) }
+    }
+
+    @Test
+    fun hostCapabilitiesExposeRootAndHttpClients() {
+        val project = project(
+            """
+            return { providers = { check = function(_, _, context)
+                local root = context.root:exec("id", { stdin = "input" })
+                local response = context.http:get("https://example.test", {
+                    query = { q = "hello world" },
+                    headers = { ["X-Test"] = "yes" },
+                })
+                return {
+                    exitCode = root.exitCode,
+                    stdout = root.stdout,
+                    statusCode = response.statusCode,
+                    ok = response.ok,
+                    body = response.body,
+                }
+            end } }
+            """.trimIndent()
+        )
+        val host = object : ScriptHost {
+            override fun rootExec(request: ScriptRootCommand) = ScriptRootResult(
+                exitCode = 0,
+                stdout = "root-ok: ${request.stdin}",
+            )
+
+            override fun httpRequest(request: ScriptHttpRequest) = ScriptHttpResponse(
+                statusCode = 200,
+                ok = true,
+                body = request.query["q"].orEmpty(),
+            )
+        }
+        ScriptRuntime(host).open(project).use { session ->
+            assertEquals(
+                mapOf(
+                    "exitCode" to 0.0,
+                    "stdout" to "root-ok: input",
+                    "statusCode" to 200.0,
+                    "ok" to true,
+                    "body" to "hello world",
+                ),
+                session.execute("check", emptyMap(), emptyMap()).data,
+            )
+        }
     }
 
     @Test

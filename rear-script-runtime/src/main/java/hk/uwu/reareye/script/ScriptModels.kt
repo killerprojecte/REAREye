@@ -62,10 +62,51 @@ data class ScriptExecutionResult(
     val expiresAt: Long = 0,
 )
 
+data class ScriptRootCommand(
+    val command: String,
+    val stdin: String = "",
+    val timeoutMillis: Long = 10_000L,
+)
+
+data class ScriptRootResult(
+    val exitCode: Int,
+    val stdout: String = "",
+    val stderr: String = "",
+    val timedOut: Boolean = false,
+    val outputLimitExceeded: Boolean = false,
+)
+
+data class ScriptHttpRequest(
+    val url: String,
+    val method: String = "GET",
+    val query: Map<String, String> = emptyMap(),
+    val headers: Map<String, String> = emptyMap(),
+    val body: String? = null,
+    val timeoutMillis: Long = 15_000L,
+    val followRedirects: Boolean = true,
+    val followSslRedirects: Boolean = true,
+)
+
+data class ScriptHttpResponse(
+    val statusCode: Int,
+    val ok: Boolean,
+    val headers: Map<String, String> = emptyMap(),
+    val body: String = "",
+    val contentType: String = "",
+    val url: String = "",
+)
+
 /** Injected by the caller, including when this library is loaded inside another host. */
 interface ScriptHost {
     fun now(): Long = System.currentTimeMillis()
     fun log(message: String) {}
+    fun rootExec(request: ScriptRootCommand): ScriptRootResult = ScriptRootResult(
+        exitCode = -1,
+        stderr = "Root execution is unavailable",
+    )
+
+    fun httpRequest(request: ScriptHttpRequest): ScriptHttpResponse =
+        ScriptHttpResponse(statusCode = 0, ok = false, body = "", contentType = "text/plain")
 }
 
 class ScriptCancellation {

@@ -63,6 +63,107 @@ class ScriptRuntime(private val host: ScriptHost = object : ScriptHost {}) {
                     }
                     0
                 }
+                bind("__root_exec") { state ->
+                    try {
+                        val command = state.toString(1)?.takeIf { it.isNotBlank() }
+                            ?: error("Expected a root command")
+                        state.pushValue(2)
+                        val options = state.get()
+                        val request = ScriptRootCommand(
+                            command = command,
+                            stdin = options.optionalString("stdin").orEmpty(),
+                            timeoutMillis = options.optionalLong("timeoutMillis")
+                                ?.coerceIn(100L, 120_000L) ?: 10_000L,
+                        )
+                        val result = host.rootExec(request)
+                        val table = state.eval("return {}").first()
+                        table.set("exitCode", toLua(result.exitCode))
+                        table.set("stdout", toLua(result.stdout))
+                        table.set("stderr", toLua(result.stderr))
+                        table.set("timedOut", toLua(result.timedOut))
+                        table.set("outputLimitExceeded", toLua(result.outputLimitExceeded))
+                        state.push(table)
+                        1
+                    } catch (e: Exception) {
+                        state.error(e.message ?: "Root command failed")
+                        0
+                    }
+                }
+                bind("__http_request") { state ->
+                    try {
+                        state.pushValue(1)
+                        val requestTable = state.get()
+                        require(requestTable.type() == Lua.LuaType.TABLE) {
+                            "Expected an HTTP request table"
+                        }
+                        val url = requestTable.string("url")
+                        require(url.isNotBlank()) { "HTTP URL cannot be blank" }
+                        val query = requestTable.get("query").let { queryTable ->
+                            if (queryTable.type() == Lua.LuaType.NIL) {
+                                emptyMap()
+                            } else {
+                                require(queryTable.type() == Lua.LuaType.TABLE) {
+                                    "HTTP query must be a table"
+                                }
+                                queryTable.entries.associate { entry ->
+                                    require(entry.key.type() == Lua.LuaType.STRING) {
+                                        "HTTP query names must be strings"
+                                    }
+                                    entry.key.toJavaObject()
+                                        .toString() to entry.value.toJavaObject().toString()
+                                }
+                            }
+                        }
+                        val headers = requestTable.get("headers").let { headerTable ->
+                            if (headerTable.type() == Lua.LuaType.NIL) {
+                                emptyMap()
+                            } else {
+                                require(headerTable.type() == Lua.LuaType.TABLE) {
+                                    "HTTP headers must be a table"
+                                }
+                                headerTable.entries.associate { entry ->
+                                    require(entry.key.type() == Lua.LuaType.STRING) {
+                                        "HTTP header names must be strings"
+                                    }
+                                    require(entry.value.type() == Lua.LuaType.STRING) {
+                                        "HTTP header values must be strings"
+                                    }
+                                    entry.key.toJavaObject().toString() to
+                                            entry.value.toJavaObject().toString()
+                                }
+                            }
+                        }
+                        val result = host.httpRequest(
+                            ScriptHttpRequest(
+                                url = url,
+                                method = requestTable.string("method", "GET").uppercase(),
+                                query = query,
+                                headers = headers,
+                                body = requestTable.optionalString("body"),
+                                timeoutMillis = requestTable.optionalLong("timeoutMillis")
+                                    ?.coerceIn(100L, 120_000L) ?: 15_000L,
+                                followRedirects = requestTable.optionalBoolean("followRedirects")
+                                    ?: true,
+                                followSslRedirects = requestTable.optionalBoolean("followSslRedirects")
+                                    ?: true,
+                            )
+                        )
+                        val table = state.eval("return {}").first()
+                        val headersTable = state.eval("return {}").first()
+                        result.headers.forEach { (key, value) -> headersTable.set(key, value) }
+                        table.set("statusCode", toLua(result.statusCode))
+                        table.set("ok", toLua(result.ok))
+                        table.set("headers", headersTable)
+                        table.set("body", toLua(result.body))
+                        table.set("contentType", toLua(result.contentType))
+                        table.set("url", toLua(result.url))
+                        state.push(table)
+                        1
+                    } catch (e: Exception) {
+                        state.error(e.message ?: "HTTP request failed")
+                        0
+                    }
+                }
                 lua.run(BOOTSTRAP)
                 // getGlobal pushes the value and get consumes that stack slot. Keep the
                 // object in the session so it can be passed as the third handler argument.
@@ -175,8 +276,8 @@ class ScriptRuntime(private val host: ScriptHost = object : ScriptHost {}) {
                         require(key.isNotBlank() && !options.containsKey(key)) { "Invalid option id" }
                         options[key] = option.string("name", key)
                     }
-                    val min = spec.number("min");
-                    val max = spec.number("max");
+                    val min = spec.number("min")
+                    val max = spec.number("max")
                     val step = spec.number("step")
                     require(min == null || max == null || min <= max) { "Invalid numeric range for $id" }
                     require(step == null || step > 0) { "Invalid numeric step for $id" }
@@ -243,6 +344,27 @@ class ScriptRuntime(private val host: ScriptHost = object : ScriptHost {}) {
             return value.toJavaObject().toString()
         }
 
+        private fun LuaValue.optionalString(key: String): String? = get(key).let {
+            if (it.type() == Lua.LuaType.NIL) null else {
+                require(it.type() == Lua.LuaType.STRING) { "$key must be a string" }
+                it.toJavaObject().toString()
+            }
+        }
+
+        private fun LuaValue.optionalLong(key: String): Long? = get(key).let {
+            if (it.type() == Lua.LuaType.NIL) null else {
+                require(it.type() == Lua.LuaType.NUMBER) { "$key must be a number" }
+                it.toNumber().toLong()
+            }
+        }
+
+        private fun LuaValue.optionalBoolean(key: String): Boolean? = get(key).let {
+            if (it.type() == Lua.LuaType.NIL) null else {
+                require(it.type() == Lua.LuaType.BOOLEAN) { "$key must be a boolean" }
+                it.toBoolean()
+            }
+        }
+
         private fun LuaValue.number(key: String): Double? = get(key).let {
             if (it.type() == Lua.LuaType.NIL) null else {
                 require(it.type() == Lua.LuaType.NUMBER) { "$key must be a number" }; it.toNumber()
@@ -279,7 +401,7 @@ class ScriptRuntime(private val host: ScriptHost = object : ScriptHost {}) {
             }
         }
 
-        fun normalizeConfig(spec: ScriptConfigSpec, value: Any?): Any? = when (spec.type) {
+        fun normalizeConfig(spec: ScriptConfigSpec, value: Any?): Any = when (spec.type) {
             "NUMBER" -> {
                 var number =
                     (value as? Number)?.toDouble() ?: value?.toString()?.toDoubleOrNull() ?: 0.0
@@ -302,6 +424,7 @@ class ScriptRuntime(private val host: ScriptHost = object : ScriptHost {}) {
         private val BOOTSTRAP = """
             jit.off()
             local budget, read, now, log = __budget, __read, __now, __log
+            local root_exec, http_request = __root_exec, __http_request
             local compile, setenv, raise = loadstring, setfenv, error
             local function check() local err = budget(); if err then raise(err, 0) end end
             debug.sethook(check, "", 1000)
@@ -334,12 +457,32 @@ class ScriptRuntime(private val host: ScriptHost = object : ScriptHost {}) {
                 for i = 1, select('#', ...) do values[i] = tostring(select(i, ...)) end
                 log(table.concat(values, '\t'))
             end
-            __context = { now = function() return now() end, log = function(_, text) log(tostring(text)) end,
-                readText = function(_, path) return read(path) end }
+            local function http_with(method, url, body, options)
+                options = options or {}
+                options.url = url
+                options.method = method
+                options.body = body
+                return http_request(options)
+            end
+            __context = {
+                now = function() return now() end,
+                log = function(_, text) log(tostring(text)) end,
+                readText = function(_, path) return read(path) end,
+                root = { exec = function(_, command, options) return root_exec(command, options) end },
+                http = {
+                    request = function(_, request) return http_request(request) end,
+                    get = function(_, url, options) return http_with("GET", url, nil, options) end,
+                    post = function(_, url, body, options) return http_with("POST", url, body, options) end,
+                    put = function(_, url, body, options) return http_with("PUT", url, body, options) end,
+                    patch = function(_, url, body, options) return http_with("PATCH", url, body, options) end,
+                    delete = function(_, url, options) return http_with("DELETE", url, nil, options) end,
+                },
+            }
             os = {time = os.time, date = os.date, difftime = os.difftime, clock = os.clock}
             io = nil; package = nil; debug = nil; jit = nil; ffi = nil; java = nil; luajava = nil
             load = nil; loadstring = nil; loadfile = nil; dofile = nil; getfenv = nil; setfenv = nil; coroutine = nil
             __budget = nil; __read = nil; __now = nil; __log = nil
+            __root_exec = nil; __http_request = nil
         """.trimIndent()
     }
 }

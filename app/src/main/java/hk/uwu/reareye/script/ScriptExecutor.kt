@@ -5,8 +5,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
-class ScriptExecutor(@Suppress("UNUSED_PARAMETER") context: Context) {
-    private val runtime = ScriptRuntime(object : ScriptHost {})
+class ScriptExecutor(context: Context) {
+    private val runtime = ScriptRuntime(AndroidScriptHost(context))
 
     suspend fun execute(
         project: ScriptProject,
