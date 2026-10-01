@@ -1,5 +1,6 @@
 package hk.uwu.reareye.ui.components.script
 
+import android.annotation.SuppressLint
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -110,6 +112,7 @@ private data class ScriptOverwriteRequest(
     val confirm: () -> Unit,
 )
 
+@SuppressLint("LocalContextGetResourceValueCall")
 @Composable
 fun ScriptManagementScreen(onBack: () -> Unit, bottomInnerPadding: Dp = 0.dp) {
     val context = LocalContext.current
@@ -332,7 +335,7 @@ internal fun ScriptList(
                 Card(Modifier.fillMaxWidth()) { SuperCard(title = stringResource(R.string.script_empty)) }
             }
             // Standalone scripts share a root; their entry file is their unique identity.
-            items(projects, key = { it.mainFile.absolutePath }) { project ->
+            items(items = projects, key = { it.mainFile.absolutePath }) { project ->
                 val kindLabel = stringResource(
                     when (project.kind) {
                         ScriptProjectKind.STANDALONE -> R.string.script_kind_standalone

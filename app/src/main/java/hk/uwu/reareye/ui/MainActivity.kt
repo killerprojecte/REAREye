@@ -28,12 +28,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import hk.uwu.reareye.ui.components.PresetPackDialog
@@ -70,6 +73,12 @@ private data class RemoteUiSettings(
 )
 
 class MainActivity : ComponentActivity() {
+    private companion object {
+        const val OOBE_PREFS = "reareye_oobe"
+        const val OOBE_COMPLETED = "completed"
+        const val FEATURE_GUIDE_COMPLETED = "feature_guide_completed"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -96,6 +105,34 @@ class MainActivity : ComponentActivity() {
         preloadHomeFrameNotice(applicationContext)
 
         setContent {
+            val onboardingPrefs = remember {
+                applicationContext.getSharedPreferences(OOBE_PREFS, MODE_PRIVATE)
+            }
+            /*onboardingPrefs.edit {
+                putBoolean(OOBE_COMPLETED, false)
+                putBoolean(FEATURE_GUIDE_COMPLETED, false)
+            }*/
+            var onboardingCompleted by remember {
+                mutableStateOf(onboardingPrefs.getBoolean(OOBE_COMPLETED, false))
+            }
+            var startFeatureGuideAfterOobe by remember { mutableStateOf(false) }
+
+            if (!onboardingCompleted) {
+                AppTheme {
+                    OnboardingScreen(
+                        onFinished = { startFeatureGuide ->
+                            onboardingPrefs.edit {
+                                putBoolean(OOBE_COMPLETED, true)
+                                putBoolean(FEATURE_GUIDE_COMPLETED, !startFeatureGuide)
+                            }
+                            startFeatureGuideAfterOobe = startFeatureGuide
+                            onboardingCompleted = true
+                        },
+                    )
+                }
+                return@setContent
+            }
+
             val remotePrefsManager = remember { applicationContext.getPrefsManager() }
             val remoteRevision = rememberRemotePrefsStatusRevision()
             var remoteUiSettings by remember { mutableStateOf<RemoteUiSettings?>(null) }
@@ -175,6 +212,31 @@ class MainActivity : ComponentActivity() {
             var pendingRearStoreWidgetId by remember { mutableStateOf<String?>(null) }
             var navigationQuickActionIds by remember {
                 mutableStateOf(settings.navigationQuickActionIds)
+            }
+            var featureGuideVisible by remember {
+                mutableStateOf(
+                    startFeatureGuideAfterOobe ||
+                            !onboardingPrefs.getBoolean(FEATURE_GUIDE_COMPLETED, false),
+                )
+            }
+            var featureGuideStep by remember { mutableIntStateOf(0) }
+            var guideAnchors by remember { mutableStateOf<Map<String, Rect>>(emptyMap()) }
+
+            fun updateGuideAnchor(key: String, rect: Rect) {
+                guideAnchors = guideAnchors + (key to rect)
+            }
+
+            LaunchedEffect(featureGuideVisible, featureGuideStep) {
+                if (!featureGuideVisible) return@LaunchedEffect
+                guideAnchors = emptyMap()
+                currentScreen = if (featureGuideStep <= 1) "home" else "config"
+                pendingConfigQuickManagerTarget = when (featureGuideStep) {
+                    3 -> ConfigType.ManagerType.CARD
+                    4 -> ConfigType.ManagerType.REAR_WALLPAPER
+                    5 -> ConfigType.ManagerType.SCENE_ROUTE
+                    else -> null
+                }
+                configInAppListMode = featureGuideStep == 5
             }
 
             LaunchedEffect(Unit) {
@@ -262,11 +324,33 @@ class MainActivity : ComponentActivity() {
                                 label = "ScreenTransition"
                             ) { screen ->
                                 when (screen) {
-                                    "home" -> HomeScreen(
-                                        bottomInnerPadding = stableBottomInset,
-                                        onOpenPresetPackDialog = { showPresetPackDialog = true },
-                                        presetPackRefreshToken = presetPackRefreshToken,
-                                    )
+                                    "home" -> Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .onGloballyPositioned { coordinates ->
+                                                val origin = coordinates.positionInRoot()
+                                                val horizontalInset = with(density) { 16.dp.toPx() }
+                                                val topInset = with(density) { 86.dp.toPx() }
+                                                val height = with(density) { 168.dp.toPx() }
+                                                updateGuideAnchor(
+                                                    "home_status",
+                                                    Rect(
+                                                        origin.x + horizontalInset,
+                                                        origin.y + topInset,
+                                                        origin.x + coordinates.size.width - horizontalInset,
+                                                        origin.y + topInset + height,
+                                                    ),
+                                                )
+                                            },
+                                    ) {
+                                        HomeScreen(
+                                            bottomInnerPadding = stableBottomInset,
+                                            onOpenPresetPackDialog = {
+                                                showPresetPackDialog = true
+                                            },
+                                            presetPackRefreshToken = presetPackRefreshToken,
+                                        )
+                                    }
 
                                     "store" -> RearStoreScreen(
                                         bottomInnerPadding = stableBottomInset,
@@ -276,25 +360,45 @@ class MainActivity : ComponentActivity() {
                                         },
                                     )
 
-                                    "config" -> ConfigScreen(
-                                        bottomInnerPadding = stableBottomInset,
-                                        quickManagerTarget = pendingConfigQuickManagerTarget,
-                                        onQuickManagerTargetHandled = {
-                                            pendingConfigQuickManagerTarget = null
-                                        },
-                                        onAppListModeChange = {
-                                            configInAppListMode = it
-                                        },
-                                        onThemeModeChange = { themeModeValue = it },
-                                        onNavigationBarModeChange = {
-                                            navigationBarModeValue = it
-                                        },
-                                        onOpenRearStoreDetail = { widgetId ->
-                                            pendingRearStoreWidgetId = widgetId
-                                            configInAppListMode = false
-                                            currentScreen = "store"
-                                        },
-                                    )
+                                    "config" -> Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .onGloballyPositioned { coordinates ->
+                                                val origin = coordinates.positionInRoot()
+                                                val horizontalInset = with(density) { 14.dp.toPx() }
+                                                val topInset = with(density) { 118.dp.toPx() }
+                                                val height = with(density) { 188.dp.toPx() }
+                                                updateGuideAnchor(
+                                                    "config_dashboard",
+                                                    Rect(
+                                                        origin.x + horizontalInset,
+                                                        origin.y + topInset,
+                                                        origin.x + coordinates.size.width - horizontalInset,
+                                                        origin.y + topInset + height,
+                                                    ),
+                                                )
+                                            },
+                                    ) {
+                                        ConfigScreen(
+                                            bottomInnerPadding = stableBottomInset,
+                                            quickManagerTarget = pendingConfigQuickManagerTarget,
+                                            onQuickManagerTargetHandled = {
+                                                pendingConfigQuickManagerTarget = null
+                                            },
+                                            onAppListModeChange = {
+                                                configInAppListMode = it
+                                            },
+                                            onThemeModeChange = { themeModeValue = it },
+                                            onNavigationBarModeChange = {
+                                                navigationBarModeValue = it
+                                            },
+                                            onOpenRearStoreDetail = { widgetId ->
+                                                pendingRearStoreWidgetId = widgetId
+                                                configInAppListMode = false
+                                                currentScreen = "store"
+                                            },
+                                        )
+                                    }
 
                                     "about" -> AboutScreen(
                                         bottomInnerPadding = stableBottomInset,
@@ -322,6 +426,16 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
                                     .onGloballyPositioned { coordinates ->
+                                        val origin = coordinates.positionInRoot()
+                                        updateGuideAnchor(
+                                            "bottom_navigation",
+                                            Rect(
+                                                origin.x + with(density) { 8.dp.toPx() },
+                                                origin.y + with(density) { 4.dp.toPx() },
+                                                origin.x + coordinates.size.width - with(density) { 8.dp.toPx() },
+                                                origin.y + coordinates.size.height - with(density) { 4.dp.toPx() },
+                                            ),
+                                        )
                                         val totalHeight = with(density) {
                                             coordinates.size.height.toDp()
                                         }
@@ -380,6 +494,32 @@ class MainActivity : ComponentActivity() {
                             onDismissRequest = { showPresetPackDialog = false },
                             onApplied = { presetPackRefreshToken++ },
                         )
+
+                        val currentGuideKey =
+                            featureGuideSteps.getOrNull(featureGuideStep)?.anchorKey
+                        if (featureGuideVisible && currentGuideKey != null && guideAnchors.containsKey(
+                                currentGuideKey
+                            )
+                        ) {
+                            FeatureGuideOverlay(
+                                stepIndex = featureGuideStep,
+                                anchors = guideAnchors,
+                                onNext = {
+                                    if (featureGuideStep == featureGuideSteps.lastIndex) {
+                                        onboardingPrefs.edit()
+                                            .putBoolean(FEATURE_GUIDE_COMPLETED, true).apply()
+                                        featureGuideVisible = false
+                                    } else {
+                                        featureGuideStep += 1
+                                    }
+                                },
+                                onSkip = {
+                                    onboardingPrefs.edit().putBoolean(FEATURE_GUIDE_COMPLETED, true)
+                                        .apply()
+                                    featureGuideVisible = false
+                                },
+                            )
+                        }
                     }
                 }
             }
