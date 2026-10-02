@@ -69,6 +69,7 @@ import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import hk.uwu.reareye.ui.easteregg.EasterEggManager
 import hk.uwu.reareye.ui.easteregg.EasterEggType
+import hk.uwu.reareye.ui.featureGuideAnchor
 import hk.uwu.reareye.ui.theme.AppThemeMode
 import hk.uwu.reareye.ui.theme.rearAcrylicEffect
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
@@ -810,7 +811,8 @@ private fun WorkingStatusCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(190.dp),
+            .height(190.dp)
+            .featureGuideAnchor("home_status"),
         colors = CardDefaults.defaultColors(color = palette.container),
         insideMargin = PaddingValues(14.dp),
         pressFeedbackType = PressFeedbackType.Tilt,

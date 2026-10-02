@@ -60,6 +60,8 @@ import hk.uwu.reareye.repository.rearwidget.RearCardPriorityManager
 import hk.uwu.reareye.repository.rearwidget.RearWidgetConfigCodec
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateConfigRepository
+import hk.uwu.reareye.ui.FeatureGuideAction
+import hk.uwu.reareye.ui.LocalFeatureGuideDemo
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.reareye.ui.components.OverlayDialog
 import hk.uwu.reareye.ui.components.RearBadgeGroup
@@ -76,6 +78,7 @@ import hk.uwu.reareye.ui.components.motion.ArtRevealItem
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.rememberRemotePrefsStatusRevision
+import hk.uwu.reareye.ui.featureGuideAnchor
 import hk.uwu.reareye.ui.theme.rearAcrylicEffect
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
@@ -129,6 +132,7 @@ fun CardManagerScreen(
     actionRequest: ConfigDashboardAction? = null,
     onActionHandled: () -> Unit = {},
 ) {
+    val demo = LocalFeatureGuideDemo.current
     val context = LocalContext.current
     val layoutDirection = LocalLayoutDirection.current
     val scope = rememberCoroutineScope()
@@ -164,6 +168,14 @@ fun CardManagerScreen(
     }
 
     LaunchedEffect(prefsManager, remotePrefsStatusRevision) {
+        if (demo != null) {
+            cards.clear(); cards.addAll(demo.state.cards)
+            businesses.clear(); businesses.addAll(demo.state.businesses)
+            cardOrderSettings.clear(); cardOrderSettings.putAll(demo.state.orderSettings)
+            cardsLoaded = true
+            dataCardsVisible = true
+            return@LaunchedEffect
+        }
         val remoteReady = withContext(Dispatchers.IO) { prefsManager.isRemoteReady() }
         if (!remoteReady) {
             if (cards.isEmpty() && businesses.isEmpty()) {
@@ -227,6 +239,9 @@ fun CardManagerScreen(
 
     fun persist() {
         val nextCards = cards.toList()
+        if (demo != null) {
+            demo.state.cards = nextCards; return
+        }
         scope.launch(Dispatchers.IO) {
             RearWidgetManagerRepository.saveCards(context, prefsManager, nextCards)
         }
@@ -248,7 +263,10 @@ fun CardManagerScreen(
         cards.addAll(reordered)
         cardOrderSettings.clear()
         cardOrderSettings.putAll(nextSettings)
-        scope.launch(Dispatchers.IO) {
+        if (demo != null) {
+            demo.state.cards = reordered
+            demo.state.orderSettings = nextSettings
+        } else scope.launch(Dispatchers.IO) {
             RearWidgetManagerRepository.saveCardOrderSettings(prefsManager, nextSettings)
             RearWidgetManagerRepository.saveCards(context, prefsManager, reordered)
         }
@@ -274,6 +292,7 @@ fun CardManagerScreen(
     )
 
     fun openCreateDialog(mode: Int = selectedCardTab) {
+        if (demo != null) return
         editingCardId = null
         addModeTab = mode.coerceIn(0, 1)
         draftCardId = RearWidgetConfigCodec.newCardId()
@@ -317,9 +336,17 @@ fun CardManagerScreen(
         draftOneConfigJson = item.oneConfigJson
         dialogSessionId++
         showDialog.value = true
+        if (demo?.action == FeatureGuideAction.OPEN_CARD) demo.onAction(FeatureGuideAction.OPEN_CARD)
+    }
+
+    LaunchedEffect(demo?.action, cardsLoaded) {
+        if (demo?.action == FeatureGuideAction.SAVE_CARD && cardsLoaded && !showDialog.value) {
+            cards.firstOrNull()?.let(::openEditDialog)
+        }
     }
 
     fun openTemplateConfig(item: RearCardConfig) {
+        if (demo != null) return
         activeTemplateCardId.value = item.id
     }
 
@@ -345,7 +372,7 @@ fun CardManagerScreen(
         availabilityProbeBusinesses,
         normalizedBusinessSourceByName,
     ) {
-        if (!cardsLoaded) return@LaunchedEffect
+        if (!cardsLoaded || demo != null) return@LaunchedEffect
         val availability = linkedMapOf<String, Boolean>()
         availabilityProbeBusinesses.forEach { business ->
             val sourcePath = normalizedBusinessSourceByName[business].orEmpty()
@@ -446,11 +473,15 @@ fun CardManagerScreen(
         cardOrderSettings.clear()
         cardOrderSettings.putAll(nextSettings)
 
-        scope.launch(Dispatchers.IO) {
+        if (demo != null) {
+            demo.state.cards = reorderedCards
+            demo.state.orderSettings = nextSettings
+        } else scope.launch(Dispatchers.IO) {
             RearWidgetManagerRepository.saveCardOrderSettings(prefsManager, nextSettings)
             RearWidgetManagerRepository.saveCards(context, prefsManager, reorderedCards)
         }
         showDialog.value = false
+        demo?.onAction?.invoke(FeatureGuideAction.SAVE_CARD)
         Toast.makeText(
             context,
             context.getString(R.string.rear_widget_card_saved),
@@ -460,6 +491,7 @@ fun CardManagerScreen(
 
     @SuppressLint("LocalContextGetResourceValueCall")
     fun submitAppCardDialog() {
+        if (demo != null) return
         val title = appDraftTitle.trim()
         val business = businesses.getOrNull(selectedBusinessIndex)?.business.orEmpty()
         if (title.isBlank() || business.isBlank()) {
@@ -610,6 +642,7 @@ fun CardManagerScreen(
                         .fillMaxSize()
                         .graphicsLayer { clip = true },
                 ) { activeTab ->
+                    if (demo != null && activeTab != 0) return@HorizontalPager
                     if (activeTab == 0) {
                         LazyColumn(
                             state = listState,
@@ -763,12 +796,16 @@ fun CardManagerScreen(
                             trailing = {
                                 if (item.renameable) {
                                     Switch(
+                                        modifier = Modifier.featureGuideAnchor("demo_card_toggle"),
                                         checked = item.enabled,
                                         onCheckedChange = { checked ->
                                             val i = cards.indexOfFirst { it.id == item.id }
                                             if (i >= 0) {
                                                 cards[i] = cards[i].copy(enabled = checked)
-                                                scope.launch(Dispatchers.IO) {
+                                                if (demo != null) {
+                                                    demo.state.cards = cards.toList()
+                                                    demo.onAction(FeatureGuideAction.TOGGLE_CARD)
+                                                } else scope.launch(Dispatchers.IO) {
                                                     RearWidgetManagerRepository.setCardEnabled(
                                                         context = context,
                                                         prefsManager = prefsManager,
@@ -794,6 +831,7 @@ fun CardManagerScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     ModuleStyleIconAction(
+                                        modifier = Modifier.featureGuideAnchor("demo_card"),
                                         icon = Icons.Rounded.EditNote,
                                         onClick = { openEditDialog(item) },
                                     )
@@ -829,7 +867,7 @@ fun CardManagerScreen(
                                         icon = MiuixIcons.Delete,
                                         text = stringResource(R.string.rear_widget_action_delete),
                                         onClick = {
-                                            if (!item.renameable) return@ModuleStyleDeleteAction
+                                            if (demo != null || !item.renameable) return@ModuleStyleDeleteAction
                                             cards.remove(item)
                                             val nextSettings =
                                                 cardOrderSettings.toMutableMap().apply {
@@ -915,7 +953,7 @@ fun CardManagerScreen(
                 onSelectedAppBusinessIndexChange = { selectedBusinessIndex = it },
                 onConfirmNormal = ::submitDialog,
                 onConfirmApp = ::submitAppCardDialog,
-                onDismissRequest = { showDialog.value = false },
+                onDismissRequest = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
             )
 
             val editingCard = editingCardId?.let { id -> cards.firstOrNull { it.id == id } }
@@ -923,9 +961,13 @@ fun CardManagerScreen(
             OverlayDialog(
                 show = showDialog.value && editingCard != null,
                 title = stringResource(R.string.rear_widget_edit_card),
-                onDismissRequest = { showDialog.value = false },
+                onDismissRequest = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
             ) {
                 DialogFormColumn {
+                    if (demo != null) {
+                        Text(stringResource(R.string.guide_demo_notice))
+                        Text(stringResource(R.string.guide_demo_edit_card))
+                    }
                     if (lockedCard == null) {
                         TextField(
                             value = draftTitle,
@@ -1017,7 +1059,7 @@ fun CardManagerScreen(
                             Text(stringResource(R.string.rear_widget_confirm))
                         }
                         Button(
-                            onClick = { showDialog.value = false },
+                            onClick = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(stringResource(R.string.rear_widget_cancel))

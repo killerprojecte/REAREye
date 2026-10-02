@@ -20,18 +20,18 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
@@ -213,30 +213,25 @@ class MainActivity : ComponentActivity() {
             var navigationQuickActionIds by remember {
                 mutableStateOf(settings.navigationQuickActionIds)
             }
-            var featureGuideVisible by remember {
+            var featureGuideVisible by rememberSaveable {
                 mutableStateOf(
                     startFeatureGuideAfterOobe ||
                             !onboardingPrefs.getBoolean(FEATURE_GUIDE_COMPLETED, false),
                 )
             }
-            var featureGuideStep by remember { mutableIntStateOf(0) }
-            var guideAnchors by remember { mutableStateOf<Map<String, Rect>>(emptyMap()) }
-
-            fun updateGuideAnchor(key: String, rect: Rect) {
-                guideAnchors = guideAnchors + (key to rect)
+            var featureGuideStep by rememberSaveable { mutableIntStateOf(0) }
+            val guideAnchors = remember { FeatureGuideAnchors() }
+            val guideDemoState =
+                rememberSaveable(featureGuideVisible, saver = FeatureGuideDemoState.Saver) {
+                    FeatureGuideDemoState(getString(hk.uwu.reareye.R.string.guide_demo_card_name))
             }
+            val guideStep = featureGuideSteps[featureGuideStep]
 
             LaunchedEffect(featureGuideVisible, featureGuideStep) {
                 if (!featureGuideVisible) return@LaunchedEffect
-                guideAnchors = emptyMap()
-                currentScreen = if (featureGuideStep <= 1) "home" else "config"
-                pendingConfigQuickManagerTarget = when (featureGuideStep) {
-                    3 -> ConfigType.ManagerType.CARD
-                    4 -> ConfigType.ManagerType.REAR_WALLPAPER
-                    5 -> ConfigType.ManagerType.SCENE_ROUTE
-                    else -> null
-                }
-                configInAppListMode = featureGuideStep == 5
+                currentScreen = if (guideStep.dashboardTab == null) "home" else "config"
+                pendingConfigQuickManagerTarget = null
+                configInAppListMode = false
             }
 
             LaunchedEffect(Unit) {
@@ -257,268 +252,246 @@ class MainActivity : ComponentActivity() {
                 }
                 var stableBottomInset by remember { mutableStateOf(0.dp) }
 
-                Scaffold { _ ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { clip = true }
-                    ) {
+                CompositionLocalProvider(LocalFeatureGuideAnchors provides guideAnchors.takeIf { featureGuideVisible }) {
+                    Scaffold { _ ->
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .then(
-                                    if (enableFloatingGlass) {
-                                        Modifier.layerBackdrop(backdrop)
-                                    } else {
-                                        Modifier
-                                    }
-                                )
+                                .graphicsLayer { clip = true }
                         ) {
-                            AnimatedContent(
-                                targetState = currentScreen,
-                                contentKey = { it },
-                                transitionSpec = {
-                                    if (pendingQuickActionTransition && targetState == "config") {
-                                        pendingQuickActionTransition = false
-                                        return@AnimatedContent ContentTransform(
-                                            targetContentEnter = EnterTransition.None,
-                                            initialContentExit = ExitTransition.None,
-                                        )
-                                    }
-
-                                    val initialIndex =
-                                        MainScreenOrder.indexOf(initialState).coerceAtLeast(0)
-                                    val targetIndex =
-                                        MainScreenOrder.indexOf(targetState).coerceAtLeast(0)
-                                    val forward = targetIndex >= initialIndex
-
-                                    fadeIn(
-                                        animationSpec = tween(
-                                            durationMillis = 210,
-                                            delayMillis = 50,
-                                            easing = LinearOutSlowInEasing,
-                                        )
-                                    ) + slideInHorizontally(
-                                        animationSpec = tween(
-                                            durationMillis = 280,
-                                            easing = FastOutSlowInEasing,
-                                        )
-                                    ) { fullWidth ->
-                                        if (forward) fullWidth / 9 else -fullWidth / 9
-                                    } togetherWith (
-                                            fadeOut(
-                                                animationSpec = tween(
-                                                    durationMillis = 110,
-                                                    easing = FastOutLinearInEasing,
-                                                )
-                                            ) + slideOutHorizontally(
-                                                animationSpec = tween(
-                                                    durationMillis = 190,
-                                                    easing = FastOutLinearInEasing,
-                                                )
-                                            ) { fullWidth ->
-                                                if (forward) -fullWidth / 12 else fullWidth / 12
-                                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .then(
+                                        if (enableFloatingGlass) {
+                                            Modifier.layerBackdrop(backdrop)
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
+                            ) {
+                                AnimatedContent(
+                                    targetState = currentScreen,
+                                    contentKey = { it },
+                                    transitionSpec = {
+                                        if (pendingQuickActionTransition && targetState == "config") {
+                                            pendingQuickActionTransition = false
+                                            return@AnimatedContent ContentTransform(
+                                                targetContentEnter = EnterTransition.None,
+                                                initialContentExit = ExitTransition.None,
                                             )
-                                },
-                                label = "ScreenTransition"
-                            ) { screen ->
-                                when (screen) {
-                                    "home" -> Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .onGloballyPositioned { coordinates ->
-                                                val origin = coordinates.positionInRoot()
-                                                val horizontalInset = with(density) { 16.dp.toPx() }
-                                                val topInset = with(density) { 86.dp.toPx() }
-                                                val height = with(density) { 168.dp.toPx() }
-                                                updateGuideAnchor(
-                                                    "home_status",
-                                                    Rect(
-                                                        origin.x + horizontalInset,
-                                                        origin.y + topInset,
-                                                        origin.x + coordinates.size.width - horizontalInset,
-                                                        origin.y + topInset + height,
-                                                    ),
+                                        }
+
+                                        val initialIndex =
+                                            MainScreenOrder.indexOf(initialState).coerceAtLeast(0)
+                                        val targetIndex =
+                                            MainScreenOrder.indexOf(targetState).coerceAtLeast(0)
+                                        val forward = targetIndex >= initialIndex
+
+                                        fadeIn(
+                                            animationSpec = tween(
+                                                durationMillis = 210,
+                                                delayMillis = 50,
+                                                easing = LinearOutSlowInEasing,
+                                            )
+                                        ) + slideInHorizontally(
+                                            animationSpec = tween(
+                                                durationMillis = 280,
+                                                easing = FastOutSlowInEasing,
+                                            )
+                                        ) { fullWidth ->
+                                            if (forward) fullWidth / 9 else -fullWidth / 9
+                                        } togetherWith (
+                                                fadeOut(
+                                                    animationSpec = tween(
+                                                        durationMillis = 110,
+                                                        easing = FastOutLinearInEasing,
+                                                    )
+                                                ) + slideOutHorizontally(
+                                                    animationSpec = tween(
+                                                        durationMillis = 190,
+                                                        easing = FastOutLinearInEasing,
+                                                    )
+                                                ) { fullWidth ->
+                                                    if (forward) -fullWidth / 12 else fullWidth / 12
+                                                }
                                                 )
+                                    },
+                                    label = "ScreenTransition"
+                                ) { screen ->
+                                    when (screen) {
+                                        "home" -> Box(modifier = Modifier.fillMaxSize()) {
+                                            HomeScreen(
+                                                bottomInnerPadding = stableBottomInset,
+                                                onOpenPresetPackDialog = {
+                                                    showPresetPackDialog = true
+                                                },
+                                                presetPackRefreshToken = presetPackRefreshToken,
+                                            )
+                                        }
+
+                                        "store" -> RearStoreScreen(
+                                            bottomInnerPadding = stableBottomInset,
+                                            initialWidgetId = pendingRearStoreWidgetId,
+                                            onInitialWidgetHandled = {
+                                                pendingRearStoreWidgetId = null
                                             },
-                                    ) {
-                                        HomeScreen(
+                                        )
+
+                                        "config" -> Box(modifier = Modifier.fillMaxSize()) {
+                                            if (featureGuideVisible) {
+                                                FeatureGuideDemoScreen(
+                                                    step = guideStep,
+                                                    state = guideDemoState,
+                                                    bottomPadding = stableBottomInset,
+                                                    onCancelEdit = {
+                                                        featureGuideStep =
+                                                            (featureGuideStep - 1).coerceAtLeast(0)
+                                                    },
+                                                    onAction = { action ->
+                                                        if (featureGuideSteps[featureGuideStep].action == action) {
+                                                            featureGuideStep += 1
+                                                        }
+                                                    },
+                                                )
+                                            } else ConfigScreen(
+                                                bottomInnerPadding = stableBottomInset,
+                                                quickManagerTarget = pendingConfigQuickManagerTarget,
+                                                onQuickManagerTargetHandled = {
+                                                    pendingConfigQuickManagerTarget = null
+                                                },
+                                                onAppListModeChange = {
+                                                    configInAppListMode = it
+                                                },
+                                                onThemeModeChange = { themeModeValue = it },
+                                                onNavigationBarModeChange = {
+                                                    navigationBarModeValue = it
+                                                },
+                                                onOpenRearStoreDetail = { widgetId ->
+                                                    pendingRearStoreWidgetId = widgetId
+                                                    configInAppListMode = false
+                                                    currentScreen = "store"
+                                                },
+                                            )
+                                        }
+
+                                        "about" -> AboutScreen(
                                             bottomInnerPadding = stableBottomInset,
                                             onOpenPresetPackDialog = {
                                                 showPresetPackDialog = true
                                             },
-                                            presetPackRefreshToken = presetPackRefreshToken,
                                         )
                                     }
+                                }
+                            }
 
-                                    "store" -> RearStoreScreen(
-                                        bottomInnerPadding = stableBottomInset,
-                                        initialWidgetId = pendingRearStoreWidgetId,
-                                        onInitialWidgetHandled = {
-                                            pendingRearStoreWidgetId = null
+                            val navShadowProgress by animateFloatAsState(
+                                targetValue = if (showNavigation) 1f else 0f,
+                                animationSpec = tween(
+                                    durationMillis = if (showNavigation) 380 else 240,
+                                    easing = if (showNavigation) {
+                                        FastOutSlowInEasing
+                                    } else {
+                                        FastOutLinearInEasing
+                                    },
+                                ),
+                                label = "NavigationShadowProgress",
+                            )
+                            if (showNavigation || navShadowProgress > 0.001f) {
+                                ArtVisibilityMotion(
+                                    visible = showNavigation,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .featureGuideAnchor("bottom_navigation")
+                                        .onGloballyPositioned { coordinates ->
+                                            val totalHeight = with(density) {
+                                                coordinates.size.height.toDp()
+                                            }
+                                            if (totalHeight != stableBottomInset) {
+                                                stableBottomInset = totalHeight
+                                            }
                                         },
-                                    )
-
-                                    "config" -> Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .onGloballyPositioned { coordinates ->
-                                                val origin = coordinates.positionInRoot()
-                                                val horizontalInset = with(density) { 14.dp.toPx() }
-                                                val topInset = with(density) { 118.dp.toPx() }
-                                                val height = with(density) { 188.dp.toPx() }
-                                                updateGuideAnchor(
-                                                    "config_dashboard",
-                                                    Rect(
-                                                        origin.x + horizontalInset,
-                                                        origin.y + topInset,
-                                                        origin.x + coordinates.size.width - horizontalInset,
-                                                        origin.y + topInset + height,
-                                                    ),
-                                                )
-                                            },
-                                    ) {
-                                        ConfigScreen(
-                                            bottomInnerPadding = stableBottomInset,
-                                            quickManagerTarget = pendingConfigQuickManagerTarget,
-                                            onQuickManagerTargetHandled = {
-                                                pendingConfigQuickManagerTarget = null
-                                            },
-                                            onAppListModeChange = {
-                                                configInAppListMode = it
-                                            },
-                                            onThemeModeChange = { themeModeValue = it },
-                                            onNavigationBarModeChange = {
-                                                navigationBarModeValue = it
-                                            },
-                                            onOpenRearStoreDetail = { widgetId ->
-                                                pendingRearStoreWidgetId = widgetId
-                                                configInAppListMode = false
-                                                currentScreen = "store"
-                                            },
-                                        )
-                                    }
-
-                                    "about" -> AboutScreen(
-                                        bottomInnerPadding = stableBottomInset,
-                                        onOpenPresetPackDialog = { showPresetPackDialog = true },
+                                    enterAlphaDurationMillis = 260,
+                                    enterTransformDurationMillis = 380,
+                                    exitAlphaDurationMillis = 180,
+                                    exitTransformDurationMillis = 240,
+                                    hiddenEnterScale = 1f,
+                                    hiddenExitScale = 1f,
+                                    slideDivisor = 3,
+                                    hiddenOffsetFallback = 28.dp,
+                                ) {
+                                    RearNavigationBar(
+                                        currentScreen = currentScreen,
+                                        navigationBarMode = navigationBarMode,
+                                        backdrop = backdrop,
+                                        shadowVisibilityProgress = navShadowProgress,
+                                        quickActionIds = navigationQuickActionIds,
+                                        onQuickActionIdsChanged = { nextIds ->
+                                            val normalizedIds = parseNavigationQuickActionIds(
+                                                encodeNavigationQuickActionIds(nextIds)
+                                            )
+                                            navigationQuickActionIds = normalizedIds
+                                            remotePrefsManager.putString(
+                                                ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS,
+                                                encodeNavigationQuickActionIds(normalizedIds),
+                                            )
+                                        },
+                                        onScreenSelected = { currentScreen = it },
+                                        onQuickActionSelected = { target ->
+                                            when (target) {
+                                                is NavigationQuickTarget.ConfigManager -> {
+                                                    pendingConfigQuickManagerTarget =
+                                                        target.managerType
+                                                    pendingQuickActionTransition = true
+                                                    // Dashboard managers stay inside the new configuration
+                                                    // workbench and keep the navigation bar visible. Only
+                                                    // dedicated More pages use the full-screen overlay mode.
+                                                    configInAppListMode =
+                                                        target.managerType in setOf(
+                                                            ConfigType.ManagerType.SCENE_ROUTE,
+                                                            ConfigType.ManagerType.BOUNDS,
+                                                        )
+                                                    currentScreen = "config"
+                                                }
+                                            }
+                                        },
                                     )
                                 }
                             }
-                        }
 
-                        val navShadowProgress by animateFloatAsState(
-                            targetValue = if (showNavigation) 1f else 0f,
-                            animationSpec = tween(
-                                durationMillis = if (showNavigation) 380 else 240,
-                                easing = if (showNavigation) {
-                                    FastOutSlowInEasing
-                                } else {
-                                    FastOutLinearInEasing
-                                },
-                            ),
-                            label = "NavigationShadowProgress",
-                        )
-                        if (showNavigation || navShadowProgress > 0.001f) {
-                            ArtVisibilityMotion(
-                                visible = showNavigation,
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .onGloballyPositioned { coordinates ->
-                                        val origin = coordinates.positionInRoot()
-                                        updateGuideAnchor(
-                                            "bottom_navigation",
-                                            Rect(
-                                                origin.x + with(density) { 8.dp.toPx() },
-                                                origin.y + with(density) { 4.dp.toPx() },
-                                                origin.x + coordinates.size.width - with(density) { 8.dp.toPx() },
-                                                origin.y + coordinates.size.height - with(density) { 4.dp.toPx() },
-                                            ),
-                                        )
-                                        val totalHeight = with(density) {
-                                            coordinates.size.height.toDp()
-                                        }
-                                        if (totalHeight != stableBottomInset) {
-                                            stableBottomInset = totalHeight
-                                        }
-                                    },
-                                enterAlphaDurationMillis = 260,
-                                enterTransformDurationMillis = 380,
-                                exitAlphaDurationMillis = 180,
-                                exitTransformDurationMillis = 240,
-                                hiddenEnterScale = 1f,
-                                hiddenExitScale = 1f,
-                                slideDivisor = 3,
-                                hiddenOffsetFallback = 28.dp,
+                            PresetPackDialog(
+                                show = showPresetPackDialog,
+                                onDismissRequest = { showPresetPackDialog = false },
+                                onApplied = { presetPackRefreshToken++ },
+                            )
+
+                            if (featureGuideVisible && guideStep.action !in setOf(
+                                    FeatureGuideAction.SAVE_CARD, FeatureGuideAction.SAVE_COMPONENT,
+                                )
                             ) {
-                                RearNavigationBar(
-                                    currentScreen = currentScreen,
-                                    navigationBarMode = navigationBarMode,
-                                    backdrop = backdrop,
-                                    shadowVisibilityProgress = navShadowProgress,
-                                    quickActionIds = navigationQuickActionIds,
-                                    onQuickActionIdsChanged = { nextIds ->
-                                        val normalizedIds = parseNavigationQuickActionIds(
-                                            encodeNavigationQuickActionIds(nextIds)
-                                        )
-                                        navigationQuickActionIds = normalizedIds
-                                        remotePrefsManager.putString(
-                                            ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS,
-                                            encodeNavigationQuickActionIds(normalizedIds),
-                                        )
+                                FeatureGuideOverlay(
+                                    stepIndex = featureGuideStep,
+                                    anchors = guideAnchors,
+                                    onPrevious = {
+                                        featureGuideStep = (featureGuideStep - 1).coerceAtLeast(0)
                                     },
-                                    onScreenSelected = { currentScreen = it },
-                                    onQuickActionSelected = { target ->
-                                        when (target) {
-                                            is NavigationQuickTarget.ConfigManager -> {
-                                                pendingConfigQuickManagerTarget = target.managerType
-                                                pendingQuickActionTransition = true
-                                                // Dashboard managers stay inside the new configuration
-                                                // workbench and keep the navigation bar visible. Only
-                                                // dedicated More pages use the full-screen overlay mode.
-                                                configInAppListMode = target.managerType in setOf(
-                                                    ConfigType.ManagerType.SCENE_ROUTE,
-                                                    ConfigType.ManagerType.BOUNDS,
-                                                )
-                                                currentScreen = "config"
-                                            }
+                                    onNext = {
+                                        if (featureGuideStep == featureGuideSteps.lastIndex) {
+                                            onboardingPrefs.edit()
+                                                .putBoolean(FEATURE_GUIDE_COMPLETED, true).apply()
+                                            featureGuideVisible = false
+                                        } else {
+                                            featureGuideStep += 1
                                         }
+                                    },
+                                    onSkip = {
+                                        onboardingPrefs.edit()
+                                            .putBoolean(FEATURE_GUIDE_COMPLETED, true)
+                                            .apply()
+                                        featureGuideVisible = false
                                     },
                                 )
                             }
-                        }
-
-                        PresetPackDialog(
-                            show = showPresetPackDialog,
-                            onDismissRequest = { showPresetPackDialog = false },
-                            onApplied = { presetPackRefreshToken++ },
-                        )
-
-                        val currentGuideKey =
-                            featureGuideSteps.getOrNull(featureGuideStep)?.anchorKey
-                        if (featureGuideVisible && currentGuideKey != null && guideAnchors.containsKey(
-                                currentGuideKey
-                            )
-                        ) {
-                            FeatureGuideOverlay(
-                                stepIndex = featureGuideStep,
-                                anchors = guideAnchors,
-                                onNext = {
-                                    if (featureGuideStep == featureGuideSteps.lastIndex) {
-                                        onboardingPrefs.edit()
-                                            .putBoolean(FEATURE_GUIDE_COMPLETED, true).apply()
-                                        featureGuideVisible = false
-                                    } else {
-                                        featureGuideStep += 1
-                                    }
-                                },
-                                onSkip = {
-                                    onboardingPrefs.edit().putBoolean(FEATURE_GUIDE_COMPLETED, true)
-                                        .apply()
-                                    featureGuideVisible = false
-                                },
-                            )
                         }
                     }
                 }

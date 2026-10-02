@@ -57,6 +57,8 @@ import hk.uwu.reareye.repository.rearwidget.RearCardOrderSetting
 import hk.uwu.reareye.repository.rearwidget.RearCardPriorityManager
 import hk.uwu.reareye.repository.rearwidget.RearWidgetConfigCodec
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
+import hk.uwu.reareye.ui.FeatureGuideAction
+import hk.uwu.reareye.ui.LocalFeatureGuideDemo
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.reareye.ui.components.OverlayDialog
 import hk.uwu.reareye.ui.components.RearBadgeGroup
@@ -67,6 +69,7 @@ import hk.uwu.reareye.ui.components.motion.ArtRevealItem
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.rememberRemotePrefsStatusRevision
+import hk.uwu.reareye.ui.featureGuideAnchor
 import hk.uwu.reareye.ui.theme.rearAcrylicEffect
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
@@ -112,6 +115,7 @@ fun BusinessManagerScreen(
     actionRequest: ConfigDashboardAction? = null,
     onActionHandled: () -> Unit = {},
 ) {
+    val demo = LocalFeatureGuideDemo.current
     val context = LocalContext.current
     val layoutDirection = LocalLayoutDirection.current
     val scrollBehavior = MiuixScrollBehavior()
@@ -153,6 +157,12 @@ fun BusinessManagerScreen(
     }
 
     LaunchedEffect(prefsManager, remotePrefsStatusRevision) {
+        if (demo != null) {
+            widgets.clear(); widgets.addAll(demo.state.businesses)
+            cards.clear(); cards.addAll(demo.state.cards)
+            widgetsLoaded = true; dataCardsVisible = true
+            return@LaunchedEffect
+        }
         val remoteReady = withContext(Dispatchers.IO) { prefsManager.isRemoteReady() }
         if (!remoteReady) {
             if (widgets.isEmpty()) {
@@ -187,12 +197,16 @@ fun BusinessManagerScreen(
 
     fun persist() {
         val nextWidgets = widgets.toList()
+        if (demo != null) {
+            demo.state.businesses = nextWidgets; return
+        }
         scope.launch(Dispatchers.IO) {
             RearWidgetManagerRepository.saveBusinesses(context, prefsManager, nextWidgets)
         }
     }
 
     fun openCreateDialog() {
+        if (demo != null) return
         editingId = null
         draftWidget = ""
         draftFilePath = ""
@@ -241,13 +255,21 @@ fun BusinessManagerScreen(
         editingId = item.id
         draftWidget = item.business
         draftFilePath = item.filePath
-        draftHideTimeTip = !RearBusinessExtraConfigRepository
+        draftHideTimeTip = demo?.state?.hideTimeTip ?: !RearBusinessExtraConfigRepository
             .getConfigForBusiness(prefsManager, item.business)
             .getShowTimeTipOrDefault()
         showDialog.value = true
+        if (demo?.action == FeatureGuideAction.OPEN_COMPONENT) demo.onAction(FeatureGuideAction.OPEN_COMPONENT)
+    }
+
+    LaunchedEffect(demo?.action, widgetsLoaded) {
+        if (demo?.action == FeatureGuideAction.SAVE_COMPONENT && widgetsLoaded && !showDialog.value) {
+            widgets.firstOrNull()?.let(::openEditDialog)
+        }
     }
 
     fun openRegisterCardDialog(item: RearBusinessConfig) {
+        if (demo != null) return
         registerCardMode = 0
         draftCardId = RearWidgetConfigCodec.newCardId()
         draftCardTitle = item.business
@@ -315,7 +337,8 @@ fun BusinessManagerScreen(
             storeInstalledAt = editingBusiness?.storeInstalledAt,
         )
 
-        RearBusinessExtraConfigRepository.updateConfigForBusiness(
+        if (demo != null) demo.state.hideTimeTip = draftHideTimeTip
+        else RearBusinessExtraConfigRepository.updateConfigForBusiness(
             prefsManager = prefsManager,
             business = widget,
         ) { extra ->
@@ -337,6 +360,7 @@ fun BusinessManagerScreen(
 
         persist()
         showDialog.value = false
+        demo?.onAction?.invoke(FeatureGuideAction.SAVE_COMPONENT)
         Toast.makeText(
             context,
             context.getString(R.string.rear_widget_business_saved),
@@ -346,6 +370,7 @@ fun BusinessManagerScreen(
 
     @SuppressLint("LocalContextGetResourceValueCall")
     fun submitRegisterCardDialog() {
+        if (demo != null) return
         val packageName = draftCardPackageName.trim()
         val business = draftCardBusiness.trim()
         if (packageName.isBlank() || business.isBlank()) {
@@ -396,6 +421,7 @@ fun BusinessManagerScreen(
     }
 
     fun submitRegisterAppCardDialog() {
+        if (demo != null) return
         val title = draftAppCardTitle.trim()
         val business = widgets.getOrNull(selectedAppBusinessIndex)?.business.orEmpty()
         if (title.isBlank() || business.isBlank()) {
@@ -441,6 +467,7 @@ fun BusinessManagerScreen(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        if (demo != null) return@rememberLauncherForActivityResult
         val copied = RearWidgetManagerRepository.copyTemplateToManagedPath(
             context = context,
             uri = uri,
@@ -549,6 +576,7 @@ fun BusinessManagerScreen(
                     }
                     val isHighlighted = highlightedBusinessId == item.id
                     ModuleStyleManagerCard(
+                        modifier = Modifier.featureGuideAnchor("demo_component_preview"),
                         backgroundColor = if (isHighlighted) {
                             MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
                         } else null,
@@ -577,6 +605,7 @@ fun BusinessManagerScreen(
                             ) {
                                 if (item.renameable) {
                                     ModuleStyleIconAction(
+                                        modifier = Modifier.featureGuideAnchor("demo_component"),
                                         icon = MaterialSymbols.Rounded.Edit_note,
                                         contentDescription = stringResource(R.string.rear_widget_edit_business),
                                         onClick = { openEditDialog(item) },
@@ -667,7 +696,8 @@ fun BusinessManagerScreen(
                                             contentColor = Color(0xFFD32F2F),
                                             onClick = {
                                                 cards.remove(card)
-                                                scope.launch(Dispatchers.IO) {
+                                                if (demo != null) demo.state.cards = cards.toList()
+                                                else scope.launch(Dispatchers.IO) {
                                                     RearWidgetManagerRepository.saveCards(
                                                         context,
                                                         prefsManager,
@@ -760,10 +790,14 @@ fun BusinessManagerScreen(
         title = stringResource(
             if (editingId == null) R.string.rear_widget_add_business else R.string.rear_widget_edit_business,
         ),
-        onDismissRequest = { showDialog.value = false },
+        onDismissRequest = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
     ) {
         val lockedBusiness = dialogEditingBusiness?.takeIf { !it.renameable }
         DialogFormColumn {
+            if (demo != null) {
+                Text(stringResource(R.string.guide_demo_notice))
+                Text(stringResource(R.string.guide_demo_edit_component))
+            }
             TextField(
                 value = draftWidget,
                 onValueChange = { draftWidget = it },
@@ -784,8 +818,8 @@ fun BusinessManagerScreen(
             )
             Button(
                 modifier = Modifier.fillMaxWidth(),
-                enabled = lockedBusiness == null,
-                onClick = { if (lockedBusiness == null) picker.launch(arrayOf("*/*")) }) {
+                enabled = lockedBusiness == null && demo == null,
+                onClick = { if (lockedBusiness == null && demo == null) picker.launch(arrayOf("*/*")) }) {
                 Icon(
                     imageVector = Icons.Filled.UploadFile,
                     contentDescription = null,
@@ -810,7 +844,10 @@ fun BusinessManagerScreen(
                 ) {
                     Text(stringResource(R.string.rear_widget_confirm))
                 }
-                Button(onClick = { showDialog.value = false }, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(stringResource(R.string.rear_widget_cancel))
                 }
             }

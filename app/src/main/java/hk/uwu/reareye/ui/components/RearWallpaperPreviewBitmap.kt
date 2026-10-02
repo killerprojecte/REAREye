@@ -6,11 +6,15 @@ import android.util.LruCache
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+
+internal val LocalRearWallpaperPreviewProvider =
+    staticCompositionLocalOf<((String) -> ImageBitmap?)?> { null }
 
 private object RearWallpaperPreviewBitmapCache {
     private val cache = LruCache<String, ImageBitmap>(64)
@@ -37,6 +41,7 @@ fun rememberRearWallpaperPreviewBitmap(
     requestedWidthPx: Int,
     requestedHeightPx: Int,
 ): ImageBitmap? {
+    LocalRearWallpaperPreviewProvider.current?.let { return it(cachePath.orEmpty()) }
     val normalizedWidth = requestedWidthPx.coerceAtLeast(0)
     val normalizedHeight = requestedHeightPx.coerceAtLeast(0)
     val cacheKey = cachePath?.let {

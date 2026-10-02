@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.config.ConfigCategory
+import hk.uwu.reareye.ui.featureGuideAnchor
 import kotlinx.coroutines.flow.distinctUntilChanged
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -89,6 +90,10 @@ internal fun ConfigDashboard(
     var loadedTabMask by rememberSaveable {
         mutableStateOf(1 shl (selectedTabIndex.coerceIn(0, DashboardTab.entries.lastIndex)))
     }
+    // Programmatic navigation must load the destination just like a tab tap.
+    LaunchedEffect(selectedTab) {
+        loadedTabMask = loadedTabMask or (1 shl selectedTab.ordinal)
+    }
     var focusCardId by rememberSaveable { mutableStateOf<String?>(null) }
     var focusComponentBusiness by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingAction by remember { mutableStateOf<ConfigDashboardAction?>(null) }
@@ -114,6 +119,7 @@ internal fun ConfigDashboard(
             .then(modifier),
     ) {
         TopAppBar(
+            modifier = Modifier.featureGuideAnchor("config_header_${selectedTab.ordinal}"),
             title = stringResource(
                 when (selectedTab) {
                     DashboardTab.CARDS -> R.string.config_tab_cards
@@ -176,6 +182,7 @@ internal fun ConfigDashboard(
             selectedTabIndex = selectedTab.ordinal,
             onTabSelected = ::selectTab,
             modifier = Modifier
+                .featureGuideAnchor("config_tabs")
                 .fillMaxWidth()
                 .padding(
                     top = 4.dp,
@@ -192,7 +199,7 @@ internal fun ConfigDashboard(
         ) {
             val pageWidth = maxWidth
             DashboardTab.entries.forEach { tab ->
-                if (loadedTabMask and (1 shl tab.ordinal) == 0) return@forEach
+                if (tab != selectedTab && loadedTabMask and (1 shl tab.ordinal) == 0) return@forEach
                 key(tab) {
                     val tabPosition by tabTransition.animateFloat(
                         transitionSpec = {

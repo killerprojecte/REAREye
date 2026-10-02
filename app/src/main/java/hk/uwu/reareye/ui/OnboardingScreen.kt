@@ -1,5 +1,6 @@
 package hk.uwu.reareye.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,8 +34,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,11 +72,11 @@ private data class PermissionSnapshot(
 fun OnboardingScreen(
     onFinished: (startFeatureGuide: Boolean) -> Unit,
 ) {
-    var page by remember { mutableStateOf(0) }
+    var page by rememberSaveable { mutableStateOf(0) }
     var permissionSnapshot by remember {
         mutableStateOf(PermissionSnapshot(XposedModuleStatus.current(), null))
     }
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 3 })
+    val pagerState = rememberPagerState(initialPage = page, pageCount = { 3 })
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(page) {
@@ -84,10 +85,8 @@ fun OnboardingScreen(
         }
     }
 
-    LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage }.collect { currentPage ->
-            if (page != currentPage) page = currentPage
-        }
+    BackHandler(enabled = page > 0) {
+        if (!pagerState.isScrollInProgress) page -= 1
     }
 
     fun refreshPermissions() {
@@ -118,7 +117,9 @@ fun OnboardingScreen(
 
     val lspScopeReady = permissionSnapshot.lsp == ModuleActivationState.ACTIVE ||
             permissionSnapshot.lsp == ModuleActivationState.NO_RUNNING_TARGET
-    val canContinue = page != 2 || (lspScopeReady && permissionSnapshot.root == true)
+    val pageSettled = !pagerState.isScrollInProgress && pagerState.currentPage == page
+    val canContinue =
+        pageSettled && (page != 2 || (lspScopeReady && permissionSnapshot.root == true))
     val accent = MiuixTheme.colorScheme.primary
 
     Box(
@@ -184,6 +185,7 @@ fun OnboardingScreen(
                     if (page > 0) {
                         Button(
                             onClick = { page -= 1 },
+                            enabled = pageSettled,
                             modifier = Modifier.weight(1f),
                         ) { Text(stringResource(R.string.oobe_previous)) }
                     }

@@ -220,12 +220,14 @@ fun ModuleStyleTextAction(
     enabled: Boolean = true,
     backgroundColor: Color = MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
     contentColor: Color = MiuixTheme.colorScheme.onSurface,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val actionIconAlpha = if (backgroundColor.luminance() < 0.5f) 0.7f else 0.9f
     val actionIconTint =
         contentColor.copy(alpha = actionIconAlpha * if (enabled) 1f else 0.45f)
     IconButton(
+        modifier = modifier,
         minHeight = 35.dp,
         minWidth = 35.dp,
         onClick = if (enabled) onClick else ({}),

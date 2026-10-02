@@ -29,6 +29,8 @@ import hk.uwu.reareye.repository.rearstore.RearStoreRepository
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperInfo
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperRepository
+import hk.uwu.reareye.ui.FeatureGuideAction
+import hk.uwu.reareye.ui.LocalFeatureGuideDemo
 import hk.uwu.reareye.ui.components.config.template.RearWallpaperTemplateConfigScreen
 import hk.uwu.reareye.ui.components.config.template.TemplateConfigRouteTransition
 import hk.uwu.reareye.ui.config.PrefsManager
@@ -74,6 +76,7 @@ fun RearWallpaperManagerScreen(
     actionRequest: ConfigDashboardAction? = null,
     onActionHandled: () -> Unit = {},
 ) {
+    val demo = LocalFeatureGuideDemo.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val scrollBehavior = MiuixScrollBehavior()
@@ -97,6 +100,7 @@ fun RearWallpaperManagerScreen(
     }
 
     fun persistSchedule() {
+        if (demo != null) return
         val snapshot = schedule.toList()
         val enabled = scheduleEnabled && snapshot.isNotEmpty()
         if (scheduleEnabled && snapshot.isEmpty()) {
@@ -115,6 +119,15 @@ fun RearWallpaperManagerScreen(
 
     @SuppressLint("LocalContextGetResourceValueCall")
     fun refreshCatalog(showSuccessToast: Boolean = false) {
+        if (demo != null) {
+            wallpapers.clear()
+            wallpapers.addAll(demo.state.wallpapers(context.getString(R.string.guide_demo_wallpaper_name)))
+            currentWallpaperId = demo.state.currentWallpaperId
+            catalogInitialized = true
+            loading = false
+            refreshing = false
+            return
+        }
         scope.launch {
             refreshing = true
             val result = runCatching {
@@ -152,6 +165,12 @@ fun RearWallpaperManagerScreen(
     }
 
     fun switchWallpaper(wallpaperId: Int) {
+        if (demo != null) {
+            currentWallpaperId = wallpaperId
+            demo.state.currentWallpaperId = wallpaperId
+            demo.onAction(FeatureGuideAction.APPLY_WALLPAPER)
+            return
+        }
         scope.launch {
             val success = withContext(Dispatchers.IO) {
                 RearWallpaperRepository.switchWallpaper(context, wallpaperId)
@@ -171,6 +190,7 @@ fun RearWallpaperManagerScreen(
         previewUri: Uri?,
         options: RearWallpaperMetadataOptions,
     ) {
+        if (demo != null) return
         scope.launch {
             refreshing = true
             val result = withContext(Dispatchers.IO) {
@@ -205,6 +225,7 @@ fun RearWallpaperManagerScreen(
         options: RearWallpaperMetadataOptions,
         previewUri: Uri?,
     ) {
+        if (demo != null) return
         scope.launch {
             refreshing = true
             val result = withContext(Dispatchers.IO) {
@@ -234,6 +255,7 @@ fun RearWallpaperManagerScreen(
 
     @SuppressLint("LocalContextGetResourceValueCall")
     fun generateWallpaperPreview(wallpaper: RearWallpaperInfo) {
+        if (demo != null) return
         scope.launch {
             refreshing = true
             val result = withContext(Dispatchers.IO) {
@@ -258,6 +280,7 @@ fun RearWallpaperManagerScreen(
 
     @SuppressLint("LocalContextGetResourceValueCall")
     fun deleteWallpaper(wallpaper: RearWallpaperInfo) {
+        if (demo != null) return
         scope.launch {
             refreshing = true
             val result = withContext(Dispatchers.IO) {
@@ -292,11 +315,22 @@ fun RearWallpaperManagerScreen(
     }
 
     LaunchedEffect(Unit) {
+        if (demo != null) {
+            refreshCatalog(); return@LaunchedEffect
+        }
         if (!catalogInitialized) {
             schedule.clear()
             schedule.addAll(RearWallpaperRepository.loadSchedule(prefsManager))
             scheduleEnabled = RearWallpaperRepository.isScheduleEnabled(prefsManager)
             refreshCatalog()
+        }
+    }
+
+    LaunchedEffect(demo?.action) {
+        if (demo?.action == FeatureGuideAction.APPLY_WALLPAPER) {
+            // Replaying this lesson must leave the normal Apply button enabled.
+            currentWallpaperId = null
+            demo.state.currentWallpaperId = null
         }
     }
 
@@ -368,7 +402,8 @@ fun RearWallpaperManagerScreen(
                 onImport = ::importWallpaperPackage,
                 onUpdateMetadata = ::updateWallpaperMetadata,
                 onEditTemplate = { wallpaper ->
-                    if (onEditTemplate != null) {
+                    if (demo != null) Unit
+                    else if (onEditTemplate != null) {
                         onEditTemplate(wallpaper)
                     } else {
                         activeTemplateWallpaperId = wallpaper.wallpaperId

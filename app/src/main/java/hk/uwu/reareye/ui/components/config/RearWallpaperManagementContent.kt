@@ -56,6 +56,7 @@ import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearstore.RearStoreInstalledWallpaper
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperInfo
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
+import hk.uwu.reareye.ui.LocalFeatureGuideDemo
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.reareye.ui.components.OverlayDialog
 import hk.uwu.reareye.ui.components.RearBadgeGroup
@@ -68,6 +69,7 @@ import hk.uwu.reareye.ui.components.config.draggable.library.draggable.Draggable
 import hk.uwu.reareye.ui.components.config.draggable.library.draggable.rememberDraggableLazyListState
 import hk.uwu.reareye.ui.components.config.draggable.longPressDraggable
 import hk.uwu.reareye.ui.components.rememberRearWallpaperPreviewBitmap
+import hk.uwu.reareye.ui.featureGuideAnchor
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.widgetapi.RearWallpaperScheduleEntry
 import kotlinx.coroutines.launch
@@ -506,6 +508,11 @@ private fun RearWallpaperManagementList(
     val currentWallpaperName = wallpapers.firstOrNull { it.wallpaperId == currentWallpaperId }?.name
         ?: stringResource(R.string.rear_wallpaper_current_none)
     val listState = rememberLazyListState()
+    val guideDemo = LocalFeatureGuideDemo.current
+    LaunchedEffect(guideDemo != null, wallpapers.size) {
+        if (guideDemo != null && wallpapers.isNotEmpty()) listState.scrollToItem(2)
+    }
+
     val scope = rememberCoroutineScope()
     val orderedSchedule = remember { mutableStateListOf<RearWallpaperScheduleEntry>() }
     val draggableState = rememberDraggableLazyListState(
@@ -717,7 +724,7 @@ private fun WallpaperManageCard(
         if (inSchedule) R.string.rear_wallpaper_rotation_remove else R.string.rear_wallpaper_rotation_add,
     )
     ModuleStyleManagerCard(
-        modifier = dragModifier,
+        modifier = dragModifier.featureGuideAnchor("demo_wallpaper_preview"),
         title = wallpaper.name,
         summaryLines = emptyList(),
         badges = rearWallpaperManagementBadges(
@@ -760,6 +767,7 @@ private fun WallpaperManageCard(
                         )
                     }
                 ModuleStyleTextAction(
+                    modifier = Modifier.featureGuideAnchor("demo_wallpaper_apply"),
                     icon = Icons.Filled.Check,
                     text = stringResource(R.string.rear_wallpaper_set_now),
                     enabled = !isCurrent,
