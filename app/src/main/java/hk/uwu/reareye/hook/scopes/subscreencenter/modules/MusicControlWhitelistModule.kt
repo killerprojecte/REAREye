@@ -32,7 +32,7 @@ class MusicControlWhitelistModule : RoxyHooker() {
             val bridge = runtime.manage(
                 createDexKitCacheBridge(
                     packageName = hookAppInfo.packageName,
-                packageVersionCode = versionCode,
+                    packageVersionCode = versionCode,
                     sourceDir = hookAppInfo.sourceDir,
                     dataDir = hookAppInfo.dataDir,
                 )
@@ -45,21 +45,21 @@ class MusicControlWhitelistModule : RoxyHooker() {
             }.hook {
                 after {
                     if (!hookPrefs.getBoolean(ConfigKeys.HOOK_MUSIC_CONTROLS_WHITELIST, true)) {
-                    return@after
-                }
-                val snapshot = result ?: return@after
-                val rawMap = registry.primaryMap(snapshot)
-                // Before Application is ready the host returns its empty registry sentinel.
-                if (rawMap === java.util.Collections.EMPTY_MAP) return@after
-                val map = unwrapMutableMap(rawMap)
-                runCatching {
-                    hookPrefs.getStringSet(ConfigKeys.MUSIC_CONTROLS_WHITELIST_APPS)
-                        .forEach { app ->
-                        map[app] = "music"
+                        return@after
                     }
-                }.onFailure { YLog.error("[$TAG] Cannot update app registry", it) }
-                    .getOrThrow()
-                YLog.debug("Hooked SubscreenCenter whitelist $map")
+                    val snapshot = result ?: return@after
+                    val rawMap = registry.primaryMap(snapshot)
+                    // Before Application is ready the host returns its empty registry sentinel.
+                    if (rawMap === java.util.Collections.EMPTY_MAP) return@after
+                    val map = unwrapMutableMap(rawMap)
+                    runCatching {
+                        hookPrefs.getStringSet(ConfigKeys.MUSIC_CONTROLS_WHITELIST_APPS)
+                            .forEach { app ->
+                                map[app] = "music"
+                            }
+                    }.onFailure { YLog.error("[$TAG] Cannot update app registry", it) }
+                        .getOrThrow()
+                    YLog.debug("Hooked SubscreenCenter whitelist $map")
                 }
             }
 
@@ -72,23 +72,23 @@ class MusicControlWhitelistModule : RoxyHooker() {
             }.hook {
                 after {
                     if (!hookPrefs.getBoolean(
-                        ConfigKeys.HOOK_MUSIC_CONTROLS_FORCE_UPDATE,
-                        false,
-                    )
-                ) return@after
+                            ConfigKeys.HOOK_MUSIC_CONTROLS_FORCE_UPDATE,
+                            false,
+                        )
+                    ) return@after
                     val i = instance!!.asResolver().firstField {
-                    name = "this$0"
-                }.get() ?: return@after
-                val mRoot = i.asResolver().firstField {
-                    name = "mRoot"
-                    superclass()
-                }.get() ?: return@after
-                mRoot.asResolver().firstMethod {
-                    name = "requestUpdate"
-                }.invoke()
+                        name = "this$0"
+                    }.get() ?: return@after
+                    val mRoot = i.asResolver().firstField {
+                        name = "mRoot"
+                        superclass()
+                    }.get() ?: return@after
+                    mRoot.asResolver().firstMethod {
+                        name = "requestUpdate"
+                    }.invoke()
                     if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
-                    YLog.debug("Request render controller to update metadata")
-                }
+                        YLog.debug("Request render controller to update metadata")
+                    }
                 }
             }
         }

@@ -4,6 +4,7 @@ import com.highcapable.kavaref.KavaRef.Companion.resolve
 import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.reareye.hook.support.hookPrefs
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.HotReloadPolicy
 import hk.uwu.roxyhook.PackageScope
 import hk.uwu.roxyhook.RoxyHooker
 
@@ -19,20 +20,21 @@ class DisableSubScreenDoubleTapWakeHook : RoxyHooker() {
                 parameters(Int::class.java, String::class.java, Int::class.java)
                 returnType = Boolean::class.java
             }.hook {
+                hotReloadPolicy = HotReloadPolicy.KEEP
                 before {
-                val groupId = args(0).int()
-                val details = args(1).string()
-                val packageName = instance.mainDisplayForegroundPackageName()
-                if (groupId == 1 && details == WAKE_REASON_DOUBLE_TAP &&
-                    packageName in hookPrefs.getStringSet(
-                        ConfigKeys.SUBSCREEN_DOUBLE_TAP_WAKE_DISABLED_APPS,
-                    )
-                ) {
-                    result = true
-                    if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
-                        YLog.debug("Skip subscreen double tap wake package=$packageName")
+                    val groupId = args(0).int()
+                    val details = args(1).string()
+                    val packageName = instance.mainDisplayForegroundPackageName()
+                    if (groupId == 1 && details == WAKE_REASON_DOUBLE_TAP &&
+                        packageName in hookPrefs.getStringSet(
+                            ConfigKeys.SUBSCREEN_DOUBLE_TAP_WAKE_DISABLED_APPS,
+                        )
+                    ) {
+                        result = true
+                        if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+                            YLog.debug("Skip subscreen double tap wake package=$packageName")
+                        }
                     }
-                }
                 }
             }
         }

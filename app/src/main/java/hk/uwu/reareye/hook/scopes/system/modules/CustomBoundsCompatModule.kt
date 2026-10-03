@@ -16,6 +16,7 @@ import hk.uwu.reareye.repository.bounds.CustomBoundsCompatConfigCodec
 import hk.uwu.reareye.repository.bounds.CustomBoundsFillMode
 import hk.uwu.reareye.repository.bounds.CustomBoundsMode
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.HotReloadPolicy
 import hk.uwu.roxyhook.PackageScope
 import hk.uwu.roxyhook.RoxyHooker
 import kotlin.math.max
@@ -44,94 +45,95 @@ class CustomBoundsCompatModule : RoxyHooker() {
                 name = "resolveOverrideConfiguration"
                 parameterCount = 2
             }.hook {
+                hotReloadPolicy = HotReloadPolicy.KEEP
                 after {
                     val moreDebug = hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
-                val parentConfig = args(0).cast<Configuration>() ?: return@after
-                val resolvedConfig = args(1).cast<Configuration>() ?: return@after
-                val activityRecord = instance.field<Any>("mAr") ?: run {
-                    if (moreDebug) YLog.debug("[$TAG] skip reason=no_activity_record")
-                    return@after
-                }
-                val packageName = activityRecord.field<String>("packageName") ?: run {
-                    if (moreDebug) YLog.debug("[$TAG] skip reason=no_package")
-                    return@after
-                }
-                val config = CustomBoundsCompatHookConfig.find(
-                    raw = hookPrefs.getString(
-                        ConfigKeys.CUSTOM_BOUNDS_COMPAT_CONFIG_DATA,
-                        CustomBoundsCompatConfigCodec.EMPTY_ARRAY,
-                    ),
-                    packageName = packageName,
-                ) ?: run {
-                    if (moreDebug) YLog.debug("[$TAG] skip package=$packageName reason=no_config")
-                    return@after
-                }
-                if (!config.enabled) {
-                    if (moreDebug) YLog.debug("[$TAG] skip package=$packageName reason=disabled")
-                    return@after
-                }
-
-                val displayId = activityRecord.call<Int>("getDisplayId") ?: -1
-                if (displayId != TARGET_DISPLAY_ID) {
-                    if (moreDebug) YLog.debug("[$TAG] skip package=$packageName reason=display_id displayId=$displayId")
-                    return@after
-                }
-                if (activityRecord.call<Boolean>("inMultiWindowMode") == true) {
-                    if (moreDebug) YLog.debug("[$TAG] skip package=$packageName reason=multi_window")
-                    return@after
-                }
-
-                val parentBounds = getWindowConfigurationBounds(parentConfig)
-                if (parentBounds == null || parentBounds.isEmpty) {
-                    if (moreDebug) YLog.debug("[$TAG] skip package=$packageName reason=empty_parent_bounds bounds=$parentBounds")
-                    return@after
-                }
-
-                val compatBounds = when (config.mode) {
-                    CustomBoundsMode.EXACT_INSETS -> computeInsetsBounds(parentBounds, config)
-                    CustomBoundsMode.CUSTOM_RATIO -> computeCompatBounds(
-                        parentBounds = parentBounds,
-                        aspectRatio = config.aspectRatio,
-                        gravity = config.gravity,
-                        scale = config.scale,
-                    )
-
-                    CustomBoundsMode.AUTO_RATIO -> computeCompatBounds(
-                        parentBounds = parentBounds,
-                        aspectRatio = CustomBoundsCompatConfigCodec.defaultAutoRatio(
-                            parentBounds.width(),
-                            parentBounds.height(),
+                    val parentConfig = args(0).cast<Configuration>() ?: return@after
+                    val resolvedConfig = args(1).cast<Configuration>() ?: return@after
+                    val activityRecord = instance.field<Any>("mAr") ?: run {
+                        if (moreDebug) YLog.debug("[$TAG] skip reason=no_activity_record")
+                        return@after
+                    }
+                    val packageName = activityRecord.field<String>("packageName") ?: run {
+                        if (moreDebug) YLog.debug("[$TAG] skip reason=no_package")
+                        return@after
+                    }
+                    val config = CustomBoundsCompatHookConfig.find(
+                        raw = hookPrefs.getString(
+                            ConfigKeys.CUSTOM_BOUNDS_COMPAT_CONFIG_DATA,
+                            CustomBoundsCompatConfigCodec.EMPTY_ARRAY,
                         ),
-                        gravity = config.gravity,
-                        scale = config.scale,
+                        packageName = packageName,
+                    ) ?: run {
+                        if (moreDebug) YLog.debug("[$TAG] skip package=$packageName reason=no_config")
+                        return@after
+                    }
+                    if (!config.enabled) {
+                        if (moreDebug) YLog.debug("[$TAG] skip package=$packageName reason=disabled")
+                        return@after
+                    }
+
+                    val displayId = activityRecord.call<Int>("getDisplayId") ?: -1
+                    if (displayId != TARGET_DISPLAY_ID) {
+                        if (moreDebug) YLog.debug("[$TAG] skip package=$packageName reason=display_id displayId=$displayId")
+                        return@after
+                    }
+                    if (activityRecord.call<Boolean>("inMultiWindowMode") == true) {
+                        if (moreDebug) YLog.debug("[$TAG] skip package=$packageName reason=multi_window")
+                        return@after
+                    }
+
+                    val parentBounds = getWindowConfigurationBounds(parentConfig)
+                    if (parentBounds == null || parentBounds.isEmpty) {
+                        if (moreDebug) YLog.debug("[$TAG] skip package=$packageName reason=empty_parent_bounds bounds=$parentBounds")
+                        return@after
+                    }
+
+                    val compatBounds = when (config.mode) {
+                        CustomBoundsMode.EXACT_INSETS -> computeInsetsBounds(parentBounds, config)
+                        CustomBoundsMode.CUSTOM_RATIO -> computeCompatBounds(
+                            parentBounds = parentBounds,
+                            aspectRatio = config.aspectRatio,
+                            gravity = config.gravity,
+                            scale = config.scale,
+                        )
+
+                        CustomBoundsMode.AUTO_RATIO -> computeCompatBounds(
+                            parentBounds = parentBounds,
+                            aspectRatio = CustomBoundsCompatConfigCodec.defaultAutoRatio(
+                                parentBounds.width(),
+                                parentBounds.height(),
+                            ),
+                            gravity = config.gravity,
+                            scale = config.scale,
+                        )
+                    }
+                    applyResolvedConfiguration(
+                        config = resolvedConfig,
+                        bounds = compatBounds,
+                        densityDpi = config.densityDpi.takeIf { it > 0 } ?: parentConfig.densityDpi,
+                        rotation = config.rotationDegrees,
                     )
-                }
-                applyResolvedConfiguration(
-                    config = resolvedConfig,
-                    bounds = compatBounds,
-                    densityDpi = config.densityDpi.takeIf { it > 0 } ?: parentConfig.densityDpi,
-                    rotation = config.rotationDegrees,
-                )
-                @Suppress("SimplifyBooleanWithConstants", "KotlinConstantConditions")
-                prepareFlipSplashColor(
-                    activityRecordImpl = instance,
-                    activityRecord = activityRecord,
-                    bounds = compatBounds,
-                    moreDebug = moreDebug,
-                    collectDetails = moreDebug && SHOULD_LOG_DETAILS,
-                    themeColorUtilsClass = themeColorUtilsClass
-                )
-                applyTaskFillColor(
-                    activityRecordImpl = instance,
-                    activityRecord = activityRecord,
-                    config = config,
-                    moreDebug = moreDebug,
-                )
-                if (moreDebug) {
-                    YLog.debug(
-                        "[$TAG] apply package=$packageName displayId=$displayId parent=$parentBounds bounds=$compatBounds mode=${config.mode} ratio=${config.aspectRatio} insets=${config.insetLeft},${config.insetTop},${config.insetRight},${config.insetBottom} gravity=${config.gravity} scale=${config.scale} dpi=${config.densityDpi} rotation=${config.rotationDegrees} fill=${config.fillEnabled}/${config.fillMode}"
+                    @Suppress("SimplifyBooleanWithConstants", "KotlinConstantConditions")
+                    prepareFlipSplashColor(
+                        activityRecordImpl = instance,
+                        activityRecord = activityRecord,
+                        bounds = compatBounds,
+                        moreDebug = moreDebug,
+                        collectDetails = moreDebug && SHOULD_LOG_DETAILS,
+                        themeColorUtilsClass = themeColorUtilsClass
                     )
-                }
+                    applyTaskFillColor(
+                        activityRecordImpl = instance,
+                        activityRecord = activityRecord,
+                        config = config,
+                        moreDebug = moreDebug,
+                    )
+                    if (moreDebug) {
+                        YLog.debug(
+                            "[$TAG] apply package=$packageName displayId=$displayId parent=$parentBounds bounds=$compatBounds mode=${config.mode} ratio=${config.aspectRatio} insets=${config.insetLeft},${config.insetTop},${config.insetRight},${config.insetBottom} gravity=${config.gravity} scale=${config.scale} dpi=${config.densityDpi} rotation=${config.rotationDegrees} fill=${config.fillEnabled}/${config.fillMode}"
+                        )
+                    }
                 }
             }
         }
@@ -227,9 +229,9 @@ class CustomBoundsCompatModule : RoxyHooker() {
 
     private fun PackageScope.resolveBySystemFlipLogic(activityRecordImpl: Any?): Int? =
         runCatching {
-        activityRecordImpl ?: return@runCatching null
+            activityRecordImpl ?: return@runCatching null
             activityRecordImpl.field<Int>("mSplashBgColor")?.takeIf({ isUsableFillColor(it) })
-    }.getOrNull()
+        }.getOrNull()
 
     private fun PackageScope.computeSplashColorDirect(
         activityRecordImpl: Any?,
@@ -534,11 +536,11 @@ class CustomBoundsCompatModule : RoxyHooker() {
 
     private fun PackageScope.getWindowConfigurationBounds(config: Configuration): Rect? =
         runCatching {
-        config.asResolver()
-            .firstField { name = "windowConfiguration" }
-            .get<Any>()
-            ?.call<Rect>("getBounds")
-    }.getOrNull()
+            config.asResolver()
+                .firstField { name = "windowConfiguration" }
+                .get<Any>()
+                ?.call<Rect>("getBounds")
+        }.getOrNull()
 
     private fun Int.toSurfaceRotation(): Int = when (this) {
         90 -> 1

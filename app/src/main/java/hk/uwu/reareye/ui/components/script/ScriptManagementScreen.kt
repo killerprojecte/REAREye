@@ -499,9 +499,11 @@ private fun ScriptEditor(
                 )
         ) {
             Column(Modifier.fillMaxSize()) {
-                LuaCodeEditor(source, editor, Modifier
-                    .fillMaxWidth()
-                    .weight(1f))
+                LuaCodeEditor(
+                    source, editor, Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                )
             }
             if (showFiles && project.kind != ScriptProjectKind.STANDALONE) {
                 Row(Modifier.fillMaxSize()) {

@@ -30,7 +30,7 @@ class UnmuteVideoWallpaperHook : RoxyHooker() {
             val bridge = runtime.manage(
                 createDexKitCacheBridge(
                     packageName = hookAppInfo.packageName,
-                packageVersionCode = versionCode,
+                    packageVersionCode = versionCode,
                     sourceDir = hookAppInfo.sourceDir,
                     dataDir = hookAppInfo.dataDir,
                 )
@@ -44,19 +44,19 @@ class UnmuteVideoWallpaperHook : RoxyHooker() {
                 parameters(File::class.java, File::class.java, File::class.java)
             }.hook {
                 replaceAny {
-                val input = args(0).cast<File>()!!
-                val output = args(1).cast<File>()!!
-                YLog.debug("Input path: ${input.absolutePath} length: ${input.length() / 1024.0}")
-                YLog.debug("Output path: $output")
-                if (input.absolutePath.contains("rear")) {
-                    YLog.debug("Patch rear screen video wallpaper")
-                    Files.copy(
-                        input.toPath(),
-                        output.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING,
-                    )
-                    return@replaceAny Pair(output, null)
-                }
+                    val input = args(0).cast<File>()!!
+                    val output = args(1).cast<File>()!!
+                    YLog.debug("Input path: ${input.absolutePath} length: ${input.length() / 1024.0}")
+                    YLog.debug("Output path: $output")
+                    if (input.absolutePath.contains("rear")) {
+                        YLog.debug("Patch rear screen video wallpaper")
+                        Files.copy(
+                            input.toPath(),
+                            output.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING,
+                        )
+                        return@replaceAny Pair(output, null)
+                    }
                     return@replaceAny callOriginal(*args)
                 }
             }

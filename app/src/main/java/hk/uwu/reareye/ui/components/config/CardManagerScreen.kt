@@ -660,253 +660,273 @@ fun CardManagerScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             overscrollEffect = null,
                         ) {
-                if (!embedded) item {
-                    Card(
-                        modifier = Modifier
-                            .padding(bottom = 12.dp)
-                            .fillMaxWidth()
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            SuperCard(
-                                title = stringResource(R.string.rear_widget_card_dialog_hint_title),
-                                summary = stringResource(R.string.rear_widget_card_dialog_hint),
-                                onClick = {},
-                                bottomAction = {
+                            if (!embedded) item {
+                                Card(
+                                    modifier = Modifier
+                                        .padding(bottom = 12.dp)
+                                        .fillMaxWidth()
+                                ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        Text(
-                                            text = stringResource(R.string.rear_widget_card_reorder_hint),
-                                            fontSize = 12.sp,
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        SuperCard(
+                                            title = stringResource(R.string.rear_widget_card_dialog_hint_title),
+                                            summary = stringResource(R.string.rear_widget_card_dialog_hint),
+                                            onClick = {},
+                                            bottomAction = {
+                                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                    Text(
+                                                        text = stringResource(R.string.rear_widget_card_reorder_hint),
+                                                        fontSize = 12.sp,
+                                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                    )
+                                                    if (cardsLoaded) {
+                                                        RearBadgeGroup(
+                                                            badges = listOf(
+                                                                rearWidgetCardCountBadge(
+                                                                    cards.size
+                                                                )
+                                                            ),
+                                                        )
+                                                    }
+                                                    Button(
+                                                        onClick = {
+                                                            if (cardsLoaded) openCreateDialog(
+                                                                0
+                                                            )
+                                                        },
+                                                        enabled = cardsLoaded,
+                                                        colors = ButtonDefaults.buttonColorsPrimary(),
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Add,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.padding(end = 6.dp),
+                                                        )
+                                                        Text(text = stringResource(R.string.rear_widget_add_card))
+                                                    }
+                                                }
+                                            }
                                         )
-                                        if (cardsLoaded) {
-                                            RearBadgeGroup(
-                                                badges = listOf(rearWidgetCardCountBadge(cards.size)),
-                                            )
-                                        }
-                                        Button(
-                                            onClick = { if (cardsLoaded) openCreateDialog(0) },
-                                            enabled = cardsLoaded,
-                                            colors = ButtonDefaults.buttonColorsPrimary(),
+                                    }
+                                }
+                            }
+
+                            if (!dataCardsVisible) {
+                                item {
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        insideMargin = PaddingValues(vertical = 24.dp),
+                                    ) {
+                                        Box(
                                             modifier = Modifier.fillMaxWidth(),
+                                            contentAlignment = Alignment.Center,
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.Add,
-                                                contentDescription = null,
-                                                modifier = Modifier.padding(end = 6.dp),
-                                            )
-                                            Text(text = stringResource(R.string.rear_widget_add_card))
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                InfiniteProgressIndicator()
+                                                Text(text = stringResource(R.string.rear_widget_loading_data))
+                                            }
                                         }
                                     }
                                 }
-                            )
-                        }
-                    }
-                }
-
-                if (!dataCardsVisible) {
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            insideMargin = PaddingValues(vertical = 24.dp),
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    InfiniteProgressIndicator()
-                                    Text(text = stringResource(R.string.rear_widget_loading_data))
-                                }
                             }
-                        }
-                    }
-                }
 
-                if (dataCardsVisible) {
-                    itemsIndexed(
-                        items = cards,
-                        key = { _, item -> item.id },
-                        contentType = { _, _ -> "card_item" },
-                    ) { _, item ->
-                        val normalizedBusiness = normalizeTemplateBusinessName(item.business)
-                        val matchingBusiness = businesses.firstOrNull { business ->
-                            business.business == item.business ||
-                                    normalizeTemplateBusinessName(business.business) == normalizedBusiness
-                        }
-                        val hasTemplateConfig =
-                            templateAvailability[item.business] == true ||
-                                    templateAvailability[normalizedBusiness] == true ||
-                                    item.oneConfigJson.isNullOrBlank().not()
-                        if (prefsManager.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
-                            debugLog(
-                                "card template action id=${item.id} business=${item.business} normalized=$normalizedBusiness available=$hasTemplateConfig rawAvailable=${templateAvailability[item.business]} normalizedAvailable=${templateAvailability[normalizedBusiness]} hasConfig=${
-                                    item.oneConfigJson.isNullOrBlank().not()
-                                }"
-                            )
-                        }
-                        val isHighlighted = highlightedCardId == item.id
-                        DraggableItem(
-                            key = item.id,
-                            state = draggableState,
-                        ) { isDragging, hoveredItemKey ->
-                        ModuleStyleManagerCard(
-                            modifier = Modifier
-                                .longPressDraggable(draggableState, item.id)
-                                .then(
-                                    if (isDragging) {
-                                        Modifier.shadow(
-                                            elevation = 12.dp,
-                                            shape = RoundedCornerShape(20.dp),
-                                            clip = false,
+                            if (dataCardsVisible) {
+                                itemsIndexed(
+                                    items = cards,
+                                    key = { _, item -> item.id },
+                                    contentType = { _, _ -> "card_item" },
+                                ) { _, item ->
+                                    val normalizedBusiness =
+                                        normalizeTemplateBusinessName(item.business)
+                                    val matchingBusiness = businesses.firstOrNull { business ->
+                                        business.business == item.business ||
+                                                normalizeTemplateBusinessName(business.business) == normalizedBusiness
+                                    }
+                                    val hasTemplateConfig =
+                                        templateAvailability[item.business] == true ||
+                                                templateAvailability[normalizedBusiness] == true ||
+                                                item.oneConfigJson.isNullOrBlank().not()
+                                    if (prefsManager.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+                                        debugLog(
+                                            "card template action id=${item.id} business=${item.business} normalized=$normalizedBusiness available=$hasTemplateConfig rawAvailable=${templateAvailability[item.business]} normalizedAvailable=${templateAvailability[normalizedBusiness]} hasConfig=${
+                                                item.oneConfigJson.isNullOrBlank().not()
+                                            }"
                                         )
-                                    } else Modifier
-                                ),
-                            backgroundColor = if (isHighlighted) {
-                                MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
-                            } else if (hoveredItemKey == item.id) {
-                                MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
-                            } else null,
-                            title = item.title,
-                            badges = buildList {
-                                add(rearWidgetPackageBadge(item.packageName))
-                                add(rearWidgetBusinessBadge(item.business))
-                                add(rearWidgetPriorityBadge(item.priority))
-                                if (item.sticky) {
-                                    add(rearWidgetStickyBadge())
-                                }
-                                if (!item.renameable) {
-                                    add(rearWidgetLockedBadge())
-                                }
-                                add(
-                                    rearWidgetTemplateStatusBadge(
-                                        hasCustomConfig = item.oneConfigJson.isNullOrBlank().not(),
-                                    )
-                                )
-                                addAll(
-                                    rearWidgetSourceBadges(
-                                        downloadedFromStore = item.downloadedFromStore,
-                                        storeWidgetId = item.storeWidgetId,
-                                    )
-                                )
-                            },
-                            summaryLines = emptyList(),
-                            trailing = {
-                                if (item.renameable) {
-                                    Switch(
-                                        modifier = Modifier.featureGuideAnchor("demo_card_toggle"),
-                                        checked = item.enabled,
-                                        onCheckedChange = { checked ->
-                                            val i = cards.indexOfFirst { it.id == item.id }
-                                            if (i >= 0) {
-                                                cards[i] = cards[i].copy(enabled = checked)
-                                                if (demo != null) {
-                                                    demo.state.cards = cards.toList()
-                                                    demo.onAction(FeatureGuideAction.TOGGLE_CARD)
-                                                } else scope.launch(Dispatchers.IO) {
-                                                    RearWidgetManagerRepository.setCardEnabled(
-                                                        context = context,
-                                                        prefsManager = prefsManager,
-                                                        cardId = item.id,
-                                                        enabled = checked,
+                                    }
+                                    val isHighlighted = highlightedCardId == item.id
+                                    DraggableItem(
+                                        key = item.id,
+                                        state = draggableState,
+                                    ) { isDragging, hoveredItemKey ->
+                                        ModuleStyleManagerCard(
+                                            modifier = Modifier
+                                                .longPressDraggable(draggableState, item.id)
+                                                .then(
+                                                    if (isDragging) {
+                                                        Modifier.shadow(
+                                                            elevation = 12.dp,
+                                                            shape = RoundedCornerShape(20.dp),
+                                                            clip = false,
+                                                        )
+                                                    } else Modifier
+                                                ),
+                                            backgroundColor = if (isHighlighted) {
+                                                MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+                                            } else if (hoveredItemKey == item.id) {
+                                                MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
+                                            } else null,
+                                            title = item.title,
+                                            badges = buildList {
+                                                add(rearWidgetPackageBadge(item.packageName))
+                                                add(rearWidgetBusinessBadge(item.business))
+                                                add(rearWidgetPriorityBadge(item.priority))
+                                                if (item.sticky) {
+                                                    add(rearWidgetStickyBadge())
+                                                }
+                                                if (!item.renameable) {
+                                                    add(rearWidgetLockedBadge())
+                                                }
+                                                add(
+                                                    rearWidgetTemplateStatusBadge(
+                                                        hasCustomConfig = item.oneConfigJson.isNullOrBlank()
+                                                            .not(),
+                                                    )
+                                                )
+                                                addAll(
+                                                    rearWidgetSourceBadges(
+                                                        downloadedFromStore = item.downloadedFromStore,
+                                                        storeWidgetId = item.storeWidgetId,
+                                                    )
+                                                )
+                                            },
+                                            summaryLines = emptyList(),
+                                            trailing = {
+                                                if (item.renameable) {
+                                                    Switch(
+                                                        modifier = Modifier.featureGuideAnchor("demo_card_toggle"),
+                                                        checked = item.enabled,
+                                                        onCheckedChange = { checked ->
+                                                            val i =
+                                                                cards.indexOfFirst { it.id == item.id }
+                                                            if (i >= 0) {
+                                                                cards[i] =
+                                                                    cards[i].copy(enabled = checked)
+                                                                if (demo != null) {
+                                                                    demo.state.cards =
+                                                                        cards.toList()
+                                                                    demo.onAction(FeatureGuideAction.TOGGLE_CARD)
+                                                                } else scope.launch(Dispatchers.IO) {
+                                                                    RearWidgetManagerRepository.setCardEnabled(
+                                                                        context = context,
+                                                                        prefsManager = prefsManager,
+                                                                        cardId = item.id,
+                                                                        enabled = checked,
+                                                                    )
+                                                                }
+                                                            }
+                                                        },
+                                                    )
+                                                } else {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.Lock,
+                                                        contentDescription = null,
+                                                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                                     )
                                                 }
-                                            }
-                                        },
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Lock,
-                                        contentDescription = null,
-                                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    )
+                                            },
+                                            onCardClick = { openEditDialog(item) },
+                                            leftAction = {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                ) {
+                                                    ModuleStyleIconAction(
+                                                        modifier = Modifier.featureGuideAnchor("demo_card"),
+                                                        icon = Icons.Rounded.EditNote,
+                                                        onClick = { openEditDialog(item) },
+                                                    )
+                                                    item.storeWidgetId
+                                                        ?.trim()
+                                                        ?.takeIf { it.isNotEmpty() }
+                                                        ?.let { storeWidgetId ->
+                                                            ModuleStyleIconAction(
+                                                                icon = MaterialSymbols.Rounded.Storefront,
+                                                                contentDescription = stringResource(
+                                                                    R.string.rear_store_open_detail
+                                                                ),
+                                                                onClick = {
+                                                                    onOpenStoreDetail(
+                                                                        storeWidgetId
+                                                                    )
+                                                                },
+                                                            )
+                                                        }
+                                                    matchingBusiness?.let { business ->
+                                                        ModuleStyleIconAction(
+                                                            icon = MaterialSymbols.Rounded.Deployed_code,
+                                                            contentDescription = stringResource(R.string.rear_widget_action_open_component),
+                                                            onClick = { onOpenComponent(business.business) },
+                                                        )
+                                                    }
+                                                    if (hasTemplateConfig) {
+                                                        ModuleStyleDeleteAction(
+                                                            icon = Icons.Filled.Tune,
+                                                            text = stringResource(R.string.rear_widget_action_config),
+                                                            onClick = { openTemplateConfig(item) },
+                                                        )
+                                                    }
+                                                }
+                                            },
+                                            rightAction = {
+                                                if (item.renameable) {
+                                                    ModuleStyleDeleteAction(
+                                                        icon = MiuixIcons.Delete,
+                                                        text = stringResource(R.string.rear_widget_action_delete),
+                                                        onClick = {
+                                                            if (demo != null || !item.renameable) return@ModuleStyleDeleteAction
+                                                            cards.remove(item)
+                                                            val nextSettings =
+                                                                cardOrderSettings.toMutableMap()
+                                                                    .apply {
+                                                                        remove(item.id)
+                                                                    }
+                                                            cardOrderSettings.clear()
+                                                            cardOrderSettings.putAll(nextSettings)
+                                                            scope.launch(Dispatchers.IO) {
+                                                                RearWidgetManagerRepository.saveCardOrderSettings(
+                                                                    prefsManager,
+                                                                    nextSettings
+                                                                )
+                                                                RearWidgetManagerRepository.saveCards(
+                                                                    context,
+                                                                    prefsManager,
+                                                                    cards.toList()
+                                                                )
+                                                            }
+                                                        },
+                                                    )
+                                                }
+                                            },
+                                        )
+                                    }
                                 }
-                            },
-                            onCardClick = { openEditDialog(item) },
-                            leftAction = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    ModuleStyleIconAction(
-                                        modifier = Modifier.featureGuideAnchor("demo_card"),
-                                        icon = Icons.Rounded.EditNote,
-                                        onClick = { openEditDialog(item) },
-                                    )
-                                    item.storeWidgetId
-                                        ?.trim()
-                                        ?.takeIf { it.isNotEmpty() }
-                                        ?.let { storeWidgetId ->
-                                            ModuleStyleIconAction(
-                                                icon = MaterialSymbols.Rounded.Storefront,
-                                                contentDescription = stringResource(R.string.rear_store_open_detail),
-                                                onClick = { onOpenStoreDetail(storeWidgetId) },
+                            }
+
+                            item {
+                                if (dataCardsVisible && cards.isEmpty()) {
+                                    ArtRevealItem(visible = true, delayMillis = 40) {
+                                        Card(modifier = Modifier.fillMaxWidth()) {
+                                            Text(
+                                                text = stringResource(R.string.rear_widget_empty_card),
+                                                modifier = Modifier.padding(16.dp),
                                             )
                                         }
-                                    matchingBusiness?.let { business ->
-                                        ModuleStyleIconAction(
-                                            icon = MaterialSymbols.Rounded.Deployed_code,
-                                            contentDescription = stringResource(R.string.rear_widget_action_open_component),
-                                            onClick = { onOpenComponent(business.business) },
-                                        )
-                                    }
-                                    if (hasTemplateConfig) {
-                                        ModuleStyleDeleteAction(
-                                            icon = Icons.Filled.Tune,
-                                            text = stringResource(R.string.rear_widget_action_config),
-                                            onClick = { openTemplateConfig(item) },
-                                        )
                                     }
                                 }
-                            },
-                            rightAction = {
-                                if (item.renameable) {
-                                    ModuleStyleDeleteAction(
-                                        icon = MiuixIcons.Delete,
-                                        text = stringResource(R.string.rear_widget_action_delete),
-                                        onClick = {
-                                            if (demo != null || !item.renameable) return@ModuleStyleDeleteAction
-                                            cards.remove(item)
-                                            val nextSettings =
-                                                cardOrderSettings.toMutableMap().apply {
-                                                    remove(item.id)
-                                                }
-                                            cardOrderSettings.clear()
-                                            cardOrderSettings.putAll(nextSettings)
-                                            scope.launch(Dispatchers.IO) {
-                                                RearWidgetManagerRepository.saveCardOrderSettings(
-                                                    prefsManager,
-                                                    nextSettings
-                                                )
-                                                RearWidgetManagerRepository.saveCards(
-                                                    context,
-                                                    prefsManager,
-                                                    cards.toList()
-                                                )
-                                            }
-                                        },
-                                    )
-                                }
-                            },
-                        )
-                        }
-                    }
-                }
-
-                item {
-                    if (dataCardsVisible && cards.isEmpty()) {
-                        ArtRevealItem(visible = true, delayMillis = 40) {
-                            Card(modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    text = stringResource(R.string.rear_widget_empty_card),
-                                    modifier = Modifier.padding(16.dp),
-                                )
                             }
-                        }
-                    }
-                }
                         }
                     } else {
                         RearAppCardManagementContent(

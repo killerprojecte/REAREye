@@ -33,7 +33,7 @@ class VideoLoopModule : RoxyHooker() {
             val bridge = runtime.manage(
                 createDexKitCacheBridge(
                     packageName = hookAppInfo.packageName,
-                packageVersionCode = versionCode,
+                    packageVersionCode = versionCode,
                     sourceDir = hookAppInfo.sourceDir,
                     dataDir = hookAppInfo.dataDir,
                 )
@@ -45,8 +45,8 @@ class VideoLoopModule : RoxyHooker() {
             }.hook {
                 replaceAny {
                     if (hookPrefs.getBoolean(ConfigKeys.HOOK_VIDEO_LOOPING, false)) {
-                    return@replaceAny true
-                }
+                        return@replaceAny true
+                    }
                     return@replaceAny callOriginal()
                 }
             }

@@ -6,6 +6,7 @@ import com.highcapable.kavaref.KavaRef.Companion.resolve
 import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.reareye.hook.support.hookPrefs
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.HotReloadPolicy
 import hk.uwu.roxyhook.PackageScope
 import hk.uwu.roxyhook.RoxyHooker
 
@@ -20,13 +21,13 @@ class BackgroundWhitelistModule : RoxyHooker() {
             }.hook {
                 after {
                     if (hookPrefs.getBoolean(ConfigKeys.HOOK_BACKGROUND_WHITELIST, true)) {
-                    val r = result<HashMap<String, Boolean>>() ?: return@after
+                        val r = result<HashMap<String, Boolean>>()
                         hookPrefs.getStringSet(ConfigKeys.BACKGROUND_WHITELIST_APPS).forEach {
-                        r[it] = true
+                            r[it] = true
+                        }
+                        result = r
+                        YLog.debug("Injected apps into dynamic whitelist")
                     }
-                    result = r
-                    YLog.debug("Injected apps into dynamic whitelist")
-                }
                 }
             }
 
@@ -35,18 +36,19 @@ class BackgroundWhitelistModule : RoxyHooker() {
                 returnType = Void.TYPE
                 parameters(Context::class.java)
             }.hook {
+                hotReloadPolicy = HotReloadPolicy.KEEP
                 after {
                     if (hookPrefs.getBoolean(ConfigKeys.HOOK_BACKGROUND_WHITELIST, true)) {
                         val method = instance!!.asResolver().firstMethod {
-                        name = "updateApplicationLockedState"
-                        returnType = Void.TYPE
-                        parameters(String::class.java, Int::class.java, Boolean::class.java)
-                    }
+                            name = "updateApplicationLockedState"
+                            returnType = Void.TYPE
+                            parameters(String::class.java, Int::class.java, Boolean::class.java)
+                        }
                         hookPrefs.getStringSet(ConfigKeys.BACKGROUND_LOCK_APPS).forEach {
-                        method.invoke(it, -100, true)
+                            method.invoke(it, -100, true)
+                        }
+                        YLog.debug("Injected apps into application locked state")
                     }
-                    YLog.debug("Injected apps into application locked state")
-                }
                 }
             }
         }

@@ -30,7 +30,7 @@ class UnlockTemplateMaximumLimitHook : RoxyHooker() {
             val bridge = runtime.manage(
                 createDexKitCacheBridge(
                     packageName = hookAppInfo.packageName,
-                packageVersionCode = versionCode,
+                    packageVersionCode = versionCode,
                     sourceDir = hookAppInfo.sourceDir,
                     dataDir = hookAppInfo.dataDir,
                 )
@@ -39,12 +39,12 @@ class UnlockTemplateMaximumLimitHook : RoxyHooker() {
             rsDetailClz.firstConstructor().hook {
                 after {
                     val ref = instance!!.asResolver()
-                ref.field {
-                    type = Int::class.java
-                    modifiers(Modifiers.PRIVATE, Modifiers.FINAL)
-                }.forEach {
-                    it.set(Int.MAX_VALUE)
-                }
+                    ref.field {
+                        type = Int::class.java
+                        modifiers(Modifiers.PRIVATE, Modifiers.FINAL)
+                    }.forEach {
+                        it.set(Int.MAX_VALUE)
+                    }
                 }
             }
         }

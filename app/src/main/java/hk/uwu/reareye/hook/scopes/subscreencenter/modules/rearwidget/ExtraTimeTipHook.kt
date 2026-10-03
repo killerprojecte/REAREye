@@ -33,7 +33,7 @@ class ExtraTimeTipHook : RoxyHooker() {
             val bridge = runtime.manage(
                 createDexKitCacheBridge(
                     packageName = hookAppInfo.packageName,
-                packageVersionCode = versionCode,
+                    packageVersionCode = versionCode,
                     sourceDir = hookAppInfo.sourceDir,
                     dataDir = hookAppInfo.dataDir,
                 )
@@ -42,38 +42,38 @@ class ExtraTimeTipHook : RoxyHooker() {
             clz.constructor().build().hook {
                 before {
                     val moreDebug = hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
-                val bundle = args.getOrNull(3) as? Bundle
-                if (bundle == null) {
-                    if (moreDebug) {
-                        YLog.debug("bundle is null ${args.joinToString { it.toString() }}")
+                    val bundle = args.getOrNull(3) as? Bundle
+                    if (bundle == null) {
+                        if (moreDebug) {
+                            YLog.debug("bundle is null ${args.joinToString { it.toString() }}")
+                        }
+                        return@before
                     }
-                    return@before
-                }
 
                     val pm = hookPrefs.getPrefsManager()
-                val business = bundle.getString("business")
-                if (business != null) {
-                    if (moreDebug) {
-                        YLog.debug("time tip process biz: $business")
+                    val business = bundle.getString("business")
+                    if (business != null) {
+                        if (moreDebug) {
+                            YLog.debug("time tip process biz: $business")
+                        }
+                        val showTimeTip = pm.getShowTimeTipForBusiness(business)
+                        if (args.size > 11) {
+                            args[11] = showTimeTip
+                        }
+                        if (moreDebug) {
+                            YLog.debug("time tip state biz=$business showTimeTip=$showTimeTip")
+                        }
+                    } else if (moreDebug) {
+                        YLog.debug(
+                            "business is null ${
+                                bundle.keySet()
+                                    ?.joinToString(separator = "\n") { key ->
+                                        @Suppress("DEPRECATION")
+                                        "$key=${bundle.get(key)}"
+                                    }
+                            }"
+                        )
                     }
-                    val showTimeTip = pm.getShowTimeTipForBusiness(business)
-                    if (args.size > 11) {
-                        args[11] = showTimeTip
-                    }
-                    if (moreDebug) {
-                        YLog.debug("time tip state biz=$business showTimeTip=$showTimeTip")
-                    }
-                } else if (moreDebug) {
-                    YLog.debug(
-                        "business is null ${
-                            bundle.keySet()
-                                ?.joinToString(separator = "\n") { key ->
-                                    @Suppress("DEPRECATION")
-                                    "$key=${bundle.get(key)}"
-                                }
-                        }"
-                    )
-                }
                 }
             }
         }

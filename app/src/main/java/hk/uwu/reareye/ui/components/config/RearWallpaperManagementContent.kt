@@ -627,35 +627,38 @@ private fun RearWallpaperManagementList(
                     key = "rotation-${entry.wallpaperId}",
                     state = draggableState,
                 ) { isDragging, hoveredItemKey ->
-                WallpaperManageCard(
-                    wallpaper = wallpaper,
-                    storeSource = wallpaper?.let { storeWallpaperSources[it.wallpaperId] },
-                    isCurrent = wallpaper?.wallpaperId == currentWallpaperId,
-                    inSchedule = true,
-                    intervalLabel = formatDelay(entry.delayMs, LocalLocale.current.platformLocale),
-                    onToggleSchedule = {
-                        orderedSchedule.removeAll { it.wallpaperId == entry.wallpaperId }
-                        onScheduleChange(orderedSchedule.toList())
-                    },
-                    onSetCurrent = { wallpaper?.let { onSetCurrent(it.wallpaperId) } },
-                    onEditInterval = { onEditInterval(entry) },
-                    onEditMetadata = { wallpaper?.let(onEditMetadata) },
-                    onEditTemplate = { wallpaper?.let(onEditTemplate) },
-                    onGeneratePreview = { wallpaper?.let(onGeneratePreview) },
-                    onOpenStoreDetail = onOpenStoreDetail,
-                    onDelete = { wallpaper?.let(onDelete) },
-                    dragModifier = Modifier
-                        .longPressDraggable(draggableState, "rotation-${entry.wallpaperId}")
-                        .then(
-                            if (isDragging) {
-                                Modifier.shadow(
-                                    elevation = 12.dp,
-                                    shape = RoundedCornerShape(20.dp),
-                                    clip = false,
-                                )
-                            } else Modifier
+                    WallpaperManageCard(
+                        wallpaper = wallpaper,
+                        storeSource = wallpaper?.let { storeWallpaperSources[it.wallpaperId] },
+                        isCurrent = wallpaper?.wallpaperId == currentWallpaperId,
+                        inSchedule = true,
+                        intervalLabel = formatDelay(
+                            entry.delayMs,
+                            LocalLocale.current.platformLocale
                         ),
-                )
+                        onToggleSchedule = {
+                            orderedSchedule.removeAll { it.wallpaperId == entry.wallpaperId }
+                            onScheduleChange(orderedSchedule.toList())
+                        },
+                        onSetCurrent = { wallpaper?.let { onSetCurrent(it.wallpaperId) } },
+                        onEditInterval = { onEditInterval(entry) },
+                        onEditMetadata = { wallpaper?.let(onEditMetadata) },
+                        onEditTemplate = { wallpaper?.let(onEditTemplate) },
+                        onGeneratePreview = { wallpaper?.let(onGeneratePreview) },
+                        onOpenStoreDetail = onOpenStoreDetail,
+                        onDelete = { wallpaper?.let(onDelete) },
+                        dragModifier = Modifier
+                            .longPressDraggable(draggableState, "rotation-${entry.wallpaperId}")
+                            .then(
+                                if (isDragging) {
+                                    Modifier.shadow(
+                                        elevation = 12.dp,
+                                        shape = RoundedCornerShape(20.dp),
+                                        clip = false,
+                                    )
+                                } else Modifier
+                            ),
+                    )
                 }
             }
         }

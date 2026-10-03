@@ -1064,6 +1064,7 @@ private fun ModuleInfoCard(
 
                 activationState == ModuleActivationState.NO_RUNNING_TARGET ->
                     androidx.compose.ui.res.stringResource(R.string.home_status_no_running_target)
+
                 easterEggType == EasterEggType.APRIL_FOOLS -> androidx.compose.ui.res.stringResource(
                     R.string.home_easter_egg_april_fools_activated
                 )

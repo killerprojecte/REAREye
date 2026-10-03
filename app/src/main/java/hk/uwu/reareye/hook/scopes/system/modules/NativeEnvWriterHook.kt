@@ -6,6 +6,7 @@ import hk.uwu.reareye.hook.support.HookPrefs
 import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.reareye.hook.support.hookPrefs
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.HotReloadPolicy
 import hk.uwu.roxyhook.PackageScope
 import hk.uwu.roxyhook.RoxyHooker
 import java.io.File
@@ -57,44 +58,45 @@ class NativeEnvWriterHook : RoxyHooker() {
                         Long::class.javaPrimitiveType!! // seq
                     )
                 }.hook {
+                    hotReloadPolicy = HotReloadPolicy.KEEP
                     before {
-                    YLog.debug("Native env writer startRustProcess called args=${args.size}")
-                    if (args.size <= BINARY_INDEX) {
-                        YLog.debug("Native env writer skip reason=args_size size=${args.size}")
-                        return@before
-                    }
-                    val packageName = args[PACKAGE_INDEX] as? String ?: run {
-                        YLog.debug("Native env writer skip reason=package_null")
-                        return@before
-                    }
-                    val originalBinary = args[BINARY_INDEX] as? String ?: run {
-                        YLog.debug("Native env writer skip package=$packageName reason=binary_null")
-                        return@before
-                    }
-                    val abi = args[ABI_INDEX] as? String ?: ABI_ARM64
-                    val originalEnv = args[ENVS_INDEX] as? String
-                    YLog.debug(
-                        "Native env writer candidate package=$packageName abi=$abi binary=$originalBinary " +
-                                "env=${originalEnv.orEmpty()}"
-                    )
-                    val spec = WrapperRegistry.find(packageName, originalBinary) ?: run {
-                        YLog.debug("Native env writer skip package=$packageName reason=no_spec")
-                        return@before
-                    }
-                    val envDir = resolveEnvTargetDir(originalBinary, abi, spec) ?: run {
+                        YLog.debug("Native env writer startRustProcess called args=${args.size}")
+                        if (args.size <= BINARY_INDEX) {
+                            YLog.debug("Native env writer skip reason=args_size size=${args.size}")
+                            return@before
+                        }
+                        val packageName = args[PACKAGE_INDEX] as? String ?: run {
+                            YLog.debug("Native env writer skip reason=package_null")
+                            return@before
+                        }
+                        val originalBinary = args[BINARY_INDEX] as? String ?: run {
+                            YLog.debug("Native env writer skip package=$packageName reason=binary_null")
+                            return@before
+                        }
+                        val abi = args[ABI_INDEX] as? String ?: ABI_ARM64
+                        val originalEnv = args[ENVS_INDEX] as? String
                         YLog.debug(
-                            "Native env writer skip package=$packageName reason=env_dir_unresolved"
+                            "Native env writer candidate package=$packageName abi=$abi binary=$originalBinary " +
+                                    "env=${originalEnv.orEmpty()}"
                         )
-                        return@before
-                    }
-                    val envValues =
-                        spec.envProvider(hookPrefs, originalBinary, originalBinary)
-                    writeModuleEnv(envDir, spec.moduleId, envValues)
+                        val spec = WrapperRegistry.find(packageName, originalBinary) ?: run {
+                            YLog.debug("Native env writer skip package=$packageName reason=no_spec")
+                            return@before
+                        }
+                        val envDir = resolveEnvTargetDir(originalBinary, abi, spec) ?: run {
+                            YLog.debug(
+                                "Native env writer skip package=$packageName reason=env_dir_unresolved"
+                            )
+                            return@before
+                        }
+                        val envValues =
+                            spec.envProvider(hookPrefs, originalBinary, originalBinary)
+                        writeModuleEnv(envDir, spec.moduleId, envValues)
 
-                    YLog.debug(
-                        "Native env writer wrote package=$packageName dir=${envDir.absolutePath} " +
-                                "moduleEnv=true envUnchanged=${originalEnv.orEmpty()}"
-                    )
+                        YLog.debug(
+                            "Native env writer wrote package=$packageName dir=${envDir.absolutePath} " +
+                                    "moduleEnv=true envUnchanged=${originalEnv.orEmpty()}"
+                        )
                     }
                 }
                 YLog.debug("Native env writer hook installed")

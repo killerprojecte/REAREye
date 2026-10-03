@@ -42,7 +42,7 @@ class GMSUnlockModule : RoxyHooker() {
                 parameterCount = 0
             }.hook {
                 after {
-                YLog.debug("Hooking SystemConfig constructor")
+                    YLog.debug("Hooking SystemConfig constructor")
                     if (hookPrefs.getBoolean(ConfigKeys.MISC_HOOK_GMS_UNLOCK, false)) {
                         remove(instance!!, true)
                     }

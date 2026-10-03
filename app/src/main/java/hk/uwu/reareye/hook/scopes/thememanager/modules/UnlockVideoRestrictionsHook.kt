@@ -92,7 +92,7 @@ class UnlockVideoRestrictionsHook : RoxyHooker() {
             val bridge = runtime.manage(
                 createDexKitCacheBridge(
                     packageName = hookAppInfo.packageName,
-                packageVersionCode = versionCode,
+                    packageVersionCode = versionCode,
                     sourceDir = hookAppInfo.sourceDir,
                     dataDir = hookAppInfo.dataDir,
                 )
@@ -403,23 +403,23 @@ class UnlockVideoRestrictionsHook : RoxyHooker() {
             }.hook {
                 after {
                     if (!hookPrefs.getBoolean(
-                        ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS,
-                        true
-                    )
-                ) return@after
+                            ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS,
+                            true
+                        )
+                    ) return@after
                     val ref = instance!!.asResolver()
-                val videoCfg = ref.firstField {
-                    name = $$"$videoConfig"
-                }.get() ?: return@after
-                if (videoCfg.asResolver().field {
-                        type = Boolean::class.java
-                    }.all { it.get() == true } && !state.load()) {
-                    result = durationCropClz.resolve().firstField {
-                        type = durationCropClz
-                    }.get()
-                } else {
-                    state.store(false)
-                }
+                    val videoCfg = ref.firstField {
+                        name = $$"$videoConfig"
+                    }.get() ?: return@after
+                    if (videoCfg.asResolver().field {
+                            type = Boolean::class.java
+                        }.all { it.get() == true } && !state.load()) {
+                        result = durationCropClz.resolve().firstField {
+                            type = durationCropClz
+                        }.get()
+                    } else {
+                        state.store(false)
+                    }
                 }
             }
 
@@ -431,70 +431,70 @@ class UnlockVideoRestrictionsHook : RoxyHooker() {
                 replaceUnit {
                     if (!hookPrefs.getBoolean(ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS, true)) {
                         callOriginal()
-                    return@replaceUnit
-                }
+                        return@replaceUnit
+                    }
                     val iRef = instance!!.asResolver()
-                val playViewRef = iRef.firstField {
-                    name = playViewFieldName
-                }.get()!!.asResolver()
-                val videoConfig = iRef.firstField {
-                    name = configFieldName
-                }.get()
-                val currentTrimIn = iRef.firstField {
-                    name = trimInFieldName
-                }.get() as? Long ?: 0L
-                val operationViewRef = iRef.firstField {
-                    name = operationViewFieldName
-                }.get()!!.asResolver()
-                val clipFrameRef = iRef.firstField {
-                    name = clipFrameFieldName
-                }.get()!!.asResolver()
-                val videoUri = iRef.firstField {
-                    name = videoUriFieldName
-                }.get()
-                val sInstance = timelineRef.firstMethod {
-                    name = timelineGetInstancePoint.methodName
-                    returnType = timelineClz
-                }.invoke()!!
+                    val playViewRef = iRef.firstField {
+                        name = playViewFieldName
+                    }.get()!!.asResolver()
+                    val videoConfig = iRef.firstField {
+                        name = configFieldName
+                    }.get()
+                    val currentTrimIn = iRef.firstField {
+                        name = trimInFieldName
+                    }.get() as? Long ?: 0L
+                    val operationViewRef = iRef.firstField {
+                        name = operationViewFieldName
+                    }.get()!!.asResolver()
+                    val clipFrameRef = iRef.firstField {
+                        name = clipFrameFieldName
+                    }.get()!!.asResolver()
+                    val videoUri = iRef.firstField {
+                        name = videoUriFieldName
+                    }.get()
+                    val sInstance = timelineRef.firstMethod {
+                        name = timelineGetInstancePoint.methodName
+                        returnType = timelineClz
+                    }.invoke()!!
                     sInstance!!.asResolver().firstMethod {
-                    name = timelineAttachTexturePoint.methodName
-                    returnType = Void.TYPE
-                }.invoke(playViewRef.firstMethod {
-                    name = "getTextureView"
-                }.invoke(), videoConfig)
-                val duration: Long =
+                        name = timelineAttachTexturePoint.methodName
+                        returnType = Void.TYPE
+                    }.invoke(playViewRef.firstMethod {
+                        name = "getTextureView"
+                    }.invoke(), videoConfig)
+                    val duration: Long =
+                        sInstance!!.asResolver().firstMethod {
+                            name = timelineGetDurationPoint.methodName
+                        }.invoke() as Long
+                    val activity = instance<Activity>()
+                    if (duration <= 0) {
+                        toastUtilsRef.firstMethod { name = toastTextPoint.methodName }
+                            .invoke(activity.resources.getString(2131888794))
+                        Log.e("VideoEditActivity", "onPlayViewCreated: originDuration = 0")
+                        activity.finish()
+                        return@replaceUnit
+                    }
+                    iRef.firstField { name = trimOutFieldName }.set(duration)
+                    operationViewRef.firstMethod { name = operationCurrentTimePoint.methodName }
+                        .invoke(currentTrimIn)
+                    operationViewRef.firstMethod { name = "setTotalTime" }.invoke(duration)
+                    val yVar = frameLoaderClz.firstConstructor {
+                        parameterCount = 0
+                    }.create()
+                    iRef.firstField { name = frameLoaderFieldName }.set(yVar)
+                    clipFrameRef.firstMethod { name = "setVideoFrameLoader" }.invoke(yVar)
+                    clipFrameRef.firstMethod { name = "setClipFrameListener" }
+                        .invoke(iRef.firstField { name = clipListenerFieldName }.get())
+                    clipFrameRef.firstMethod { name = clipFrameLoadPoint.methodName }.invoke(
+                        videoUri,
+                        duration,
+                        duration
+                    )
                     sInstance!!.asResolver().firstMethod {
-                        name = timelineGetDurationPoint.methodName
-                    }.invoke() as Long
-                val activity = instance<Activity>()
-                if (duration <= 0) {
-                    toastUtilsRef.firstMethod { name = toastTextPoint.methodName }
-                        .invoke(activity.resources.getString(2131888794))
-                    Log.e("VideoEditActivity", "onPlayViewCreated: originDuration = 0")
-                    activity.finish()
-                    return@replaceUnit
-                }
-                iRef.firstField { name = trimOutFieldName }.set(duration)
-                operationViewRef.firstMethod { name = operationCurrentTimePoint.methodName }
-                    .invoke(currentTrimIn)
-                operationViewRef.firstMethod { name = "setTotalTime" }.invoke(duration)
-                val yVar = frameLoaderClz.firstConstructor {
-                    parameterCount = 0
-                }.create()
-                iRef.firstField { name = frameLoaderFieldName }.set(yVar)
-                clipFrameRef.firstMethod { name = "setVideoFrameLoader" }.invoke(yVar)
-                clipFrameRef.firstMethod { name = "setClipFrameListener" }
-                    .invoke(iRef.firstField { name = clipListenerFieldName }.get())
-                clipFrameRef.firstMethod { name = clipFrameLoadPoint.methodName }.invoke(
-                    videoUri,
-                    duration,
-                    duration
-                )
-                    sInstance!!.asResolver().firstMethod {
-                    name = timelinePreparePoint.methodName
-                    parameters(Int::class.java)
-                }.invoke(currentTrimIn.toInt())
-                state.store(true)
+                        name = timelinePreparePoint.methodName
+                        parameters(Int::class.java)
+                    }.invoke(currentTrimIn.toInt())
+                    state.store(true)
                 }
             }
 
@@ -505,69 +505,69 @@ class UnlockVideoRestrictionsHook : RoxyHooker() {
                 replaceUnit {
                     if (!hookPrefs.getBoolean(ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS, true)) {
                         callOriginal()
-                    return@replaceUnit
-                }
-                val strF7l8 =
-                    historyHelperClz.resolve().firstMethod {
-                        returnType = String::class.java
-                        parameterCount = 0
-                    }.invoke() as String
+                        return@replaceUnit
+                    }
+                    val strF7l8 =
+                        historyHelperClz.resolve().firstMethod {
+                            returnType = String::class.java
+                            parameterCount = 0
+                        }.invoke() as String
                     val iVEA = instance!!.asResolver().firstField { type = videoEditClz }.get()!!
-                val iRef = iVEA.asResolver()
-                val yObj = iRef.firstField { name = videoUriFieldName }.get()
-                val cFieldRef = iRef.firstField { name = exportPathFieldName }
-                cFieldRef.set(
-                    strF7l8 + (coderUtilsRef.firstMethod {
-                        name = coderHashPoint.methodName
-                    }.invoke(yObj) as String) + ".mp4"
-                )
-                val frameRetriever =
-                    "com.xiaomi.milab.videosdk.FrameRetriever".toClass().resolve()
-                        .firstConstructor().create().asResolver()
-                frameRetriever.firstMethod { name = "setDataSource" }.invoke(yObj)
-                val width = frameRetriever.firstMethod { name = "getWidth" }.invoke() as Int
-                val height =
-                    frameRetriever.firstMethod { name = "getHeight" }.invoke() as Int
-                val fps = frameRetriever.firstMethod { name = "getFPS" }.invoke() as Float
-                val bitrate =
-                    frameRetriever.firstMethod { name = "getBitrate" }.invoke() as Long
-                frameRetriever.firstMethod { name = "release" }.invoke()
-                if (width <= 0 || height <= 0) {
-                    iRef.firstMethod { name = "onExportFail" }.invoke()
-                    return@replaceUnit
-                }
-                val (outWidth, outHeight) = computeExportOutputSize(width, height, 1080)
-                val toqVar = exportConfigClz.firstConstructor {
-                    parameterCount = 5
-                }.create(
-                    true,
-                    cFieldRef.get(),
-                    Size(outWidth, outHeight),
-                    (((((bitrate / (width * height)) * outWidth) * outHeight) / fps) * fps).toInt(),
-                    0
-                )
-                toqVar.asResolver().firstMethod {
-                    name = exportConfigSetFpsPoint.methodName
-                }.invoke(fps.toInt())
-                Log.d(
-                    "VideoEditActivity",
-                    String.format(
-                        "ExportConfig %s",
-                        gsonUtilsClz.firstMethod { name = gsonSerializePoint.methodName }
-                            .invoke(toqVar)
+                    val iRef = iVEA.asResolver()
+                    val yObj = iRef.firstField { name = videoUriFieldName }.get()
+                    val cFieldRef = iRef.firstField { name = exportPathFieldName }
+                    cFieldRef.set(
+                        strF7l8 + (coderUtilsRef.firstMethod {
+                            name = coderHashPoint.methodName
+                        }.invoke(yObj) as String) + ".mp4"
                     )
-                )
-                Log.d("lollipop", "export videopath is " + cFieldRef.get())
-                val qRef = timelineRef.firstMethod {
-                    name = timelineGetInstancePoint.methodName
-                }.invoke()!!.asResolver()
-                qRef.firstMethod {
-                    name = timelineExportPoint.methodName
-                }.invoke(
-                    iRef.firstField { name = trimInFieldName }.get(),
-                    iRef.firstField { name = trimOutFieldName }.get(),
-                    toqVar
-                )
+                    val frameRetriever =
+                        "com.xiaomi.milab.videosdk.FrameRetriever".toClass().resolve()
+                            .firstConstructor().create().asResolver()
+                    frameRetriever.firstMethod { name = "setDataSource" }.invoke(yObj)
+                    val width = frameRetriever.firstMethod { name = "getWidth" }.invoke() as Int
+                    val height =
+                        frameRetriever.firstMethod { name = "getHeight" }.invoke() as Int
+                    val fps = frameRetriever.firstMethod { name = "getFPS" }.invoke() as Float
+                    val bitrate =
+                        frameRetriever.firstMethod { name = "getBitrate" }.invoke() as Long
+                    frameRetriever.firstMethod { name = "release" }.invoke()
+                    if (width <= 0 || height <= 0) {
+                        iRef.firstMethod { name = "onExportFail" }.invoke()
+                        return@replaceUnit
+                    }
+                    val (outWidth, outHeight) = computeExportOutputSize(width, height, 1080)
+                    val toqVar = exportConfigClz.firstConstructor {
+                        parameterCount = 5
+                    }.create(
+                        true,
+                        cFieldRef.get(),
+                        Size(outWidth, outHeight),
+                        (((((bitrate / (width * height)) * outWidth) * outHeight) / fps) * fps).toInt(),
+                        0
+                    )
+                    toqVar.asResolver().firstMethod {
+                        name = exportConfigSetFpsPoint.methodName
+                    }.invoke(fps.toInt())
+                    Log.d(
+                        "VideoEditActivity",
+                        String.format(
+                            "ExportConfig %s",
+                            gsonUtilsClz.firstMethod { name = gsonSerializePoint.methodName }
+                                .invoke(toqVar)
+                        )
+                    )
+                    Log.d("lollipop", "export videopath is " + cFieldRef.get())
+                    val qRef = timelineRef.firstMethod {
+                        name = timelineGetInstancePoint.methodName
+                    }.invoke()!!.asResolver()
+                    qRef.firstMethod {
+                        name = timelineExportPoint.methodName
+                    }.invoke(
+                        iRef.firstField { name = trimInFieldName }.get(),
+                        iRef.firstField { name = trimOutFieldName }.get(),
+                        toqVar
+                    )
                 }
             }
 
@@ -576,23 +576,23 @@ class UnlockVideoRestrictionsHook : RoxyHooker() {
             }.hook {
                 before {
                     if (!hookPrefs.getBoolean(
-                        ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS,
-                        true
-                    )
-                ) return@before
+                            ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS,
+                            true
+                        )
+                    ) return@before
                     val ref = instance!!.asResolver()
-                val isCallFromRearScreen = ref.field {
-                    type = Boolean::class.java
-                }.all { it.get() == true }
-                if (isCallFromRearScreen) {
-                    YLog.debug("Overwriting video editor max duration & frame-rate limitations")
-                    ref.firstField {
-                        type = Long::class.java
-                    }.set(Long.MAX_VALUE)
-                    ref.firstField {
-                        type = Int::class.java
-                    }.set(120)
-                }
+                    val isCallFromRearScreen = ref.field {
+                        type = Boolean::class.java
+                    }.all { it.get() == true }
+                    if (isCallFromRearScreen) {
+                        YLog.debug("Overwriting video editor max duration & frame-rate limitations")
+                        ref.firstField {
+                            type = Long::class.java
+                        }.set(Long.MAX_VALUE)
+                        ref.firstField {
+                            type = Int::class.java
+                        }.set(120)
+                    }
                 }
             }
         }

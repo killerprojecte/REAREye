@@ -74,7 +74,7 @@ class UnlimitedSubscreenAppListHook : RoxyHooker() {
             installListSizeProbe(listPoint)
             YLog.info(
                 "[$TAG] installed insert=${insertPoint.className}->${insertPoint.methodName}, " +
-                    "list=${listPoint.className}->${listPoint.methodName}",
+                        "list=${listPoint.className}->${listPoint.methodName}",
             )
         }
     }
@@ -163,11 +163,11 @@ class UnlimitedSubscreenAppListHook : RoxyHooker() {
             returnType = ArrayList::class.java
         }.hook {
             after {
-            if ((insertTransactionDepth.get() ?: 0) <= 0) return@after
+                if ((insertTransactionDepth.get() ?: 0) <= 0) return@after
 
-            @Suppress("UNCHECKED_CAST")
-            val source = result as? ArrayList<Any?> ?: return@after
-            result = UnlimitedSizeProbe(source)
+                @Suppress("UNCHECKED_CAST")
+                val source = result as? ArrayList<Any?> ?: return@after
+                result = UnlimitedSizeProbe(source)
             }
         }
     }

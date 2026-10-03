@@ -59,9 +59,9 @@ class SystemUiNotificationBridgeHook : RoxyHooker() {
                 }.hook {
                     after {
                         val sbn = instance!!.asResolver().firstField {
-                        type(StatusBarNotification::class.java)
-                    }.get<StatusBarNotification>()
-                    handleNotificationPosted(sbn)
+                            type(StatusBarNotification::class.java)
+                        }.get<StatusBarNotification>()
+                        handleNotificationPosted(sbn)
                     }
                 }
             }.onFailure {
@@ -79,14 +79,14 @@ class SystemUiNotificationBridgeHook : RoxyHooker() {
                 }.hook {
                     after {
                         val sbn = instance!!.asResolver().firstField {
-                        type(StatusBarNotification::class.java)
-                    }.get<StatusBarNotification>()
-                    handleNotificationRemoved(
-                        sbn = sbn,
-                        removeReason = instance!!.asResolver().lastField {
-                            type(Int::class.java)
-                        }.get<Int>() ?: 1,
-                    )
+                            type(StatusBarNotification::class.java)
+                        }.get<StatusBarNotification>()
+                        handleNotificationRemoved(
+                            sbn = sbn,
+                            removeReason = instance!!.asResolver().lastField {
+                                type(Int::class.java)
+                            }.get<Int>() ?: 1,
+                        )
                     }
                 }
             }.onFailure {

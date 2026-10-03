@@ -4,6 +4,7 @@ import com.highcapable.kavaref.KavaRef.Companion.resolve
 import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.reareye.hook.support.hookPrefs
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.HotReloadPolicy
 import hk.uwu.roxyhook.PackageScope
 import hk.uwu.roxyhook.RoxyHooker
 
@@ -23,17 +24,18 @@ class ExternalDisplayLaunchUnlockModule : RoxyHooker() {
                     name = "isCallerAllowedToLaunchOnDisplay"
                     returnType = Boolean::class.java
                 }.hook {
+                    hotReloadPolicy = HotReloadPolicy.KEEP
                     after {
                         if (!hookPrefs.getBoolean(
                                 ConfigKeys.ALLOW_EXTERNAL_DISPLAY_LAUNCH,
                                 true
                             )
                         ) return@after
-                    if (result<Boolean>() != false) return@after
+                        if (result<Boolean>() != false) return@after
                         val displayId = args(2).value as? Int ?: return@after
-                    if (displayId <= 0) return@after
+                        if (displayId <= 0) return@after
                         result = true
-                    YLog.debug("Allowed activity launch on external display id=$displayId")
+                        YLog.debug("Allowed activity launch on external display id=$displayId")
                     }
                 }
         }

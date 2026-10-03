@@ -77,7 +77,7 @@ class VideoProgressResumeModule : RoxyHooker() {
             val bridge = runtime.manage(
                 createDexKitCacheBridge(
                     packageName = hookAppInfo.packageName,
-                packageVersionCode = versionCode,
+                    packageVersionCode = versionCode,
                     sourceDir = hookAppInfo.sourceDir,
                     dataDir = hookAppInfo.dataDir,
                 )
@@ -110,20 +110,20 @@ class VideoProgressResumeModule : RoxyHooker() {
                         )
                     ) {
                         callOriginal(*args)
-                    return@replaceUnit
-                }
+                        return@replaceUnit
+                    }
 
-                val position = args(0).int()
-                val holder = VideoProgressStore.readVideoHolder(instance)
-                if (VideoProgressStore.shouldSkipReset(
-                        view = holder,
-                        position = position,
-                        debugEnabled = isMoreDebugEnabled(),
-                        reason = "VideoElement.seekTo",
-                    )
-                ) {
-                    return@replaceUnit
-                }
+                    val position = args(0).int()
+                    val holder = VideoProgressStore.readVideoHolder(instance)
+                    if (VideoProgressStore.shouldSkipReset(
+                            view = holder,
+                            position = position,
+                            debugEnabled = isMoreDebugEnabled(),
+                            reason = "VideoElement.seekTo",
+                        )
+                    ) {
+                        return@replaceUnit
+                    }
 
                     callOriginal(*args)
                 }
@@ -140,7 +140,7 @@ class VideoProgressResumeModule : RoxyHooker() {
                 parameterCount = 0
             }.hook {
                 after {
-                VideoProgressStore.markStarted(instance)
+                    VideoProgressStore.markStarted(instance)
                 }
             }
         }.onFailure { YLog.warn(it) }
@@ -159,19 +159,19 @@ class VideoProgressResumeModule : RoxyHooker() {
                         )
                     ) {
                         callOriginal(*args)
-                    return@replaceUnit
-                }
+                        return@replaceUnit
+                    }
 
-                val position = args(0).int()
-                if (VideoProgressStore.shouldSkipReset(
-                        view = instance,
-                        position = position,
-                        debugEnabled = isMoreDebugEnabled(),
-                        reason = "${instance!!::class.java.name}.seekTo",
-                    )
-                ) {
-                    return@replaceUnit
-                }
+                    val position = args(0).int()
+                    if (VideoProgressStore.shouldSkipReset(
+                            view = instance,
+                            position = position,
+                            debugEnabled = isMoreDebugEnabled(),
+                            reason = "${instance!!::class.java.name}.seekTo",
+                        )
+                    ) {
+                        return@replaceUnit
+                    }
 
                     callOriginal(*args)
                 }
@@ -185,7 +185,7 @@ class VideoProgressResumeModule : RoxyHooker() {
                     parameterCount = 0
                 }.hook {
                     before {
-                    VideoProgressStore.save(instance, isMoreDebugEnabled())
+                        VideoProgressStore.save(instance, isMoreDebugEnabled())
                     }
                 }
             }.onFailure { YLog.warn(it) }
@@ -198,7 +198,7 @@ class VideoProgressResumeModule : RoxyHooker() {
                 returnType = Void.TYPE
             }.hook {
                 before {
-                VideoProgressStore.save(instance, isMoreDebugEnabled())
+                    VideoProgressStore.save(instance, isMoreDebugEnabled())
                 }
             }
         }.onFailure { YLog.warn(it) }
@@ -210,15 +210,15 @@ class VideoProgressResumeModule : RoxyHooker() {
                 returnType = Void.TYPE
             }.hook {
                 after {
-                VideoProgressStore.register(instance)
-                if (VideoProgressStore.onSourceReopened(
-                        view = instance,
-                        debugEnabled = isMoreDebugEnabled(),
-                        reason = "setVideoPath",
-                    )
-                ) {
-                    scheduleRestore("sourceReopen:setVideoPath")
-                }
+                    VideoProgressStore.register(instance)
+                    if (VideoProgressStore.onSourceReopened(
+                            view = instance,
+                            debugEnabled = isMoreDebugEnabled(),
+                            reason = "setVideoPath",
+                        )
+                    ) {
+                        scheduleRestore("sourceReopen:setVideoPath")
+                    }
                 }
             }
         }.onFailure { YLog.warn(it) }
@@ -231,15 +231,15 @@ class VideoProgressResumeModule : RoxyHooker() {
                 parameters(MediaDataSource::class.java)
             }.hook {
                 after {
-                VideoProgressStore.register(instance)
-                if (VideoProgressStore.onSourceReopened(
-                        view = instance,
-                        debugEnabled = isMoreDebugEnabled(),
-                        reason = "setVideoDataSource",
-                    )
-                ) {
-                    scheduleRestore("sourceReopen:setVideoDataSource")
-                }
+                    VideoProgressStore.register(instance)
+                    if (VideoProgressStore.onSourceReopened(
+                            view = instance,
+                            debugEnabled = isMoreDebugEnabled(),
+                            reason = "setVideoDataSource",
+                        )
+                    ) {
+                        scheduleRestore("sourceReopen:setVideoDataSource")
+                    }
                 }
             }
         }.onFailure {
@@ -250,15 +250,15 @@ class VideoProgressResumeModule : RoxyHooker() {
                     returnType = Void.TYPE
                 }.hook {
                     after {
-                    VideoProgressStore.register(instance)
-                    if (VideoProgressStore.onSourceReopened(
-                            view = instance,
-                            debugEnabled = isMoreDebugEnabled(),
-                            reason = "setVideoDataSource",
-                        )
-                    ) {
-                        scheduleRestore("sourceReopen:setVideoDataSource")
-                    }
+                        VideoProgressStore.register(instance)
+                        if (VideoProgressStore.onSourceReopened(
+                                view = instance,
+                                debugEnabled = isMoreDebugEnabled(),
+                                reason = "setVideoDataSource",
+                            )
+                        ) {
+                            scheduleRestore("sourceReopen:setVideoDataSource")
+                        }
                     }
                 }
             }.onFailure(YLog::warn)
@@ -272,8 +272,8 @@ class VideoProgressResumeModule : RoxyHooker() {
                 superclass()
             }.hook {
                 after {
-                val state = args(0).int()
-                VideoProgressStore.onStateChanged(instance, state)
+                    val state = args(0).int()
+                    VideoProgressStore.onStateChanged(instance, state)
                 }
             }
         }.onFailure { YLog.warn(it) }
@@ -286,7 +286,7 @@ class VideoProgressResumeModule : RoxyHooker() {
                 parameterCount = 0
             }.hook {
                 before {
-                VideoProgressStore.save(instance, isMoreDebugEnabled())
+                    VideoProgressStore.save(instance, isMoreDebugEnabled())
                 }
             }
         }.onFailure { YLog.warn(it) }
@@ -307,8 +307,8 @@ class VideoProgressResumeModule : RoxyHooker() {
                             false
                         )
                     ) {
-                    scheduleRestore("widgetOnResume")
-                }
+                        scheduleRestore("widgetOnResume")
+                    }
                 }
             }
         }.onFailure { YLog.warn(it) }

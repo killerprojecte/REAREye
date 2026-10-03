@@ -80,26 +80,26 @@ class RearScreenActivityWhitelistModule : RoxyHooker() {
                 after {
                     if (hookPrefs.getBoolean(ConfigKeys.ALLOW_ALL_ACTIVITIES, false)) {
                         result = true
-                    return@after
-                }
+                        return@after
+                    }
                     if (!hookPrefs.getBoolean(
                             ConfigKeys.HOOK_ACTIVITIES_WHITELIST,
                             true
                         )
                     ) return@after
                     val whitelist = hookPrefs.getStringSet(ConfigKeys.ACTIVITIES_WHITELIST_APPS)
-                val inWhitelist = result<Boolean>()
-                if (inWhitelist == false) {
-                    val arObj = args(0).value ?: return@after
-                    val packageName = arObj.asResolver().firstField {
-                        name = "packageName"
-                        type = String::class.java
-                    }.get<String>()
-                    if (whitelist.contains(packageName)) {
-                        result = true
-                        YLog.debug("Allow starting $packageName while rear screen is locked")
+                    val inWhitelist = result<Boolean>()
+                    if (inWhitelist == false) {
+                        val arObj = args(0).value ?: return@after
+                        val packageName = arObj.asResolver().firstField {
+                            name = "packageName"
+                            type = String::class.java
+                        }.get<String>()
+                        if (whitelist.contains(packageName)) {
+                            result = true
+                            YLog.debug("Allow starting $packageName while rear screen is locked")
+                        }
                     }
-                }
                 }
             }
 
@@ -108,7 +108,7 @@ class RearScreenActivityWhitelistModule : RoxyHooker() {
             }.hook {
                 before {
                     if (hookPrefs.getBoolean(ConfigKeys.HOOK_SKIP_LOCK_BACK_HOME, false)) {
-                    val arg = args(3)
+                        val arg = args(3)
                         arg.value = false
                     }
                 }

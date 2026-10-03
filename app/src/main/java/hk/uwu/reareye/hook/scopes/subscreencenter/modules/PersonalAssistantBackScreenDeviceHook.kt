@@ -182,10 +182,10 @@ class PersonalAssistantBackScreenDeviceHook : RoxyHooker() {
             returnType = JSONObject::class.java
         }.hook {
             before {
-            if (backScreenRequest.get() != true) return@before
-            val key = args.getOrNull(0) as? String ?: return@before
-            val value = args.getOrNull(1) ?: return@before
-            args[1] = rewriteJsonValue(key, value)
+                if (backScreenRequest.get() != true) return@before
+                val key = args.getOrNull(0) as? String ?: return@before
+                val value = args.getOrNull(1) ?: return@before
+                args[1] = rewriteJsonValue(key, value)
             }
         }
     }
@@ -215,16 +215,16 @@ class PersonalAssistantBackScreenDeviceHook : RoxyHooker() {
             returnType = JSONObject::class.java
         }.hook {
             after {
-            if (backScreenRequest.get() != true) return@after
-            val json = result as? JSONObject ?: return@after
-            val currentIncremental = json.optString("os")
-            val rewrittenIncremental = rewriteIncremental(currentIncremental)
-            json.put("phoneModel", MODEL)
-            json.put("phoneDevice", DEVICE)
-            if (rewrittenIncremental.isNotEmpty()) json.put("os", rewrittenIncremental)
-            YLog.debug(
-                "[$TAG] environmentSignal.after=$json",
-            )
+                if (backScreenRequest.get() != true) return@after
+                val json = result as? JSONObject ?: return@after
+                val currentIncremental = json.optString("os")
+                val rewrittenIncremental = rewriteIncremental(currentIncremental)
+                json.put("phoneModel", MODEL)
+                json.put("phoneDevice", DEVICE)
+                if (rewrittenIncremental.isNotEmpty()) json.put("os", rewrittenIncremental)
+                YLog.debug(
+                    "[$TAG] environmentSignal.after=$json",
+                )
             }
         }
     }
@@ -237,12 +237,12 @@ class PersonalAssistantBackScreenDeviceHook : RoxyHooker() {
             parameterCount = 0
         }.hook {
             after {
-            if (backScreenRequest.get() != true) return@after
-            val body = result ?: return@after
-            rewriteFormBody(body)?.let {
-                result = it
-                YLog.debug("[$TAG] device-info form.after=${describeFormBody(it)}")
-            }
+                if (backScreenRequest.get() != true) return@after
+                val body = result ?: return@after
+                rewriteFormBody(body)?.let {
+                    result = it
+                    YLog.debug("[$TAG] device-info form.after=${describeFormBody(it)}")
+                }
             }
         }
     }
@@ -281,9 +281,9 @@ class PersonalAssistantBackScreenDeviceHook : RoxyHooker() {
             parameterCount = 1
         }.hook {
             before {
-            val request = args.firstOrNull() ?: return@before
-            if (!isBackScreenRequest(request)) return@before
-            debug("request.after-bridge", describeRequest(request))
+                val request = args.firstOrNull() ?: return@before
+                if (!isBackScreenRequest(request)) return@before
+                debug("request.after-bridge", describeRequest(request))
             }
         }
     }

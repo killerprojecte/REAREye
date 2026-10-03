@@ -47,7 +47,7 @@ class RearWallpaperThemeManagerSyncHook : RoxyHooker() {
                 val bridge = runtime.manage(
                     createDexKitCacheBridge(
                         packageName = hookAppInfo.packageName,
-                    packageVersionCode = versionCode,
+                        packageVersionCode = versionCode,
                         sourceDir = hookAppInfo.sourceDir,
                         dataDir = hookAppInfo.dataDir,
                     )
@@ -64,8 +64,8 @@ class RearWallpaperThemeManagerSyncHook : RoxyHooker() {
                     returnType = List::class.java
                 }.hook {
                     after {
-                    val original = result as? List<*> ?: return@after
-                    result = mergeImportedWallpapers(original, itemBeanClassName)
+                        val original = result as? List<*> ?: return@after
+                        result = mergeImportedWallpapers(original, itemBeanClassName)
                     }
                 }
 

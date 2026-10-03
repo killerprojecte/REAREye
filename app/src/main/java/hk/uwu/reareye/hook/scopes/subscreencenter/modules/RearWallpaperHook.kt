@@ -335,12 +335,12 @@ class RearWallpaperHook : RoxyHooker() {
                 parameterCount = 1
             }.hook {
                 after {
-                runCatching {
-                    capturePanels(instance)
-                    refreshSchedule(forceApply = true)
-                }.onFailure {
-                    YLog.warn(it)
-                }
+                    runCatching {
+                        capturePanels(instance)
+                        refreshSchedule(forceApply = true)
+                    }.onFailure {
+                        YLog.warn(it)
+                    }
                 }
             }
             val saveSelectionPoint =
@@ -381,12 +381,12 @@ class RearWallpaperHook : RoxyHooker() {
                 parameterCount = 0
             }.hook {
                 after {
-                runCatching {
-                    capturePanels(instance)
-                    refreshSchedule(forceApply = true)
-                }.onFailure {
-                    YLog.warn(it)
-                }
+                    runCatching {
+                        capturePanels(instance)
+                        refreshSchedule(forceApply = true)
+                    }.onFailure {
+                        YLog.warn(it)
+                    }
                 }
             }
 
@@ -395,7 +395,7 @@ class RearWallpaperHook : RoxyHooker() {
                 parameterCount = 0
             }.hook {
                 before {
-                debugLog("launcher onPause keep scheduler nextAt=${readNextSwitchAt()}")
+                    debugLog("launcher onPause keep scheduler nextAt=${readNextSwitchAt()}")
                 }
             }
 
@@ -404,10 +404,10 @@ class RearWallpaperHook : RoxyHooker() {
                 parameterCount = 0
             }.hook {
                 before {
-                stopScheduler()
+                    stopScheduler()
                     SubscreenWidgetRenderHostRegistry.clear(mainPanel)
-                mainPanel = null
-                mainHandler = null
+                    mainPanel = null
+                    mainHandler = null
                 }
             }
 
@@ -416,7 +416,7 @@ class RearWallpaperHook : RoxyHooker() {
                 parameterCount = 0
             }.hook {
                 after {
-                updateSelectedWallpaperIdFromPanel(instance)
+                    updateSelectedWallpaperIdFromPanel(instance)
                 }
             }
         }
@@ -579,14 +579,14 @@ class RearWallpaperHook : RoxyHooker() {
     private fun PackageScope.registerHookBootstrapReceiver() {
         val ctx = hostContext ?: return
         bootstrapReceiverRegistration.register(ctx) { registrationContext ->
-                ContextCompat.registerReceiver(
-                    registrationContext,
-                    hookBootstrapReceiver,
-                    IntentFilter(RearWallpaperApiContract.ACTION_REQUEST_HOOK_SERVICE),
-                    RearWallpaperApiContract.SERVICE_PERMISSION,
-                    null,
-                    ContextCompat.RECEIVER_EXPORTED,
-                )
+            ContextCompat.registerReceiver(
+                registrationContext,
+                hookBootstrapReceiver,
+                IntentFilter(RearWallpaperApiContract.ACTION_REQUEST_HOOK_SERVICE),
+                RearWallpaperApiContract.SERVICE_PERMISSION,
+                null,
+                ContextCompat.RECEIVER_EXPORTED,
+            )
         }
     }
 

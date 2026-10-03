@@ -224,7 +224,7 @@ class MainActivity : ComponentActivity() {
             val guideDemoState =
                 rememberSaveable(featureGuideVisible, saver = FeatureGuideDemoState.Saver) {
                     FeatureGuideDemoState(getString(hk.uwu.reareye.R.string.guide_demo_card_name))
-            }
+                }
             val guideStep = featureGuideSteps[featureGuideStep]
 
             LaunchedEffect(featureGuideVisible, featureGuideStep) {

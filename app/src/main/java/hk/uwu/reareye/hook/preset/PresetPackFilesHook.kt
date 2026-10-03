@@ -35,9 +35,9 @@ class PresetPackFilesHook : RoxyHooker() {
             parameterCount = 0
         }.hook {
             replaceAny {
-            val file = instance<File>()
-            val local = store.redirect(file.path)
-            val directory = store.redirectDir(file.path)
+                val file = instance<File>()
+                val local = store.redirect(file.path)
+                val directory = store.redirectDir(file.path)
                 if (local != null || directory != null) true else callOriginal()
             }
         }
@@ -46,7 +46,7 @@ class PresetPackFilesHook : RoxyHooker() {
             parameterCount = 0
         }.hook {
             replaceAny {
-            val file = instance<File>()
+                val file = instance<File>()
                 store.redirect(file.path)?.let { true } ?: callOriginal()
             }
         }
@@ -55,7 +55,7 @@ class PresetPackFilesHook : RoxyHooker() {
             parameterCount = 0
         }.hook {
             replaceAny {
-            val file = instance<File>()
+                val file = instance<File>()
                 store.redirectDir(file.path)?.let { true } ?: callOriginal()
             }
         }
@@ -64,7 +64,7 @@ class PresetPackFilesHook : RoxyHooker() {
             parameterCount = 0
         }.hook {
             replaceAny {
-            val file = instance<File>()
+                val file = instance<File>()
                 store.redirect(file.path)?.length() ?: callOriginal()
             }
         }
@@ -73,7 +73,7 @@ class PresetPackFilesHook : RoxyHooker() {
             parameterCount = 0
         }.hook {
             replaceAny {
-            val file = instance<File>()
+                val file = instance<File>()
                 store.appendNames(file.path, callOriginal() as? Array<String>)
             }
         }
@@ -84,18 +84,18 @@ class PresetPackFilesHook : RoxyHooker() {
             parameters(String::class.java)
         }.hook {
             before {
-            val path = args.getOrNull(0) as? String
-            val local = store.redirect(path)
-            local?.absolutePath?.let { args[0] = it }
+                val path = args.getOrNull(0) as? String
+                val local = store.redirect(path)
+                local?.absolutePath?.let { args[0] = it }
             }
         }
         FileInputStream::class.java.resolve().firstConstructor {
             parameters(File::class.java)
         }.hook {
             before {
-            val file = args.getOrNull(0) as? File
-            val local = file?.let { store.redirect(it.path) }
-            local?.let { args[0] = it }
+                val file = args.getOrNull(0) as? File
+                val local = file?.let { store.redirect(it.path) }
+                local?.let { args[0] = it }
             }
         }
     }
@@ -111,9 +111,9 @@ class PresetPackFilesHook : RoxyHooker() {
                 )
             }.hook {
                 before {
-                val path = args.getOrNull(0) as? String
-                val local = store.redirect(path)
-                local?.absolutePath?.let { args[0] = it }
+                    val path = args.getOrNull(0) as? String
+                    val local = store.redirect(path)
+                    local?.absolutePath?.let { args[0] = it }
                 }
             }
         }
@@ -124,18 +124,18 @@ class PresetPackFilesHook : RoxyHooker() {
             parameters(String::class.java)
         }.hook {
             before {
-            val path = args.getOrNull(0) as? String
-            val local = store.redirect(path)
-            local?.absolutePath?.let { args[0] = it }
+                val path = args.getOrNull(0) as? String
+                val local = store.redirect(path)
+                local?.absolutePath?.let { args[0] = it }
             }
         }
         ZipFile::class.java.resolve().firstConstructor {
             parameters(File::class.java)
         }.hook {
             before {
-            val file = args.getOrNull(0) as? File
-            val local = file?.let { store.redirect(it.path) }
-            local?.let { args[0] = it }
+                val file = args.getOrNull(0) as? File
+                val local = file?.let { store.redirect(it.path) }
+                local?.let { args[0] = it }
             }
         }
         runCatching {
@@ -143,9 +143,9 @@ class PresetPackFilesHook : RoxyHooker() {
                 parameters(File::class.java, Int::class.javaPrimitiveType!!)
             }.hook {
                 before {
-                val file = args.getOrNull(0) as? File
-                val local = file?.let { store.redirect(it.path) }
-                local?.let { args[0] = it }
+                    val file = args.getOrNull(0) as? File
+                    val local = file?.let { store.redirect(it.path) }
+                    local?.let { args[0] = it }
                 }
             }
         }

@@ -317,7 +317,7 @@ class LyriconHook : RoxyHooker() {
             val bridge = runtime.manage(
                 createDexKitCacheBridge(
                     packageName = hookAppInfo.packageName,
-                packageVersionCode = versionCode,
+                    packageVersionCode = versionCode,
                     sourceDir = hookAppInfo.sourceDir,
                     dataDir = hookAppInfo.dataDir,
                 )
@@ -343,11 +343,11 @@ class LyriconHook : RoxyHooker() {
             }.hook {
                 replaceUnit {
                     val iRef = instance!!.asResolver()
-                val mMetadata = iRef.firstField { name = "mMetadata" }.get<MediaMetadata>()
+                    val mMetadata = iRef.firstField { name = "mMetadata" }.get<MediaMetadata>()
                     if (mMetadata != null && stateOf(instance!!).oldMediaId == mMetadata.description.mediaId) {
-                    YLog.debug("Reject reset lyric while media id is not changed")
-                    return@replaceUnit
-                } else {
+                        YLog.debug("Reject reset lyric while media id is not changed")
+                        return@replaceUnit
+                    } else {
                         clearManagedLyricState(instance!!)
                         callOriginal()
                     }
@@ -361,8 +361,8 @@ class LyriconHook : RoxyHooker() {
                 replaceUnit {
                     if (!isManagedFullLyric(instance!!)) {
                         callOriginal(*args)
-                    return@replaceUnit
-                }
+                        return@replaceUnit
+                    }
                     updateLyricVarsDiff(instance!!, args(0).cast<Long>() ?: 0L)
                 }
             }
@@ -374,26 +374,26 @@ class LyriconHook : RoxyHooker() {
                 replaceUnit {
                     if (!isManagedFullLyric(instance!!)) {
                         callOriginal(*args)
-                    return@replaceUnit
-                }
-                val isPlaying = args(0).boolean()
-                if (isPlaying) {
-                    val state = stateOf(instance!!)
-                    state.lastLineIndex = Int.MIN_VALUE
-                    state.pendingSnapshot = null
-                    ensurePreTickerRegistered(instance!!)
-                    if (queueCurrentLyricSnapshot(instance!!)) {
-                        instance!!.asResolver().firstMethod {
-                            name = "requestUpdate"
-                            superclass()
-                        }.invoke()
+                        return@replaceUnit
                     }
-                }
-                scheduleManagedProgressTick(
-                    element = instance!!,
-                    isPlaying = isPlaying,
-                    delayMs = args(1).cast<Long>() ?: 0L
-                )
+                    val isPlaying = args(0).boolean()
+                    if (isPlaying) {
+                        val state = stateOf(instance!!)
+                        state.lastLineIndex = Int.MIN_VALUE
+                        state.pendingSnapshot = null
+                        ensurePreTickerRegistered(instance!!)
+                        if (queueCurrentLyricSnapshot(instance!!)) {
+                            instance!!.asResolver().firstMethod {
+                                name = "requestUpdate"
+                                superclass()
+                            }.invoke()
+                        }
+                    }
+                    scheduleManagedProgressTick(
+                        element = instance!!,
+                        isPlaying = isPlaying,
+                        delayMs = args(1).cast<Long>() ?: 0L
+                    )
                 }
             }
 
@@ -403,12 +403,12 @@ class LyriconHook : RoxyHooker() {
                 parameters(Boolean::class.java)
             }.hook {
                 after {
-                if (instanceClass == clz && !args(0).boolean()) {
-                    YLog.debug("Release music control instance: $instance")
-                    clearManagedLyricState(instance!!)
-                    elements.remove(instance!!)
-                    removeStateOf(instance!!)
-                }
+                    if (instanceClass == clz && !args(0).boolean()) {
+                        YLog.debug("Release music control instance: $instance")
+                        clearManagedLyricState(instance!!)
+                        elements.remove(instance!!)
+                        removeStateOf(instance!!)
+                    }
                 }
             }
 
@@ -419,13 +419,13 @@ class LyriconHook : RoxyHooker() {
                 replaceUnit {
                     val element = instance!!.readFieldValue("this$0") ?: run {
                         callOriginal()
-                    return@replaceUnit
-                }
-                if (!isManagedFullLyric(element)) {
-                    callOriginal()
-                    return@replaceUnit
-                }
-                runManagedProgressTick(element)
+                        return@replaceUnit
+                    }
+                    if (!isManagedFullLyric(element)) {
+                        callOriginal()
+                        return@replaceUnit
+                    }
+                    runManagedProgressTick(element)
                 }
             }
 

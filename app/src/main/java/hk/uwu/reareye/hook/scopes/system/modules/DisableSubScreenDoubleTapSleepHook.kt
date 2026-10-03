@@ -6,6 +6,7 @@ import com.highcapable.kavaref.KavaRef.Companion.resolve
 import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.reareye.hook.support.hookPrefs
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.HotReloadPolicy
 import hk.uwu.roxyhook.PackageScope
 import hk.uwu.roxyhook.RoxyHooker
 
@@ -28,6 +29,7 @@ class DisableSubScreenDoubleTapSleepHook : RoxyHooker() {
                 name = "onFocusedWindowChanged"
                 parameterCount = 3
             }.hook {
+                hotReloadPolicy = HotReloadPolicy.KEEP
                 after {
                     focusedPackageName = args(2).value.owningPackage()
                 }
@@ -38,21 +40,22 @@ class DisableSubScreenDoubleTapSleepHook : RoxyHooker() {
                 returnType = Void.TYPE
                 parameters(MotionEvent::class.java)
             }.hook {
+                hotReloadPolicy = HotReloadPolicy.KEEP
                 replaceUnit {
                     val whitelist = hookPrefs.getStringSet(
-                    ConfigKeys.SUBSCREEN_DOUBLE_TAP_SLEEP_DISABLED_APPS,
-                )
-                val packageName = focusedPackageName ?: managerRef.firstMethod {
-                    name = "getFocusedWindow"
-                }.invoke().owningPackage()?.also {
-                    focusedPackageName = it
-                }
-                if (packageName != null && packageName in whitelist) {
-                    if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
-                        YLog.debug("Rejected subscreen double tap sleep gesture package=$packageName")
+                        ConfigKeys.SUBSCREEN_DOUBLE_TAP_SLEEP_DISABLED_APPS,
+                    )
+                    val packageName = focusedPackageName ?: managerRef.firstMethod {
+                        name = "getFocusedWindow"
+                    }.invoke().owningPackage()?.also {
+                        focusedPackageName = it
                     }
-                    return@replaceUnit
-                }
+                    if (packageName != null && packageName in whitelist) {
+                        if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+                            YLog.debug("Rejected subscreen double tap sleep gesture package=$packageName")
+                        }
+                        return@replaceUnit
+                    }
                     callOriginal(*args)
                 }
             }

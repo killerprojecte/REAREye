@@ -37,7 +37,7 @@ class SubScreenBackHomeWhitelistModule : RoxyHooker() {
             val bridge = runtime.manage(
                 createDexKitCacheBridge(
                     packageName = hookAppInfo.packageName,
-                packageVersionCode = versionCode,
+                    packageVersionCode = versionCode,
                     sourceDir = hookAppInfo.sourceDir,
                     dataDir = hookAppInfo.dataDir,
                 )
@@ -54,35 +54,35 @@ class SubScreenBackHomeWhitelistModule : RoxyHooker() {
                 parameters(String::class.java)
             }.hook {
                 replaceUnit {
-                val reason = args(0).cast<String>()
+                    val reason = args(0).cast<String>()
                     val whitelist = hookPrefs.getStringSet(
-                    ConfigKeys.SUBSCREEN_LOCK_BACK_HOME_WHITELIST_APPS,
-                )
-                if (reason != AOD_REASON || whitelist.isEmpty()) {
-                    callOriginal(*args)
-                    return@replaceUnit
-                }
+                        ConfigKeys.SUBSCREEN_LOCK_BACK_HOME_WHITELIST_APPS,
+                    )
+                    if (reason != AOD_REASON || whitelist.isEmpty()) {
+                        callOriginal(*args)
+                        return@replaceUnit
+                    }
 
                     val foregroundPackage = instance!!.asResolver().firstField {
-                    name = foregroundPackageFieldName
-                    type = String::class.java
-                }.get<String>()
+                        name = foregroundPackageFieldName
+                        type = String::class.java
+                    }.get<String>()
                     val moreDebug = hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
-                if (moreDebug) {
-                    YLog.debug(
-                        "Handle subscreen home return reason=$reason package=$foregroundPackage",
-                    )
-                }
-                if (foregroundPackage == null || foregroundPackage !in whitelist) {
-                    callOriginal(*args)
-                    return@replaceUnit
-                }
+                    if (moreDebug) {
+                        YLog.debug(
+                            "Handle subscreen home return reason=$reason package=$foregroundPackage",
+                        )
+                    }
+                    if (foregroundPackage == null || foregroundPackage !in whitelist) {
+                        callOriginal(*args)
+                        return@replaceUnit
+                    }
 
-                if (moreDebug) {
-                    YLog.debug(
-                        "Skip SubScreen home return reason=$reason package=$foregroundPackage",
-                    )
-                }
+                    if (moreDebug) {
+                        YLog.debug(
+                            "Skip SubScreen home return reason=$reason package=$foregroundPackage",
+                        )
+                    }
                 }
             }
         }

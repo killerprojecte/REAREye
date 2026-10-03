@@ -34,7 +34,7 @@ class VideoVolumeHook : RoxyHooker() {
             val bridge = runtime.manage(
                 createDexKitCacheBridge(
                     packageName = hookAppInfo.packageName,
-                packageVersionCode = versionCode,
+                    packageVersionCode = versionCode,
                     sourceDir = hookAppInfo.sourceDir,
                     dataDir = hookAppInfo.dataDir,
                 )
@@ -47,17 +47,17 @@ class VideoVolumeHook : RoxyHooker() {
             }.hook {
                 after {
                     val vol = hookPrefs.getFloat(
-                    ConfigKeys.VIDEO_WALLPAPER_VOLUME,
-                    ConfigKeys.VIDEO_WALLPAPER_VOLUME_DEFAULT,
-                )
-                if (vol > 0f) {
-                    val setVol = instance!!.asResolver().firstMethod {
-                        name = "setVolume"
-                        parameters(Float::class.java)
+                        ConfigKeys.VIDEO_WALLPAPER_VOLUME,
+                        ConfigKeys.VIDEO_WALLPAPER_VOLUME_DEFAULT,
+                    )
+                    if (vol > 0f) {
+                        val setVol = instance!!.asResolver().firstMethod {
+                            name = "setVolume"
+                            parameters(Float::class.java)
+                        }
+                        setVol.invoke(vol)
+                        YLog.debug("Changed video volume to $vol")
                     }
-                    setVol.invoke(vol)
-                    YLog.debug("Changed video volume to $vol")
-                }
                 }
             }
         }

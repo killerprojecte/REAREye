@@ -334,7 +334,7 @@ class RearWidgetHook : RoxyHooker() {
             dexKitBridge = runtime.manage(
                 createDexKitCacheBridge(
                     packageName = hookAppInfo.packageName,
-                packageVersionCode = versionCode,
+                    packageVersionCode = versionCode,
                     sourceDir = hookAppInfo.sourceDir,
                     dataDir = hookAppInfo.dataDir,
                 )
@@ -349,8 +349,8 @@ class RearWidgetHook : RoxyHooker() {
                 parameterCount = 0
             }.hook {
                 after {
-                val snapshot = result ?: error("Smart assistant app registry snapshot is null")
-                patchRegistryPrimaryMap(snapshot)
+                    val snapshot = result ?: error("Smart assistant app registry snapshot is null")
+                    patchRegistryPrimaryMap(snapshot)
                 }
             }
 
@@ -404,7 +404,7 @@ class RearWidgetHook : RoxyHooker() {
                         parameterCount = constructorParamCount
                     }.hook {
                         after {
-                        rememberSmartAssistantPanel(instance)
+                            rememberSmartAssistantPanel(instance)
                             if (manager == null) recoverExistingManager()
                         }
                     }
@@ -417,7 +417,7 @@ class RearWidgetHook : RoxyHooker() {
                     parameterCount = 1
                 }.hook {
                     before {
-                    rememberSmartAssistantPanel(instance)
+                        rememberSmartAssistantPanel(instance)
                         if (manager == null) recoverExistingManager()
                     }
                 }
@@ -430,7 +430,7 @@ class RearWidgetHook : RoxyHooker() {
                     parameterCount = 3
                 }.hook {
                     before {
-                    rememberSmartAssistantPanel(instance)
+                        rememberSmartAssistantPanel(instance)
                         if (manager == null) recoverExistingManager()
                     }
                 }
@@ -440,7 +440,7 @@ class RearWidgetHook : RoxyHooker() {
                 parameterCount = 0
             }.hook {
                 after {
-                debugLog("PersistenceManager created, waiting for host smart_assistant release")
+                    debugLog("PersistenceManager created, waiting for host smart_assistant release")
                 }
             }
 
@@ -449,7 +449,7 @@ class RearWidgetHook : RoxyHooker() {
                 parameterCount = 0
             }.hook {
                 after {
-                handlePresetReleaseRunnable(instance, persistenceClass)
+                    handlePresetReleaseRunnable(instance, persistenceClass)
                 }
             }
 
@@ -460,28 +460,28 @@ class RearWidgetHook : RoxyHooker() {
                 after {
                     val managerChanged = adoptManager(instance)
                     if (!managerChanged && manager == null) return@after
-                if (managerChanged) {
-                    debugLog("adopted smart assistant manager from init hook")
-                }
+                    if (managerChanged) {
+                        debugLog("adopted smart assistant manager from init hook")
+                    }
 
-                if (!managerChanged && startupBootstrapped.get()) {
+                    if (!managerChanged && startupBootstrapped.get()) {
+                        applyRuntimeMaps(force = true)
+                        patchManagerAppGates(manager)
+                        scheduleInjectAllActiveNotices()
+                        debugLog("captured manager unchanged, skip bootstrap and reinject active notices")
+                        return@after
+                    }
+
+                    val bootOk = if (presetDataReleased) {
+                        bootstrapFromPrefsOnInit(force = false)
+                    } else {
+                        false
+                    }
+                    if (presetDataReleased && !bootOk) scheduleBootstrapRetry()
                     applyRuntimeMaps(force = true)
                     patchManagerAppGates(manager)
                     scheduleInjectAllActiveNotices()
-                    debugLog("captured manager unchanged, skip bootstrap and reinject active notices")
-                    return@after
-                }
-
-                val bootOk = if (presetDataReleased) {
-                    bootstrapFromPrefsOnInit(force = false)
-                } else {
-                    false
-                }
-                if (presetDataReleased && !bootOk) scheduleBootstrapRetry()
-                applyRuntimeMaps(force = true)
-                patchManagerAppGates(manager)
-                scheduleInjectAllActiveNotices()
-                debugLog("captured manager=${manager != null}, handler=${mainHandler != null}")
+                    debugLog("captured manager=${manager != null}, handler=${mainHandler != null}")
                 }
             }
 
@@ -490,7 +490,7 @@ class RearWidgetHook : RoxyHooker() {
                 parameterCount = 1
             }.hook {
                 after {
-                patchManagerAppGates(instance)
+                    patchManagerAppGates(instance)
                 }
             }
 
@@ -498,7 +498,7 @@ class RearWidgetHook : RoxyHooker() {
                 name = restoreWidgetsPoint.methodName
             }.hook {
                 after {
-                normalizeRestoredManagerWidgetPriority(manager)
+                    normalizeRestoredManagerWidgetPriority(manager)
                 }
             }
 
@@ -507,7 +507,7 @@ class RearWidgetHook : RoxyHooker() {
                 parameterCount = 1
             }.hook {
                 after {
-                normalizeInitialManagerWidgetPriority(instance, args.getOrNull(0))
+                    normalizeInitialManagerWidgetPriority(instance, args.getOrNull(0))
                 }
             }
 
@@ -516,7 +516,7 @@ class RearWidgetHook : RoxyHooker() {
                 parameterCount = 2
             }.hook {
                 after {
-                applyRuntimeMaps(force = false)
+                    applyRuntimeMaps(force = false)
                 }
             }
 
@@ -525,13 +525,13 @@ class RearWidgetHook : RoxyHooker() {
                 parameterCount = 2
             }.hook {
                 after {
-                if (!presetDataReleased) return@after
-                val pkg = args[0] as? String ?: return@after
-                val biz = args[1] as? String ?: return@after
-                // business 文件映射是全局覆盖 只要注册了该 business 文件 就覆盖系统内置路径
-                val path = RearWidgetRuntimeStore.getBusinessFile(biz) ?: return@after
-                result = path
-                debugLog("smart assistant override path pkg=$pkg biz=$biz path=$path")
+                    if (!presetDataReleased) return@after
+                    val pkg = args[0] as? String ?: return@after
+                    val biz = args[1] as? String ?: return@after
+                    // business 文件映射是全局覆盖 只要注册了该 business 文件 就覆盖系统内置路径
+                    val path = RearWidgetRuntimeStore.getBusinessFile(biz) ?: return@after
+                    result = path
+                    debugLog("smart assistant override path pkg=$pkg biz=$biz path=$path")
                 }
             }
 
@@ -540,11 +540,11 @@ class RearWidgetHook : RoxyHooker() {
                 parameterCount = 3
             }.hook {
                 before {
-                val pkg = args[0] as? String ?: return@before
-                if (RearWidgetRuntimeStore.hasAnyBusinessForPackage(pkg)) {
-                    result = true
-                    debugLog("smart assistant allow force pass pkg=$pkg")
-                }
+                    val pkg = args[0] as? String ?: return@before
+                    if (RearWidgetRuntimeStore.hasAnyBusinessForPackage(pkg)) {
+                        result = true
+                        debugLog("smart assistant allow force pass pkg=$pkg")
+                    }
                 }
             }
 
@@ -562,10 +562,10 @@ class RearWidgetHook : RoxyHooker() {
                 parameterCount = 0
             }.hook {
                 after {
-                val snapshot = synchronized(postRunnableSnapshots) {
-                    postRunnableSnapshots[instance]
-                } ?: return@after
-                rememberOriginalNotificationRoute(snapshot)
+                    val snapshot = synchronized(postRunnableSnapshots) {
+                        postRunnableSnapshots[instance]
+                    } ?: return@after
+                    rememberOriginalNotificationRoute(snapshot)
                 }
             }
 
@@ -607,65 +607,65 @@ class RearWidgetHook : RoxyHooker() {
             if (removeNotificationLayout != null) {
                 removeNotificationMethod.hook {
                     after {
-                    val notificationId = args.getOrNull(0) as? Int ?: return@after
-                    val packageName =
-                        args.getOrNull(if (removeNotificationLayout) 1 else 2) as? String
-                            ?: return@after
-                    val removeReason =
-                        args.getOrNull(if (removeNotificationLayout) 2 else 1) as? Int
-                            ?: return@after
-                    handleOriginalNotificationRemoved(
-                        packageName = packageName,
-                        notificationId = notificationId,
-                        notificationKey = null,
-                        removeReason = removeReason,
-                    )
+                        val notificationId = args.getOrNull(0) as? Int ?: return@after
+                        val packageName =
+                            args.getOrNull(if (removeNotificationLayout) 1 else 2) as? String
+                                ?: return@after
+                        val removeReason =
+                            args.getOrNull(if (removeNotificationLayout) 2 else 1) as? Int
+                                ?: return@after
+                        handleOriginalNotificationRemoved(
+                            packageName = packageName,
+                            notificationId = notificationId,
+                            notificationKey = null,
+                            removeReason = removeReason,
+                        )
                     }
                 }
             }
 
             postRunnableConstructor.hook {
                 after {
-                val notificationId = args.getOrNull(1) as? Int ?: return@after
-                val packageName = args.getOrNull(2) as? String ?: return@after
-                val notificationKey = args.getOrNull(3) as? String
-                val extras = args.getOrNull(4) as? Bundle ?: return@after
-                val hasChRoute = RearWidgetRuntimeStore.hasSceneRoutePrefix(
-                    packageName,
-                    CHANNEL_SCENE_PREFIX,
-                )
-                debugLog(
-                    "ordinary notice postRunnable pkg=$packageName id=$notificationId key=${notificationKey.orEmpty()} " +
-                            "hasChRoute=$hasChRoute hasFocus=${
-                                !extras.getString("miui.focus.param").isNullOrBlank()
-                            } " +
-                            "hasRear=${
-                                !extras.getString("miui.rear.param").isNullOrBlank()
-                            }"
-                )
-                val injected = applySceneRouteBusinessToExtras(
-                    packageName = packageName,
-                    notificationId = notificationId,
-                    notificationKey = notificationKey,
-                    extras = extras,
-                )
-                synchronized(postRunnableSnapshots) {
-                    postRunnableSnapshots[instance] = PostRunnableSnapshot(
-                        owner = args.getOrNull(0),
+                    val notificationId = args.getOrNull(1) as? Int ?: return@after
+                    val packageName = args.getOrNull(2) as? String ?: return@after
+                    val notificationKey = args.getOrNull(3) as? String
+                    val extras = args.getOrNull(4) as? Bundle ?: return@after
+                    val hasChRoute = RearWidgetRuntimeStore.hasSceneRoutePrefix(
+                        packageName,
+                        CHANNEL_SCENE_PREFIX,
+                    )
+                    debugLog(
+                        "ordinary notice postRunnable pkg=$packageName id=$notificationId key=${notificationKey.orEmpty()} " +
+                                "hasChRoute=$hasChRoute hasFocus=${
+                                    !extras.getString("miui.focus.param").isNullOrBlank()
+                                } " +
+                                "hasRear=${
+                                    !extras.getString("miui.rear.param").isNullOrBlank()
+                                }"
+                    )
+                    val injected = applySceneRouteBusinessToExtras(
+                        packageName = packageName,
                         notificationId = notificationId,
                         notificationKey = notificationKey,
-                        packageName = packageName,
-                        extras = Bundle(extras),
+                        extras = extras,
                     )
-                }
-                if (injected != null) {
-                    injected.staleCompositeKeys.forEach { staleKey ->
-                        ejectByCompositeKey(staleKey)
+                    synchronized(postRunnableSnapshots) {
+                        postRunnableSnapshots[instance] = PostRunnableSnapshot(
+                            owner = args.getOrNull(0),
+                            notificationId = notificationId,
+                            notificationKey = notificationKey,
+                            packageName = packageName,
+                            extras = Bundle(extras),
+                        )
                     }
-                    debugLog(
-                        "scene route injected pkg=$packageName scene=${injected.scene} business=${injected.business}"
-                    )
-                }
+                    if (injected != null) {
+                        injected.staleCompositeKeys.forEach { staleKey ->
+                            ejectByCompositeKey(staleKey)
+                        }
+                        debugLog(
+                            "scene route injected pkg=$packageName scene=${injected.scene} business=${injected.business}"
+                        )
+                    }
                 }
             }
 
@@ -674,12 +674,12 @@ class RearWidgetHook : RoxyHooker() {
                 parameterCount = 1
             }.hook {
                 after {
-                rememberLiveNotificationWidget(instance)
-                applyCardOneConfig(
-                    instance,
-                    args.getOrNull(0),
-                    "notificationWidget.${widgetApplyPoint.methodName}"
-                )
+                    rememberLiveNotificationWidget(instance)
+                    applyCardOneConfig(
+                        instance,
+                        args.getOrNull(0),
+                        "notificationWidget.${widgetApplyPoint.methodName}"
+                    )
                 }
             }
 
@@ -688,11 +688,11 @@ class RearWidgetHook : RoxyHooker() {
                 parameterCount = 10
             }.hook {
                 after {
-                applyRuntimeMaps(force = false)
-                val out = result as? Bundle ?: return@after
-                val key = out.getString("composite_key") ?: (args.getOrNull(1) as? String)
-                val notice = key?.let { RearWidgetRuntimeStore.getNotice(it) } ?: return@after
-                out.putAll(RearWidgetRuntimeStore.buildDecoratedExtras(notice.ticket))
+                    applyRuntimeMaps(force = false)
+                    val out = result as? Bundle ?: return@after
+                    val key = out.getString("composite_key") ?: (args.getOrNull(1) as? String)
+                    val notice = key?.let { RearWidgetRuntimeStore.getNotice(it) } ?: return@after
+                    out.putAll(RearWidgetRuntimeStore.buildDecoratedExtras(notice.ticket))
                 }
             }
         }
@@ -1921,35 +1921,35 @@ class RearWidgetHook : RoxyHooker() {
     private var notificationRouteBridgeBinder: INotificationRouteBridgeService.Stub? = null
     private fun PackageScope.createNotificationRouteBridgeBinder() =
         object : INotificationRouteBridgeService.Stub() {
-        override fun dispatch(subchannel: String?, payload: Bundle?): Boolean {
-            enforceNotificationRouteCaller()
-            val normalizedSubchannel = subchannel?.trim().orEmpty()
-            if (normalizedSubchannel.isBlank()) return false
+            override fun dispatch(subchannel: String?, payload: Bundle?): Boolean {
+                enforceNotificationRouteCaller()
+                val normalizedSubchannel = subchannel?.trim().orEmpty()
+                if (normalizedSubchannel.isBlank()) return false
 
-            val payloadCopy = Bundle(payload ?: Bundle.EMPTY)
-            return runCatching {
-                when (normalizedSubchannel) {
-                    NotificationRouteBridgeContract.Subchannel.NOTIFICATION_POSTED -> {
-                        if (shouldLogNotificationRoutePayloadJson()) {
-                            debugLog("notification route posted payload=${payloadCopy.toJsonStringByGson()}")
+                val payloadCopy = Bundle(payload ?: Bundle.EMPTY)
+                return runCatching {
+                    when (normalizedSubchannel) {
+                        NotificationRouteBridgeContract.Subchannel.NOTIFICATION_POSTED -> {
+                            if (shouldLogNotificationRoutePayloadJson()) {
+                                debugLog("notification route posted payload=${payloadCopy.toJsonStringByGson()}")
+                            }
+                            handleNotificationRoutePosted(payloadCopy)
                         }
-                        handleNotificationRoutePosted(payloadCopy)
-                    }
 
-                    NotificationRouteBridgeContract.Subchannel.NOTIFICATION_REMOVED -> {
-                        handleNotificationRouteRemoved(payloadCopy)
-                    }
+                        NotificationRouteBridgeContract.Subchannel.NOTIFICATION_REMOVED -> {
+                            handleNotificationRouteRemoved(payloadCopy)
+                        }
 
-                    else -> return false
-                }
-                true
-            }.onFailure {
-                debugLog(
-                    "notification route dispatch failed subchannel=$normalizedSubchannel err=${it.message}"
-                )
-            }.getOrDefault(false)
+                        else -> return false
+                    }
+                    true
+                }.onFailure {
+                    debugLog(
+                        "notification route dispatch failed subchannel=$normalizedSubchannel err=${it.message}"
+                    )
+                }.getOrDefault(false)
+            }
         }
-    }
 
     private lateinit var hookBootstrapReceiver: BroadcastReceiver
     private fun PackageScope.createBootstrapReceiver() = object : BroadcastReceiver() {

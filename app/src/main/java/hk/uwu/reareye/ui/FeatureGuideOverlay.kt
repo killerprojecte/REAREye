@@ -187,11 +187,12 @@ internal fun FeatureGuideOverlay(
     }
     BackHandler { if (stepIndex > 0) onPrevious() else onSkip() }
 
-    BoxWithConstraints(modifier = Modifier
-        .fillMaxSize()
-        .onGloballyPositioned {
-            overlayCoordinates = it
-        }) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned {
+                overlayCoordinates = it
+            }) {
         val availableAbove = focus?.top ?: 0f
         val availableBelow = constraints.maxHeight - (focus?.bottom ?: 0f)
         val anchorNearBottom = availableAbove > availableBelow
