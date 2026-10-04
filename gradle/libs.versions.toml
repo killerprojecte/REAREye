@@ -79,6 +79,7 @@ haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
 backdrop = { module = "io.github.kyant0:backdrop", version.ref = "backdrop" }
 capsule = { module = "io.github.kyant0:capsule", version.ref = "capsule" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver3", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp-logging" }
 lyricon-provider = { group = "io.github.proify.lyricon", name = "provider", version.ref = "lyricon" }
 lyricon-central = { group = "io.github.proify.lyricon", name = "central", version.ref = "lyriconCentral" }

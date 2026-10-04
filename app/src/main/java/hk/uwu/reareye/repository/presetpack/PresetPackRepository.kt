@@ -4,6 +4,10 @@ import android.content.Context
 import android.net.Uri
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -30,6 +34,10 @@ class PresetPackRepository(
     context: Context,
     private val prefs: PrefsManager,
 ) {
+    companion object {
+        private val downloadMutex = Mutex()
+    }
+
     private val appContext = context.applicationContext
     private val root = File(appContext.filesDir, "preset-pack")
     private val activeFile = File(root, "active.rpp")
@@ -90,21 +98,26 @@ class PresetPackRepository(
     suspend fun downloadLatest(
         release: PresetPackRelease,
         onProgress: (Long, Long) -> Unit = { _, _ -> },
-    ): PresetPackManifest {
-        val request = Request.Builder()
-            .url(release.assetUrl)
-            .header("Accept", "application/octet-stream")
-            .header("User-Agent", "REAREye/${appContext.packageName}")
-            .build()
-        return client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("Preset download failed: HTTP ${response.code}")
-            val body = response.body
-            val length = body.contentLength().takeIf { it >= 0L } ?: release.assetSize
-            body.byteStream().use { input ->
-                writeStaging(input, length, onProgress)
-            }
-            validateStaging()
+    ): PresetPackManifest = downloadMutex.withLock {
+        val downloader = PresetPackDownloader(client, File(root, "download"))
+        val downloaded = downloader.download(
+            release.assetUrl,
+            "${release.tagName}/${release.assetName}",
+            release.assetSize,
+            onProgress,
+        )
+        // Validate before replacing an existing staged pack. Corrupt bytes must not
+        // become a permanent checkpoint that makes every retry fail validation.
+        val manifest = try {
+            PresetPackValidator.validate(downloaded)
+        } catch (error: Exception) {
+            downloader.clear()
+            throw error
         }
+        currentCoroutineContext().ensureActive()
+        atomicReplace(downloaded, stagingFile)
+        downloader.clear()
+        manifest
     }
 
     fun import(

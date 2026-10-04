@@ -1,8 +1,8 @@
 package hk.uwu.reareye.hook.scopes.thememanager.modules
 
-import com.highcapable.kavaref.KavaRef.Companion.asResolver
+import android.annotation.SuppressLint
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import com.highcapable.kavaref.condition.type.Modifiers
+import com.highcapable.kavaref.extension.classOf
 import hk.uwu.reareye.hook.support.hookAppInfo
 import hk.uwu.reareye.hook.support.hookSystemContext
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
@@ -36,21 +36,21 @@ class UnlockTemplateMaximumLimitHook : RoxyHooker() {
                 )
             )
             val rsDetailClz = resolveRearDetailViewModelClass(bridge).toClass().resolve()
-            rsDetailClz.firstConstructor().hook {
+            rsDetailClz.firstMethod {
+                @SuppressLint("ReplaceWithKavaRefExtension")
+                parameters(List::class.java)
+
+                parameterCount = 1
+                returnType = classOf<Boolean>()
+            }.hook {
                 after {
-                    val ref = instance!!.asResolver()
-                    ref.field {
-                        type = Int::class.java
-                        modifiers(Modifiers.PRIVATE, Modifiers.FINAL)
-                    }.forEach {
-                        it.set(Int.MAX_VALUE)
-                    }
+                    result = true
                 }
             }
         }
     }
 
-    private fun PackageScope.resolveRearDetailViewModelClass(
+    private fun resolveRearDetailViewModelClass(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): String {
         return resolveDexKitClassValue(

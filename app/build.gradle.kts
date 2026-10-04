@@ -275,6 +275,11 @@ tasks.withType<KotlinJvmCompile>().configureEach {
     }
 }
 
+// Android 16 Robolectric uses SharedSecrets to create ApplicationSharedMemory on JDK 17+.
+tasks.withType<Test>().configureEach {
+    jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+}
+
 dependencies {
     implementation(project(":rear-widget-api"))
     implementation(libs.androidx.compose.foundation.layout)
@@ -295,6 +300,7 @@ dependencies {
     implementation(libs.mmkv)
 
     testImplementation(libs.junit)
+    testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.libxposed.api)
