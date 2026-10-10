@@ -3,11 +3,14 @@ package hk.uwu.reareye.hook.scopes.subscreencenter.modules
 import android.content.Context
 import android.os.Build
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookSystemContext
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveDexKitMethodInjectionPoint
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 import org.json.JSONObject
 import org.luckypray.dexkit.DexKitCacheBridge
 import org.luckypray.dexkit.annotations.DexKitExperimentalApi
@@ -23,7 +26,7 @@ import java.util.IdentityHashMap
  * DexKit. No obfuscated application class or method name is embedded here.
  */
 @OptIn(DexKitExperimentalApi::class)
-class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
+class PersonalAssistantBackScreenDeviceHook : RoxyHooker() {
     companion object {
         private const val TAG = "REAREye-PersonalAssistantBackScreen"
         private const val MODEL = "M1544F"
@@ -42,7 +45,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
     private val backScreenRequest = ThreadLocal.withInitial { false }
     private val encryptedBackScreenRequest = ThreadLocal.withInitial { false }
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadApp("com.miui.personalassistant") {
             val bridge = runCatching { createBridge() }
                 .onFailure { YLog.warn("[$TAG] DexKit init failed: $it") }
@@ -76,23 +79,23 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun createBridge(): DexKitCacheBridge.RecyclableBridge {
+    private fun PackageScope.createBridge(): DexKitCacheBridge.RecyclableBridge {
         val versionCode = resolveHookPackageVersionCode(
-            context = systemContext,
-            packageName = appInfo.packageName,
-            sourceDir = appInfo.sourceDir,
+            context = hookSystemContext,
+            packageName = hookAppInfo.packageName,
+            sourceDir = hookAppInfo.sourceDir,
         )
-        return trackResource(
+        return runtime.manage(
             createDexKitCacheBridge(
-                packageName = appInfo.packageName,
+                packageName = hookAppInfo.packageName,
                 packageVersionCode = versionCode,
-                sourceDir = appInfo.sourceDir,
-                dataDir = appInfo.dataDir,
+                sourceDir = hookAppInfo.sourceDir,
+                dataDir = hookAppInfo.dataDir,
             ),
         )
     }
 
-    private fun resolveWrapper(
+    private fun PackageScope.resolveWrapper(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ) = resolveDexKitMethodInjectionPoint(bridge, WRAPPER_CACHE_KEY) {
         // This is the interceptor that creates userSignal/environmentSignal/timeSignal/eventSignal.
@@ -105,7 +108,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }.singleOrNull()
     }
 
-    private fun resolveCommonParams(
+    private fun PackageScope.resolveCommonParams(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ) = resolveDexKitMethodInjectionPoint(bridge, COMMON_PARAMS_CACHE_KEY) {
         findMethod {
@@ -118,7 +121,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }.singleOrNull()
     }
 
-    private fun resolveDeviceForm(
+    private fun PackageScope.resolveDeviceForm(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ) = resolveDexKitMethodInjectionPoint(bridge, DEVICE_FORM_CACHE_KEY) {
         findMethod {
@@ -130,7 +133,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }.singleOrNull()
     }
 
-    private fun resolveEncryptor(
+    private fun PackageScope.resolveEncryptor(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ) = resolveDexKitMethodInjectionPoint(bridge, ENCRYPTOR_CACHE_KEY) {
         findMethod {
@@ -141,7 +144,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }.singleOrNull()
     }
 
-    private fun resolveChainProceed(
+    private fun PackageScope.resolveChainProceed(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ) = resolveDexKitMethodInjectionPoint(bridge, CHAIN_PROCEED_CACHE_KEY) {
         // RealInterceptorChain.proceed(Request) is called after BridgeInterceptor has
@@ -159,7 +162,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }.singleOrNull()
     }
 
-    private fun installWrapperMarker(point: hk.uwu.reareye.hook.utils.DexKitMethodInjectionPoint) {
+    private fun PackageScope.installWrapperMarker(point: hk.uwu.reareye.hook.utils.DexKitMethodInjectionPoint) {
         point.className.toClass().resolve().firstMethod {
             name = point.methodName
             parameterCount = 1
@@ -173,19 +176,21 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun installJsonRewrite() {
+    private fun PackageScope.installJsonRewrite() {
         JSONObject::class.java.resolve().firstMethod {
             parameters(String::class.java, Any::class.java)
             returnType = JSONObject::class.java
-        }.hook().before {
-            if (backScreenRequest.get() != true) return@before
-            val key = args.getOrNull(0) as? String ?: return@before
-            val value = args.getOrNull(1) ?: return@before
-            args[1] = rewriteJsonValue(key, value)
+        }.hook {
+            before {
+                if (backScreenRequest.get() != true) return@before
+                val key = args.getOrNull(0) as? String ?: return@before
+                val value = args.getOrNull(1) ?: return@before
+                args[1] = rewriteJsonValue(key, value)
+            }
         }
     }
 
-    private fun rewriteJsonValue(key: String, value: Any): Any {
+    private fun PackageScope.rewriteJsonValue(key: String, value: Any): Any {
         val normalized = key.lowercase()
         return when (normalized) {
             "phonemodel", "model" -> MODEL
@@ -201,44 +206,48 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun installCommonParamsRewrite(
+    private fun PackageScope.installCommonParamsRewrite(
         point: hk.uwu.reareye.hook.utils.DexKitMethodInjectionPoint,
     ) {
         point.className.toClass().resolve().firstMethod {
             name = point.methodName
             parameters(Context::class.java, String::class.java)
             returnType = JSONObject::class.java
-        }.hook().after {
-            if (backScreenRequest.get() != true) return@after
-            val json = result as? JSONObject ?: return@after
-            val currentIncremental = json.optString("os")
-            val rewrittenIncremental = rewriteIncremental(currentIncremental)
-            json.put("phoneModel", MODEL)
-            json.put("phoneDevice", DEVICE)
-            if (rewrittenIncremental.isNotEmpty()) json.put("os", rewrittenIncremental)
-            YLog.debug(
-                "[$TAG] environmentSignal.after=$json",
-            )
+        }.hook {
+            after {
+                if (backScreenRequest.get() != true) return@after
+                val json = result as? JSONObject ?: return@after
+                val currentIncremental = json.optString("os")
+                val rewrittenIncremental = rewriteIncremental(currentIncremental)
+                json.put("phoneModel", MODEL)
+                json.put("phoneDevice", DEVICE)
+                if (rewrittenIncremental.isNotEmpty()) json.put("os", rewrittenIncremental)
+                YLog.debug(
+                    "[$TAG] environmentSignal.after=$json",
+                )
+            }
         }
     }
 
-    private fun installDeviceFormRewrite(
+    private fun PackageScope.installDeviceFormRewrite(
         point: hk.uwu.reareye.hook.utils.DexKitMethodInjectionPoint,
     ) {
         point.className.toClass().resolve().firstMethod {
             name = point.methodName
             parameterCount = 0
-        }.hook().after {
-            if (backScreenRequest.get() != true) return@after
-            val body = result ?: return@after
-            rewriteFormBody(body)?.let {
-                result = it
-                YLog.debug("[$TAG] device-info form.after=${describeFormBody(it)}")
+        }.hook {
+            after {
+                if (backScreenRequest.get() != true) return@after
+                val body = result ?: return@after
+                rewriteFormBody(body)?.let {
+                    result = it
+                    YLog.debug("[$TAG] device-info form.after=${describeFormBody(it)}")
+                }
             }
         }
     }
 
-    private fun installEncryptorDebug(
+    private fun PackageScope.installEncryptorDebug(
         point: hk.uwu.reareye.hook.utils.DexKitMethodInjectionPoint,
     ) {
         point.className.toClass().resolve().firstMethod {
@@ -264,20 +273,22 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun installFinalRequestDebug(
+    private fun PackageScope.installFinalRequestDebug(
         point: hk.uwu.reareye.hook.utils.DexKitMethodInjectionPoint,
     ) {
         point.className.toClass().resolve().firstMethod {
             name = point.methodName
             parameterCount = 1
-        }.hook().before {
-            val request = args.firstOrNull() ?: return@before
-            if (!isBackScreenRequest(request)) return@before
-            debug("request.after-bridge", describeRequest(request))
+        }.hook {
+            before {
+                val request = args.firstOrNull() ?: return@before
+                if (!isBackScreenRequest(request)) return@before
+                debug("request.after-bridge", describeRequest(request))
+            }
         }
     }
 
-    private fun rewriteIncremental(value: String): String {
+    private fun PackageScope.rewriteIncremental(value: String): String {
         if (value.isEmpty()) return value
         val parts = value.split(".").toMutableList()
         if (parts.size <= 2) return value
@@ -286,15 +297,15 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         return parts.joinToString(".")
     }
 
-    private fun fieldsOf(type: Class<*>): Sequence<java.lang.reflect.Field> =
+    private fun PackageScope.fieldsOf(type: Class<*>): Sequence<java.lang.reflect.Field> =
         generateSequence(type) { it.superclass }
             .flatMap { it.declaredFields.asSequence() }
 
-    private fun methodsOf(type: Class<*>): Sequence<java.lang.reflect.Method> =
+    private fun PackageScope.methodsOf(type: Class<*>): Sequence<java.lang.reflect.Method> =
         type.methods.asSequence() + generateSequence(type) { it.superclass }
             .flatMap { it.declaredMethods.asSequence() }
 
-    private fun rewriteFormBody(body: Any): Any? {
+    private fun PackageScope.rewriteFormBody(body: Any): Any? {
         val listFields = fieldsOf(body.javaClass).filter { field ->
             !Modifier.isStatic(field.modifiers) && List::class.java.isAssignableFrom(field.type)
         }.toList()
@@ -332,7 +343,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun describeFormBody(body: Any): String {
+    private fun PackageScope.describeFormBody(body: Any): String {
         val fields = fieldsOf(body.javaClass).filter { field ->
             !Modifier.isStatic(field.modifiers) && List::class.java.isAssignableFrom(field.type)
         }
@@ -345,7 +356,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun describeRequest(request: Any?): String {
+    private fun PackageScope.describeRequest(request: Any?): String {
         if (request == null) return "<null>"
         val body = findBody(request)
         val headers = findHeaders(request)
@@ -366,7 +377,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         val restoredResponse: Any?,
     )
 
-    private fun findHeaders(request: Any): Any? {
+    private fun PackageScope.findHeaders(request: Any): Any? {
         val headerMethod = methodsOf(request.javaClass).firstOrNull { method ->
             method.parameterTypes.isEmpty() &&
                     looksLikeHeadersType(method.returnType)
@@ -388,17 +399,17 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun looksLikeHeadersType(type: Class<*>): Boolean =
+    private fun PackageScope.looksLikeHeadersType(type: Class<*>): Boolean =
         type.name.startsWith("okhttp3.") &&
                 Iterable::class.java.isAssignableFrom(type) &&
                 methodsOf(type).any { method ->
                     method.parameterTypes.isEmpty() && method.returnType == Int::class.javaPrimitiveType
                 }
 
-    private fun looksLikeHeaders(value: Any?): Boolean =
+    private fun PackageScope.looksLikeHeaders(value: Any?): Boolean =
         value != null && looksLikeHeadersType(value.javaClass)
 
-    private fun describeResponse(response: Any?): ResponseCapture {
+    private fun PackageScope.describeResponse(response: Any?): ResponseCapture {
         if (response == null) return ResponseCapture("<null>", null)
         val body = findResponseBody(response)
             ?: return ResponseCapture("$response\nbody=<unavailable>", null)
@@ -416,7 +427,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         )
     }
 
-    private fun findResponseBody(response: Any): Any? {
+    private fun PackageScope.findResponseBody(response: Any): Any? {
         return fieldsOf(response.javaClass).firstNotNullOfOrNull { field ->
             if (Modifier.isStatic(field.modifiers) || field.isSynthetic) return@firstNotNullOfOrNull null
             val nested = runCatching {
@@ -427,7 +438,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }
     }
 
-    private fun looksLikeResponseBody(value: Any?): Boolean {
+    private fun PackageScope.looksLikeResponseBody(value: Any?): Boolean {
         if (value == null) return false
         val methods = methodsOf(value.javaClass)
         val hasBytes = methods.any { method ->
@@ -439,7 +450,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         return hasBytes && hasLength
     }
 
-    private fun readResponseBytes(body: Any): ByteArray? {
+    private fun PackageScope.readResponseBytes(body: Any): ByteArray? {
         val method = methodsOf(body.javaClass).firstOrNull { candidate ->
             candidate.parameterTypes.isEmpty() && candidate.returnType == ByteArray::class.java
         } ?: return null
@@ -451,7 +462,11 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun rebuildResponseWithBody(response: Any, originalBody: Any, bytes: ByteArray): Any? {
+    private fun PackageScope.rebuildResponseWithBody(
+        response: Any,
+        originalBody: Any,
+        bytes: ByteArray
+    ): Any? {
         return runCatching {
             val mediaType = methodsOf(originalBody.javaClass).firstOrNull { method ->
                 method.parameterTypes.isEmpty() &&
@@ -500,7 +515,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun readBodyText(body: Any): String? {
+    private fun PackageScope.readBodyText(body: Any): String? {
         val methods = methodsOf(body.javaClass)
         val textMethod = methods.firstOrNull { method ->
             method.parameterTypes.isEmpty() &&
@@ -528,13 +543,13 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun readRequestBody(body: Any): String? {
+    private fun PackageScope.readRequestBody(body: Any): String? {
         // JADX shows okhttp3.w stores the payload in an okio.ByteString field and
         // forwards it through qo.h.d0(ByteString). Read that ByteString directly.
         return extractBytes(body)
     }
 
-    private fun findBody(root: Any?): Any? {
+    private fun PackageScope.findBody(root: Any?): Any? {
         if (root == null) return null
         // Request/Response have a direct body field. Do not recursively classify URL or
         // path-segment objects: they also expose one-argument methods and were previously
@@ -567,7 +582,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         return visit(root, 0)
     }
 
-    private fun looksLikeBody(value: Any?): Boolean {
+    private fun PackageScope.looksLikeBody(value: Any?): Boolean {
         if (value == null) return false
         val methods = methodsOf(value.javaClass)
         val hasWrite = methods.any { method ->
@@ -579,7 +594,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         return hasWrite && hasLength
     }
 
-    private fun extractBytes(root: Any?): String? {
+    private fun PackageScope.extractBytes(root: Any?): String? {
         if (root == null) return null
         val visited = Collections.newSetFromMap(IdentityHashMap<Any, Boolean>())
 
@@ -615,7 +630,7 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         return visit(root, 0)
     }
 
-    private fun findBackScreenRequest(root: Any?): Any? {
+    private fun PackageScope.findBackScreenRequest(root: Any?): Any? {
         val visited = Collections.newSetFromMap(IdentityHashMap<Any, Boolean>())
 
         fun visit(value: Any?, depth: Int): Any? {
@@ -638,26 +653,26 @@ class PersonalAssistantBackScreenDeviceHook : YukiBaseHooker() {
         return visit(root, 0)
     }
 
-    private fun isBackScreenText(text: String): Boolean =
+    private fun PackageScope.isBackScreenText(text: String): Boolean =
         text.contains(BACK_SCREEN_PAGE) ||
                 text.contains(BACK_SCREEN_DETAIL) ||
                 text.contains(BACK_SCREEN_UPDATE)
 
-    private fun isRequestText(text: String): Boolean =
+    private fun PackageScope.isRequestText(text: String): Boolean =
         (text.contains("Request{method=") || text.contains("Response{")) &&
                 isBackScreenText(text)
 
-    private fun isBackScreenRequest(value: Any): Boolean =
+    private fun PackageScope.isBackScreenRequest(value: Any): Boolean =
         isRequestText(runCatching { value.toString() }.getOrDefault(""))
 
-    private fun debug(label: String, value: String) {
+    private fun PackageScope.debug(label: String, value: String) {
         val text = value.ifEmpty { "<empty>" }
         text.chunked(2000).forEachIndexed { index, chunk ->
             YLog.debug("[$TAG] $label[${index + 1}/${(text.length + 1999) / 2000}] $chunk")
         }
     }
 
-    private fun containsBackScreenUrl(root: Any?): Boolean {
+    private fun PackageScope.containsBackScreenUrl(root: Any?): Boolean {
         val visited = Collections.newSetFromMap(IdentityHashMap<Any, Boolean>())
 
         fun visit(value: Any?, depth: Int): Boolean {

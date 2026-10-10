@@ -1,7 +1,5 @@
 package hk.uwu.reareye.hook.scopes.subscreencenter
 
-import hk.uwu.reareye.hook.core.HookModule
-import hk.uwu.reareye.hook.core.YLog
 import hk.uwu.reareye.hook.scopes.Scope
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.ForceAppWidgetEnabledHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.MusicControlWhitelistModule
@@ -14,31 +12,36 @@ import hk.uwu.reareye.hook.scopes.subscreencenter.modules.VideoProgressResumeMod
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.VideoVolumeHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.lyrics.LyriconHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.ExtraTimeTipHook
+import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.RearAppHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.RearWidgetHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.SystemUiNotificationBridgeHook
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 
-class SubscreenCenterScope : Scope {
-    override val hooks: List<HookModule> = buildList {
-        if (isRearDevice) {
-            addAll(
-                listOf(
-                    ForceAppWidgetEnabledHook(),
-                    MusicControlWhitelistModule(),
-                    SubScreenBackHomeWhitelistModule(),
-                    UnlimitedSubscreenAppListHook(),
-                    VideoLoopModule(),
-                    VideoProgressResumeModule(),
-                    RearWallpaperHook(),
-                    RearWidgetHook(),
-                    SystemUiNotificationBridgeHook(),
-                    LyriconHook(),
-                    VideoVolumeHook(),
-                    ExtraTimeTipHook(),
-                    PersonalAssistantBackScreenDeviceHook(),
-                )
-            )
-        } else {
-            YLog.debug("This device is not support rear screen, skip load some features that this device is not supported")
+class SubscreenCenterScope : RoxyHooker(), Scope {
+    override fun PackageScope.onHook() {
+        if (!isRearDevice) {
+            YLog.debug("This device does not support a rear screen; skipping SubscreenCenter hooks")
+            return
         }
+
+        val hookers = listOf(
+            ForceAppWidgetEnabledHook(),
+            MusicControlWhitelistModule(),
+            SubScreenBackHomeWhitelistModule(),
+            UnlimitedSubscreenAppListHook(),
+            VideoLoopModule(),
+            VideoProgressResumeModule(),
+            RearWallpaperHook(),
+            RearWidgetHook(),
+            RearAppHook(),
+            SystemUiNotificationBridgeHook(),
+            LyriconHook(),
+            VideoVolumeHook(),
+            ExtraTimeTipHook(),
+            PersonalAssistantBackScreenDeviceHook(),
+        )
+        hookers.forEach(::loadHooker)
     }
 }

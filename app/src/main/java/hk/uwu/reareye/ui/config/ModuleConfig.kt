@@ -50,6 +50,7 @@ object ConfigKeys {
     const val REAR_WIDGET_BUSINESS_DATA = "rear_widget_business_data"
     const val REAR_WIDGET_SCENE_ROUTE_DATA = "rear_widget_scene_route_data"
     const val REAR_WIDGET_CARD_DATA = "rear_widget_card_data"
+    const val REAR_WIDGET_CARD_ORDER_DATA = "rear_widget_card_order_data"
     const val REAR_WIDGET_BUSINESS_EXTRA_CONFIG_DATA = "rear_widget_business_extra_config_data"
     const val HOOK_ALLOW_REAR_FOCUS_NOTICES = "enable_allow_rear_focus_notices"
 

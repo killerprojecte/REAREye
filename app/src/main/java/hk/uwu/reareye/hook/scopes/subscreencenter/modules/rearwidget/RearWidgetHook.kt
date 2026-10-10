@@ -23,9 +23,15 @@ import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
 import com.highcapable.kavaref.condition.type.Modifiers
 import hk.uwu.reareye.generated.AppProperties
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
 import hk.uwu.reareye.hook.hostbridge.HookHostBridgeBootstrapRegistry
+import hk.uwu.reareye.hook.support.ReloadableReceiverRegistration
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.assessInstanceAdoption
+import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookPrefs
+import hk.uwu.reareye.hook.support.hookSystemContext
+import hk.uwu.reareye.hook.support.readNamedInstanceField
+import hk.uwu.reareye.hook.support.resolveNamedStaticInstance
 import hk.uwu.reareye.hook.utils.DexKitMethodInjectionPoint
 import hk.uwu.reareye.hook.utils.SmartAssistantRegistry
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
@@ -49,6 +55,9 @@ import hk.uwu.reareye.widgetapi.RearWidgetNoticeTicket
 import hk.uwu.reareye.widgetapi.RearWidgetSceneRouteSpec
 import hk.uwu.reareye.widgetapi.RearWidgetTemplateConfigState
 import hk.uwu.reareye.widgetapi.RearWidgetTemplateImagePreview
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
+import hk.uwu.roxyhook.android.lifecycle.lifecycle
 import org.json.JSONObject
 import org.luckypray.dexkit.DexKitBridge
 import org.luckypray.dexkit.DexKitCacheBridge
@@ -67,7 +76,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipFile
 
 @OptIn(DexKitExperimentalApi::class)
-class RearWidgetHook : YukiBaseHooker() {
+class RearWidgetHook : RoxyHooker() {
 
     private data class OperationOutcome(
         val injectCompositeKey: String? = null,
@@ -169,6 +178,8 @@ class RearWidgetHook : YukiBaseHooker() {
             "SSC_NOTIFICATION_WIDGET_EXTRA_CHANGED_METHOD"
         private const val SMART_ASSISTANT_PANEL_HOLDER_LIST_FIELD_CACHE_KEY =
             "SSC_SMART_ASSISTANT_PANEL_HOLDER_LIST_FIELD"
+        private const val SMART_ASSISTANT_PANEL_MANAGER_FIELD_CACHE_KEY =
+            "SSC_SMART_ASSISTANT_PANEL_MANAGER_FIELD"
         private const val SMART_ASSISTANT_PANEL_REFRESH_METHOD_CACHE_KEY =
             "SSC_SMART_ASSISTANT_PANEL_REFRESH_METHOD"
         private const val CHANNEL_SCENE_PREFIX = "CH:"
@@ -217,7 +228,14 @@ class RearWidgetHook : YukiBaseHooker() {
 
     private val appliedOnce = AtomicBoolean(false)
     private val startupBootstrapped = AtomicBoolean(false)
-    private val bootstrapReceiverRegistered = AtomicBoolean(false)
+    private val bootstrapReceiverRegistration = ReloadableReceiverRegistration(
+        label = "rear widget bootstrap receiver",
+        logger = { message, throwable ->
+            if (throwable == null) YLog.error("[$TAG] $message")
+            else YLog.error("[$TAG] $message", throwable)
+        },
+    )
+    private val apiConnections = ConcurrentHashMap.newKeySet<IRearWidgetApiConnection>()
     private val deployedBlobMetaCache = ConcurrentHashMap<String, String>()
     private val deployedCardConfigMetaCache = ConcurrentHashMap<String, String>()
     private val bootstrapRetryCount = AtomicInteger(0)
@@ -252,11 +270,56 @@ class RearWidgetHook : YukiBaseHooker() {
     private val notificationRouteBridgeBootstrap = HookHostBridgeBootstrapRegistry(
         action = NotificationRouteBridgeContract.Action.REQUEST_BINDER,
         binderProvider = { notificationRouteBridgeBinder },
-        logger = ::debugLog,
+        logger = { message -> YLog.debug("[$TAG] $message") },
     )
 
-    override fun onHook() {
+    override fun onHotReloadPreflight(): Boolean {
+        if (!bootstrapReceiverRegistration.isConsistent()) {
+            YLog.error("[$TAG] reload preflight failed: bootstrap receiver has no context")
+            return false
+        }
+        if (!notificationRouteBridgeBootstrap.isRegistrationConsistent()) {
+            YLog.error("[$TAG] reload preflight failed: notification bridge has no context")
+            return false
+        }
+        return true
+    }
+
+    override fun onHotReloadQuiesce() {
+        check(releaseForReload()) {
+            "$TAG failed to release reload resources"
+        }
+    }
+
+    private fun releaseForReload(): Boolean {
+        managerEpoch.incrementAndGet()
+        invalidateApiConnections()
+        var success = unregisterHookBootstrapReceiver()
+
+        if (!notificationRouteBridgeBootstrap.unregister()) {
+            success = false
+            YLog.error("[$TAG] failed to unregister notification route bridge during reload")
+        }
+
+        if (success) hostContext = null
+        manager = null
+        mainHandler = null
+        dexKitBridge = null
+        smartAssistantRegistry = null
+        liveNotificationWidgets.clear()
+        smartAssistantPanels.clear()
+        synchronized(postRunnableSnapshots) { postRunnableSnapshots.clear() }
+        ordinaryChannelNoticeIndex.clear()
+        hookBinder = null
+        notificationRouteBridgeBinder = null
+        return success
+    }
+
+    override fun PackageScope.onHook() {
         loadApp("com.xiaomi.subscreencenter") {
+            hookBinder = createHookBinder()
+            notificationRouteBridgeBinder = createNotificationRouteBridgeBinder()
+            hookBootstrapReceiver = createBootstrapReceiver()
             allowNotificationRoutePayloadJsonLog =
                 AppProperties.BUILD_CHANNEL.equals("dev", ignoreCase = true)
             debugLog("hook process=$processName")
@@ -264,16 +327,16 @@ class RearWidgetHook : YukiBaseHooker() {
             debugLog("onHook start")
 
             val versionCode = resolveHookPackageVersionCode(
-                context = systemContext,
-                packageName = appInfo.packageName,
-                sourceDir = appInfo.sourceDir,
+                context = hookSystemContext,
+                packageName = hookAppInfo.packageName,
+                sourceDir = hookAppInfo.sourceDir,
             )
-            dexKitBridge = trackResource(
+            dexKitBridge = runtime.manage(
                 createDexKitCacheBridge(
-                packageName = appInfo.packageName,
-                packageVersionCode = versionCode,
-                sourceDir = appInfo.sourceDir,
-                dataDir = appInfo.dataDir,
+                    packageName = hookAppInfo.packageName,
+                    packageVersionCode = versionCode,
+                    sourceDir = hookAppInfo.sourceDir,
+                    dataDir = hookAppInfo.dataDir,
                 )
             )
             smartAssistantRegistry = SmartAssistantRegistry(
@@ -284,21 +347,24 @@ class RearWidgetHook : YukiBaseHooker() {
             registrySnapshotPoint.className.toClass().resolve().firstMethod {
                 name = registrySnapshotPoint.methodName
                 parameterCount = 0
-            }.hook().after {
-                val snapshot = result ?: error("Smart assistant app registry snapshot is null")
-                patchRegistryPrimaryMap(snapshot)
+            }.hook {
+                after {
+                    val snapshot = result ?: error("Smart assistant app registry snapshot is null")
+                    patchRegistryPrimaryMap(snapshot)
+                }
             }
 
-            onAppLifecycle {
-                attachBaseContext {
-                    val context = appContext ?: (args.getOrNull(0) as? Context)
-                    hostContext = context?.applicationContext ?: context
+            this.lifecycle {
+                onAttach(replay = true) {
+                    hostContext = application.applicationContext ?: application
                     registerHookBootstrapReceiver()
                     hostContext?.let {
                         registerNotificationRouteBridge()
                     }
+                    runCatching { recoverExistingManager() }
+                        .onFailure { debugLog("existing manager recovery deferred err=${it.message}") }
                     applyRuntimeMaps(force = true)
-                    debugLog("attachBaseContext applied runtime maps and waiting for preset release")
+                    debugLog("application attach applied runtime maps and waiting for preset release")
                 }
             }
 
@@ -336,8 +402,11 @@ class RearWidgetHook : YukiBaseHooker() {
                 runCatching {
                     smartAssistantPanelRef.firstConstructor {
                         parameterCount = constructorParamCount
-                    }.hook().after {
-                        rememberSmartAssistantPanel(instance)
+                    }.hook {
+                        after {
+                            rememberSmartAssistantPanel(instance)
+                            if (manager == null) recoverExistingManager()
+                        }
                     }
                 }
             }
@@ -346,8 +415,11 @@ class RearWidgetHook : YukiBaseHooker() {
                 smartAssistantPanelRef.firstMethod {
                     name = "setAssistantVisibleImpl"
                     parameterCount = 1
-                }.hook().before {
-                    rememberSmartAssistantPanel(instance)
+                }.hook {
+                    before {
+                        rememberSmartAssistantPanel(instance)
+                        if (manager == null) recoverExistingManager()
+                    }
                 }
             }
 
@@ -356,129 +428,145 @@ class RearWidgetHook : YukiBaseHooker() {
                 smartAssistantPanelRef.firstMethod {
                     name = panelRefreshPoint.methodName
                     parameterCount = 3
-                }.hook().before {
-                    rememberSmartAssistantPanel(instance)
+                }.hook {
+                    before {
+                        rememberSmartAssistantPanel(instance)
+                        if (manager == null) recoverExistingManager()
+                    }
                 }
             }
 
             persistenceRef.firstConstructor {
                 parameterCount = 0
-            }.hook().after {
-                debugLog("PersistenceManager created, waiting for host smart_assistant release")
+            }.hook {
+                after {
+                    debugLog("PersistenceManager created, waiting for host smart_assistant release")
+                }
             }
 
             presetReleaseRunPoint.className.toClass().resolve().firstMethod {
                 name = presetReleaseRunPoint.methodName
                 parameterCount = 0
-            }.hook().after {
-                handlePresetReleaseRunnable(instance, persistenceClass)
+            }.hook {
+                after {
+                    handlePresetReleaseRunnable(instance, persistenceClass)
+                }
             }
 
             managerRef.firstMethod {
                 name = managerInitPoint.methodName
                 parameterCount = 1
-            }.hook().after {
-                val oldManager = manager
-                manager = instance
-                mainHandler = runCatching {
-                    managerRef.firstField {
-                        name = resolveSmartAssistantManagerHandlerFieldName()
-                    }.get() as? Handler
-                }.getOrNull()
-                val managerChanged = oldManager !== manager
-                if (managerChanged) {
-                    managerEpoch.incrementAndGet()
-                    liveNotificationWidgets.clear()
-                    smartAssistantPanels.clear()
-                    ordinaryChannelNoticeIndex.clear()
-                }
+            }.hook {
+                after {
+                    val managerChanged = adoptManager(instance)
+                    if (!managerChanged && manager == null) return@after
+                    if (managerChanged) {
+                        debugLog("adopted smart assistant manager from init hook")
+                    }
 
-                if (!managerChanged && startupBootstrapped.get()) {
+                    if (!managerChanged && startupBootstrapped.get()) {
+                        applyRuntimeMaps(force = true)
+                        patchManagerAppGates(manager)
+                        scheduleInjectAllActiveNotices()
+                        debugLog("captured manager unchanged, skip bootstrap and reinject active notices")
+                        return@after
+                    }
+
+                    val bootOk = if (presetDataReleased) {
+                        bootstrapFromPrefsOnInit(force = false)
+                    } else {
+                        false
+                    }
+                    if (presetDataReleased && !bootOk) scheduleBootstrapRetry()
                     applyRuntimeMaps(force = true)
                     patchManagerAppGates(manager)
                     scheduleInjectAllActiveNotices()
-                    debugLog("captured manager unchanged, skip bootstrap and reinject active notices")
-                    return@after
+                    debugLog("captured manager=${manager != null}, handler=${mainHandler != null}")
                 }
-
-                val bootOk = if (presetDataReleased) {
-                    bootstrapFromPrefsOnInit(force = false)
-                } else {
-                    false
-                }
-                if (presetDataReleased && !bootOk) scheduleBootstrapRetry()
-                applyRuntimeMaps(force = true)
-                patchManagerAppGates(manager)
-                scheduleInjectAllActiveNotices()
-                debugLog("captured manager=${manager != null}, handler=${mainHandler != null}")
             }
 
             managerRefreshPoint.className.toClass().resolve().firstMethod {
                 name = managerRefreshPoint.methodName
                 parameterCount = 1
-            }.hook().after {
-                patchManagerAppGates(instance)
+            }.hook {
+                after {
+                    patchManagerAppGates(instance)
+                }
             }
 
             restoreWidgetsPoint.className.toClass().resolve().firstMethod {
                 name = restoreWidgetsPoint.methodName
-            }.hook().after {
-                normalizeRestoredManagerWidgetPriority(manager)
+            }.hook {
+                after {
+                    normalizeRestoredManagerWidgetPriority(manager)
+                }
             }
 
             managerRef.firstMethod {
                 name = managerInsertPoint.methodName
                 parameterCount = 1
-            }.hook().after {
-                normalizeInitialManagerWidgetPriority(instance, args.getOrNull(0))
+            }.hook {
+                after {
+                    normalizeInitialManagerWidgetPriority(instance, args.getOrNull(0))
+                }
             }
 
             parseWidgetPoint.className.toClass().resolve().firstMethod {
                 name = parseWidgetPoint.methodName
                 parameterCount = 2
-            }.hook().after {
-                applyRuntimeMaps(force = false)
+            }.hook {
+                after {
+                    applyRuntimeMaps(force = false)
+                }
             }
 
             resolvePathPoint.className.toClass().resolve().firstMethod {
                 name = resolvePathPoint.methodName
                 parameterCount = 2
-            }.hook().after {
-                if (!presetDataReleased) return@after
-                val pkg = args[0] as? String ?: return@after
-                val biz = args[1] as? String ?: return@after
-                // business 文件映射是全局覆盖 只要注册了该 business 文件 就覆盖系统内置路径
-                val path = RearWidgetRuntimeStore.getBusinessFile(biz) ?: return@after
-                result = path
-                debugLog("smart assistant override path pkg=$pkg biz=$biz path=$path")
+            }.hook {
+                after {
+                    if (!presetDataReleased) return@after
+                    val pkg = args[0] as? String ?: return@after
+                    val biz = args[1] as? String ?: return@after
+                    // business 文件映射是全局覆盖 只要注册了该 business 文件 就覆盖系统内置路径
+                    val path = RearWidgetRuntimeStore.getBusinessFile(biz) ?: return@after
+                    result = path
+                    debugLog("smart assistant override path pkg=$pkg biz=$biz path=$path")
+                }
             }
 
             allowAppPoint.className.toClass().resolve().firstMethod {
                 name = allowAppPoint.methodName
                 parameterCount = 3
-            }.hook().before {
-                val pkg = args[0] as? String ?: return@before
-                if (RearWidgetRuntimeStore.hasAnyBusinessForPackage(pkg)) {
-                    result = true
-                    debugLog("smart assistant allow force pass pkg=$pkg")
+            }.hook {
+                before {
+                    val pkg = args[0] as? String ?: return@before
+                    if (RearWidgetRuntimeStore.hasAnyBusinessForPackage(pkg)) {
+                        result = true
+                        debugLog("smart assistant allow force pass pkg=$pkg")
+                    }
                 }
             }
 
             postRunnableRef.firstMethod {
                 name = "run"
                 parameterCount = 0
-            }.hook().before {
-                allowSelfDescribedNotificationPackage(instance)
+            }.hook {
+                before {
+                    allowSelfDescribedNotificationPackage(instance!!)
+                }
             }
 
             postRunnableRef.firstMethod {
                 name = "run"
                 parameterCount = 0
-            }.hook().after {
-                val snapshot = synchronized(postRunnableSnapshots) {
-                    postRunnableSnapshots[instance]
-                } ?: return@after
-                rememberOriginalNotificationRoute(snapshot)
+            }.hook {
+                after {
+                    val snapshot = synchronized(postRunnableSnapshots) {
+                        postRunnableSnapshots[instance]
+                    } ?: return@after
+                    rememberOriginalNotificationRoute(snapshot)
+                }
             }
 
             val removeNotificationPoint = resolveSmartAssistantManagerRemoveNotificationMethod()
@@ -517,87 +605,95 @@ class RearWidgetHook : YukiBaseHooker() {
                 }
             }
             if (removeNotificationLayout != null) {
-                removeNotificationMethod.hook().after {
-                    val notificationId = args.getOrNull(0) as? Int ?: return@after
-                    val packageName =
-                        args.getOrNull(if (removeNotificationLayout) 1 else 2) as? String
-                            ?: return@after
-                    val removeReason =
-                        args.getOrNull(if (removeNotificationLayout) 2 else 1) as? Int
-                            ?: return@after
-                    handleOriginalNotificationRemoved(
-                        packageName = packageName,
-                        notificationId = notificationId,
-                        notificationKey = null,
-                        removeReason = removeReason,
-                    )
+                removeNotificationMethod.hook {
+                    after {
+                        val notificationId = args.getOrNull(0) as? Int ?: return@after
+                        val packageName =
+                            args.getOrNull(if (removeNotificationLayout) 1 else 2) as? String
+                                ?: return@after
+                        val removeReason =
+                            args.getOrNull(if (removeNotificationLayout) 2 else 1) as? Int
+                                ?: return@after
+                        handleOriginalNotificationRemoved(
+                            packageName = packageName,
+                            notificationId = notificationId,
+                            notificationKey = null,
+                            removeReason = removeReason,
+                        )
+                    }
                 }
             }
 
-            postRunnableConstructor.hook().after {
-                val notificationId = args.getOrNull(1) as? Int ?: return@after
-                val packageName = args.getOrNull(2) as? String ?: return@after
-                val notificationKey = args.getOrNull(3) as? String
-                val extras = args.getOrNull(4) as? Bundle ?: return@after
-                val hasChRoute = RearWidgetRuntimeStore.hasSceneRoutePrefix(
-                    packageName,
-                    CHANNEL_SCENE_PREFIX,
-                )
-                debugLog(
-                    "ordinary notice postRunnable pkg=$packageName id=$notificationId key=${notificationKey.orEmpty()} " +
-                            "hasChRoute=$hasChRoute hasFocus=${
-                                !extras.getString("miui.focus.param").isNullOrBlank()
-                            } " +
-                            "hasRear=${
-                                !extras.getString("miui.rear.param").isNullOrBlank()
-                            }"
-                )
-                val injected = applySceneRouteBusinessToExtras(
-                    packageName = packageName,
-                    notificationId = notificationId,
-                    notificationKey = notificationKey,
-                    extras = extras,
-                )
-                synchronized(postRunnableSnapshots) {
-                    postRunnableSnapshots[instance] = PostRunnableSnapshot(
-                        owner = args.getOrNull(0),
+            postRunnableConstructor.hook {
+                after {
+                    val notificationId = args.getOrNull(1) as? Int ?: return@after
+                    val packageName = args.getOrNull(2) as? String ?: return@after
+                    val notificationKey = args.getOrNull(3) as? String
+                    val extras = args.getOrNull(4) as? Bundle ?: return@after
+                    val hasChRoute = RearWidgetRuntimeStore.hasSceneRoutePrefix(
+                        packageName,
+                        CHANNEL_SCENE_PREFIX,
+                    )
+                    debugLog(
+                        "ordinary notice postRunnable pkg=$packageName id=$notificationId key=${notificationKey.orEmpty()} " +
+                                "hasChRoute=$hasChRoute hasFocus=${
+                                    !extras.getString("miui.focus.param").isNullOrBlank()
+                                } " +
+                                "hasRear=${
+                                    !extras.getString("miui.rear.param").isNullOrBlank()
+                                }"
+                    )
+                    val injected = applySceneRouteBusinessToExtras(
+                        packageName = packageName,
                         notificationId = notificationId,
                         notificationKey = notificationKey,
-                        packageName = packageName,
-                        extras = Bundle(extras),
+                        extras = extras,
                     )
-                }
-                if (injected != null) {
-                    injected.staleCompositeKeys.forEach { staleKey ->
-                        ejectByCompositeKey(staleKey)
+                    synchronized(postRunnableSnapshots) {
+                        postRunnableSnapshots[instance] = PostRunnableSnapshot(
+                            owner = args.getOrNull(0),
+                            notificationId = notificationId,
+                            notificationKey = notificationKey,
+                            packageName = packageName,
+                            extras = Bundle(extras),
+                        )
                     }
-                    debugLog(
-                        "scene route injected pkg=$packageName scene=${injected.scene} business=${injected.business}"
-                    )
+                    if (injected != null) {
+                        injected.staleCompositeKeys.forEach { staleKey ->
+                            ejectByCompositeKey(staleKey)
+                        }
+                        debugLog(
+                            "scene route injected pkg=$packageName scene=${injected.scene} business=${injected.business}"
+                        )
+                    }
                 }
             }
 
             widgetApplyPoint.className.toClass().resolve().firstMethod {
                 name = widgetApplyPoint.methodName
                 parameterCount = 1
-            }.hook().after {
-                rememberLiveNotificationWidget(instance)
-                applyCardOneConfig(
-                    instance,
-                    args.getOrNull(0),
-                    "notificationWidget.${widgetApplyPoint.methodName}"
-                )
+            }.hook {
+                after {
+                    rememberLiveNotificationWidget(instance)
+                    applyCardOneConfig(
+                        instance,
+                        args.getOrNull(0),
+                        "notificationWidget.${widgetApplyPoint.methodName}"
+                    )
+                }
             }
 
             decorateExtrasPoint.className.toClass().resolve().firstMethod {
                 name = decorateExtrasPoint.methodName
                 parameterCount = 10
-            }.hook().after {
-                applyRuntimeMaps(force = false)
-                val out = result as? Bundle ?: return@after
-                val key = out.getString("composite_key") ?: (args.getOrNull(1) as? String)
-                val notice = key?.let { RearWidgetRuntimeStore.getNotice(it) } ?: return@after
-                out.putAll(RearWidgetRuntimeStore.buildDecoratedExtras(notice.ticket))
+            }.hook {
+                after {
+                    applyRuntimeMaps(force = false)
+                    val out = result as? Bundle ?: return@after
+                    val key = out.getString("composite_key") ?: (args.getOrNull(1) as? String)
+                    val notice = key?.let { RearWidgetRuntimeStore.getNotice(it) } ?: return@after
+                    out.putAll(RearWidgetRuntimeStore.buildDecoratedExtras(notice.ticket))
+                }
             }
         }
     }
@@ -652,7 +748,7 @@ class RearWidgetHook : YukiBaseHooker() {
         return fieldName
     }
 
-    private fun resolvePersistenceManagerClassName(): String {
+    private fun PackageScope.resolvePersistenceManagerClassName(): String {
         return resolveCachedClassName(
             cacheKey = PERSISTENCE_MANAGER_CLASS_CACHE_KEY
         ) {
@@ -669,7 +765,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantRestoreWidgetsMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantRestoreWidgetsMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_RESTORE_WIDGETS_METHOD_CACHE_KEY,
         ) {
@@ -685,7 +781,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantPostRunnableClassName(): String {
+    private fun PackageScope.resolveSmartAssistantPostRunnableClassName(): String {
         return resolveCachedClassName(
             cacheKey = SMART_ASSISTANT_POST_RUNNABLE_CLASS_CACHE_KEY
         ) {
@@ -702,7 +798,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantPostRunnableConstructor() = run {
+    private fun PackageScope.resolveSmartAssistantPostRunnableConstructor() = run {
         val runnableClassName = resolveSmartAssistantPostRunnableClassName()
         val managerClassName = resolveSmartAssistantManagerClassName()
         val matches = runnableClassName.toClass().resolve().optional(silent = true).constructor {
@@ -725,11 +821,11 @@ class RearWidgetHook : YukiBaseHooker() {
         matches.single()
     }
 
-    private fun resolveSmartAssistantManagerClassName(): String {
+    private fun PackageScope.resolveSmartAssistantManagerClassName(): String {
         return resolveSmartAssistantManagerInitMethod().className
     }
 
-    private fun resolveSmartAssistantWidgetRecordClassName(): String {
+    private fun PackageScope.resolveSmartAssistantWidgetRecordClassName(): String {
         val point = resolveSmartAssistantManagerInsertWidgetMethod()
         return runCatching {
             point.className.toClass().resolve().firstMethod {
@@ -740,27 +836,27 @@ class RearWidgetHook : YukiBaseHooker() {
             ?: error("DexKit failed to resolve smart assistant widget record class")
     }
 
-    private fun resolveNotificationWidgetHostClassName(): String {
+    private fun PackageScope.resolveNotificationWidgetHostClassName(): String {
         return resolveNotificationWidgetApplyMethod().className.toClass().superclass?.name
             ?.takeIf { it.isNotBlank() }
             ?: error("DexKit failed to resolve notification widget host class")
     }
 
-    private fun resolveNotificationWidgetBaseClassName(): String {
+    private fun PackageScope.resolveNotificationWidgetBaseClassName(): String {
         return resolveNotificationWidgetHostClassName().toClass().superclass?.name
             ?.takeIf { it.isNotBlank() }
             ?: error("DexKit failed to resolve notification widget base class")
     }
 
-    private fun resolveSmartAssistantUtilsClassName(): String {
+    private fun PackageScope.resolveSmartAssistantUtilsClassName(): String {
         return resolveSmartAssistantParseWidgetMethod().className
     }
 
-    private fun resolveSmartAssistantConfigClassName(): String {
+    private fun PackageScope.resolveSmartAssistantConfigClassName(): String {
         return resolveSmartAssistantBuiltinSupportMethod().className
     }
 
-    private fun resolveSmartAssistantManagerHandlerFieldName(): String {
+    private fun PackageScope.resolveSmartAssistantManagerHandlerFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SMART_ASSISTANT_MANAGER_HANDLER_FIELD_CACHE_KEY
         ) {
@@ -776,7 +872,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantManagerWidgetListFieldName(): String {
+    private fun PackageScope.resolveSmartAssistantManagerWidgetListFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SMART_ASSISTANT_MANAGER_WIDGET_LIST_FIELD_CACHE_KEY,
         ) {
@@ -803,7 +899,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantManagerCurrentIndexFieldName(): String {
+    private fun PackageScope.resolveSmartAssistantManagerCurrentIndexFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SMART_ASSISTANT_MANAGER_CURRENT_INDEX_FIELD_CACHE_KEY,
         ) {
@@ -830,7 +926,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantManagerBeforeInactiveIndexFieldName(): String {
+    private fun PackageScope.resolveSmartAssistantManagerBeforeInactiveIndexFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SMART_ASSISTANT_MANAGER_BEFORE_INACTIVE_INDEX_FIELD_CACHE_KEY,
         ) {
@@ -877,7 +973,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantManagerAllowedMapFieldName(): String {
+    private fun PackageScope.resolveSmartAssistantManagerAllowedMapFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SMART_ASSISTANT_MANAGER_ALLOWED_MAP_FIELD_CACHE_KEY
         ) {
@@ -902,7 +998,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantManagerAllowedSetFieldName(): String {
+    private fun PackageScope.resolveSmartAssistantManagerAllowedSetFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SMART_ASSISTANT_MANAGER_ALLOWED_SET_FIELD_CACHE_KEY
         ) {
@@ -927,7 +1023,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantWidgetSpecBusinessFieldName(): String {
+    private fun PackageScope.resolveSmartAssistantWidgetSpecBusinessFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SMART_ASSISTANT_WIDGET_SPEC_BUSINESS_FIELD_CACHE_KEY
         ) {
@@ -943,7 +1039,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantWidgetRecordExtrasFieldName(): String {
+    private fun PackageScope.resolveSmartAssistantWidgetRecordExtrasFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SMART_ASSISTANT_WIDGET_RECORD_EXTRAS_FIELD_CACHE_KEY,
         ) {
@@ -958,7 +1054,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantWidgetRecordPriorityFieldName(): String {
+    private fun PackageScope.resolveSmartAssistantWidgetRecordPriorityFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SMART_ASSISTANT_WIDGET_RECORD_PRIORITY_FIELD_CACHE_KEY,
         ) {
@@ -985,7 +1081,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantWidgetSpecClassName(): String {
+    private fun PackageScope.resolveSmartAssistantWidgetSpecClassName(): String {
         val point = resolveSmartAssistantParseWidgetMethod()
         return runCatching {
             point.className.toClass().resolve().firstMethod {
@@ -996,7 +1092,7 @@ class RearWidgetHook : YukiBaseHooker() {
             ?: error("DexKit failed to resolve smart assistant widget spec class")
     }
 
-    private fun resolveSmartAssistantManagerInitMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantManagerInitMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_MANAGER_INIT_METHOD_CACHE_KEY,
         ) {
@@ -1014,7 +1110,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantManagerRefreshMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantManagerRefreshMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_MANAGER_REFRESH_METHOD_CACHE_KEY,
         ) {
@@ -1030,7 +1126,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantManagerInsertWidgetMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantManagerInsertWidgetMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_MANAGER_INSERT_WIDGET_METHOD_CACHE_KEY,
         ) {
@@ -1049,7 +1145,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantManagerRemoveNotificationMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantManagerRemoveNotificationMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_MANAGER_REMOVE_NOTIFICATION_METHOD_CACHE_KEY,
         ) {
@@ -1065,7 +1161,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantManagerRemoveBusinessMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantManagerRemoveBusinessMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_MANAGER_REMOVE_BUSINESS_METHOD_CACHE_KEY,
         ) {
@@ -1081,7 +1177,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantManagerRemoveCompositeMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantManagerRemoveCompositeMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_MANAGER_REMOVE_COMPOSITE_METHOD_CACHE_KEY,
         ) {
@@ -1097,7 +1193,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantParseWidgetMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantParseWidgetMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_PARSE_WIDGET_METHOD_CACHE_KEY,
         ) {
@@ -1114,7 +1210,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantResolvePathMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantResolvePathMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_RESOLVE_PATH_METHOD_CACHE_KEY,
         ) {
@@ -1147,7 +1243,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantAllowAppMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantAllowAppMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_ALLOW_APP_METHOD_CACHE_KEY,
         ) {
@@ -1211,7 +1307,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantDecorateExtrasMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantDecorateExtrasMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_DECORATE_EXTRAS_METHOD_CACHE_KEY,
         ) {
@@ -1227,7 +1323,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantParseParamsMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantParseParamsMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_PARSE_PARAMS_METHOD_CACHE_KEY,
         ) {
@@ -1245,7 +1341,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantBuiltinSupportMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantBuiltinSupportMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_BUILTIN_SUPPORT_METHOD_CACHE_KEY,
         ) {
@@ -1269,7 +1365,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveNotificationWidgetApplyMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveNotificationWidgetApplyMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = NOTIFICATION_WIDGET_APPLY_METHOD_CACHE_KEY,
         ) {
@@ -1283,7 +1379,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveNotificationWidgetTemplatePathFieldName(): String {
+    private fun PackageScope.resolveNotificationWidgetTemplatePathFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = NOTIFICATION_WIDGET_TEMPLATE_PATH_FIELD_CACHE_KEY,
         ) {
@@ -1306,7 +1402,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveNotificationWidgetExtrasFieldName(): String {
+    private fun PackageScope.resolveNotificationWidgetExtrasFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = NOTIFICATION_WIDGET_EXTRAS_FIELD_CACHE_KEY,
         ) {
@@ -1331,7 +1427,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveNotificationWidgetChangedFlagFieldName(): String {
+    private fun PackageScope.resolveNotificationWidgetChangedFlagFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = NOTIFICATION_WIDGET_CHANGED_FLAG_FIELD_CACHE_KEY,
         ) {
@@ -1353,7 +1449,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveNotificationWidgetExtraChangedMethodName(): String {
+    private fun PackageScope.resolveNotificationWidgetExtraChangedMethodName(): String {
         return resolveCachedMethodPoint(
             cacheKey = NOTIFICATION_WIDGET_EXTRA_CHANGED_METHOD_CACHE_KEY,
         ) {
@@ -1367,7 +1463,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }.methodName
     }
 
-    private fun resolveSmartAssistantPanelHolderListFieldName(): String {
+    private fun PackageScope.resolveSmartAssistantPanelHolderListFieldName(): String {
         return resolveCachedFieldName(
             cacheKey = SMART_ASSISTANT_PANEL_HOLDER_LIST_FIELD_CACHE_KEY,
         ) {
@@ -1387,7 +1483,22 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantPanelRefreshMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantPanelManagerFieldName(): String? {
+        val bridge = dexKitBridge ?: return null
+        return resolveDexKitFieldValue(
+            bridge = bridge,
+            cacheKey = SMART_ASSISTANT_PANEL_MANAGER_FIELD_CACHE_KEY,
+        ) {
+            findField {
+                matcher {
+                    declaredClass = "com.xiaomi.subscreencenter.SmartAssistantPanel"
+                    type = resolveSmartAssistantManagerClassName()
+                }
+            }.singleOrNull()
+        }?.takeIf { it.isNotBlank() }
+    }
+
+    private fun PackageScope.resolveSmartAssistantPanelRefreshMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_PANEL_REFRESH_METHOD_CACHE_KEY,
         ) {
@@ -1401,7 +1512,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun invokeSmartAssistantManagerRemoveNotification(
+    private fun PackageScope.invokeSmartAssistantManagerRemoveNotification(
         target: Any,
         notificationId: Int,
         packageName: String,
@@ -1443,7 +1554,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun invokeSmartAssistantManagerRemoveBusiness(
+    private fun PackageScope.invokeSmartAssistantManagerRemoveBusiness(
         target: Any,
         packageName: String,
         business: String
@@ -1455,7 +1566,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }.invoke(packageName, business)
     }
 
-    private fun invokeSmartAssistantManagerRemoveComposite(
+    private fun PackageScope.invokeSmartAssistantManagerRemoveComposite(
         target: Any,
         compositeKey: String,
         packageName: String,
@@ -1468,7 +1579,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }.invoke<Boolean>(removeReason, compositeKey, packageName) == true
     }
 
-    private fun invokeSmartAssistantParseParams(bundle: Bundle): Any? {
+    private fun PackageScope.invokeSmartAssistantParseParams(bundle: Bundle): Any? {
         val point = resolveSmartAssistantParseParamsMethod()
         return point.className.toClass().resolve().firstMethod {
             name = point.methodName
@@ -1476,7 +1587,10 @@ class RearWidgetHook : YukiBaseHooker() {
         }.invoke(bundle)
     }
 
-    private fun invokeSmartAssistantParseWidget(packageName: String, parsedParams: Any): Any? {
+    private fun PackageScope.invokeSmartAssistantParseWidget(
+        packageName: String,
+        parsedParams: Any
+    ): Any? {
         val point = resolveSmartAssistantParseWidgetMethod()
         return point.className.toClass().resolve().firstMethod {
             name = point.methodName
@@ -1484,7 +1598,10 @@ class RearWidgetHook : YukiBaseHooker() {
         }.invoke(packageName, parsedParams)
     }
 
-    private fun invokeSmartAssistantBuiltinSupport(packageName: String, business: String): Boolean {
+    private fun PackageScope.invokeSmartAssistantBuiltinSupport(
+        packageName: String,
+        business: String
+    ): Boolean {
         val point = resolveSmartAssistantBuiltinSupportMethod()
         return point.className.toClass().resolve().firstMethod {
             name = point.methodName
@@ -1492,7 +1609,10 @@ class RearWidgetHook : YukiBaseHooker() {
         }.invoke<Boolean>(packageName, business) ?: false
     }
 
-    private fun invokeSmartAssistantResolvePath(packageName: String, business: String): String? {
+    private fun PackageScope.invokeSmartAssistantResolvePath(
+        packageName: String,
+        business: String
+    ): String? {
         val point = resolveSmartAssistantResolvePathMethod()
         return point.className.toClass().resolve().firstMethod {
             name = point.methodName
@@ -1500,21 +1620,22 @@ class RearWidgetHook : YukiBaseHooker() {
         }.invoke<String>(packageName, business)
     }
 
-    private fun readManagerAllowedPackageSet(target: Any): ConcurrentHashMap.KeySetView<String, *> {
+    private fun PackageScope.readManagerAllowedPackageSet(target: Any): ConcurrentHashMap.KeySetView<String, *> {
         @Suppress("UNCHECKED_CAST")
         return target.asResolver().firstField {
             name = resolveSmartAssistantManagerAllowedSetFieldName()
         }.get() as ConcurrentHashMap.KeySetView<String, *>
     }
 
-    private fun readManagerAllowedPackageMap(target: Any): ConcurrentHashMap<String, Boolean> {
+    private fun PackageScope.readManagerAllowedPackageMap(target: Any): ConcurrentHashMap<String, Boolean> {
         @Suppress("UNCHECKED_CAST")
         return target.asResolver().firstField {
             name = resolveSmartAssistantManagerAllowedMapFieldName()
         }.get() as ConcurrentHashMap<String, Boolean>
     }
 
-    private val hookBinder = object : IRearWidgetApiService.Stub() {
+    private var hookBinder: IRearWidgetApiService.Stub? = null
+    private fun PackageScope.createHookBinder() = object : IRearWidgetApiService.Stub() {
         override fun registerBusinessFile(business: String?, filePath: String?) {
             enforceCallerPermission()
             val normalizedBusiness = business?.trim().orEmpty()
@@ -1746,6 +1867,7 @@ class RearWidgetHook : YukiBaseHooker() {
 
         override fun syncState() {
             enforceCallerPermission()
+            recoverExistingManager()
             bootstrapFromPrefsOnInit(force = true)
             applyRuntimeMaps(force = true)
             patchManagerAppGates(manager)
@@ -1796,44 +1918,49 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private val notificationRouteBridgeBinder = object : INotificationRouteBridgeService.Stub() {
-        override fun dispatch(subchannel: String?, payload: Bundle?): Boolean {
-            enforceNotificationRouteCaller()
-            val normalizedSubchannel = subchannel?.trim().orEmpty()
-            if (normalizedSubchannel.isBlank()) return false
+    private var notificationRouteBridgeBinder: INotificationRouteBridgeService.Stub? = null
+    private fun PackageScope.createNotificationRouteBridgeBinder() =
+        object : INotificationRouteBridgeService.Stub() {
+            override fun dispatch(subchannel: String?, payload: Bundle?): Boolean {
+                enforceNotificationRouteCaller()
+                val normalizedSubchannel = subchannel?.trim().orEmpty()
+                if (normalizedSubchannel.isBlank()) return false
 
-            val payloadCopy = Bundle(payload ?: Bundle.EMPTY)
-            return runCatching {
-                when (normalizedSubchannel) {
-                    NotificationRouteBridgeContract.Subchannel.NOTIFICATION_POSTED -> {
-                        if (shouldLogNotificationRoutePayloadJson()) {
-                            debugLog("notification route posted payload=${payloadCopy.toJsonStringByGson()}")
+                val payloadCopy = Bundle(payload ?: Bundle.EMPTY)
+                return runCatching {
+                    when (normalizedSubchannel) {
+                        NotificationRouteBridgeContract.Subchannel.NOTIFICATION_POSTED -> {
+                            if (shouldLogNotificationRoutePayloadJson()) {
+                                debugLog("notification route posted payload=${payloadCopy.toJsonStringByGson()}")
+                            }
+                            handleNotificationRoutePosted(payloadCopy)
                         }
-                        handleNotificationRoutePosted(payloadCopy)
-                    }
 
-                    NotificationRouteBridgeContract.Subchannel.NOTIFICATION_REMOVED -> {
-                        handleNotificationRouteRemoved(payloadCopy)
-                    }
+                        NotificationRouteBridgeContract.Subchannel.NOTIFICATION_REMOVED -> {
+                            handleNotificationRouteRemoved(payloadCopy)
+                        }
 
-                    else -> return false
-                }
-                true
-            }.onFailure {
-                debugLog(
-                    "notification route dispatch failed subchannel=$normalizedSubchannel err=${it.message}"
-                )
-            }.getOrDefault(false)
+                        else -> return false
+                    }
+                    true
+                }.onFailure {
+                    debugLog(
+                        "notification route dispatch failed subchannel=$normalizedSubchannel err=${it.message}"
+                    )
+                }.getOrDefault(false)
+            }
         }
-    }
 
-    private val hookBootstrapReceiver = object : BroadcastReceiver() {
+    private lateinit var hookBootstrapReceiver: BroadcastReceiver
+    private fun PackageScope.createBootstrapReceiver() = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            if (runtime.isClosed) return
             if (intent?.action != RearWidgetApiContract.ACTION_REQUEST_HOOK_SERVICE) return
             val callbackBinder = intent
                 .getBundleExtra(RearWidgetApiContract.Extras.BUNDLE)
                 ?.getBinder(RearWidgetApiContract.Extras.BINDER)
             val callback = IRearWidgetApiConnection.Stub.asInterface(callbackBinder)
+            callback?.let(apiConnections::add)
             val forceSync = intent.getBooleanExtra(RearWidgetApiContract.Extras.FORCE_SYNC, false)
             if (forceSync) {
                 bootstrapFromPrefsOnInit(force = true)
@@ -1841,44 +1968,51 @@ class RearWidgetHook : YukiBaseHooker() {
             runCatching {
                 callback?.onServiceConnected(hookBinder)
             }.onFailure {
+                callback?.let(apiConnections::remove)
                 debugLog("reply hook binder failed err=${it.message}")
             }
         }
     }
 
-    private fun registerHookBootstrapReceiver() {
-        if (!bootstrapReceiverRegistered.compareAndSet(false, true)) return
-        val ctx = hostContext ?: run {
-            bootstrapReceiverRegistered.set(false)
-            return
+    private fun invalidateApiConnections() {
+        apiConnections.forEach { connection ->
+            runCatching { connection.onServiceConnected(null) }
+                .onFailure {
+                    YLog.warn("[$TAG] failed to invalidate API client during reload", it)
+                }
         }
-        val ok = runCatching {
+        apiConnections.clear()
+    }
+
+    private fun PackageScope.registerHookBootstrapReceiver() {
+        val ctx = hostContext ?: return
+        val registered = bootstrapReceiverRegistration.register(ctx) { registrationContext ->
             val filter = IntentFilter(RearWidgetApiContract.ACTION_REQUEST_HOOK_SERVICE)
             ContextCompat.registerReceiver(
-                ctx,
+                registrationContext,
                 hookBootstrapReceiver,
                 filter,
                 RearWidgetApiContract.SERVICE_PERMISSION,
                 null,
                 ContextCompat.RECEIVER_EXPORTED
             )
-            true
-        }.onFailure {
-            bootstrapReceiverRegistered.set(false)
-            debugLog("register bootstrap receiver failed err=${it.message}")
-        }.getOrDefault(false)
-        if (ok) {
-            debugLog("register bootstrap receiver success")
+        }
+        if (registered) debugLog("register bootstrap receiver success")
+    }
+
+    private fun unregisterHookBootstrapReceiver(): Boolean {
+        return bootstrapReceiverRegistration.unregister { context ->
+            context.unregisterReceiver(hookBootstrapReceiver)
         }
     }
 
-    private fun registerNotificationRouteBridge() {
+    private fun PackageScope.registerNotificationRouteBridge() {
         val ctx = hostContext ?: return
         notificationRouteBridgeBootstrap.register(ctx)
     }
 
-    private fun shouldLogNotificationRoutePayloadJson(): Boolean {
-        return allowNotificationRoutePayloadJsonLog && prefs.getBoolean(
+    private fun PackageScope.shouldLogNotificationRoutePayloadJson(): Boolean {
+        return allowNotificationRoutePayloadJsonLog && hookPrefs.getBoolean(
             ConfigKeys.MORE_DEBUG,
             false
         )
@@ -1893,7 +2027,8 @@ class RearWidgetHook : YukiBaseHooker() {
         return com.google.gson.Gson().toJson(map)
     }
 
-    private fun dispatchOperation(op: String, action: () -> OperationOutcome) {
+    private fun PackageScope.dispatchOperation(op: String, action: () -> OperationOutcome) {
+        if (manager == null) recoverExistingManager()
         val outcome = action()
         applyRuntimeMaps(force = true)
         patchManagerAppGates(manager)
@@ -1905,7 +2040,7 @@ class RearWidgetHook : YukiBaseHooker() {
         outcome.ejectBusiness?.let { (pkg, biz) -> ejectBusinessDisplay(pkg, biz) }
     }
 
-    private fun handleNotificationRoutePosted(payload: Bundle) {
+    private fun PackageScope.handleNotificationRoutePosted(payload: Bundle) {
         val snapshot = NotificationRouteSnapshot.fromBundle(payload) ?: return
         val cardId = snapshot.cardId()
         if (!RearWidgetRuntimeStore.hasSceneRoutePrefix(
@@ -1957,7 +2092,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun handleNotificationRouteRemoved(payload: Bundle) {
+    private fun PackageScope.handleNotificationRouteRemoved(payload: Bundle) {
         val snapshot = NotificationRouteSnapshot.fromBundle(payload) ?: return
         val removeReason = payload.getInt(NotificationRouteBridgeContract.Keys.REMOVE_REASON, 1)
         val removed = removeOrdinaryChannelRouteNotice(
@@ -1971,7 +2106,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun buildOrdinaryChannelRoutePayload(
+    private fun PackageScope.buildOrdinaryChannelRoutePayload(
         snapshot: NotificationRouteSnapshot,
         cardId: String,
         scene: String,
@@ -2006,7 +2141,10 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun removeOrdinaryChannelRouteNotice(cardId: String, reason: String): Boolean {
+    private fun PackageScope.removeOrdinaryChannelRouteNotice(
+        cardId: String,
+        reason: String
+    ): Boolean {
         val compositeKey = ordinaryChannelNoticeIndex.remove(cardId)
         if (compositeKey.isNullOrBlank()) return false
         ejectByCompositeKey(compositeKey)
@@ -2014,8 +2152,8 @@ class RearWidgetHook : YukiBaseHooker() {
         return true
     }
 
-    private fun enforceCallerPermission() {
-        reloadGenerationGate.requireOpen()
+    private fun PackageScope.enforceCallerPermission() {
+        check(!runtime.isClosed) { "Roxy runtime is closed" }
         val ctx = hostContext
         val uid = Binder.getCallingUid()
         if (uid == Process.myUid()) return
@@ -2034,8 +2172,8 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun enforceNotificationRouteCaller() {
-        reloadGenerationGate.requireOpen()
+    private fun PackageScope.enforceNotificationRouteCaller() {
+        check(!runtime.isClosed) { "Roxy runtime is closed" }
         val ctx = hostContext
         val uid = Binder.getCallingUid()
         if (uid == Process.myUid()) return
@@ -2055,27 +2193,27 @@ class RearWidgetHook : YukiBaseHooker() {
         )
     }
 
-    private fun normalizeTargetPackage(targetPackage: String?): String {
+    private fun PackageScope.normalizeTargetPackage(targetPackage: String?): String {
         return targetPackage?.trim().takeUnless { it.isNullOrBlank() }
             ?: RearWidgetRuntimeStore.defaultPackageName
     }
 
-    private fun bootstrapFromPrefsOnInit(force: Boolean = false): Boolean {
+    private fun PackageScope.bootstrapFromPrefsOnInit(force: Boolean = false): Boolean {
         if (!presetDataReleased) {
             debugLog("bootstrap deferred until host smart_assistant release completes")
             return false
         }
         if (!force && startupBootstrapped.get()) return true
 
-        val businessRaw = prefs.getString(
+        val businessRaw = hookPrefs.getString(
             ConfigKeys.REAR_WIDGET_BUSINESS_DATA,
             RearWidgetConfigCodec.EMPTY_ARRAY,
         )
-        val sceneRouteRaw = prefs.getString(
+        val sceneRouteRaw = hookPrefs.getString(
             ConfigKeys.REAR_WIDGET_SCENE_ROUTE_DATA,
             RearWidgetConfigCodec.EMPTY_ARRAY,
         )
-        val cardRaw = prefs.getString(
+        val cardRaw = hookPrefs.getString(
             ConfigKeys.REAR_WIDGET_CARD_DATA,
             RearWidgetConfigCodec.EMPTY_ARRAY,
         )
@@ -2083,7 +2221,7 @@ class RearWidgetHook : YukiBaseHooker() {
         val sceneRoutes = RearWidgetConfigCodec.parseSceneRoutes(sceneRouteRaw)
         val cards = RearWidgetConfigCodec.parseCards(cardRaw).filter { it.enabled }
         val stickyCards = cards.filter { it.sticky }
-        val prefsManager = prefs.getPrefsManager()
+        val prefsManager = hookPrefs.getPrefsManager()
         if (!force && businesses.isEmpty() && sceneRoutes.isEmpty() && cards.isEmpty()) {
             debugLog("bootstrap init skipped: no config yet")
             return false
@@ -2176,7 +2314,7 @@ class RearWidgetHook : YukiBaseHooker() {
         return true
     }
 
-    private fun scheduleBootstrapRetry() {
+    private fun PackageScope.scheduleBootstrapRetry() {
         val handler = mainHandler ?: return
         val retry = bootstrapRetryCount.incrementAndGet()
         if (retry > 5) {
@@ -2193,13 +2331,13 @@ class RearWidgetHook : YukiBaseHooker() {
         debugLog("bootstrap retry scheduled count=$retry delay=${delay}ms")
     }
 
-    private fun injectAllActiveNotices() {
+    private fun PackageScope.injectAllActiveNotices() {
         RearWidgetRuntimeStore.listNotices().forEach { notice ->
             applyNoticeDisplayByCompositeKey(notice.ticket.compositeKey)
         }
     }
 
-    private fun scheduleInjectAllActiveNotices() {
+    private fun PackageScope.scheduleInjectAllActiveNotices() {
         val handler = mainHandler ?: return
         val epoch = managerEpoch.get()
         handler.postDelayed({
@@ -2212,7 +2350,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }, 2800L)
     }
 
-    private fun handlePresetReleaseRunnable(task: Any?, persistenceClass: Class<*>) {
+    private fun PackageScope.handlePresetReleaseRunnable(task: Any?, persistenceClass: Class<*>) {
         val runnable = task ?: return
         val owner = runCatching {
             runnable.asResolver().firstField { type = "java.lang.Object" }.get<Any?>()
@@ -2240,7 +2378,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun applyNoticeDisplayByCompositeKey(compositeKey: String) {
+    private fun PackageScope.applyNoticeDisplayByCompositeKey(compositeKey: String) {
         if (!presetDataReleased) {
             debugLog("deferred notice injection until host smart_assistant release key=$compositeKey")
             return
@@ -2254,7 +2392,7 @@ class RearWidgetHook : YukiBaseHooker() {
         injectByCompositeKey(compositeKey)
     }
 
-    private fun ejectDuplicateCardWidgets(notice: RearWidgetActiveNotice) {
+    private fun PackageScope.ejectDuplicateCardWidgets(notice: RearWidgetActiveNotice) {
         val cardId = notice.payload.getString("__rear_card_id__")?.trim().orEmpty()
         if (cardId.isBlank()) return
         val managerTarget = manager ?: return
@@ -2290,7 +2428,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun tryUpdateExistingNoticeDisplay(notice: RearWidgetActiveNotice): Boolean {
+    private fun PackageScope.tryUpdateExistingNoticeDisplay(notice: RearWidgetActiveNotice): Boolean {
         if (notice.payload.containsKey(REAR_WIDGET_CARD_ONE_CONFIG_JSON_KEY)) {
             return false
         }
@@ -2318,7 +2456,7 @@ class RearWidgetHook : YukiBaseHooker() {
         return false
     }
 
-    private fun injectByCompositeKey(compositeKey: String) {
+    private fun PackageScope.injectByCompositeKey(compositeKey: String) {
         val notice = RearWidgetRuntimeStore.getNotice(compositeKey) ?: return
         val mgr = manager ?: return
         val handler = mainHandler ?: return
@@ -2340,7 +2478,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun ejectByTicket(ticket: RearWidgetNoticeTicket) {
+    private fun PackageScope.ejectByTicket(ticket: RearWidgetNoticeTicket) {
         val mgr = manager ?: return
         val handler = mainHandler ?: return
         liveNotificationWidgets.remove(ticket.compositeKey)
@@ -2363,7 +2501,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun ejectByCompositeKey(compositeKey: String) {
+    private fun PackageScope.ejectByCompositeKey(compositeKey: String) {
         liveNotificationWidgets.remove(compositeKey)
         val notice = RearWidgetRuntimeStore.getNotice(compositeKey)
         val ticket = notice?.ticket
@@ -2383,7 +2521,7 @@ class RearWidgetHook : YukiBaseHooker() {
         )
     }
 
-    private fun ejectNativeCompositeKey(
+    private fun PackageScope.ejectNativeCompositeKey(
         compositeKey: String,
         packageName: String,
         removeReason: Int,
@@ -2413,7 +2551,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun parseCompositeKey(compositeKey: String): Pair<String, String?>? {
+    private fun PackageScope.parseCompositeKey(compositeKey: String): Pair<String, String?>? {
         val parts = compositeKey.split(':')
         return when (parts.size) {
             2 -> parts[0] to null
@@ -2422,7 +2560,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun ejectBusinessDisplay(packageName: String, business: String) {
+    private fun PackageScope.ejectBusinessDisplay(packageName: String, business: String) {
         val mgr = manager ?: return
         val handler = mainHandler ?: return
         val prefix = "$packageName:$business:"
@@ -2441,7 +2579,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun applyRuntimeMaps(force: Boolean) {
+    private fun PackageScope.applyRuntimeMaps(force: Boolean) {
         if (!force && !RearWidgetRuntimeStore.mapsDirty.get()) return
         if (!appliedOnce.compareAndSet(
                 false,
@@ -2505,7 +2643,7 @@ class RearWidgetHook : YukiBaseHooker() {
         RearWidgetRuntimeStore.mapsDirty.set(false)
     }
 
-    private fun patchRegistryPrimaryMap(snapshot: Any) {
+    private fun PackageScope.patchRegistryPrimaryMap(snapshot: Any) {
         val registry = smartAssistantRegistry
             ?: error("Smart assistant app registry resolver is not ready")
         val rawMap = registry.primaryMap(snapshot)
@@ -2516,7 +2654,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSmartAssistantPresetReleaseRunMethod(): DexKitMethodInjectionPoint {
+    private fun PackageScope.resolveSmartAssistantPresetReleaseRunMethod(): DexKitMethodInjectionPoint {
         return resolveCachedMethodPoint(
             cacheKey = SMART_ASSISTANT_PRESET_RELEASE_RUN_METHOD_CACHE_KEY,
         ) {
@@ -2536,7 +2674,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun patchManagerAppGates(target: Any?) {
+    private fun PackageScope.patchManagerAppGates(target: Any?) {
         val instance = target ?: return
         val pkgBiz = RearWidgetRuntimeStore.allPkgBusinesses()
         if (pkgBiz.isEmpty()) return
@@ -2556,8 +2694,8 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun allowSelfDescribedNotificationPackage(runnable: Any) {
-        if (!prefs.getBoolean(ConfigKeys.HOOK_ALLOW_REAR_FOCUS_NOTICES, false)) return
+    private fun PackageScope.allowSelfDescribedNotificationPackage(runnable: Any) {
+        if (!hookPrefs.getBoolean(ConfigKeys.HOOK_ALLOW_REAR_FOCUS_NOTICES, false)) return
         val snapshot = synchronized(postRunnableSnapshots) {
             postRunnableSnapshots[runnable]
         } ?: return
@@ -2589,7 +2727,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun rememberOriginalNotificationRoute(snapshot: PostRunnableSnapshot) {
+    private fun PackageScope.rememberOriginalNotificationRoute(snapshot: PostRunnableSnapshot) {
         val packageName = snapshot.packageName.trim()
         if (packageName.isBlank()) return
         val extras = snapshot.extras
@@ -2613,7 +2751,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun handleOriginalNotificationRemoved(
+    private fun PackageScope.handleOriginalNotificationRemoved(
         packageName: String,
         notificationId: Int,
         notificationKey: String?,
@@ -2638,7 +2776,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun applySceneRouteBusinessToExtras(
+    private fun PackageScope.applySceneRouteBusinessToExtras(
         packageName: String,
         notificationId: Int,
         notificationKey: String?,
@@ -2690,7 +2828,7 @@ class RearWidgetHook : YukiBaseHooker() {
         )
     }
 
-    private fun normalizeInitialManagerWidgetPriority(target: Any?, widget: Any?) {
+    private fun PackageScope.normalizeInitialManagerWidgetPriority(target: Any?, widget: Any?) {
         val managerTarget = target ?: return
         val insertedWidget = widget ?: return
         val listFieldName = resolveSmartAssistantManagerWidgetListFieldName()
@@ -2708,7 +2846,7 @@ class RearWidgetHook : YukiBaseHooker() {
         synchronized(list) {
             if (!list.contains(insertedWidget)) return
             val original = ArrayList(list)
-            val normalWidgets = original.filter(::isPriorityManagedWidget)
+            val normalWidgets = original.filter({ isPriorityManagedWidget(it) })
             if (normalWidgets.size <= 1) return
 
             val sortedNormalWidgets = normalWidgets.sortedWith(
@@ -2729,7 +2867,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun normalizeRestoredManagerWidgetPriority(target: Any?) {
+    private fun PackageScope.normalizeRestoredManagerWidgetPriority(target: Any?) {
         val managerTarget = target ?: return
         val listFieldName = resolveSmartAssistantManagerWidgetListFieldName()
         val beforeInactiveFieldName = resolveSmartAssistantManagerBeforeInactiveIndexFieldName()
@@ -2742,7 +2880,7 @@ class RearWidgetHook : YukiBaseHooker() {
             if (list.size <= 1) return
 
             val original = ArrayList(list)
-            val normalWidgets = original.filter(::isPriorityManagedWidget)
+            val normalWidgets = original.filter({ isPriorityManagedWidget(it) })
             if (normalWidgets.isEmpty()) return
             val sortedNormalWidgets = normalWidgets.sortedWith(
                 compareByDescending<Any> { managerWidgetPriority(it) }
@@ -2764,7 +2902,7 @@ class RearWidgetHook : YukiBaseHooker() {
             val currentBeforeInactive = runCatching {
                 managerTarget.asResolver().firstField { name = beforeInactiveFieldName }.get<Int>()
             }.getOrNull() ?: -1
-            val preferredIndex = list.indexOfFirst(::isPriorityManagedWidget)
+            val preferredIndex = list.indexOfFirst({ isPriorityManagedWidget(it) })
                 .takeIf { it >= 0 }
                 ?: 0
             val indexChanged = currentBeforeInactive != preferredIndex
@@ -2781,31 +2919,34 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun isPriorityManagedWidget(widget: Any): Boolean {
+    private fun PackageScope.isPriorityManagedWidget(widget: Any): Boolean {
         val bundle = managerWidgetBundle(widget) ?: return false
         return !bundle.getBoolean("force_popup", false) &&
                 !bundle.getBoolean("enableFloat", false) &&
                 !bundle.getBoolean("is_pin", false)
     }
 
-    private fun managerWidgetBundle(widget: Any): Bundle? {
+    private fun PackageScope.managerWidgetBundle(widget: Any): Bundle? {
         val extrasFieldName = resolveSmartAssistantWidgetRecordExtrasFieldName()
         return runCatching {
             widget.asResolver().firstField { name = extrasFieldName }.get<Bundle?>()
         }.getOrNull()
     }
 
-    private fun setManagerWidgetBundle(widget: Any, extras: Bundle) {
+    private fun PackageScope.setManagerWidgetBundle(widget: Any, extras: Bundle) {
         val extrasFieldName = resolveSmartAssistantWidgetRecordExtrasFieldName()
         widget.asResolver().firstField { name = extrasFieldName }.set(Bundle(extras))
     }
 
-    private fun setManagerWidgetPriority(widget: Any, priority: Int) {
+    private fun PackageScope.setManagerWidgetPriority(widget: Any, priority: Int) {
         val priorityFieldName = resolveSmartAssistantWidgetRecordPriorityFieldName()
         widget.asResolver().firstField { name = priorityFieldName }.set(priority)
     }
 
-    private fun updateManagerWidgetRecord(notice: RearWidgetActiveNotice, extras: Bundle): Boolean {
+    private fun PackageScope.updateManagerWidgetRecord(
+        notice: RearWidgetActiveNotice,
+        extras: Bundle
+    ): Boolean {
         val managerTarget = manager ?: return false
         val listFieldName = resolveSmartAssistantManagerWidgetListFieldName()
         val list = runCatching {
@@ -2832,12 +2973,123 @@ class RearWidgetHook : YukiBaseHooker() {
         return true
     }
 
-    private fun rememberSmartAssistantPanel(panel: Any?) {
+    private fun PackageScope.rememberSmartAssistantPanel(panel: Any?) {
         val target = panel ?: return
         smartAssistantPanels[System.identityHashCode(target)] = WeakReference(target)
     }
 
-    private fun forEachRememberedPanel(action: (Any) -> Unit) {
+    /** Adopt a live manager only after verifying its exact host type. */
+    private fun PackageScope.adoptManager(candidate: Any?): Boolean {
+        val managerClass = runCatching { resolveSmartAssistantManagerClassName().toClass() }
+            .getOrNull() ?: return false
+        val liveCandidate = candidate ?: return false
+        val adoption = assessInstanceAdoption(manager, liveCandidate, managerClass)
+        if (!adoption.accepted) return false
+        val changed = adoption.changed
+        manager = liveCandidate
+        mainHandler = runCatching {
+            liveCandidate.asResolver().firstField {
+                name = resolveSmartAssistantManagerHandlerFieldName()
+            }.get() as? Handler
+        }.getOrNull()
+        if (changed) {
+            managerEpoch.incrementAndGet()
+            liveNotificationWidgets.clear()
+            smartAssistantPanels.clear()
+            ordinaryChannelNoticeIndex.clear()
+        }
+        return changed
+    }
+
+    private fun PackageScope.adoptRecoveredManager(candidate: Any?): Boolean {
+        if (candidate == null) return false
+        return adoptManager(candidate) || manager === candidate
+    }
+
+    /**
+     * Find the manager created by the old classloader. The resolver uses named singleton APIs and
+     * named panel/controller fields only; it never selects an arbitrary first static/type match.
+     */
+    private fun PackageScope.recoverExistingManager(): Boolean {
+        val managerClass = runCatching { resolveSmartAssistantManagerClassName().toClass() }
+            .getOrNull() ?: return false
+        var recovered = manager != null
+        if (!recovered) {
+            recovered = adoptRecoveredManager(
+                resolveNamedStaticInstance(
+                    type = managerClass,
+                    fieldNames = listOf("INSTANCE", "sInstance", "mInstance", "instance"),
+                    methodNames = listOf(
+                        "getInstance", "instance", "getManager",
+                        "getSmartAssistantManager",
+                    ),
+                )
+            )
+        }
+
+        val panelFieldNames = listOf(
+            "mSmartAssistantPanel", "smartAssistantPanel", "mAssistantPanel", "assistantPanel",
+            "mPanel", "panel",
+        )
+        val managerFieldNames =
+            listOfNotNull(resolveSmartAssistantPanelManagerFieldName()) + listOf(
+                "mManager", "manager", "mSmartAssistantManager", "smartAssistantManager",
+                "mController", "controller",
+            )
+        if (!recovered) {
+            val applicationManager = hostContext?.let {
+                readNamedInstanceField(it, managerFieldNames)
+            }
+            recovered = adoptRecoveredManager(applicationManager)
+        }
+        val activityThread = runCatching {
+            val type = Class.forName("android.app.ActivityThread", false, javaClass.classLoader)
+            type.getDeclaredMethod("currentActivityThread")
+                .apply { isAccessible = true }
+                .invoke(null)
+        }.getOrNull()
+        val records = activityThread?.let { thread ->
+            runCatching {
+                thread.javaClass.getDeclaredField("mActivities")
+                    .apply { isAccessible = true }
+                    .get(thread) as? Map<*, *>
+            }.getOrNull()
+        }.orEmpty()
+        records.values.forEach { record ->
+            val activity = runCatching {
+                record?.javaClass?.getDeclaredField("activity")
+                    ?.apply { isAccessible = true }?.get(record)
+            }.getOrNull() ?: return@forEach
+            if (!recovered) {
+                recovered = adoptRecoveredManager(
+                    readNamedInstanceField(activity, managerFieldNames)
+                )
+            }
+            panelFieldNames.forEach { fieldName ->
+                val panel = readNamedInstanceField(activity, listOf(fieldName)) ?: return@forEach
+                rememberSmartAssistantPanel(panel)
+                if (!recovered) {
+                    recovered = adoptRecoveredManager(
+                        readNamedInstanceField(panel, managerFieldNames)
+                    )
+                    // adoptManager clears stale panel references when the manager changes.
+                    rememberSmartAssistantPanel(panel)
+                }
+            }
+        }
+        if (!recovered) {
+            var rememberedManager: Any? = null
+            forEachRememberedPanel { panel ->
+                if (rememberedManager == null) {
+                    rememberedManager = readNamedInstanceField(panel, managerFieldNames)
+                }
+            }
+            recovered = adoptRecoveredManager(rememberedManager)
+        }
+        return recovered
+    }
+
+    private fun PackageScope.forEachRememberedPanel(action: (Any) -> Unit) {
         smartAssistantPanels.entries.toList().forEach { (id, ref) ->
             val panel = ref.get()
             if (panel == null) {
@@ -2848,7 +3100,10 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun queueSmartAssistantPanelRefresh(compositeKey: String, extras: Bundle): Boolean {
+    private fun PackageScope.queueSmartAssistantPanelRefresh(
+        compositeKey: String,
+        extras: Bundle
+    ): Boolean {
         var queued = false
         forEachRememberedPanel { panel ->
             val view = panel as? View
@@ -2867,7 +3122,7 @@ class RearWidgetHook : YukiBaseHooker() {
         return queued
     }
 
-    private fun findLiveNotificationWidget(compositeKey: String): Any? {
+    private fun PackageScope.findLiveNotificationWidget(compositeKey: String): Any? {
         liveNotificationWidgets[compositeKey]?.get()?.let { cached ->
             val currentExtras = extractFieldFromHierarchy(
                 cached,
@@ -2903,7 +3158,11 @@ class RearWidgetHook : YukiBaseHooker() {
         return found
     }
 
-    private fun refreshSmartAssistantPanelWidget(panel: Any, compositeKey: String, extras: Bundle) {
+    private fun PackageScope.refreshSmartAssistantPanelWidget(
+        panel: Any,
+        compositeKey: String,
+        extras: Bundle
+    ) {
         val holderList = panel.asResolver().firstField {
             name = resolveSmartAssistantPanelHolderListFieldName()
         }.get<Any>() as? Iterable<*>
@@ -2931,7 +3190,7 @@ class RearWidgetHook : YukiBaseHooker() {
         debugLog("queued panel refresh key=$compositeKey")
     }
 
-    private fun markWidgetExtraChanged(widget: Any) {
+    private fun PackageScope.markWidgetExtraChanged(widget: Any) {
         runCatching {
             val fieldName = resolveNotificationWidgetChangedFlagFieldName()
             val currentFlags = (extractFieldFromHierarchy(widget, fieldName) as? Int) ?: 0
@@ -2941,7 +3200,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun rememberLiveNotificationWidget(widget: Any?) {
+    private fun PackageScope.rememberLiveNotificationWidget(widget: Any?) {
         val owner = widget ?: return
         val extras = extractFieldFromHierarchy(
             owner,
@@ -2952,7 +3211,10 @@ class RearWidgetHook : YukiBaseHooker() {
         liveNotificationWidgets[compositeKey] = WeakReference(owner)
     }
 
-    private fun updateLiveNotificationWidget(compositeKey: String, extras: Bundle): Boolean {
+    private fun PackageScope.updateLiveNotificationWidget(
+        compositeKey: String,
+        extras: Bundle
+    ): Boolean {
         val widget = findLiveNotificationWidget(compositeKey)
         if (widget == null) {
             liveNotificationWidgets.remove(compositeKey)
@@ -2980,7 +3242,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }.getOrDefault(false)
     }
 
-    private fun invokeNotificationWidgetExtraChanged(widget: Any, extras: Bundle) {
+    private fun PackageScope.invokeNotificationWidgetExtraChanged(widget: Any, extras: Bundle) {
         val methodName = resolveNotificationWidgetExtraChangedMethodName()
         var current: Class<*>? = widget.javaClass
         while (current != null && current != Any::class.java) {
@@ -3007,7 +3269,7 @@ class RearWidgetHook : YukiBaseHooker() {
         error("notification widget extra changed method not found: ${widget.javaClass.name}")
     }
 
-    private fun resolveSmartAssistantHolderWidget(holder: Any?): Any? {
+    private fun PackageScope.resolveSmartAssistantHolderWidget(holder: Any?): Any? {
         val target = holder ?: return null
         val baseClass = resolveNotificationWidgetBaseClassName().toClass()
         var current: Class<*>? = target.javaClass
@@ -3026,18 +3288,18 @@ class RearWidgetHook : YukiBaseHooker() {
         return null
     }
 
-    private fun managerWidgetPriority(widget: Any): Int {
+    private fun PackageScope.managerWidgetPriority(widget: Any): Int {
         val priorityFieldName = resolveSmartAssistantWidgetRecordPriorityFieldName()
         return runCatching {
             widget.asResolver().firstField { name = priorityFieldName }.get<Int>()
         }.getOrNull() ?: Int.MIN_VALUE
     }
 
-    private fun managerWidgetCreatedAt(widget: Any): Long {
+    private fun PackageScope.managerWidgetCreatedAt(widget: Any): Long {
         return managerWidgetBundle(widget)?.getLong("timestamp", Long.MIN_VALUE) ?: Long.MIN_VALUE
     }
 
-    private fun clearAllOrdinaryChannelRouteNotices(reason: String) {
+    private fun PackageScope.clearAllOrdinaryChannelRouteNotices(reason: String) {
         if (ordinaryChannelNoticeIndex.isEmpty()) return
         ordinaryChannelNoticeIndex.entries.toList().forEach { (_, compositeKey) ->
             ejectByCompositeKey(compositeKey)
@@ -3046,7 +3308,7 @@ class RearWidgetHook : YukiBaseHooker() {
         ordinaryChannelNoticeIndex.clear()
     }
 
-    private fun extractSceneCandidate(vararg sources: JSONObject?): String? {
+    private fun PackageScope.extractSceneCandidate(vararg sources: JSONObject?): String? {
         sources.forEach { source ->
             val scene = source?.optString(RearWidgetApiContract.BundleKeys.SCENE)?.trim().orEmpty()
             if (scene.isNotBlank()) return scene
@@ -3054,11 +3316,11 @@ class RearWidgetHook : YukiBaseHooker() {
         return null
     }
 
-    private fun buildChannelScene(channelId: String): String {
+    private fun PackageScope.buildChannelScene(channelId: String): String {
         return CHANNEL_SCENE_PREFIX + channelId.trim()
     }
 
-    private fun buildSyntheticChannelFocusParamJson(
+    private fun PackageScope.buildSyntheticChannelFocusParamJson(
         packageName: String,
         notificationId: Int,
         notificationKey: String?,
@@ -3116,7 +3378,7 @@ class RearWidgetHook : YukiBaseHooker() {
         return this
     }
 
-    private fun staleCompositeKeys(
+    private fun PackageScope.staleCompositeKeys(
         packageName: String,
         notificationId: Int,
         notificationKey: String?,
@@ -3131,7 +3393,7 @@ class RearWidgetHook : YukiBaseHooker() {
         )
     }
 
-    private fun parseBusinessFromParams(packageName: String, extras: Bundle): String? {
+    private fun PackageScope.parseBusinessFromParams(packageName: String, extras: Bundle): String? {
         val parser = runCatching {
             invokeSmartAssistantParseParams(extras)
         }.getOrNull() ?: return null
@@ -3147,7 +3409,11 @@ class RearWidgetHook : YukiBaseHooker() {
         }.getOrNull()?.trim()?.ifBlank { null }
     }
 
-    private fun logNoWidgetPathIfNeeded(packageName: String, business: String, extras: Bundle) {
+    private fun PackageScope.logNoWidgetPathIfNeeded(
+        packageName: String,
+        business: String,
+        extras: Bundle
+    ) {
         val hasRemoteView =
             extras.containsKey("miui.rear.rv") || extras.containsKey("miui.rear.rvAOD")
         if (hasRemoteView) return
@@ -3167,7 +3433,7 @@ class RearWidgetHook : YukiBaseHooker() {
     }
 
     @Suppress("SameParameterValue")
-    private fun createU0b(business: String, index: Int, priority: Int): Any {
+    private fun PackageScope.createU0b(business: String, index: Int, priority: Int): Any {
         return resolveSmartAssistantWidgetSpecClassName().toClass().resolve().firstConstructor {
             parameterCount = 3
         }.create(
@@ -3177,7 +3443,7 @@ class RearWidgetHook : YukiBaseHooker() {
         )
     }
 
-    private fun replaceStaticMap(
+    private fun PackageScope.replaceStaticMap(
         className: String,
         fieldName: String,
         mutate: (MutableMap<Any, Any?>) -> Unit,
@@ -3198,7 +3464,7 @@ class RearWidgetHook : YukiBaseHooker() {
     }
 
     @Suppress("SameParameterValue")
-    private fun replaceStaticList(
+    private fun PackageScope.replaceStaticList(
         className: String,
         fieldName: String,
         mutate: (MutableList<Any>) -> Unit,
@@ -3218,7 +3484,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun unwrapMutableMap(any: Any): MutableMap<Any, Any?> {
+    private fun PackageScope.unwrapMutableMap(any: Any): MutableMap<Any, Any?> {
         var current: Any = any
         repeat(32) {
             val map = current as? MutableMap<Any?, Any?>
@@ -3249,7 +3515,7 @@ class RearWidgetHook : YukiBaseHooker() {
         error(message)
     }
 
-    private fun unwrapMutableList(any: Any): MutableList<Any> {
+    private fun PackageScope.unwrapMutableList(any: Any): MutableList<Any> {
         var current: Any = any
         repeat(32) {
             val list = current as? MutableList<Any?>
@@ -3281,12 +3547,12 @@ class RearWidgetHook : YukiBaseHooker() {
         error(message)
     }
 
-    private fun debugMutableWrapperOnce(
+    private fun PackageScope.debugMutableWrapperOnce(
         kind: String,
         wrapper: Any,
         error: UnsupportedOperationException,
     ) {
-        if (!prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) return
+        if (!hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) return
         if (!mutableWrapperDebuggedTypes.add("$kind:${wrapper.javaClass.name}")) return
         YLog.debug(
             "[$TAG] $kind wrapper is not writable, resolving backing $kind " +
@@ -3294,13 +3560,13 @@ class RearWidgetHook : YukiBaseHooker() {
         )
     }
 
-    private fun debugLog(message: String) {
-        if (prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+    private fun PackageScope.debugLog(message: String) {
+        if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
             YLog.debug("[$TAG] $message")
         }
     }
 
-    private fun deployBusinessTemplate(business: String, sourcePath: String): String? {
+    private fun PackageScope.deployBusinessTemplate(business: String, sourcePath: String): String? {
         val source = sourcePath.trim()
         val target = resolveTemplatePath(business)
         val targetFile = File(target)
@@ -3312,19 +3578,19 @@ class RearWidgetHook : YukiBaseHooker() {
         }
         pendingBusinessTemplateSources.remove(business)
 
-        val blobMeta = prefs.getString(RearWidgetConfigCodec.businessBlobMetaKey(business), "")
+        val blobMeta = hookPrefs.getString(RearWidgetConfigCodec.businessBlobMetaKey(business), "")
         if (blobMeta.isNotBlank() && deployedBlobMetaCache[business] == blobMeta && targetFile.exists()) {
             return target
         }
 
         if (blobMeta.isNotBlank()) {
-            val blobValue = prefs.getString(RearWidgetConfigCodec.businessBlobKey(business), "")
+            val blobValue = hookPrefs.getString(RearWidgetConfigCodec.businessBlobKey(business), "")
             val remoteFileName = RearWidgetConfigCodec.remoteBlobFileNameFromMarker(blobValue)
             if (remoteFileName != null) {
                 val tmp = File(targetFile.parentFile, "${targetFile.name}.tmp.${Process.myPid()}")
                 val ok = runCatching {
                     targetFile.parentFile?.mkdirs()
-                    check(prefs.copyRemoteFileTo(remoteFileName, tmp)) {
+                    check(hookPrefs.copyRemoteFileTo(remoteFileName, tmp)) {
                         "RemoteFile copy returned false"
                     }
                     check(RearWidgetConfigCodec.verifyBusinessBlobMeta(tmp, blobMeta)) {
@@ -3380,7 +3646,7 @@ class RearWidgetHook : YukiBaseHooker() {
                     }.getOrDefault(false)
                     if (ok) {
                         deployedBlobMetaCache[business] = blobMeta
-                        debugLog("deployed business template from legacy prefs business=$business -> $target size=${bytes.size}")
+                        debugLog("deployed business template from legacy hookPrefs business=$business -> $target size=${bytes.size}")
                         return target
                     }
                 }
@@ -3421,35 +3687,35 @@ class RearWidgetHook : YukiBaseHooker() {
         return null
     }
 
-    private fun resolveTemplatePath(business: String): String {
+    private fun PackageScope.resolveTemplatePath(business: String): String {
         val userId = Process.myUid() / 100000
         val base = TEMPLATE_BASE.format(userId.toString())
         val safeBiz = business.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_")
         return "$base/re_$safeBiz"
     }
 
-    private fun resolveCardConfigPath(cardKey: String): String {
+    private fun PackageScope.resolveCardConfigPath(cardKey: String): String {
         val userId = Process.myUid() / 100000
         val base = CARD_CONFIG_BASE.format(userId.toString())
         val safeKey = cardKey.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_")
         return "$base/$safeKey.json"
     }
 
-    private fun resolveCardAssetDir(cardKey: String): File {
+    private fun PackageScope.resolveCardAssetDir(cardKey: String): File {
         val userId = Process.myUid() / 100000
         val base = CARD_ASSET_BASE.format(userId.toString())
         val safeKey = cardKey.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_")
         return File(base, safeKey)
     }
 
-    private fun resolveBuiltinTemplatePath(business: String): String? {
+    private fun PackageScope.resolveBuiltinTemplatePath(business: String): String? {
         val userId = Process.myUid() / 100000
         val normalizedBusiness = normalizeBusinessName(business)
         val relative = BUILTIN_TEMPLATE_RELATIVE_PATHS[normalizedBusiness] ?: return null
         return "/data/system/theme_magic/users/$userId/subscreencenter/smart_assistant/$relative"
     }
 
-    private fun normalizeBusinessName(raw: String): String {
+    private fun PackageScope.normalizeBusinessName(raw: String): String {
         return when (raw.trim()) {
             "taxi", "car_hailing", "carHailing" -> "carHailing"
             "food_Delivery", "food_delivery", "foodDelivery" -> "foodDelivery"
@@ -3459,7 +3725,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun deployCardOneConfig(cardKey: String, json: String): String? {
+    private fun PackageScope.deployCardOneConfig(cardKey: String, json: String): String? {
         val normalizedJson = json.trim()
         if (normalizedJson.isBlank()) return null
 
@@ -3493,7 +3759,7 @@ class RearWidgetHook : YukiBaseHooker() {
         return target
     }
 
-    private fun removeCardOneConfig(cardKey: String) {
+    private fun PackageScope.removeCardOneConfig(cardKey: String) {
         runCatching {
             deployedCardConfigMetaCache.remove(cardKey)
             val file = File(resolveCardConfigPath(cardKey))
@@ -3503,7 +3769,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun applyCardOneConfig(owner: Any?, mamlView: Any?, hookPoint: String) {
+    private fun PackageScope.applyCardOneConfig(owner: Any?, mamlView: Any?, hookPoint: String) {
         if (owner == null || mamlView == null) {
             debugLog("applyCardOneConfig skip hook=$hookPoint owner=${owner != null} view=${mamlView != null}")
             return
@@ -3558,7 +3824,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }, 120L)
     }
 
-    private fun applyCardOneConfigOnce(
+    private fun PackageScope.applyCardOneConfigOnce(
         mamlView: Any,
         json: String,
         configPath: String,
@@ -3581,7 +3847,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun extractCardExtras(owner: Any): Bundle? {
+    private fun PackageScope.extractCardExtras(owner: Any): Bundle? {
         extractFieldFromHierarchy(owner, resolveNotificationWidgetExtrasFieldName())?.let { value ->
             val bundle = value as? Bundle
             if (bundle != null && bundle.hasCardConfigMarkers()) return bundle
@@ -3603,14 +3869,14 @@ class RearWidgetHook : YukiBaseHooker() {
         return null
     }
 
-    private fun extractNotificationWidgetTemplatePath(owner: Any): String? {
+    private fun PackageScope.extractNotificationWidgetTemplatePath(owner: Any): String? {
         return extractFieldFromHierarchy(
             owner,
             resolveNotificationWidgetTemplatePathFieldName()
         ) as? String
     }
 
-    private fun extractFieldFromHierarchy(owner: Any, fieldName: String): Any? {
+    private fun PackageScope.extractFieldFromHierarchy(owner: Any, fieldName: String): Any? {
         var current: Class<*>? = owner.javaClass
         while (current != null && current != Any::class.java) {
             current.declaredFields.firstOrNull { it.name == fieldName }?.let { field ->
@@ -3624,7 +3890,7 @@ class RearWidgetHook : YukiBaseHooker() {
         return null
     }
 
-    private fun setFieldInHierarchy(owner: Any, fieldName: String, value: Any?) {
+    private fun PackageScope.setFieldInHierarchy(owner: Any, fieldName: String, value: Any?) {
         var current: Class<*>? = owner.javaClass
         while (current != null && current != Any::class.java) {
             current.declaredFields.firstOrNull { it.name == fieldName }?.let { field ->
@@ -3643,7 +3909,7 @@ class RearWidgetHook : YukiBaseHooker() {
         return containsKey(REAR_WIDGET_CARD_ONE_CONFIG_JSON_KEY) || containsKey("__rear_card_id__")
     }
 
-    private fun applyHostOneConfig(mamlView: Any, json: String) {
+    private fun PackageScope.applyHostOneConfig(mamlView: Any, json: String) {
         runCatching {
             val oneConfigClass = "com.miui.maml.widget.edit.OneConfig".toClass()
             val widgetEditSaveClass = "com.miui.maml.widget.edit.WidgetEditSave".toClass()
@@ -3664,7 +3930,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun applyCompatOneConfig(mamlView: Any, json: String) {
+    private fun PackageScope.applyCompatOneConfig(mamlView: Any, json: String) {
         val oneConfig = WidgetTemplateConfigRepository.decodeOneConfig(json) ?: return
         val dropDownValues = oneConfig.dropDownSaveConfig.orEmpty()
         if (dropDownValues.isEmpty()) return
@@ -3691,7 +3957,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun requestMamlRefresh(mamlView: Any) {
+    private fun PackageScope.requestMamlRefresh(mamlView: Any) {
         runCatching {
             mamlView.javaClass.methods.firstOrNull {
                 it.name == "requestUpdate" && it.parameterTypes.isEmpty()
@@ -3713,8 +3979,8 @@ class RearWidgetHook : YukiBaseHooker() {
         val expression: String,
     )
 
-    private fun applyManifestDerivedVars(mamlView: Any, templatePath: String?) {
-        val manifest = templatePath?.let(::readManifestText) ?: return
+    private fun PackageScope.applyManifestDerivedVars(mamlView: Any, templatePath: String?) {
+        val manifest = templatePath?.let({ readManifestText(it) }) ?: return
         val vars = parseManifestVarDefs(manifest)
         if (vars.isEmpty()) return
 
@@ -3801,7 +4067,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun parseManifestVarDefs(text: String): List<ManifestVarDef> {
+    private fun PackageScope.parseManifestVarDefs(text: String): List<ManifestVarDef> {
         val regex =
             Regex("<Var\\s+[^>]*name=\"([^\"]+)\"[^>]*type=\"([^\"]+)\"[^>]*expression=\"([^\"]*)\"[^>]*/?>")
         return regex.findAll(text).map {
@@ -3813,7 +4079,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }.toList()
     }
 
-    private fun readManifestText(templatePath: String): String? {
+    private fun PackageScope.readManifestText(templatePath: String): String? {
         return runCatching {
             val file = File(templatePath)
             if (!file.exists()) return null
@@ -3829,7 +4095,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun resolveTemplateImagePreviewModel(
+    private fun PackageScope.resolveTemplateImagePreviewModel(
         business: String,
         sourcePath: String,
         imageValue: String,
@@ -3857,7 +4123,7 @@ class RearWidgetHook : YukiBaseHooker() {
         )
     }
 
-    private fun resolveTemplateConfigStateModel(
+    private fun PackageScope.resolveTemplateConfigStateModel(
         business: String,
         sourcePath: String,
         currentOneConfigJson: String?,
@@ -3901,7 +4167,7 @@ class RearWidgetHook : YukiBaseHooker() {
         )
     }
 
-    private fun resolveTemplatePreviewPath(
+    private fun PackageScope.resolveTemplatePreviewPath(
         business: String,
         sourcePath: String,
     ): String? {
@@ -3918,7 +4184,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
 
         val builtin = normalizedBusiness.takeIf { it.isNotBlank() }
-            ?.let(::resolveBuiltinTemplatePath)
+            ?.let({ resolveBuiltinTemplatePath(it) })
             ?.takeIf { File(it).exists() }
         if (builtin != null) {
             debugLog("resolveTemplatePreviewPath builtin business=$business normalized=$normalizedBusiness path=$builtin")
@@ -3941,7 +4207,7 @@ class RearWidgetHook : YukiBaseHooker() {
         return null
     }
 
-    private fun loadTemplateImageBytes(
+    private fun PackageScope.loadTemplateImageBytes(
         templatePath: String,
         imageValue: String,
     ): ByteArray? {
@@ -3987,7 +4253,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }.getOrNull()
     }
 
-    private fun compressPreviewBytes(bytes: ByteArray): ByteArray? {
+    private fun PackageScope.compressPreviewBytes(bytes: ByteArray): ByteArray? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         val maxDimension = maxOf(bounds.outWidth, bounds.outHeight)
@@ -4018,7 +4284,7 @@ class RearWidgetHook : YukiBaseHooker() {
         }
     }
 
-    private fun importCardCustomImageInternal(
+    private fun PackageScope.importCardCustomImageInternal(
         cardKey: String,
         fieldName: String,
         sourceUri: String,
@@ -4056,7 +4322,7 @@ class RearWidgetHook : YukiBaseHooker() {
     }
 
     @SuppressLint("SetWorldReadable")
-    private fun ensureReadable(file: File) {
+    private fun PackageScope.ensureReadable(file: File) {
         file.setReadable(true, false)
         file.parentFile?.setReadable(true, false)
         file.parentFile?.setExecutable(true, false)

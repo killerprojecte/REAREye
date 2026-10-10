@@ -4,20 +4,22 @@ import android.content.pm.FeatureInfo
 import android.util.ArrayMap
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookPrefs
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 
-class GMSUnlockModule : YukiBaseHooker() {
+class GMSUnlockModule : RoxyHooker() {
     private val blacklistServices =
         listOf("cn.google.services", "com.google.android.feature.services_updater")
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadSystem {
             val clz = "com.android.server.SystemConfig".toClass().resolve()
 
             val remove: (Any, Boolean) -> Unit = { instance, log ->
-                instance.asResolver().firstMethod {
+                instance!!.asResolver().firstMethod {
                     name = "removeFeature"
                     returnType = Void.TYPE
                     parameters(String::class.java)
@@ -27,7 +29,7 @@ class GMSUnlockModule : YukiBaseHooker() {
                     }
                     if (log) {
                         @Suppress("UNCHECKED_CAST")
-                        val map = instance.asResolver().firstMethod {
+                        val map = instance!!.asResolver().firstMethod {
                             name = "getAvailableFeatures"
                         }.invoke() as ArrayMap<String, FeatureInfo>
                         YLog.debug("Hooked system features $map")
@@ -38,10 +40,12 @@ class GMSUnlockModule : YukiBaseHooker() {
             }
             clz.firstConstructor {
                 parameterCount = 0
-            }.hook().after {
-                YLog.debug("Hooking SystemConfig constructor")
-                if (prefs.getBoolean(ConfigKeys.MISC_HOOK_GMS_UNLOCK, false)) {
-                    remove(instance, true)
+            }.hook {
+                after {
+                    YLog.debug("Hooking SystemConfig constructor")
+                    if (hookPrefs.getBoolean(ConfigKeys.MISC_HOOK_GMS_UNLOCK, false)) {
+                        remove(instance!!, true)
+                    }
                 }
             }
 
@@ -49,8 +53,8 @@ class GMSUnlockModule : YukiBaseHooker() {
                 name = "getAvailableFeatures"
             }.hook {
                 before {
-                    if (prefs.getBoolean(ConfigKeys.MISC_HOOK_GMS_UNLOCK, false)) {
-                        remove(instance, false)
+                    if (hookPrefs.getBoolean(ConfigKeys.MISC_HOOK_GMS_UNLOCK, false)) {
+                        remove(instance!!, false)
                         YLog.debug("Features has been patched, remove this hook")
                         removeSelf()
                     }

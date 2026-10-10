@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.util.AttributeSet
 import android.view.MotionEvent
-import android.view.View
 import android.view.ViewConfiguration
 import android.webkit.WebView
 import kotlin.math.abs
@@ -58,31 +57,11 @@ class ScrollWebView : WebView {
         return super.onTouchEvent(event)
     }
 
-    override fun onOverScrolled(
-        scrollX: Int,
-        scrollY: Int,
-        clampedX: Boolean,
-        clampedY: Boolean,
-    ) {
-        if (clampedY) {
-            requestParentDisallowIntercept(false)
-        }
-        super.onOverScrolled(scrollX, scrollY, clampedX, clampedY)
-    }
-
     private fun requestParentDisallowIntercept(disallowIntercept: Boolean) {
         if (disallowInterceptRequested == disallowIntercept) {
             return
         }
         disallowInterceptRequested = disallowIntercept
-        var parent = getParent()
-        while (parent != null) {
-            parent.requestDisallowInterceptTouchEvent(disallowIntercept)
-            if (parent is View) {
-                parent = (parent as View).parent
-            } else {
-                break
-            }
-        }
+        parent?.requestDisallowInterceptTouchEvent(disallowIntercept)
     }
 }

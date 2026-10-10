@@ -62,9 +62,10 @@ internal fun rearWallpaperStatusBadges(
 internal fun rearWallpaperManagementOverviewBadges(
     currentWallpaperName: String,
     wallpaperCount: Int,
+    onCurrentClick: (() -> Unit)? = null,
 ): List<RearBadgeItem> {
     return buildList {
-        add(rearWallpaperCurrentNameBadge(currentWallpaperName))
+        add(rearWallpaperCurrentNameBadge(currentWallpaperName, onCurrentClick))
         add(rearWallpaperCountBadge(wallpaperCount))
     }
 }
@@ -74,8 +75,14 @@ internal fun rearWallpaperManagementBadges(
     wallpaper: RearWallpaperInfo,
     storeSource: RearStoreInstalledWallpaper?,
     isCurrent: Boolean,
+    inSchedule: Boolean = false,
+    intervalLabel: String? = null,
 ): List<RearBadgeItem> {
     return buildList {
+        if (inSchedule) {
+            add(rearWallpaperRotationBadge())
+            intervalLabel?.let { add(rearWallpaperIntervalBadge(it)) }
+        }
         addAll(
             rearWidgetSourceBadges(
                 downloadedFromStore = storeSource != null,
@@ -103,6 +110,8 @@ internal fun rearWallpaperScheduleItemBadges(
     isCurrent: Boolean,
 ): List<RearBadgeItem> {
     return buildList {
+        add(rearWallpaperRotationBadge())
+        add(rearWallpaperIntervalBadge(intervalLabel))
         if (wallpaper == null) {
             add(rearWallpaperUnavailableBadge())
         } else {
@@ -112,7 +121,6 @@ internal fun rearWallpaperScheduleItemBadges(
             }
         }
         if (isCurrent) add(rearWallpaperCurrentBadge())
-        add(rearWallpaperIntervalBadge(intervalLabel))
     }
 }
 
@@ -141,10 +149,14 @@ internal fun rearWallpaperCurrentBadge(): RearBadgeItem {
 }
 
 @Composable
-internal fun rearWallpaperCurrentNameBadge(currentWallpaperName: String): RearBadgeItem {
+internal fun rearWallpaperCurrentNameBadge(
+    currentWallpaperName: String,
+    onClick: (() -> Unit)? = null,
+): RearBadgeItem {
     return RearBadgeItem(
         text = stringResource(R.string.rear_wallpaper_badge_current_name, currentWallpaperName),
         palette = rememberRearWallpaperBadgePalette(RearWallpaperBadgeKind.CurrentName),
+        onClick = onClick,
     )
 }
 
@@ -181,6 +193,14 @@ internal fun rearWallpaperScheduleBadge(scheduleEnabled: Boolean): RearBadgeItem
                 RearWallpaperBadgeKind.ScheduleOff
             }
         ),
+    )
+}
+
+@Composable
+internal fun rearWallpaperRotationBadge(): RearBadgeItem {
+    return RearBadgeItem(
+        text = stringResource(R.string.rear_wallpaper_badge_rotation),
+        palette = rememberRearWallpaperBadgePalette(RearWallpaperBadgeKind.ScheduleOn),
     )
 }
 

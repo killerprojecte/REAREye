@@ -1,48 +1,60 @@
 [versions]
-agp = "9.1.1"
-kotlin = "2.3.21"
+agp = "9.4.1"
+kotlin = "2.4.20"
 kotlinx-serialization-json = "1.11.0"
-material-components = "1.11.0"
+material-components = "1.14.0"
 libxposed = "102.0.0"
-kavaref-core = "1.0.2"
-kavaref-extension = "1.0.2"
-okhttp = "5.3.2"
-okhttp-logging = "5.3.2"
+ksp = "2.3.11"
+roxyhook = "08ef7ad110"
+kavaref-bom = "1.1.1"
+okhttp = "5.5.0"
+okhttp-logging = "5.5.0"
 junit = "4.13.2"
-robolectric = "4.16.1"
+robolectric = "4.17"
 androidx-test-junit = "1.3.0"
 androidx-test-espresso-core = "3.7.0"
-compose-bom = "2026.05.00"
-compose-foundation-style = "1.11.1"
+compose-bom = "2026.09.00"
+compose-foundation-style = "1.12.1"
 androidx-activity-compose = "1.13.0"
-androidx-lifecycle-runtime-compose = "2.10.0"
-miuix = "0.9.0"
-haze = "1.7.2"
-backdrop = "1.0.6"
+androidx-lifecycle-runtime-compose = "2.11.0"
+miuix = "0.9.4"
+haze = "2.0.1"
+backdrop = "2.0.1"
 capsule = "2.1.3"
 lyriconCentral = "0.1.80"
-lyricon = "0.1.70"
-superlyric = "3.4"
+lyricon = "0.1.80"
+superlyric = "3.6"
 gson = "2.14.0"
-dexkit = "2.2.0"
-foundation-layout = "1.11.1"
-mmkv = "2.4.0"
+dexkit = "2.3.0"
+foundation-layout = "1.12.1"
+mmkv = "2.4.2"
 compose-icons = "2.2.1"
+sora-editor = "0.23.6"
+monarch-language-pack = "1.0.2"
+luajava = "4.1.0"
 
 [plugins]
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+roxyhook = { id = "hk.uwu.roxyhook", version.ref = "roxyhook" }
 serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
 [libraries]
+androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+roxy-libxposed = { group = "com.github.NekoStash.RoxyHook", name = "roxy-libxposed", version.ref = "roxyhook" }
+roxy-annotations = { group = "com.github.NekoStash.RoxyHook", name = "roxy-annotations", version.ref = "roxyhook" }
+roxy-ksp = { group = "com.github.NekoStash.RoxyHook", name = "roxy-ksp", version.ref = "roxyhook" }
 androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 material-components = { group = "com.google.android.material", name = "material", version.ref = "material-components" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
 libxposed-api = { group = "io.github.libxposed", name = "api", version.ref = "libxposed" }
 libxposed-service = { group = "io.github.libxposed", name = "service", version.ref = "libxposed" }
-kavaref-core = { group = "com.highcapable.kavaref", name = "kavaref-core", version.ref = "kavaref-core" }
-kavaref-extension = { group = "com.highcapable.kavaref", name = "kavaref-extension", version.ref = "kavaref-extension" }
+kavaref-bom = { module = "com.highcapable.kavaref:kavaref-bom", version.ref = "kavaref-bom" }
+kavaref-core = { module = "com.highcapable.kavaref:kavaref-core" }
+kavaref-android = { module = "com.highcapable.kavaref:kavaref-android" }
+kavaref-extension = { module = "com.highcapable.kavaref:kavaref-extension" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-junit" }
@@ -60,11 +72,14 @@ miuix-ui = { group = "top.yukonga.miuix.kmp", name = "miuix-ui", version.ref = "
 miuix-preference = { group = "top.yukonga.miuix.kmp", name = "miuix-preference", version.ref = "miuix" }
 miuix-icons = { group = "top.yukonga.miuix.kmp", name = "miuix-icons", version.ref = "miuix" }
 miuix-blur = { group = "top.yukonga.miuix.kmp", name = "miuix-blur", version.ref = "miuix" }
+miuix-shader = { group = "top.yukonga.miuix.kmp", name = "miuix-shader", version.ref = "miuix" }
 
-haze = { module = "dev.chrisbanes.haze:haze-android", version.ref = "haze" }
+haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
 backdrop = { module = "io.github.kyant0:backdrop", version.ref = "backdrop" }
 capsule = { module = "io.github.kyant0:capsule", version.ref = "capsule" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver3", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp-logging" }
 lyricon-provider = { group = "io.github.proify.lyricon", name = "provider", version.ref = "lyricon" }
 lyricon-central = { group = "io.github.proify.lyricon", name = "central", version.ref = "lyriconCentral" }
@@ -80,4 +95,8 @@ compose-icons-material-symbols-sharp-cmp = { group = "com.composables", name = "
 compose-icons-material-symbols-outlined-filled-cmp = { group = "com.composables", name = "icons-material-symbols-outlined-filled-cmp", version.ref = "compose-icons" }
 compose-icons-material-symbols-rounded-filled-cmp = { group = "com.composables", name = "icons-material-symbols-rounded-filled-cmp", version.ref = "compose-icons" }
 compose-icons-material-symbols-sharp-filled-cmp = { group = "com.composables", name = "icons-material-symbols-sharp-filled-cmp", version.ref = "compose-icons" }
-
+sora-editor = { group = "io.github.Rosemoe.sora-editor", name = "editor", version.ref = "sora-editor" }
+sora-language-monarch = { group = "io.github.Rosemoe.sora-editor", name = "language-monarch", version.ref = "sora-editor" }
+monarch-language-pack = { module = "io.github.dingyi222666.monarch:monarch-language-pack", version.ref = "monarch-language-pack" }
+luajava-luajit = { group = "party.iroiro.luajava", name = "luajit", version.ref = "luajava" }
+luajava-android = { group = "party.iroiro.luajava", name = "android", version.ref = "luajava" }

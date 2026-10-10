@@ -40,7 +40,10 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 @Composable
 fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
+    modifier: Modifier = Modifier,
     title: String,
+    embedded: Boolean = false,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     loading: Boolean,
     schema: TSchema?,
     config: TConfig?,
@@ -57,34 +60,21 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
     val scrollBehavior = MiuixScrollBehavior()
     val hazeState = rememberAcrylicHazeState()
     val hazeStyle = rememberAcrylicHazeStyle()
+    val contentSourceModifier = if (embedded) {
+        modifier
+    } else {
+        modifier.rearAcrylicSource(hazeState)
+    }
 
     BackHandler(onBack = onBack)
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                color = Color.Transparent,
-                title = title,
-                scrollBehavior = scrollBehavior,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
-                        )
-                    }
-                },
-            )
-        },
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets.systemBars,
-    ) { paddingValues ->
+    val screenContent: @Composable (PaddingValues) -> Unit = { paddingValues ->
         when {
             loading -> {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .rearAcrylicSource(hazeState)
+                        .then(contentSourceModifier)
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -102,7 +92,7 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .rearAcrylicSource(hazeState)
+                        .then(contentSourceModifier)
                         .padding(paddingValues)
                         .padding(16.dp),
                     contentAlignment = Alignment.Center,
@@ -118,11 +108,11 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
+                        .then(contentSourceModifier)
                         .imePadding()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .scrollEndHaptic()
                         .overScrollVertical()
-                        .rearAcrylicSource(hazeState)
                         .padding(horizontal = 12.dp),
                     contentPadding = PaddingValues(
                         top = paddingValues.calculateTopPadding() + 12.dp,
@@ -159,5 +149,30 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
                 }
             }
         }
+    }
+
+    if (embedded) {
+        screenContent(contentPadding)
+    } else {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
+                    color = Color.Transparent,
+                    title = title,
+                    scrollBehavior = scrollBehavior,
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = null,
+                            )
+                        }
+                    },
+                )
+            },
+            contentWindowInsets = androidx.compose.foundation.layout.WindowInsets.systemBars,
+            content = screenContent,
+        )
     }
 }

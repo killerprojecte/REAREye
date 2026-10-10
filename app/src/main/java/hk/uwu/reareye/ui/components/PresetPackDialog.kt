@@ -1,39 +1,46 @@
 package hk.uwu.reareye.ui.components
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.presetpack.PresetPackInstalled
 import hk.uwu.reareye.repository.presetpack.PresetPackManifest
 import hk.uwu.reareye.repository.presetpack.PresetPackRelease
 import hk.uwu.reareye.repository.presetpack.PresetPackRepository
+import hk.uwu.reareye.service.PresetPackDownloadService
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -92,6 +99,11 @@ fun rememberPresetPackHomeSnapshot(refreshToken: Any? = Unit): PresetPackHomeSna
                 },
             )
         }
+        // Apply local changes immediately; a slow update check must not keep a stale notice visible.
+        snapshot = snapshot.copy(
+            local = local,
+            latest = snapshot.latest.takeIf { local.status == PresetPackLocalStatus.READY },
+        )
         val latest = if (local.status == PresetPackLocalStatus.READY) {
             withContext(Dispatchers.IO) {
                 runCatching { PresetPackRepository(context, prefs).checkLatest() }.getOrNull()
@@ -194,24 +206,41 @@ fun PresetPackStatusCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.defaultColors(color = background),
+        insideMargin = PaddingValues(16.dp),
         onClick = onClick,
         pressFeedbackType = PressFeedbackType.Tilt,
         showIndication = true,
     ) {
-        BasicComponent(
-            title = title,
-            titleColor = BasicComponentDefaults.titleColor(color = titleTint),
-            summary = summary,
-            summaryColor = BasicComponentDefaults.summaryColor(color = summaryTint),
-            startAction = {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = iconTint,
-                    modifier = Modifier.padding(end = 6.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(32.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = title,
+                    color = titleTint,
+                    fontSize = 18.sp,
+                    lineHeight = 24.sp,
+                    fontWeight = FontWeight.SemiBold,
                 )
-            },
-        )
+                Text(
+                    text = summary,
+                    color = summaryTint,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                )
+            }
+        }
     }
 }
 
@@ -228,9 +257,32 @@ fun PresetPackDialog(
     var installed by remember { mutableStateOf<PresetPackInstalled?>(null) }
     var staged by remember { mutableStateOf<PresetPackManifest?>(null) }
     var latest by remember { mutableStateOf<PresetPackRelease?>(null) }
-    var busy by remember { mutableStateOf(false) }
+    var localBusy by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    val downloadState by PresetPackDownloadService.state.collectAsState()
+    val busy = localBusy || downloadState.running
+    val displayedProgress = if (downloadState.running) {
+        downloadState.downloaded to downloadState.total
+    } else progress
+
+    LaunchedEffect(downloadState.release, downloadState.running, downloadState.message) {
+        downloadState.release?.let { latest = it }
+        downloadState.message?.let { message = it }
+        if (!downloadState.running && downloadState.manifest != null) {
+            staged = downloadState.manifest
+        }
+    }
+
+    var pendingDownload by remember { mutableStateOf<PresetPackRelease?>(null) }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        // Permission controls notification visibility, not whether the user can download.
+        pendingDownload?.let { PresetPackDownloadService.start(context, it) }
+        pendingDownload = null
+        localBusy = false
+    }
 
     fun refreshInstalled() {
         scope.launch(Dispatchers.IO) {
@@ -258,7 +310,7 @@ fun PresetPackDialog(
     val importer =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
-            busy = true
+            localBusy = true
             message = null
             scope.launch {
                 val result = withContext(Dispatchers.IO) {
@@ -266,10 +318,11 @@ fun PresetPackDialog(
                         progress = done to total
                     }
                 }
-                busy = false
+                localBusy = false
                 progress = null
                 result.fold(
                     onSuccess = { manifest ->
+                        PresetPackDownloadService.clearResult()
                         staged = manifest; message =
                         "已导入 ${manifest.packVersion}，点击应用覆盖当前版本"
                     },
@@ -282,7 +335,7 @@ fun PresetPackDialog(
         show = show,
         title = androidx.compose.ui.res.stringResource(R.string.preset_pack_title),
         summary = androidx.compose.ui.res.stringResource(R.string.preset_pack_dialog_summary),
-        onDismissRequest = { if (!busy) onDismissRequest() },
+        onDismissRequest = { if (!localBusy) onDismissRequest() },
     ) {
         Column(
             modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -297,7 +350,7 @@ fun PresetPackDialog(
                     installed?.let { Text("文件：${formatBytes(it.file.length())}") }
                     installed?.let { Text("SHA-256：${it.sha256.take(16)}…") }
                     staged?.let { Text("待应用版本：${it.packVersion}") }
-                    progress?.let { (done, total) ->
+                    displayedProgress?.let { (done, total) ->
                         Text(
                             if (total > 0) "处理中：${formatBytes(done)} / ${formatBytes(total)}" else "处理中：${
                                 formatBytes(
@@ -307,6 +360,7 @@ fun PresetPackDialog(
                         )
                     }
                     message?.let { Text(it, color = MiuixTheme.colorScheme.error) }
+                    if (downloadState.running) Text("正在后台下载，可息屏或关闭弹窗；中断后再次下载会自动续传。")
                 }
             }
 
@@ -316,7 +370,7 @@ fun PresetPackDialog(
             ) {
                 Button(
                     onClick = {
-                        busy = true
+                        localBusy = true
                         message = null
                         scope.launch {
                             runCatching { withContext(Dispatchers.IO) { repository.checkLatest() } }
@@ -325,7 +379,7 @@ fun PresetPackDialog(
                                     message = "发现版本 ${release.version}"
                                 }
                                 .onFailure { message = it.message ?: "检查更新失败" }
-                            busy = false
+                            localBusy = false
                         }
                     },
                     enabled = !busy,
@@ -349,25 +403,13 @@ fun PresetPackDialog(
             latest?.let { release ->
                 Button(
                     onClick = {
-                        busy = true
                         message = null
-                        scope.launch {
-                            val result = runCatching {
-                                withContext(Dispatchers.IO) {
-                                    repository.downloadLatest(release) { done, total ->
-                                        progress = done to total
-                                    }
-                                }
-                            }
-                            busy = false
-                            progress = null
-                            result.fold(
-                                onSuccess = { manifest ->
-                                    staged = manifest; message =
-                                    "已下载 ${manifest.packVersion}，点击应用"
-                                },
-                                onFailure = { message = it.message ?: "下载失败" },
-                            )
+                        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                            pendingDownload = release
+                            localBusy = true
+                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            PresetPackDownloadService.start(context, release)
                         }
                     },
                     enabled = !busy,
@@ -377,24 +419,32 @@ fun PresetPackDialog(
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text("下载 ${release.version}")
+                        Text("下载 / 继续下载 ${release.version}")
                         Icon(imageVector = MiuixIcons.Download, contentDescription = null)
                     }
                 }
             }
 
+            if (downloadState.running) {
+                Button(
+                    onClick = { PresetPackDownloadService.pause(context) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("暂停下载（保留进度）") }
+            }
+
             staged?.let { manifest ->
                 Button(
                     onClick = {
-                        busy = true
+                        localBusy = true
                         message = null
                         scope.launch {
                             val result = withContext(Dispatchers.IO) { repository.applyStaged() }
-                            busy = false
+                            localBusy = false
                             result.fold(
                                 onSuccess = { value ->
                                     installed = value
                                     staged = null
+                                    PresetPackDownloadService.clearResult()
                                     message = "已应用 ${manifest.packVersion}，重启目标应用后生效"
                                     onApplied()
                                 },
@@ -418,13 +468,14 @@ fun PresetPackDialog(
                 ) { Text("重新校验") }
                 Button(
                     onClick = {
-                        busy = true
+                        localBusy = true
                         scope.launch {
                             val result =
                                 withContext(Dispatchers.IO) { repository.removeInstalled() }
-                            busy = false
+                            localBusy = false
                             result.fold(
                                 onSuccess = {
+                                    PresetPackDownloadService.clearResult()
                                     installed = null; staged = null; message =
                                     "已删除活动资源包，目标侧不会注入"
                                 },

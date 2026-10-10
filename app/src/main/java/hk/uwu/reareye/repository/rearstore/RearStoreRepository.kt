@@ -13,11 +13,13 @@ import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperOperationResult
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperRepository
+import hk.uwu.reareye.repository.rearwidget.RearAppCardRepository
 import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
 import hk.uwu.reareye.repository.rearwidget.RearCardConfig
 import hk.uwu.reareye.repository.rearwidget.RearWidgetConfigCodec
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.repository.rearwidget.RearWidgetSceneRouteConfig
+import hk.uwu.reareye.script.ScriptProjectStore
 import hk.uwu.reareye.ui.config.ConfigCategory
 import hk.uwu.reareye.ui.config.ConfigGroup
 import hk.uwu.reareye.ui.config.ConfigItem
@@ -215,6 +217,10 @@ fun RearStoreWidgetInfo?.evaluateRequirements(
 
 fun RearStoreWidgetMetadata?.resolvedType(): RearStoreWidgetMetadataType {
     return RearStoreWidgetMetadataType.fromRaw(this?.type)
+}
+
+fun RearStoreWidgetMetadata?.shouldInstallAsApp(): Boolean {
+    return this?.installAsApp == true && resolvedType() == RearStoreWidgetMetadataType.CARD
 }
 
 private fun RearStoreWidgetRequirements?.normalizedPackages(): List<String> {
@@ -837,6 +843,8 @@ data class RearStoreWidgetInfo(
 data class RearStoreWidgetMetadata(
     @SerializedName("type")
     val type: String = "",
+    @SerializedName(value = "install_as_app", alternate = ["installAsApp"])
+    val installAsApp: Boolean = false,
 )
 
 @Keep
@@ -1424,6 +1432,12 @@ object RearStoreRepository {
             error("Widget is not installed")
         }
 
+        removeInstalledAppCards(
+            context = context,
+            businessIds = removedBusinesses.map { it.business },
+        )
+        ScriptProjectStore(context).uninstallComponent(normalizedWidgetId)
+
         removedWallpaper?.let { wallpaper ->
             val result = RearWallpaperRepository.deleteWallpaper(context, wallpaper.wallpaperId)
             if (!result.success && !isMissingWallpaperError(result.error)) {
@@ -1481,6 +1495,24 @@ object RearStoreRepository {
             removedSceneRouteCount = removedSceneRoutes.size,
             removedWallpaperCount = if (removedWallpaper != null) 1 else 0,
         )
+    }
+
+    private fun removeInstalledAppCards(
+        context: Context,
+        businessIds: Collection<String>,
+    ) {
+        val normalizedBusinessIds = businessIds.mapNotNull(String::normalizedOrNull).toSet()
+        if (normalizedBusinessIds.isEmpty()) return
+        RearAppCardRepository.loadCatalog(context)
+            .filter { card ->
+                card.ownedByRearEye && card.componentBusiness in normalizedBusinessIds
+            }
+            .forEach { card ->
+                val result = RearAppCardRepository.delete(context, card.appId)
+                if (!result.success) {
+                    error(result.error ?: "Failed to uninstall app card")
+                }
+            }
     }
 
     suspend fun prepareInstallAsset(
@@ -1783,6 +1815,7 @@ object RearStoreRepository {
 
         val cards = RearWidgetManagerRepository.loadCards(prefsManager)
         val cardPackage = detail.widgetInfo?.cardSetup?.packageName.normalizedOrNull()
+        val installAsApp = detail.metadata.shouldInstallAsApp()
         val previousCard = cardPackage?.let { targetPackage ->
             cards.firstOrNull {
                 it.matchesStoreCard(detail.widgetId, businessId, targetPackage) ||
@@ -1794,15 +1827,27 @@ object RearStoreRepository {
         var installedCardId: String? = null
         val nextCards = cards
             .filterNot {
-                (cardPackage != null && it.matchesStoreCard(
-                    detail.widgetId,
-                    businessId,
-                    cardPackage
-                )) ||
+                (installAsApp && it.storeWidgetId.normalizedOrNull() == detail.widgetId) ||
+                        (cardPackage != null && it.matchesStoreCard(
+                            detail.widgetId,
+                            businessId,
+                            cardPackage
+                        )) ||
                         (conflictingStoreWidgetId != null &&
                                 it.storeWidgetId.normalizedOrNull() == conflictingStoreWidgetId)
             }
             .let { existingCards ->
+                if (installAsApp) {
+                    installedCardId = installAppCard(
+                        context = context,
+                        prefsManager = prefsManager,
+                        businessId = businessId,
+                        title = detail.widgetInfo?.cardSetup?.name.normalizedOrNull()
+                            ?: businessName,
+                    )
+                    cardInstalled = true
+                    return@let existingCards
+                }
                 val cardSetup = detail.widgetInfo?.cardSetup ?: return@let existingCards
                 val normalizedCardPackage = cardPackage ?: return@let existingCards
                 cardInstalled = true
@@ -1840,6 +1885,10 @@ object RearStoreRepository {
             )
         }
 
+        // Component scripts are copied into REAREye-owned storage. Reinstalling a
+        // component replaces the complete script tree.
+        installComponentScripts(context, detail.widgetId, assetBytes)
+
         return RearStoreQuickInstallResult(
             widgetId = detail.widgetId,
             widgetName = businessName,
@@ -1850,6 +1899,73 @@ object RearStoreRepository {
             businessConfigId = installedBusiness.id,
             cardId = installedCardId,
         )
+    }
+
+    private fun installAppCard(
+        context: Context,
+        prefsManager: PrefsManager,
+        businessId: String,
+        title: String,
+    ): String {
+        val existing = RearAppCardRepository.loadCatalog(context).firstOrNull {
+            it.ownedByRearEye && it.componentBusiness == businessId
+        }
+        val result = if (existing != null) {
+            RearAppCardRepository.rename(
+                context = context,
+                appId = existing.appId,
+                title = title,
+            )
+        } else {
+            RearAppCardRepository.register(
+                context = context,
+                prefsManager = prefsManager,
+                title = title,
+                componentBusiness = businessId,
+            )
+        }
+        if (!result.success) {
+            error(result.error ?: "Failed to install app card")
+        }
+        return result.appId ?: existing?.appId
+        ?: error("App card installation returned no app id")
+    }
+
+    private fun installComponentScripts(
+        context: Context,
+        componentId: String,
+        assetBytes: ByteArray
+    ) {
+        val safeId = componentId.trim().replace(Regex("[^A-Za-z0-9_-]"), "_").ifBlank { return }
+        val store = ScriptProjectStore(context)
+        // Reinstall semantics intentionally clear the old component script tree even
+        // when the new component has no scripts directory.
+        store.uninstallComponent(safeId)
+        val staging = File(context.cacheDir, "script-install-$safeId-${System.nanoTime()}")
+        try {
+            var found = false
+            ZipInputStream(assetBytes.inputStream()).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    val normalized = entry.name.replace('\\', '/')
+                    val scriptsIndex = normalized.indexOf("scripts/")
+                    if (scriptsIndex < 0 || entry.isDirectory) continue
+                    val relative = normalized.substring(scriptsIndex + "scripts/".length)
+                    if (relative.isBlank() || relative.contains("../")) continue
+                    val target = staging.resolve(relative).canonicalFile
+                    if (!target.path.startsWith(staging.canonicalPath + File.separator)) continue
+                    target.parentFile?.mkdirs()
+                    target.outputStream().use { output -> zip.copyTo(output) }
+                    found = true
+                }
+            }
+            if (found) store.installComponentScripts(safeId, staging)
+        } catch (_: Throwable) {
+            // A component without a scripts/ directory is valid; script installation
+            // must not make the widget installation fail.
+        } finally {
+            staging.deleteRecursively()
+        }
     }
 
     private suspend fun installWallpaperAsset(

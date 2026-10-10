@@ -5,19 +5,23 @@ import android.os.Handler
 import android.os.Looper
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookPrefs
+import hk.uwu.reareye.hook.support.hookSystemContext
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveDexKitClassValue
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 import org.luckypray.dexkit.DexKitCacheBridge
 import org.luckypray.dexkit.annotations.DexKitExperimentalApi
 import java.util.Collections
 import java.util.WeakHashMap
 
 @OptIn(DexKitExperimentalApi::class)
-class VideoProgressResumeModule : YukiBaseHooker() {
+class VideoProgressResumeModule : RoxyHooker() {
     companion object {
         private const val TAG = "REAREye-VideoProgressResume"
         private const val VIDEO_ELEMENT_CLASS_CACHE_KEY = "SSC_VIDEO_PROGRESS_VIDEO_ELEMENT_CLASS"
@@ -37,7 +41,13 @@ class VideoProgressResumeModule : YukiBaseHooker() {
     @Volatile
     private var lastRestoreScheduleAt = 0L
 
-    override fun onReloading(): Boolean {
+    override fun onHotReloadQuiesce() {
+        check(releaseForReload()) {
+            "VideoProgressResumeModule failed to release reload resources"
+        }
+    }
+
+    private fun releaseForReload(): Boolean {
         var success = true
         val remaining = ArrayList<Runnable>(restoreRunnables.size)
         restoreRunnables.forEach { runnable ->
@@ -57,73 +67,81 @@ class VideoProgressResumeModule : YukiBaseHooker() {
         return success
     }
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadApp("com.xiaomi.subscreencenter") {
             val versionCode = resolveHookPackageVersionCode(
-                systemContext,
-                appInfo.packageName,
-                appInfo.sourceDir,
+                hookSystemContext,
+                hookAppInfo.packageName,
+                hookAppInfo.sourceDir,
             )
-            val bridge = trackResource(
+            val bridge = runtime.manage(
                 createDexKitCacheBridge(
-                packageName = appInfo.packageName,
-                packageVersionCode = versionCode,
-                sourceDir = appInfo.sourceDir,
-                dataDir = appInfo.dataDir,
+                    packageName = hookAppInfo.packageName,
+                    packageVersionCode = versionCode,
+                    sourceDir = hookAppInfo.sourceDir,
+                    dataDir = hookAppInfo.dataDir,
                 )
             )
 
-            resolveVideoElementClassName(bridge)?.let(::hookVideoElementClass)
+            resolveVideoElementClassName(bridge)?.let { hookVideoElementClass(it) }
                 ?: YLog.warn("$TAG skip VideoElement hooks: DexKit unresolved")
-            resolveTextureVideoViewClassName(bridge)?.let(::hookVideoHolderClass)
+            resolveTextureVideoViewClassName(bridge)?.let { hookVideoHolderClass(it) }
                 ?: YLog.warn("$TAG skip TextureVideoView hooks: DexKit unresolved")
-            resolveBaseVideoViewClassName(bridge)?.let(::hookVideoHolderClass)
+            resolveBaseVideoViewClassName(bridge)?.let { hookVideoHolderClass(it) }
                 ?: YLog.warn("$TAG skip BaseVideoView hooks: DexKit unresolved")
-            resolveSurfaceVideoViewClassName(bridge)?.let(::hookSurfaceVideoView)
+            resolveSurfaceVideoViewClassName(bridge)?.let { hookSurfaceVideoView(it) }
                 ?: YLog.warn("$TAG skip SurfaceVideoView hooks: DexKit unresolved")
             hookRestoreSchedulers(bridge)
         }
     }
 
-    private fun hookVideoElementClass(className: String) {
+    private fun PackageScope.hookVideoElementClass(className: String) {
         runCatching {
             className.toClass().resolve().firstMethod {
                 name = "seekTo"
                 parameterCount = 1
                 returnType = Void.TYPE
                 parameters(Int::class.java)
-            }.hook().replaceUnit {
-                if (!prefs.getBoolean(ConfigKeys.HOOK_VIDEO_WALLPAPER_RESUME_PROGRESS, false)) {
-                    invokeOriginal(*args)
-                    return@replaceUnit
-                }
+            }.hook {
+                replaceUnit {
+                    if (!hookPrefs.getBoolean(
+                            ConfigKeys.HOOK_VIDEO_WALLPAPER_RESUME_PROGRESS,
+                            false
+                        )
+                    ) {
+                        callOriginal(*args)
+                        return@replaceUnit
+                    }
 
-                val position = args(0).int()
-                val holder = VideoProgressStore.readVideoHolder(instance)
-                if (VideoProgressStore.shouldSkipReset(
-                        view = holder,
-                        position = position,
-                        debugEnabled = isMoreDebugEnabled(),
-                        reason = "VideoElement.seekTo",
-                    )
-                ) {
-                    return@replaceUnit
-                }
+                    val position = args(0).int()
+                    val holder = VideoProgressStore.readVideoHolder(instance)
+                    if (VideoProgressStore.shouldSkipReset(
+                            view = holder,
+                            position = position,
+                            debugEnabled = isMoreDebugEnabled(),
+                            reason = "VideoElement.seekTo",
+                        )
+                    ) {
+                        return@replaceUnit
+                    }
 
-                invokeOriginal(*args)
+                    callOriginal(*args)
+                }
             }
         }.onFailure { YLog.warn(it) }
     }
 
-    private fun hookVideoHolderClass(className: String) {
+    private fun PackageScope.hookVideoHolderClass(className: String) {
         val classRef = className.toClass().resolve()
 
         runCatching {
             classRef.firstMethod {
                 name = "start"
                 parameterCount = 0
-            }.hook().after {
-                VideoProgressStore.markStarted(instance)
+            }.hook {
+                after {
+                    VideoProgressStore.markStarted(instance)
+                }
             }
         }.onFailure { YLog.warn(it) }
 
@@ -133,24 +151,30 @@ class VideoProgressResumeModule : YukiBaseHooker() {
                 parameterCount = 1
                 returnType = Void.TYPE
                 parameters(Int::class.java)
-            }.hook().replaceUnit {
-                if (!prefs.getBoolean(ConfigKeys.HOOK_VIDEO_WALLPAPER_RESUME_PROGRESS, false)) {
-                    invokeOriginal(*args)
-                    return@replaceUnit
-                }
+            }.hook {
+                replaceUnit {
+                    if (!hookPrefs.getBoolean(
+                            ConfigKeys.HOOK_VIDEO_WALLPAPER_RESUME_PROGRESS,
+                            false
+                        )
+                    ) {
+                        callOriginal(*args)
+                        return@replaceUnit
+                    }
 
-                val position = args(0).int()
-                if (VideoProgressStore.shouldSkipReset(
-                        view = instance,
-                        position = position,
-                        debugEnabled = isMoreDebugEnabled(),
-                        reason = "${instance::class.java.name}.seekTo",
-                    )
-                ) {
-                    return@replaceUnit
-                }
+                    val position = args(0).int()
+                    if (VideoProgressStore.shouldSkipReset(
+                            view = instance,
+                            position = position,
+                            debugEnabled = isMoreDebugEnabled(),
+                            reason = "${instance!!::class.java.name}.seekTo",
+                        )
+                    ) {
+                        return@replaceUnit
+                    }
 
-                invokeOriginal(*args)
+                    callOriginal(*args)
+                }
             }
         }.onFailure { YLog.warn(it) }
 
@@ -159,8 +183,10 @@ class VideoProgressResumeModule : YukiBaseHooker() {
                 classRef.firstMethod {
                     name = methodName
                     parameterCount = 0
-                }.hook().before {
-                    VideoProgressStore.save(instance, isMoreDebugEnabled())
+                }.hook {
+                    before {
+                        VideoProgressStore.save(instance, isMoreDebugEnabled())
+                    }
                 }
             }.onFailure { YLog.warn(it) }
         }
@@ -170,8 +196,10 @@ class VideoProgressResumeModule : YukiBaseHooker() {
                 name = "releaseMedia"
                 parameterCount = 1
                 returnType = Void.TYPE
-            }.hook().before {
-                VideoProgressStore.save(instance, isMoreDebugEnabled())
+            }.hook {
+                before {
+                    VideoProgressStore.save(instance, isMoreDebugEnabled())
+                }
             }
         }.onFailure { YLog.warn(it) }
 
@@ -180,15 +208,17 @@ class VideoProgressResumeModule : YukiBaseHooker() {
                 name = "setVideoPath"
                 parameterCount = 2
                 returnType = Void.TYPE
-            }.hook().after {
-                VideoProgressStore.register(instance)
-                if (VideoProgressStore.onSourceReopened(
-                        view = instance,
-                        debugEnabled = isMoreDebugEnabled(),
-                        reason = "setVideoPath",
-                    )
-                ) {
-                    scheduleRestore("sourceReopen:setVideoPath")
+            }.hook {
+                after {
+                    VideoProgressStore.register(instance)
+                    if (VideoProgressStore.onSourceReopened(
+                            view = instance,
+                            debugEnabled = isMoreDebugEnabled(),
+                            reason = "setVideoPath",
+                        )
+                    ) {
+                        scheduleRestore("sourceReopen:setVideoPath")
+                    }
                 }
             }
         }.onFailure { YLog.warn(it) }
@@ -199,24 +229,8 @@ class VideoProgressResumeModule : YukiBaseHooker() {
                 parameterCount = 1
                 returnType = Void.TYPE
                 parameters(MediaDataSource::class.java)
-            }.hook().after {
-                VideoProgressStore.register(instance)
-                if (VideoProgressStore.onSourceReopened(
-                        view = instance,
-                        debugEnabled = isMoreDebugEnabled(),
-                        reason = "setVideoDataSource",
-                    )
-                ) {
-                    scheduleRestore("sourceReopen:setVideoDataSource")
-                }
-            }
-        }.onFailure {
-            runCatching {
-                classRef.firstMethod {
-                    name = "setVideoDataSource"
-                    parameterCount = 1
-                    returnType = Void.TYPE
-                }.hook().after {
+            }.hook {
+                after {
                     VideoProgressStore.register(instance)
                     if (VideoProgressStore.onSourceReopened(
                             view = instance,
@@ -225,6 +239,26 @@ class VideoProgressResumeModule : YukiBaseHooker() {
                         )
                     ) {
                         scheduleRestore("sourceReopen:setVideoDataSource")
+                    }
+                }
+            }
+        }.onFailure {
+            runCatching {
+                classRef.firstMethod {
+                    name = "setVideoDataSource"
+                    parameterCount = 1
+                    returnType = Void.TYPE
+                }.hook {
+                    after {
+                        VideoProgressStore.register(instance)
+                        if (VideoProgressStore.onSourceReopened(
+                                view = instance,
+                                debugEnabled = isMoreDebugEnabled(),
+                                reason = "setVideoDataSource",
+                            )
+                        ) {
+                            scheduleRestore("sourceReopen:setVideoDataSource")
+                        }
                     }
                 }
             }.onFailure(YLog::warn)
@@ -236,25 +270,29 @@ class VideoProgressResumeModule : YukiBaseHooker() {
                 parameterCount = 1
                 returnType = Void.TYPE
                 superclass()
-            }.hook().after {
-                val state = args(0).int()
-                VideoProgressStore.onStateChanged(instance, state)
+            }.hook {
+                after {
+                    val state = args(0).int()
+                    VideoProgressStore.onStateChanged(instance, state)
+                }
             }
         }.onFailure { YLog.warn(it) }
     }
 
-    private fun hookSurfaceVideoView(className: String) {
+    private fun PackageScope.hookSurfaceVideoView(className: String) {
         runCatching {
             className.toClass().resolve().firstMethod {
                 name = "onSurfaceDestroyed"
                 parameterCount = 0
-            }.hook().before {
-                VideoProgressStore.save(instance, isMoreDebugEnabled())
+            }.hook {
+                before {
+                    VideoProgressStore.save(instance, isMoreDebugEnabled())
+                }
             }
         }.onFailure { YLog.warn(it) }
     }
 
-    private fun hookRestoreSchedulers(bridge: DexKitCacheBridge.RecyclableBridge) {
+    private fun PackageScope.hookRestoreSchedulers(bridge: DexKitCacheBridge.RecyclableBridge) {
         runCatching {
             val widgetViewClassName = resolveMamlWidgetViewClassName(bridge)
                 ?: return@runCatching YLog.warn("$TAG skip widget view restore hooks: DexKit unresolved")
@@ -262,24 +300,30 @@ class VideoProgressResumeModule : YukiBaseHooker() {
             widgetViewRef.firstMethod {
                 name = "onResume"
                 parameterCount = 0
-            }.hook().after {
-                if (prefs.getBoolean(ConfigKeys.HOOK_VIDEO_WALLPAPER_RESUME_PROGRESS, false)) {
-                    scheduleRestore("widgetOnResume")
+            }.hook {
+                after {
+                    if (hookPrefs.getBoolean(
+                            ConfigKeys.HOOK_VIDEO_WALLPAPER_RESUME_PROGRESS,
+                            false
+                        )
+                    ) {
+                        scheduleRestore("widgetOnResume")
+                    }
                 }
             }
         }.onFailure { YLog.warn(it) }
     }
 
-    private fun debugLog(message: String) {
+    private fun PackageScope.debugLog(message: String) {
         if (isMoreDebugEnabled()) YLog.debug(message)
     }
 
-    private fun isMoreDebugEnabled(): Boolean {
-        return prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
+    private fun PackageScope.isMoreDebugEnabled(): Boolean {
+        return hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)
     }
 
-    private fun scheduleRestore(reason: String) {
-        if (!prefs.getBoolean(ConfigKeys.HOOK_VIDEO_WALLPAPER_RESUME_PROGRESS, false)) return
+    private fun PackageScope.scheduleRestore(reason: String) {
+        if (!hookPrefs.getBoolean(ConfigKeys.HOOK_VIDEO_WALLPAPER_RESUME_PROGRESS, false)) return
         if (!VideoProgressStore.hasSavedProgress()) {
             debugLog("$TAG skip restore schedule reason=$reason saved=false")
             return
@@ -307,7 +351,7 @@ class VideoProgressResumeModule : YukiBaseHooker() {
         }
     }
 
-    private fun resolveVideoElementClassName(
+    private fun PackageScope.resolveVideoElementClassName(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): String? {
         return resolveDexKitClassValue(
@@ -327,7 +371,7 @@ class VideoProgressResumeModule : YukiBaseHooker() {
         }
     }
 
-    private fun resolveTextureVideoViewClassName(
+    private fun PackageScope.resolveTextureVideoViewClassName(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): String? {
         return resolveDexKitClassValue(
@@ -349,7 +393,7 @@ class VideoProgressResumeModule : YukiBaseHooker() {
         }
     }
 
-    private fun resolveBaseVideoViewClassName(
+    private fun PackageScope.resolveBaseVideoViewClassName(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): String? {
         return resolveDexKitClassValue(
@@ -371,7 +415,7 @@ class VideoProgressResumeModule : YukiBaseHooker() {
         }
     }
 
-    private fun resolveSurfaceVideoViewClassName(
+    private fun PackageScope.resolveSurfaceVideoViewClassName(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): String? {
         return resolveDexKitClassValue(
@@ -387,7 +431,7 @@ class VideoProgressResumeModule : YukiBaseHooker() {
         }
     }
 
-    private fun resolveMamlWidgetViewClassName(
+    private fun PackageScope.resolveMamlWidgetViewClassName(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): String? {
         return resolveDexKitClassValue(

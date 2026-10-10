@@ -3,15 +3,18 @@ package hk.uwu.reareye.hook.scopes.system.modules
 import android.view.MotionEvent
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookPrefs
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.HotReloadPolicy
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 
-class DisableSubScreenDoubleTapSleepHook : YukiBaseHooker() {
+class DisableSubScreenDoubleTapSleepHook : RoxyHooker() {
     @Volatile
     private var focusedPackageName: String? = null
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadSystem {
             val clz =
                 "com.miui.server.input.gesture.multifingergesture.gesture.MiuiSubscreenDoubleTapGesture"
@@ -25,30 +28,36 @@ class DisableSubScreenDoubleTapSleepHook : YukiBaseHooker() {
             managerRef.firstMethod {
                 name = "onFocusedWindowChanged"
                 parameterCount = 3
-            }.hook().after {
-                focusedPackageName = args(2).any().owningPackage()
+            }.hook {
+                hotReloadPolicy = HotReloadPolicy.KEEP
+                after {
+                    focusedPackageName = args(2).value.owningPackage()
+                }
             }
 
             clz.firstMethod {
                 name = "onPointerEvent"
                 returnType = Void.TYPE
                 parameters(MotionEvent::class.java)
-            }.hook().replaceUnit {
-                val whitelist = prefs.getStringSet(
-                    ConfigKeys.SUBSCREEN_DOUBLE_TAP_SLEEP_DISABLED_APPS,
-                )
-                val packageName = focusedPackageName ?: managerRef.firstMethod {
-                    name = "getFocusedWindow"
-                }.invoke().owningPackage()?.also {
-                    focusedPackageName = it
-                }
-                if (packageName != null && packageName in whitelist) {
-                    if (prefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
-                        YLog.debug("Rejected subscreen double tap sleep gesture package=$packageName")
+            }.hook {
+                hotReloadPolicy = HotReloadPolicy.KEEP
+                replaceUnit {
+                    val whitelist = hookPrefs.getStringSet(
+                        ConfigKeys.SUBSCREEN_DOUBLE_TAP_SLEEP_DISABLED_APPS,
+                    )
+                    val packageName = focusedPackageName ?: managerRef.firstMethod {
+                        name = "getFocusedWindow"
+                    }.invoke().owningPackage()?.also {
+                        focusedPackageName = it
                     }
-                    return@replaceUnit
+                    if (packageName != null && packageName in whitelist) {
+                        if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+                            YLog.debug("Rejected subscreen double tap sleep gesture package=$packageName")
+                        }
+                        return@replaceUnit
+                    }
+                    callOriginal(*args)
                 }
-                invokeOriginal(*args)
             }
         }
     }

@@ -2,16 +2,19 @@ package hk.uwu.reareye.hook.scopes.subscreencenter.modules
 
 import android.os.Parcel
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookPrefs
+import hk.uwu.reareye.hook.support.hookSystemContext
 import hk.uwu.reareye.hook.utils.DexKitMethodInjectionPoint
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveDexKitMethodInjectionPoint
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 import org.luckypray.dexkit.DexKitCacheBridge
 import org.luckypray.dexkit.annotations.DexKitExperimentalApi
-import java.util.ArrayList
 
 /**
  * Removes Subscreen Center's hard-coded 15-app limit for insertApp.
@@ -22,7 +25,7 @@ import java.util.ArrayList
  * use the real size so persistence and other list operations remain unchanged.
  */
 @OptIn(DexKitExperimentalApi::class)
-class UnlimitedSubscreenAppListHook : YukiBaseHooker() {
+class UnlimitedSubscreenAppListHook : RoxyHooker() {
     companion object {
         private const val TAG = "REAREye-SubscreenAppList"
         private const val INSERT_TRANSACTION = 11
@@ -35,20 +38,20 @@ class UnlimitedSubscreenAppListHook : YukiBaseHooker() {
 
     private val insertTransactionDepth = ThreadLocal.withInitial { 0 }
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadApp("com.xiaomi.subscreencenter") {
             val bridge = runCatching {
                 val versionCode = resolveHookPackageVersionCode(
-                    systemContext,
-                    appInfo.packageName,
-                    appInfo.sourceDir,
+                    hookSystemContext,
+                    hookAppInfo.packageName,
+                    hookAppInfo.sourceDir,
                 )
-                trackResource(
+                runtime.manage(
                     createDexKitCacheBridge(
-                        packageName = appInfo.packageName,
+                        packageName = hookAppInfo.packageName,
                         packageVersionCode = versionCode,
-                        sourceDir = appInfo.sourceDir,
-                        dataDir = appInfo.dataDir,
+                        sourceDir = hookAppInfo.sourceDir,
+                        dataDir = hookAppInfo.dataDir,
                     ),
                 )
             }.onFailure {
@@ -71,12 +74,12 @@ class UnlimitedSubscreenAppListHook : YukiBaseHooker() {
             installListSizeProbe(listPoint)
             YLog.info(
                 "[$TAG] installed insert=${insertPoint.className}->${insertPoint.methodName}, " +
-                    "list=${listPoint.className}->${listPoint.methodName}",
+                        "list=${listPoint.className}->${listPoint.methodName}",
             )
         }
     }
 
-    private fun resolveInsertMethod(
+    private fun PackageScope.resolveInsertMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): DexKitMethodInjectionPoint? {
         return resolveDexKitMethodInjectionPoint(
@@ -93,7 +96,7 @@ class UnlimitedSubscreenAppListHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveListMethod(
+    private fun PackageScope.resolveListMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
         insertPoint: DexKitMethodInjectionPoint,
     ): DexKitMethodInjectionPoint? {
@@ -117,7 +120,7 @@ class UnlimitedSubscreenAppListHook : YukiBaseHooker() {
         }
     }
 
-    private fun installInsertTransactionMarker(
+    private fun PackageScope.installInsertTransactionMarker(
         point: DexKitMethodInjectionPoint,
     ) {
         point.className.toClass().resolve().firstMethod {
@@ -133,7 +136,7 @@ class UnlimitedSubscreenAppListHook : YukiBaseHooker() {
         }.hook {
             before {
                 if (args(0).int() != INSERT_TRANSACTION) return@before
-                if (!prefs.getBoolean(ConfigKeys.HOOK_UNLIMITED_SUBSCREEN_APP_LIST, true)) {
+                if (!hookPrefs.getBoolean(ConfigKeys.HOOK_UNLIMITED_SUBSCREEN_APP_LIST, true)) {
                     return@before
                 }
                 insertTransactionDepth.set((insertTransactionDepth.get() ?: 0) + 1)
@@ -151,19 +154,21 @@ class UnlimitedSubscreenAppListHook : YukiBaseHooker() {
         }
     }
 
-    private fun installListSizeProbe(
+    private fun PackageScope.installListSizeProbe(
         point: DexKitMethodInjectionPoint,
     ) {
         point.className.toClass().resolve().firstMethod {
             name = point.methodName
             parameterCount = 0
             returnType = ArrayList::class.java
-        }.hook().after {
-            if ((insertTransactionDepth.get() ?: 0) <= 0) return@after
+        }.hook {
+            after {
+                if ((insertTransactionDepth.get() ?: 0) <= 0) return@after
 
-            @Suppress("UNCHECKED_CAST")
-            val source = result as? ArrayList<Any?> ?: return@after
-            result = UnlimitedSizeProbe(source)
+                @Suppress("UNCHECKED_CAST")
+                val source = result as? ArrayList<Any?> ?: return@after
+                result = UnlimitedSizeProbe(source)
+            }
         }
     }
 

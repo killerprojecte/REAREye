@@ -126,14 +126,14 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.ColorPalette
 import top.yukonga.miuix.kmp.basic.ColorPicker
+import top.yukonga.miuix.kmp.basic.DropdownDefaults
+import top.yukonga.miuix.kmp.basic.DropdownImpl
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Slider
-import top.yukonga.miuix.kmp.basic.SpinnerDefaults
-import top.yukonga.miuix.kmp.basic.SpinnerEntry
-import top.yukonga.miuix.kmp.basic.SpinnerItemImpl
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
@@ -146,12 +146,16 @@ import kotlin.math.roundToInt
 
 @Composable
 fun WidgetTemplateConfigScreenContent(
+    modifier: Modifier = Modifier,
     business: String,
     sourceFilePath: String,
     cardStorageKey: String,
     currentConfigJson: String?,
     onBack: () -> Unit,
     onSave: (String?) -> Unit,
+    embedded: Boolean = false,
+    allowContentPresentation: Boolean = true,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     titleText: String? = null,
     loadingText: String? = null,
     unavailableText: String? = null,
@@ -187,18 +191,27 @@ fun WidgetTemplateConfigScreenContent(
         val state = withContext(Dispatchers.IO) {
             stateResolver(context, business, sourceFilePath, currentConfigJson)
         }
-        schema = state?.templateSchemaJson?.let(WidgetTemplateConfigRepository::decodeSchema)
-        workingConfig = state?.oneConfigJson
-            ?.let(WidgetTemplateConfigRepository::decodeOneConfig)
-            ?: RearWidgetOneConfig()
+        val decodedState = withContext(Dispatchers.Default) {
+            val decodedSchema = state?.templateSchemaJson
+                ?.let(WidgetTemplateConfigRepository::decodeSchema)
+            val decodedConfig = state?.oneConfigJson
+                ?.let(WidgetTemplateConfigRepository::decodeOneConfig)
+                ?: RearWidgetOneConfig()
+            decodedSchema to decodedConfig
+        }
+        schema = decodedState.first
+        workingConfig = decodedState.second
         loading = false
     }
 
     val resolvedSchema = schema
     val resolvedConfig = workingConfig
     TemplateVarConfigScreenScaffold(
+        modifier = modifier,
         title = titleText ?: stringResource(R.string.rear_widget_card_template_title),
-        loading = loading,
+        embedded = embedded,
+        contentPadding = contentPadding,
+        loading = loading || !allowContentPresentation,
         schema = resolvedSchema,
         config = resolvedConfig,
         hasEditableItems = resolvedSchema?.items?.isNotEmpty() == true,
@@ -1841,7 +1854,7 @@ private fun SingleChoicePreference(
     var showPopup by remember(title, selectedValue, options) { mutableStateOf(false) }
     val entries = remember(options, optionSummaries) {
         options.mapIndexed { index, option ->
-            SpinnerEntry(
+            DropdownItem(
                 title = option,
                 summary = optionSummaries.getOrNull(index)?.takeIf { it.isBlank().not() },
             )
@@ -1869,12 +1882,12 @@ private fun SingleChoicePreference(
         ) {
             ListPopupColumn {
                 options.forEachIndexed { index, option ->
-                    SpinnerItemImpl(
-                        entry = entries[index],
-                        entryCount = options.size,
+                    DropdownImpl(
+                        item = entries[index],
+                        optionSize = options.size,
                         isSelected = option == selectedValue,
                         index = index,
-                        spinnerColors = SpinnerDefaults.spinnerColors(),
+                        dropdownColors = DropdownDefaults.dropdownColors(),
                         onSelectedIndexChange = {
                             showPopup = false
                             popupScope.launch {

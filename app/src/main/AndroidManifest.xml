@@ -8,6 +8,9 @@
     <uses-permission android:name="hk.uwu.reareye.permission.ACCESS_REAR_WIDGET_API" />
     <uses-permission android:name="com.android.permission.GET_INSTALLED_APPS" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE"
         tools:ignore="ForegroundServicesPolicy" />
@@ -54,6 +57,17 @@
             android:authorities="${applicationId}.archive.read"
             android:exported="true"
             tools:ignore="ExportedContentProvider" />
+
+        <provider
+            android:name=".script.ScriptDataProvider"
+            android:authorities="hk.uwu.reareye.script"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+
+        <service
+            android:name=".service.PresetPackDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <service
             android:name=".service.SwitchToRearTileService"

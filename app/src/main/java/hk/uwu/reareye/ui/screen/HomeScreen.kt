@@ -58,8 +58,8 @@ import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.rounded.Frame_bug
 import hk.uwu.reareye.R
 import hk.uwu.reareye.generated.AppProperties
-import hk.uwu.reareye.hook.core.ModuleActivationState
-import hk.uwu.reareye.hook.core.XposedModuleStatus
+import hk.uwu.reareye.hook.support.ModuleActivationState
+import hk.uwu.reareye.hook.support.XposedModuleStatus
 import hk.uwu.reareye.ui.components.PresetPackLocalStatus
 import hk.uwu.reareye.ui.components.PresetPackStatusCard
 import hk.uwu.reareye.ui.components.isNewerThan
@@ -69,6 +69,7 @@ import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import hk.uwu.reareye.ui.easteregg.EasterEggManager
 import hk.uwu.reareye.ui.easteregg.EasterEggType
+import hk.uwu.reareye.ui.featureGuideAnchor
 import hk.uwu.reareye.ui.theme.AppThemeMode
 import hk.uwu.reareye.ui.theme.rearAcrylicEffect
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
@@ -85,6 +86,9 @@ import okhttp3.Request
 import org.json.JSONObject
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.DropdownDefaults
+import top.yukonga.miuix.kmp.basic.DropdownImpl
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
@@ -92,9 +96,6 @@ import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SpinnerDefaults
-import top.yukonga.miuix.kmp.basic.SpinnerEntry
-import top.yukonga.miuix.kmp.basic.SpinnerItemImpl
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -435,16 +436,16 @@ fun HomeScreen(
                             ListPopupColumn {
                                 Spacer(modifier = Modifier.height(4.dp))
 
-                                SpinnerItemImpl(
-                                    entry = SpinnerEntry(
+                                DropdownImpl(
+                                    item = DropdownItem(
                                         title = androidx.compose.ui.res.stringResource(
                                             R.string.quick_stop_subscreencenter,
                                         ),
                                     ),
-                                    entryCount = 4,
+                                    optionSize = 4,
                                     isSelected = false,
                                     index = 0,
-                                    spinnerColors = SpinnerDefaults.spinnerColors(),
+                                    dropdownColors = DropdownDefaults.dropdownColors(),
                                     onSelectedIndexChange = {
                                         showTopMenu.value = false
 
@@ -458,16 +459,16 @@ fun HomeScreen(
                                     },
                                 )
 
-                                SpinnerItemImpl(
-                                    entry = SpinnerEntry(
+                                DropdownImpl(
+                                    item = DropdownItem(
                                         title = androidx.compose.ui.res.stringResource(
                                             R.string.quick_stop_thememanager,
                                         ),
                                     ),
-                                    entryCount = 4,
+                                    optionSize = 4,
                                     isSelected = false,
                                     index = 1,
-                                    spinnerColors = SpinnerDefaults.spinnerColors(),
+                                    dropdownColors = DropdownDefaults.dropdownColors(),
                                     onSelectedIndexChange = {
                                         showTopMenu.value = false
                                         coroutineScope.launch {
@@ -480,16 +481,16 @@ fun HomeScreen(
                                     },
                                 )
 
-                                SpinnerItemImpl(
-                                    entry = SpinnerEntry(
+                                DropdownImpl(
+                                    item = DropdownItem(
                                         title = androidx.compose.ui.res.stringResource(
                                             R.string.quick_stop_personalassistant,
                                         ),
                                     ),
-                                    entryCount = 4,
+                                    optionSize = 4,
                                     isSelected = false,
                                     index = 2,
-                                    spinnerColors = SpinnerDefaults.spinnerColors(),
+                                    dropdownColors = DropdownDefaults.dropdownColors(),
                                     onSelectedIndexChange = {
                                         showTopMenu.value = false
                                         coroutineScope.launch {
@@ -502,16 +503,16 @@ fun HomeScreen(
                                     },
                                 )
 
-                                SpinnerItemImpl(
-                                    entry = SpinnerEntry(
+                                DropdownImpl(
+                                    item = DropdownItem(
                                         title = androidx.compose.ui.res.stringResource(
                                             R.string.quick_stop_systemui,
                                         ),
                                     ),
-                                    entryCount = 4,
+                                    optionSize = 4,
                                     isSelected = false,
                                     index = 3,
-                                    spinnerColors = SpinnerDefaults.spinnerColors(),
+                                    dropdownColors = DropdownDefaults.dropdownColors(),
                                     onSelectedIndexChange = {
                                         showTopMenu.value = false
                                         coroutineScope.launch {
@@ -810,7 +811,8 @@ private fun WorkingStatusCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(190.dp),
+            .height(190.dp)
+            .featureGuideAnchor("home_status"),
         colors = CardDefaults.defaultColors(color = palette.container),
         insideMargin = PaddingValues(14.dp),
         pressFeedbackType = PressFeedbackType.Tilt,
@@ -1062,6 +1064,7 @@ private fun ModuleInfoCard(
 
                 activationState == ModuleActivationState.NO_RUNNING_TARGET ->
                     androidx.compose.ui.res.stringResource(R.string.home_status_no_running_target)
+
                 easterEggType == EasterEggType.APRIL_FOOLS -> androidx.compose.ui.res.stringResource(
                     R.string.home_easter_egg_april_fools_activated
                 )

@@ -1,6 +1,6 @@
 package hk.uwu.reareye.repository.rearwidget
 
-import hk.uwu.reareye.hook.core.RemoteFileName
+import hk.uwu.reareye.hook.support.RemoteFileName
 import hk.uwu.reareye.widgetapi.RearWidgetSceneRouteSpec
 import org.json.JSONArray
 import org.json.JSONObject

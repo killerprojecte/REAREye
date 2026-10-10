@@ -20,11 +20,13 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +36,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import hk.uwu.reareye.ui.components.PresetPackDialog
@@ -70,6 +73,12 @@ private data class RemoteUiSettings(
 )
 
 class MainActivity : ComponentActivity() {
+    private companion object {
+        const val OOBE_PREFS = "reareye_oobe"
+        const val OOBE_COMPLETED = "completed"
+        const val FEATURE_GUIDE_COMPLETED = "feature_guide_completed"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -96,6 +105,34 @@ class MainActivity : ComponentActivity() {
         preloadHomeFrameNotice(applicationContext)
 
         setContent {
+            val onboardingPrefs = remember {
+                applicationContext.getSharedPreferences(OOBE_PREFS, MODE_PRIVATE)
+            }
+            /*onboardingPrefs.edit {
+                putBoolean(OOBE_COMPLETED, false)
+                putBoolean(FEATURE_GUIDE_COMPLETED, false)
+            }*/
+            var onboardingCompleted by remember {
+                mutableStateOf(onboardingPrefs.getBoolean(OOBE_COMPLETED, false))
+            }
+            var startFeatureGuideAfterOobe by remember { mutableStateOf(false) }
+
+            if (!onboardingCompleted) {
+                AppTheme {
+                    OnboardingScreen(
+                        onFinished = { startFeatureGuide ->
+                            onboardingPrefs.edit {
+                                putBoolean(OOBE_COMPLETED, true)
+                                putBoolean(FEATURE_GUIDE_COMPLETED, !startFeatureGuide)
+                            }
+                            startFeatureGuideAfterOobe = startFeatureGuide
+                            onboardingCompleted = true
+                        },
+                    )
+                }
+                return@setContent
+            }
+
             val remotePrefsManager = remember { applicationContext.getPrefsManager() }
             val remoteRevision = rememberRemotePrefsStatusRevision()
             var remoteUiSettings by remember { mutableStateOf<RemoteUiSettings?>(null) }
@@ -105,6 +142,25 @@ class MainActivity : ComponentActivity() {
                     if (!remotePrefsManager.isRemoteReady()) {
                         null
                     } else {
+                        val rawQuickActionIds = remotePrefsManager.getString(
+                            ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS
+                        )
+                        val normalizedQuickActionIds = parseNavigationQuickActionIds(
+                            rawQuickActionIds
+                        ).toList()
+                        // Drop quick actions removed by a newer configuration model while
+                        // preserving the user's remaining order during upgrade.
+                        if (rawQuickActionIds.isNotBlank()) {
+                            val normalizedValue = encodeNavigationQuickActionIds(
+                                normalizedQuickActionIds
+                            )
+                            if (rawQuickActionIds != normalizedValue) {
+                                remotePrefsManager.putString(
+                                    ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS,
+                                    normalizedValue,
+                                )
+                            }
+                        }
                         RemoteUiSettings(
                             themeModeValue = remotePrefsManager.getInt(
                                 ConfigKeys.MODULE_THEME_MODE,
@@ -114,9 +170,7 @@ class MainActivity : ComponentActivity() {
                                 ConfigKeys.MODULE_NAVIGATION_BAR_MODE,
                                 ModuleNavigationBarMode.default.value,
                             ),
-                            navigationQuickActionIds = parseNavigationQuickActionIds(
-                                remotePrefsManager.getString(ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS)
-                            ).toList(),
+                            navigationQuickActionIds = normalizedQuickActionIds,
                             launcherHidden = remotePrefsManager.getBoolean(
                                 ConfigKeys.MODULE_HIDE_LAUNCHER_ENTRY,
                                 false,
@@ -155,8 +209,29 @@ class MainActivity : ComponentActivity() {
                 mutableStateOf<ConfigType.ManagerType?>(null)
             }
             var pendingQuickActionTransition by remember { mutableStateOf(false) }
+            var pendingRearStoreWidgetId by remember { mutableStateOf<String?>(null) }
             var navigationQuickActionIds by remember {
                 mutableStateOf(settings.navigationQuickActionIds)
+            }
+            var featureGuideVisible by rememberSaveable {
+                mutableStateOf(
+                    startFeatureGuideAfterOobe ||
+                            !onboardingPrefs.getBoolean(FEATURE_GUIDE_COMPLETED, false),
+                )
+            }
+            var featureGuideStep by rememberSaveable { mutableIntStateOf(0) }
+            val guideAnchors = remember { FeatureGuideAnchors() }
+            val guideDemoState =
+                rememberSaveable(featureGuideVisible, saver = FeatureGuideDemoState.Saver) {
+                    FeatureGuideDemoState(getString(hk.uwu.reareye.R.string.guide_demo_card_name))
+                }
+            val guideStep = featureGuideSteps[featureGuideStep]
+
+            LaunchedEffect(featureGuideVisible, featureGuideStep) {
+                if (!featureGuideVisible) return@LaunchedEffect
+                currentScreen = if (guideStep.dashboardTab == null) "home" else "config"
+                pendingConfigQuickManagerTarget = null
+                configInAppListMode = false
             }
 
             LaunchedEffect(Unit) {
@@ -177,174 +252,247 @@ class MainActivity : ComponentActivity() {
                 }
                 var stableBottomInset by remember { mutableStateOf(0.dp) }
 
-                Scaffold { _ ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { clip = true }
-                    ) {
+                CompositionLocalProvider(LocalFeatureGuideAnchors provides guideAnchors.takeIf { featureGuideVisible }) {
+                    Scaffold { _ ->
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .then(
-                                    if (enableFloatingGlass) {
-                                        Modifier.layerBackdrop(backdrop)
-                                    } else {
-                                        Modifier
-                                    }
-                                )
+                                .graphicsLayer { clip = true }
                         ) {
-                            AnimatedContent(
-                                targetState = currentScreen,
-                                contentKey = { it },
-                                transitionSpec = {
-                                    if (pendingQuickActionTransition && targetState == "config") {
-                                        pendingQuickActionTransition = false
-                                        return@AnimatedContent ContentTransform(
-                                            targetContentEnter = EnterTransition.None,
-                                            initialContentExit = ExitTransition.None,
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .then(
+                                        if (enableFloatingGlass) {
+                                            Modifier.layerBackdrop(backdrop)
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
+                            ) {
+                                AnimatedContent(
+                                    targetState = currentScreen,
+                                    contentKey = { it },
+                                    transitionSpec = {
+                                        if (pendingQuickActionTransition && targetState == "config") {
+                                            pendingQuickActionTransition = false
+                                            return@AnimatedContent ContentTransform(
+                                                targetContentEnter = EnterTransition.None,
+                                                initialContentExit = ExitTransition.None,
+                                            )
+                                        }
+
+                                        val initialIndex =
+                                            MainScreenOrder.indexOf(initialState).coerceAtLeast(0)
+                                        val targetIndex =
+                                            MainScreenOrder.indexOf(targetState).coerceAtLeast(0)
+                                        val forward = targetIndex >= initialIndex
+
+                                        fadeIn(
+                                            animationSpec = tween(
+                                                durationMillis = 210,
+                                                delayMillis = 50,
+                                                easing = LinearOutSlowInEasing,
+                                            )
+                                        ) + slideInHorizontally(
+                                            animationSpec = tween(
+                                                durationMillis = 280,
+                                                easing = FastOutSlowInEasing,
+                                            )
+                                        ) { fullWidth ->
+                                            if (forward) fullWidth / 9 else -fullWidth / 9
+                                        } togetherWith (
+                                                fadeOut(
+                                                    animationSpec = tween(
+                                                        durationMillis = 110,
+                                                        easing = FastOutLinearInEasing,
+                                                    )
+                                                ) + slideOutHorizontally(
+                                                    animationSpec = tween(
+                                                        durationMillis = 190,
+                                                        easing = FastOutLinearInEasing,
+                                                    )
+                                                ) { fullWidth ->
+                                                    if (forward) -fullWidth / 12 else fullWidth / 12
+                                                }
+                                                )
+                                    },
+                                    label = "ScreenTransition"
+                                ) { screen ->
+                                    when (screen) {
+                                        "home" -> Box(modifier = Modifier.fillMaxSize()) {
+                                            HomeScreen(
+                                                bottomInnerPadding = stableBottomInset,
+                                                onOpenPresetPackDialog = {
+                                                    showPresetPackDialog = true
+                                                },
+                                                presetPackRefreshToken = presetPackRefreshToken,
+                                            )
+                                        }
+
+                                        "store" -> RearStoreScreen(
+                                            bottomInnerPadding = stableBottomInset,
+                                            initialWidgetId = pendingRearStoreWidgetId,
+                                            onInitialWidgetHandled = {
+                                                pendingRearStoreWidgetId = null
+                                            },
+                                        )
+
+                                        "config" -> Box(modifier = Modifier.fillMaxSize()) {
+                                            if (featureGuideVisible) {
+                                                FeatureGuideDemoScreen(
+                                                    step = guideStep,
+                                                    state = guideDemoState,
+                                                    bottomPadding = stableBottomInset,
+                                                    onCancelEdit = {
+                                                        featureGuideStep =
+                                                            (featureGuideStep - 1).coerceAtLeast(0)
+                                                    },
+                                                    onAction = { action ->
+                                                        if (featureGuideSteps[featureGuideStep].action == action) {
+                                                            featureGuideStep += 1
+                                                        }
+                                                    },
+                                                )
+                                            } else ConfigScreen(
+                                                bottomInnerPadding = stableBottomInset,
+                                                quickManagerTarget = pendingConfigQuickManagerTarget,
+                                                onQuickManagerTargetHandled = {
+                                                    pendingConfigQuickManagerTarget = null
+                                                },
+                                                onAppListModeChange = {
+                                                    configInAppListMode = it
+                                                },
+                                                onThemeModeChange = { themeModeValue = it },
+                                                onNavigationBarModeChange = {
+                                                    navigationBarModeValue = it
+                                                },
+                                                onOpenRearStoreDetail = { widgetId ->
+                                                    pendingRearStoreWidgetId = widgetId
+                                                    configInAppListMode = false
+                                                    currentScreen = "store"
+                                                },
+                                            )
+                                        }
+
+                                        "about" -> AboutScreen(
+                                            bottomInnerPadding = stableBottomInset,
+                                            onOpenPresetPackDialog = {
+                                                showPresetPackDialog = true
+                                            },
                                         )
                                     }
+                                }
+                            }
 
-                                    val initialIndex =
-                                        MainScreenOrder.indexOf(initialState).coerceAtLeast(0)
-                                    val targetIndex =
-                                        MainScreenOrder.indexOf(targetState).coerceAtLeast(0)
-                                    val forward = targetIndex >= initialIndex
-
-                                    fadeIn(
-                                        animationSpec = tween(
-                                            durationMillis = 210,
-                                            delayMillis = 50,
-                                            easing = LinearOutSlowInEasing,
-                                        )
-                                    ) + slideInHorizontally(
-                                        animationSpec = tween(
-                                            durationMillis = 280,
-                                            easing = FastOutSlowInEasing,
-                                        )
-                                    ) { fullWidth ->
-                                        if (forward) fullWidth / 9 else -fullWidth / 9
-                                    } togetherWith (
-                                            fadeOut(
-                                                animationSpec = tween(
-                                                    durationMillis = 110,
-                                                    easing = FastOutLinearInEasing,
-                                                )
-                                            ) + slideOutHorizontally(
-                                                animationSpec = tween(
-                                                    durationMillis = 190,
-                                                    easing = FastOutLinearInEasing,
-                                                )
-                                            ) { fullWidth ->
-                                                if (forward) -fullWidth / 12 else fullWidth / 12
+                            val navShadowProgress by animateFloatAsState(
+                                targetValue = if (showNavigation) 1f else 0f,
+                                animationSpec = tween(
+                                    durationMillis = if (showNavigation) 380 else 240,
+                                    easing = if (showNavigation) {
+                                        FastOutSlowInEasing
+                                    } else {
+                                        FastOutLinearInEasing
+                                    },
+                                ),
+                                label = "NavigationShadowProgress",
+                            )
+                            if (showNavigation || navShadowProgress > 0.001f) {
+                                ArtVisibilityMotion(
+                                    visible = showNavigation,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .featureGuideAnchor("bottom_navigation")
+                                        .onGloballyPositioned { coordinates ->
+                                            val totalHeight = with(density) {
+                                                coordinates.size.height.toDp()
                                             }
+                                            if (totalHeight != stableBottomInset) {
+                                                stableBottomInset = totalHeight
+                                            }
+                                        },
+                                    enterAlphaDurationMillis = 260,
+                                    enterTransformDurationMillis = 380,
+                                    exitAlphaDurationMillis = 180,
+                                    exitTransformDurationMillis = 240,
+                                    hiddenEnterScale = 1f,
+                                    hiddenExitScale = 1f,
+                                    slideDivisor = 3,
+                                    hiddenOffsetFallback = 28.dp,
+                                ) {
+                                    RearNavigationBar(
+                                        currentScreen = currentScreen,
+                                        navigationBarMode = navigationBarMode,
+                                        backdrop = backdrop,
+                                        shadowVisibilityProgress = navShadowProgress,
+                                        quickActionIds = navigationQuickActionIds,
+                                        onQuickActionIdsChanged = { nextIds ->
+                                            val normalizedIds = parseNavigationQuickActionIds(
+                                                encodeNavigationQuickActionIds(nextIds)
                                             )
-                                },
-                                label = "ScreenTransition"
-                            ) { screen ->
-                                when (screen) {
-                                    "home" -> HomeScreen(
-                                        bottomInnerPadding = stableBottomInset,
-                                        onOpenPresetPackDialog = { showPresetPackDialog = true },
-                                        presetPackRefreshToken = presetPackRefreshToken,
-                                    )
-
-                                    "store" -> RearStoreScreen(bottomInnerPadding = stableBottomInset)
-
-                                    "config" -> ConfigScreen(
-                                        bottomInnerPadding = stableBottomInset,
-                                        quickManagerTarget = pendingConfigQuickManagerTarget,
-                                        onQuickManagerTargetHandled = {
-                                            pendingConfigQuickManagerTarget = null
+                                            navigationQuickActionIds = normalizedIds
+                                            remotePrefsManager.putString(
+                                                ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS,
+                                                encodeNavigationQuickActionIds(normalizedIds),
+                                            )
                                         },
-                                        onAppListModeChange = {
-                                            configInAppListMode = it
+                                        onScreenSelected = { currentScreen = it },
+                                        onQuickActionSelected = { target ->
+                                            when (target) {
+                                                is NavigationQuickTarget.ConfigManager -> {
+                                                    pendingConfigQuickManagerTarget =
+                                                        target.managerType
+                                                    pendingQuickActionTransition = true
+                                                    // Dashboard managers stay inside the new configuration
+                                                    // workbench and keep the navigation bar visible. Only
+                                                    // dedicated More pages use the full-screen overlay mode.
+                                                    configInAppListMode =
+                                                        target.managerType in setOf(
+                                                            ConfigType.ManagerType.SCENE_ROUTE,
+                                                            ConfigType.ManagerType.BOUNDS,
+                                                        )
+                                                    currentScreen = "config"
+                                                }
+                                            }
                                         },
-                                        onThemeModeChange = { themeModeValue = it },
-                                        onNavigationBarModeChange = {
-                                            navigationBarModeValue = it
-                                        },
-                                    )
-
-                                    "about" -> AboutScreen(
-                                        bottomInnerPadding = stableBottomInset,
-                                        onOpenPresetPackDialog = { showPresetPackDialog = true },
                                     )
                                 }
                             }
-                        }
 
-                        val navShadowProgress by animateFloatAsState(
-                            targetValue = if (showNavigation) 1f else 0f,
-                            animationSpec = tween(
-                                durationMillis = if (showNavigation) 380 else 240,
-                                easing = if (showNavigation) {
-                                    FastOutSlowInEasing
-                                } else {
-                                    FastOutLinearInEasing
-                                },
-                            ),
-                            label = "NavigationShadowProgress",
-                        )
-                        if (showNavigation || navShadowProgress > 0.001f) {
-                            ArtVisibilityMotion(
-                                visible = showNavigation,
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .onGloballyPositioned { coordinates ->
-                                        val totalHeight = with(density) {
-                                            coordinates.size.height.toDp()
-                                        }
-                                        if (totalHeight != stableBottomInset) {
-                                            stableBottomInset = totalHeight
-                                        }
-                                    },
-                                enterAlphaDurationMillis = 260,
-                                enterTransformDurationMillis = 380,
-                                exitAlphaDurationMillis = 180,
-                                exitTransformDurationMillis = 240,
-                                hiddenEnterScale = 1f,
-                                hiddenExitScale = 1f,
-                                slideDivisor = 3,
-                                hiddenOffsetFallback = 28.dp,
+                            PresetPackDialog(
+                                show = showPresetPackDialog,
+                                onDismissRequest = { showPresetPackDialog = false },
+                                onApplied = { presetPackRefreshToken++ },
+                            )
+
+                            if (featureGuideVisible && guideStep.action !in setOf(
+                                    FeatureGuideAction.SAVE_CARD, FeatureGuideAction.SAVE_COMPONENT,
+                                )
                             ) {
-                                RearNavigationBar(
-                                    currentScreen = currentScreen,
-                                    navigationBarMode = navigationBarMode,
-                                    backdrop = backdrop,
-                                    shadowVisibilityProgress = navShadowProgress,
-                                    quickActionIds = navigationQuickActionIds,
-                                    onQuickActionIdsChanged = { nextIds ->
-                                        val normalizedIds = parseNavigationQuickActionIds(
-                                            encodeNavigationQuickActionIds(nextIds)
-                                        )
-                                        navigationQuickActionIds = normalizedIds
-                                        remotePrefsManager.putString(
-                                            ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS,
-                                            encodeNavigationQuickActionIds(normalizedIds),
-                                        )
+                                FeatureGuideOverlay(
+                                    stepIndex = featureGuideStep,
+                                    anchors = guideAnchors,
+                                    onPrevious = {
+                                        featureGuideStep = (featureGuideStep - 1).coerceAtLeast(0)
                                     },
-                                    onScreenSelected = { currentScreen = it },
-                                    onQuickActionSelected = { target ->
-                                        when (target) {
-                                            is NavigationQuickTarget.ConfigManager -> {
-                                                pendingConfigQuickManagerTarget = target.managerType
-                                                pendingQuickActionTransition = true
-                                                configInAppListMode = true
-                                                currentScreen = "config"
-                                            }
+                                    onNext = {
+                                        if (featureGuideStep == featureGuideSteps.lastIndex) {
+                                            onboardingPrefs.edit()
+                                                .putBoolean(FEATURE_GUIDE_COMPLETED, true).apply()
+                                            featureGuideVisible = false
+                                        } else {
+                                            featureGuideStep += 1
                                         }
+                                    },
+                                    onSkip = {
+                                        onboardingPrefs.edit()
+                                            .putBoolean(FEATURE_GUIDE_COMPLETED, true)
+                                            .apply()
+                                        featureGuideVisible = false
                                     },
                                 )
                             }
                         }
-
-                        PresetPackDialog(
-                            show = showPresetPackDialog,
-                            onDismissRequest = { showPresetPackDialog = false },
-                            onApplied = { presetPackRefreshToken++ },
-                        )
                     }
                 }
             }

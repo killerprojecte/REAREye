@@ -41,6 +41,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
@@ -129,7 +130,6 @@ import top.yukonga.miuix.kmp.icon.extended.Create
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.Link
-import top.yukonga.miuix.kmp.shapes.SmoothRoundedCornerShape
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -649,7 +649,7 @@ private fun AboutRootContent(
                         .size(90.dp)
                         .textureBlur(
                             backdrop = backdrop,
-                            shape = SmoothRoundedCornerShape(24.dp),
+                            shape = RoundedCornerShape(24.dp),
                             blurRadius = 150f,
                             colors = BlurColors(
                                 blendColors = visualTokens.logoBlendColors,
@@ -679,7 +679,7 @@ private fun AboutRootContent(
                     }
                     .textureBlur(
                         backdrop = backdrop,
-                        shape = SmoothRoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(16.dp),
                         blurRadius = 150f,
                         colors = BlurColors(
                             blendColors = visualTokens.logoBlendColors,
@@ -764,7 +764,7 @@ private fun AboutRootContent(
                     Card(
                         modifier = Modifier.textureBlur(
                             backdrop = backdrop,
-                            shape = SmoothRoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(16.dp),
                             blurRadius = 60f,
                             noiseCoefficient = 0.001f,
                             colors = BlurColors(
@@ -806,7 +806,7 @@ private fun AboutRootContent(
                                 modifier = Modifier
                                     .textureBlur(
                                         backdrop = backdrop,
-                                        shape = SmoothRoundedCornerShape(16.dp),
+                                        shape = RoundedCornerShape(16.dp),
                                         blurRadius = 60f,
                                         noiseCoefficient = 0.001f,
                                         colors = BlurColors(
@@ -847,7 +847,7 @@ private fun AboutRootContent(
                                     modifier = Modifier
                                         .textureBlur(
                                             backdrop = backdrop,
-                                            shape = SmoothRoundedCornerShape(16.dp),
+                                            shape = RoundedCornerShape(16.dp),
                                             blurRadius = 60f,
                                             noiseCoefficient = 0.001f,
                                             colors = BlurColors(
@@ -895,7 +895,7 @@ private fun AboutRootContent(
                                 modifier = Modifier
                                     .textureBlur(
                                         backdrop = backdrop,
-                                        shape = SmoothRoundedCornerShape(16.dp),
+                                        shape = RoundedCornerShape(16.dp),
                                         blurRadius = 60f,
                                         noiseCoefficient = 0.001f,
                                         colors = BlurColors(
@@ -959,7 +959,7 @@ private fun AboutDeviceInfoCard(
             modifier = Modifier
                 .textureBlur(
                     backdrop = backdrop,
-                    shape = SmoothRoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(16.dp),
                     blurRadius = 60f,
                     noiseCoefficient = 0.001f,
                     colors = BlurColors(

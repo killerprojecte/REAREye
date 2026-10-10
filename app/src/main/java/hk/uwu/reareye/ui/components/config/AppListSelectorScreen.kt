@@ -26,6 +26,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.style.ExperimentalFoundationStyleApi
 import androidx.compose.foundation.style.MutableStyleState
 import androidx.compose.foundation.style.Style
+import androidx.compose.foundation.style.animate
+import androidx.compose.foundation.style.border
+import androidx.compose.foundation.style.scale
 import androidx.compose.foundation.style.selected
 import androidx.compose.foundation.style.styleable
 import androidx.compose.material.icons.Icons
@@ -74,6 +77,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.DropdownDefaults
+import top.yukonga.miuix.kmp.basic.DropdownImpl
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.FabPosition
 import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
@@ -84,9 +90,6 @@ import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SpinnerDefaults
-import top.yukonga.miuix.kmp.basic.SpinnerEntry
-import top.yukonga.miuix.kmp.basic.SpinnerItemImpl
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -691,44 +694,44 @@ fun AppListSelectorScreen(
                                 renderInRootScaffold = true,
                                 content = {
                                     ListPopupColumn {
-                                        SpinnerItemImpl(
-                                            entry = SpinnerEntry(title = stringResource(R.string.app_list_sort_by_name)),
-                                            entryCount = 3,
+                                        DropdownImpl(
+                                            item = DropdownItem(title = stringResource(R.string.app_list_sort_by_name)),
+                                            optionSize = 3,
                                             isSelected = sortMode == AppSortMode.LABEL,
                                             index = 0,
-                                            spinnerColors = SpinnerDefaults.spinnerColors(),
+                                            dropdownColors = DropdownDefaults.dropdownColors(),
                                             onSelectedIndexChange = {
                                                 dismissThenApply(
                                                     { showSortMenu.value = false },
                                                     { sortMode = AppSortMode.LABEL },
                                                 )
-                                            },
+                                            }
                                         )
-                                        SpinnerItemImpl(
-                                            entry = SpinnerEntry(title = stringResource(R.string.app_list_sort_by_package)),
-                                            entryCount = 3,
+                                        DropdownImpl(
+                                            item = DropdownItem(title = stringResource(R.string.app_list_sort_by_package)),
+                                            optionSize = 3,
                                             isSelected = sortMode == AppSortMode.PACKAGE,
                                             index = 1,
-                                            spinnerColors = SpinnerDefaults.spinnerColors(),
+                                            dropdownColors = DropdownDefaults.dropdownColors(),
                                             onSelectedIndexChange = {
                                                 dismissThenApply(
                                                     { showSortMenu.value = false },
                                                     { sortMode = AppSortMode.PACKAGE },
                                                 )
-                                            },
+                                            }
                                         )
-                                        SpinnerItemImpl(
-                                            entry = SpinnerEntry(title = stringResource(R.string.app_list_sort_reverse)),
-                                            entryCount = 3,
+                                        DropdownImpl(
+                                            item = DropdownItem(title = stringResource(R.string.app_list_sort_reverse)),
+                                            optionSize = 3,
                                             isSelected = reverseOrder,
                                             index = 2,
-                                            spinnerColors = SpinnerDefaults.spinnerColors(),
+                                            dropdownColors = DropdownDefaults.dropdownColors(),
                                             onSelectedIndexChange = {
                                                 dismissThenApply(
                                                     { showSortMenu.value = false },
                                                     { reverseOrder = !reverseOrder },
                                                 )
-                                            },
+                                            }
                                         )
                                     }
                                 })
@@ -757,8 +760,8 @@ fun AppListSelectorScreen(
                                 renderInRootScaffold = true,
                                 content = {
                                     ListPopupColumn {
-                                        SpinnerItemImpl(
-                                            entry = SpinnerEntry(
+                                        DropdownImpl(
+                                            item = DropdownItem(
                                                 icon = { modifier ->
                                                     Icon(
                                                         imageVector = Icons.Filled.Apps,
@@ -769,10 +772,10 @@ fun AppListSelectorScreen(
                                                 },
                                                 title = stringResource(R.string.show_system_apps),
                                             ),
-                                            entryCount = 1,
+                                            optionSize = 1,
                                             isSelected = showSystemApps,
                                             index = 0,
-                                            spinnerColors = SpinnerDefaults.spinnerColors(),
+                                            dropdownColors = DropdownDefaults.dropdownColors(),
                                             onSelectedIndexChange = {
                                                 dismissThenApply(
                                                     { showFilterMenu.value = false },
@@ -807,8 +810,8 @@ fun AppListSelectorScreen(
                                 renderInRootScaffold = true,
                                 content = {
                                     ListPopupColumn {
-                                        SpinnerItemImpl(
-                                            entry = SpinnerEntry(
+                                        DropdownImpl(
+                                            item = DropdownItem(
                                                 icon = { modifier ->
                                                     Icon(
                                                         imageVector = Icons.Filled.Delete,
@@ -819,10 +822,10 @@ fun AppListSelectorScreen(
                                                 },
                                                 title = stringResource(R.string.selection_clear),
                                             ),
-                                            entryCount = 1,
+                                            optionSize = 1,
                                             isSelected = false,
                                             index = 0,
-                                            spinnerColors = SpinnerDefaults.spinnerColors(),
+                                            dropdownColors = DropdownDefaults.dropdownColors(),
                                             onSelectedIndexChange = {
                                                 dismissThenApply(
                                                     { showMoreMenu.value = false },

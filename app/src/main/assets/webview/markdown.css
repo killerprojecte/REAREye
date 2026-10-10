@@ -15,6 +15,8 @@ html {
 }
 
 body {
+  margin: 0;
+  padding: 24px;
   color: var(--textPrimary);
   background-color: var(--background);
 }
@@ -57,7 +59,7 @@ blockquote {
 }
 
 table, table *, pre {
-  touch-action: pan-x;
+  touch-action: pan-x pan-y;
 }
 
 .markdown-body ul.contains-task-list {

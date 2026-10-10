@@ -79,12 +79,12 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.ColorPalette
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SpinnerEntry
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
@@ -93,7 +93,6 @@ import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.miuixShape
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import java.util.Locale
@@ -831,11 +830,11 @@ private fun CustomBoundsDropdownPreference(
 ) {
     val optionTitles = options.map { stringResource(it.titleRes) }
     val optionEntries = remember(optionTitles) {
-        optionTitles.map { SpinnerEntry(title = it) }
+        optionTitles.map { DropdownItem(title = it) }
     }
     val selectedIndex = options.indexOfFirst { it.value == selectedValue }.coerceAtLeast(0)
     WindowSpinnerPreference(
-        modifier = Modifier.clip(miuixShape(16.dp)),
+        modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
         items = optionEntries,
         selectedIndex = selectedIndex,
         title = title,
@@ -850,12 +849,12 @@ private fun CustomBoundsInfoText(text: String) {
         text = text,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(miuixShape(16.dp))
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
             .background(MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f))
             .border(
                 width = 0.5.dp,
                 color = MiuixTheme.colorScheme.outline.copy(alpha = 0.18f),
-                shape = miuixShape(16.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
             )
             .padding(horizontal = 16.dp, vertical = 12.dp),
         style = MiuixTheme.textStyles.body2,

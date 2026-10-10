@@ -17,6 +17,7 @@ local.properties
 .claude
 .tmp-ref
 rear-widget-api/build
+rear-script-runtime/build
 **/.project
 .project
 .settings

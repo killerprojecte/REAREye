@@ -1,20 +1,14 @@
 package hk.uwu.reareye.hook.scopes
 
-import hk.uwu.reareye.hook.core.HookEnvironment
-import hk.uwu.reareye.hook.core.HookModule
-import hk.uwu.reareye.hook.core.HookScope
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.reareye.hook.support.isRearDevice as detectRearDevice
 
-/**
- * REAREye 业务 Scope 接口。
- *
- * Scope 只负责按当前目标上下文创建 HookModule 列表；isRearDevice 从当前上下文延迟读取，
- * 不再使用跨 system-server/application ClassLoader 的静态缓存。
- */
-interface Scope : HookScope {
-    /** 当前目标要安装的 Hook 模块实例。 */
-    override val hooks: List<HookModule>
+/** Common entry point and rear-device policy for REAREye business scopes. */
+interface Scope {
+    /** Installs this scope in the current RoxyHook package context. */
+    fun PackageScope.onHook()
 
-    /** 当前目标设备是否支持后屏功能。 */
-    val isRearDevice: Boolean
-        get() = HookEnvironment.requireContext().isRearDevice
+    /** Whether the current target device exposes the rear display. */
+    val PackageScope.isRearDevice: Boolean
+        get() = detectRearDevice
 }

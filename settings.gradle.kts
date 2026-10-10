@@ -1,5 +1,13 @@
 pluginManagement {
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "hk.uwu.roxyhook") {
+                useModule("com.github.NekoStash.RoxyHook:roxy-gradle-plugin:${requested.version}")
+            }
+        }
+    }
     repositories {
+        maven("https://jitpack.io")
         gradlePluginPortal()
         google()
         mavenCentral()
@@ -10,10 +18,10 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         mavenLocal()
+        maven("https://jitpack.io")
         maven("https://repo.fastmcmirror.org/content/repositories/releases/")
         google()
         mavenCentral()
-        maven("https://jitpack.io")
     }
 }
 
@@ -81,3 +89,5 @@ rootProject.name = "REAREye"
 
 include(":app")
 include(":rear-widget-api")
+include(":rear-script-runtime")
+

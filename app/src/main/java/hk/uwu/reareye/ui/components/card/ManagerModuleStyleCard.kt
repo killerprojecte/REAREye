@@ -1,13 +1,16 @@
 package hk.uwu.reareye.ui.components.card
 
 import android.annotation.SuppressLint
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +43,7 @@ fun ModuleStyleManagerCard(
     trailing: @Composable (() -> Unit)? = null,
     headerVerticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
     showActions: Boolean = true,
+    scrollActionsHorizontally: Boolean = false,
     backgroundColor: Color? = null,
     contentColor: Color? = null,
     titleColor: Color = contentColor ?: MiuixTheme.colorScheme.onSurface,
@@ -49,7 +53,11 @@ fun ModuleStyleManagerCard(
     leftAction: @Composable () -> Unit,
     rightAction: @Composable () -> Unit,
 ) {
-    val cardModifier = modifier.padding(bottom = bottomPadding)
+    // Keep the inter-card gap outside the shadowed surface while dragging.
+    val cardModifier = Modifier
+        .padding(bottom = bottomPadding)
+        .then(modifier)
+    val actionScrollState = rememberScrollState()
 
     val headerContent: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -106,6 +114,26 @@ fun ModuleStyleManagerCard(
             }
         }
     }
+    val actionsContent: @Composable () -> Unit = {
+        if (scrollActionsHorizontally) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(actionScrollState),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                leftAction()
+                rightAction()
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                leftAction()
+                Spacer(Modifier.weight(1f))
+                rightAction()
+            }
+        }
+    }
 
     if (onCardClick != null) {
         Card(
@@ -128,11 +156,7 @@ fun ModuleStyleManagerCard(
                     color = dividerColor,
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    leftAction()
-                    Spacer(Modifier.weight(1f))
-                    rightAction()
-                }
+                actionsContent()
             }
         }
     } else {
@@ -155,11 +179,7 @@ fun ModuleStyleManagerCard(
                     color = dividerColor,
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    leftAction()
-                    Spacer(Modifier.weight(1f))
-                    rightAction()
-                }
+                actionsContent()
             }
         }
     }
@@ -170,6 +190,7 @@ fun ModuleStyleIconAction(
     @SuppressLint("ModifierParameter")
     modifier: Modifier = Modifier.size(20.dp),
     icon: ImageVector,
+    contentDescription: String? = null,
     backgroundColor: Color = MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
     contentColor: Color? = null,
     onClick: () -> Unit,
@@ -186,7 +207,7 @@ fun ModuleStyleIconAction(
         Icon(
             imageVector = icon,
             tint = actionIconTint,
-            contentDescription = null,
+            contentDescription = contentDescription,
             modifier = modifier,
         )
     }
@@ -199,12 +220,14 @@ fun ModuleStyleTextAction(
     enabled: Boolean = true,
     backgroundColor: Color = MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
     contentColor: Color = MiuixTheme.colorScheme.onSurface,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val actionIconAlpha = if (backgroundColor.luminance() < 0.5f) 0.7f else 0.9f
     val actionIconTint =
         contentColor.copy(alpha = actionIconAlpha * if (enabled) 1f else 0.45f)
     IconButton(
+        modifier = modifier,
         minHeight = 35.dp,
         minWidth = 35.dp,
         onClick = if (enabled) onClick else ({}),

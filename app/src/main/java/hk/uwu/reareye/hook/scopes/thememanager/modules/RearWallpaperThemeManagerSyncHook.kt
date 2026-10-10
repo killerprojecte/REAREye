@@ -3,12 +3,15 @@ package hk.uwu.reareye.hook.scopes.thememanager.modules
 import android.os.Process
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookSystemContext
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveDexKitClassValue
 import hk.uwu.reareye.hook.utils.resolveDexKitMethodValue
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 import org.json.JSONArray
 import org.json.JSONObject
 import org.luckypray.dexkit.DexKitCacheBridge
@@ -16,7 +19,7 @@ import org.luckypray.dexkit.annotations.DexKitExperimentalApi
 import java.io.File
 
 @OptIn(DexKitExperimentalApi::class)
-class RearWallpaperThemeManagerSyncHook : YukiBaseHooker() {
+class RearWallpaperThemeManagerSyncHook : RoxyHooker() {
 
     companion object {
         private const val TAG = "REAREye-RearWallpaper-TM"
@@ -33,20 +36,20 @@ class RearWallpaperThemeManagerSyncHook : YukiBaseHooker() {
         val position: Int,
     )
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadApp("com.android.thememanager") {
             runCatching {
                 val versionCode = resolveHookPackageVersionCode(
-                    context = systemContext,
-                    packageName = appInfo.packageName,
-                    sourceDir = appInfo.sourceDir,
+                    context = hookSystemContext,
+                    packageName = hookAppInfo.packageName,
+                    sourceDir = hookAppInfo.sourceDir,
                 )
-                val bridge = trackResource(
+                val bridge = runtime.manage(
                     createDexKitCacheBridge(
-                    packageName = appInfo.packageName,
-                    packageVersionCode = versionCode,
-                    sourceDir = appInfo.sourceDir,
-                    dataDir = appInfo.dataDir,
+                        packageName = hookAppInfo.packageName,
+                        packageVersionCode = versionCode,
+                        sourceDir = hookAppInfo.sourceDir,
+                        dataDir = hookAppInfo.dataDir,
                     )
                 )
 
@@ -59,9 +62,11 @@ class RearWallpaperThemeManagerSyncHook : YukiBaseHooker() {
                     name = filterMethodName
                     parameterCount = 1
                     returnType = List::class.java
-                }.hook().after {
-                    val original = result as? List<*> ?: return@after
-                    result = mergeImportedWallpapers(original, itemBeanClassName)
+                }.hook {
+                    after {
+                        val original = result as? List<*> ?: return@after
+                        result = mergeImportedWallpapers(original, itemBeanClassName)
+                    }
                 }
 
                 YLog.debug(
@@ -71,7 +76,7 @@ class RearWallpaperThemeManagerSyncHook : YukiBaseHooker() {
         }
     }
 
-    private fun resolveRearListManagerClass(
+    private fun PackageScope.resolveRearListManagerClass(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): String {
         return resolveDexKitClassValue(
@@ -90,7 +95,7 @@ class RearWallpaperThemeManagerSyncHook : YukiBaseHooker() {
         } ?: error("DexKit failed to resolve rear list manager class")
     }
 
-    private fun resolveRearListFilterMethod(
+    private fun PackageScope.resolveRearListFilterMethod(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): String {
         return resolveDexKitMethodValue(
@@ -109,7 +114,7 @@ class RearWallpaperThemeManagerSyncHook : YukiBaseHooker() {
         } ?: error("DexKit failed to resolve rear list filter method")
     }
 
-    private fun resolveRearListItemBeanClass(
+    private fun PackageScope.resolveRearListItemBeanClass(
         bridge: DexKitCacheBridge.RecyclableBridge,
     ): String {
         return resolveDexKitClassValue(
@@ -131,14 +136,14 @@ class RearWallpaperThemeManagerSyncHook : YukiBaseHooker() {
         } ?: error("DexKit failed to resolve rear list item bean class")
     }
 
-    private fun mergeImportedWallpapers(
+    private fun PackageScope.mergeImportedWallpapers(
         original: List<*>,
         itemBeanClassName: String,
     ): List<Any?> {
         val imported = readImportedRuntimeRecords()
             .sortedByDescending { it.position }
             .mapNotNull { record ->
-                runCatching { record.toRearScreenListItemBean(itemBeanClassName) }
+                runCatching { toRearScreenListItemBean(record, itemBeanClassName) }
                     .onFailure(YLog::warn)
                     .getOrNull()
             }
@@ -154,7 +159,7 @@ class RearWallpaperThemeManagerSyncHook : YukiBaseHooker() {
         return merged
     }
 
-    private fun readImportedRuntimeRecords(): List<RuntimeRecord> {
+    private fun PackageScope.readImportedRuntimeRecords(): List<RuntimeRecord> {
         val file = resolveRuntimeFile()
         if (!file.isFile) return emptyList()
         val text = runCatching { file.readText() }.getOrDefault("")
@@ -182,7 +187,11 @@ class RearWallpaperThemeManagerSyncHook : YukiBaseHooker() {
         }
     }
 
-    private fun RuntimeRecord.toRearScreenListItemBean(itemBeanClassName: String): Any {
+    private fun PackageScope.toRearScreenListItemBean(
+        record: RuntimeRecord,
+        itemBeanClassName: String
+    ): Any {
+        val (item, resId, applyId, position) = record
         val json = item
         val resType = json.optNonBlankString("resType") ?: "REAREye"
         val packagePath = json.optNonBlankString("resLocalPath")
@@ -248,14 +257,14 @@ class RearWallpaperThemeManagerSyncHook : YukiBaseHooker() {
         return "$resId::$applyId"
     }
 
-    private fun resolveRuntimeFile(): File {
+    private fun PackageScope.resolveRuntimeFile(): File {
         return File(
             "/data/system/theme_magic/users/${currentUserId()}/rearScreen",
             "runtime.json",
         )
     }
 
-    private fun currentUserId(): Int {
+    private fun PackageScope.currentUserId(): Int {
         return (Process.myUid() / 100000).coerceAtLeast(0)
     }
 

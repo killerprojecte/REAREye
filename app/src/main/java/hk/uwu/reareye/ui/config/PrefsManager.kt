@@ -1,9 +1,9 @@
 package hk.uwu.reareye.ui.config
 
 import android.content.Context
-import hk.uwu.reareye.hook.core.HookPrefs
-import hk.uwu.reareye.hook.core.REMOTE_PREFS_GROUP
-import hk.uwu.reareye.hook.core.XposedRemoteHookPrefs
+import hk.uwu.reareye.hook.support.HookPrefs
+import hk.uwu.reareye.hook.support.REMOTE_PREFS_GROUP
+import hk.uwu.reareye.hook.support.XposedRemoteHookPrefs
 import java.io.File
 
 /**

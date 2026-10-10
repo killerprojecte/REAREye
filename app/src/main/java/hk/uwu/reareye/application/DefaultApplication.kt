@@ -1,8 +1,8 @@
 package hk.uwu.reareye.application
 
 import android.app.Application
-import hk.uwu.reareye.hook.core.XposedModuleStatus
-import hk.uwu.reareye.hook.core.YLog
+import hk.uwu.reareye.hook.support.XposedModuleStatus
+import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.reareye.repository.contributor.ContributorRepository
 import hk.uwu.reareye.ui.config.LegacyPreferenceMigrationCoordinator
 import hk.uwu.reareye.ui.config.RootLegacyPreferenceSource

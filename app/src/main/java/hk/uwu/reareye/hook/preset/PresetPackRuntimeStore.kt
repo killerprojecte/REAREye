@@ -1,8 +1,8 @@
 package hk.uwu.reareye.hook.preset
 
 import android.content.pm.ApplicationInfo
-import hk.uwu.reareye.hook.core.HookPrefs
-import hk.uwu.reareye.hook.core.YLog
+import hk.uwu.reareye.hook.support.HookPrefs
+import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.reareye.repository.presetpack.PresetPackContract
 import hk.uwu.reareye.repository.presetpack.PresetPackManifest
 import hk.uwu.reareye.repository.presetpack.PresetPackValidator

@@ -2,10 +2,13 @@ package hk.uwu.reareye.hook.scopes.system.modules
 
 import android.annotation.SuppressLint
 import com.highcapable.kavaref.KavaRef.Companion.resolve
-import hk.uwu.reareye.hook.core.HookPrefs
-import hk.uwu.reareye.hook.core.YLog
-import hk.uwu.reareye.hook.core.YukiBaseHooker
+import hk.uwu.reareye.hook.support.HookPrefs
+import hk.uwu.reareye.hook.support.YLog
+import hk.uwu.reareye.hook.support.hookPrefs
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.roxyhook.HotReloadPolicy
+import hk.uwu.roxyhook.PackageScope
+import hk.uwu.roxyhook.RoxyHooker
 import java.io.File
 import java.util.zip.ZipFile
 
@@ -16,11 +19,11 @@ import java.util.zip.ZipFile
  * 不经过 Java）；本 hook 只在 system_server 启动目标进程前把 UI 开关写入
  * reareye_<module>.env，供 native 端读取。不再改写启动二进制、不再提取模块 wrapper so。
  */
-class NativeEnvWriterHook : YukiBaseHooker() {
-    override val reloadable: Boolean
+class NativeEnvWriterHook : RoxyHooker() {
+    val reloadable: Boolean
         get() = false
 
-    override fun onHook() {
+    override fun PackageScope.onHook() {
         loadSystem {
             runCatching {
                 YLog.debug("Native env writer hook installing")
@@ -49,47 +52,52 @@ class NativeEnvWriterHook : YukiBaseHooker() {
                         Boolean::class.javaPrimitiveType!!, // bindMountAppStorageDirs
                         Boolean::class.javaPrimitiveType!!, // bindMountOverrideSysprops
                         String::class.java, // binary
+                        String::class.java, // searchPath
+                        String::class.java, // libraryPermittedPath
                         String::class.java, // envs
                         Long::class.javaPrimitiveType!! // seq
                     )
-                }.hook().before {
-                    YLog.debug("Native env writer startRustProcess called args=${args.size}")
-                    if (args.size <= BINARY_INDEX) {
-                        YLog.debug("Native env writer skip reason=args_size size=${args.size}")
-                        return@before
-                    }
-                    val packageName = args[PACKAGE_INDEX] as? String ?: run {
-                        YLog.debug("Native env writer skip reason=package_null")
-                        return@before
-                    }
-                    val originalBinary = args[BINARY_INDEX] as? String ?: run {
-                        YLog.debug("Native env writer skip package=$packageName reason=binary_null")
-                        return@before
-                    }
-                    val abi = args[ABI_INDEX] as? String ?: ABI_ARM64
-                    val originalEnv = args[ENVS_INDEX] as? String
-                    YLog.debug(
-                        "Native env writer candidate package=$packageName abi=$abi binary=$originalBinary " +
-                                "env=${originalEnv.orEmpty()}"
-                    )
-                    val spec = WrapperRegistry.find(packageName, originalBinary) ?: run {
-                        YLog.debug("Native env writer skip package=$packageName reason=no_spec")
-                        return@before
-                    }
-                    val envDir = resolveEnvTargetDir(originalBinary, abi, spec) ?: run {
+                }.hook {
+                    hotReloadPolicy = HotReloadPolicy.KEEP
+                    before {
+                        YLog.debug("Native env writer startRustProcess called args=${args.size}")
+                        if (args.size <= BINARY_INDEX) {
+                            YLog.debug("Native env writer skip reason=args_size size=${args.size}")
+                            return@before
+                        }
+                        val packageName = args[PACKAGE_INDEX] as? String ?: run {
+                            YLog.debug("Native env writer skip reason=package_null")
+                            return@before
+                        }
+                        val originalBinary = args[BINARY_INDEX] as? String ?: run {
+                            YLog.debug("Native env writer skip package=$packageName reason=binary_null")
+                            return@before
+                        }
+                        val abi = args[ABI_INDEX] as? String ?: ABI_ARM64
+                        val originalEnv = args[ENVS_INDEX] as? String
                         YLog.debug(
-                            "Native env writer skip package=$packageName reason=env_dir_unresolved"
+                            "Native env writer candidate package=$packageName abi=$abi binary=$originalBinary " +
+                                    "env=${originalEnv.orEmpty()}"
                         )
-                        return@before
-                    }
-                    val envValues =
-                        spec.envProvider(prefs, originalBinary, originalBinary)
-                    writeModuleEnv(envDir, spec.moduleId, envValues)
+                        val spec = WrapperRegistry.find(packageName, originalBinary) ?: run {
+                            YLog.debug("Native env writer skip package=$packageName reason=no_spec")
+                            return@before
+                        }
+                        val envDir = resolveEnvTargetDir(originalBinary, abi, spec) ?: run {
+                            YLog.debug(
+                                "Native env writer skip package=$packageName reason=env_dir_unresolved"
+                            )
+                            return@before
+                        }
+                        val envValues =
+                            spec.envProvider(hookPrefs, originalBinary, originalBinary)
+                        writeModuleEnv(envDir, spec.moduleId, envValues)
 
-                    YLog.debug(
-                        "Native env writer wrote package=$packageName dir=${envDir.absolutePath} " +
-                                "moduleEnv=true envUnchanged=${originalEnv.orEmpty()}"
-                    )
+                        YLog.debug(
+                            "Native env writer wrote package=$packageName dir=${envDir.absolutePath} " +
+                                    "moduleEnv=true envUnchanged=${originalEnv.orEmpty()}"
+                        )
+                    }
                 }
                 YLog.debug("Native env writer hook installed")
             }.onFailure {
@@ -105,7 +113,7 @@ class NativeEnvWriterHook : YukiBaseHooker() {
      *   保证目标进程 /proc/self/maps 中出现可解析的真实库路径（native 端据此锚定 env 目录）。
      * - 普通文件型 binary：直接使用其父目录（现行为）。
      */
-    private fun resolveEnvTargetDir(
+    private fun PackageScope.resolveEnvTargetDir(
         originalBinary: String,
         abi: String,
         spec: EnvSpec,
@@ -148,7 +156,7 @@ class NativeEnvWriterHook : YukiBaseHooker() {
     }
 
     @SuppressLint("SetWorldReadable")
-    private fun extractEntry(
+    private fun PackageScope.extractEntry(
         apk: File,
         entryName: String,
         outFile: File,
@@ -181,7 +189,11 @@ class NativeEnvWriterHook : YukiBaseHooker() {
     }
 
     @SuppressLint("SetWorldReadable")
-    private fun writeModuleEnv(moduleDir: File?, moduleId: String, values: Map<String, String>) {
+    private fun PackageScope.writeModuleEnv(
+        moduleDir: File?,
+        moduleId: String,
+        values: Map<String, String>
+    ) {
         if (moduleDir == null) return
         runCatching {
             if (!moduleDir.exists()) moduleDir.mkdirs()
@@ -225,10 +237,11 @@ class NativeEnvWriterHook : YukiBaseHooker() {
                 moduleId = MODULE_ID_WEATHER,
                 packageName = "com.miui.weather2",
                 originalLibName = "libweather_app.so",
-            ) { prefs, _, _ ->
+            ) { hookPrefs, _, _ ->
                 mapOf(
-                    ENV_DEVICE_LEVEL to prefs.getInt(ConfigKeys.WEATHER_DEVICE_LEVEL, 0).toString(),
-                    ENV_UNLOCK_SUPER_BLUR to if (prefs.getBoolean(
+                    ENV_DEVICE_LEVEL to hookPrefs.getInt(ConfigKeys.WEATHER_DEVICE_LEVEL, 0)
+                        .toString(),
+                    ENV_UNLOCK_SUPER_BLUR to if (hookPrefs.getBoolean(
                             ConfigKeys.WEATHER_UNLOCK_SUPER_BLUR,
                             false
                         )
@@ -239,51 +252,57 @@ class NativeEnvWriterHook : YukiBaseHooker() {
                 moduleId = MODULE_ID_GALLERY,
                 packageName = "com.miui.gallery",
                 originalLibName = "libapp_gallery.so",
-            ) { prefs, _, _ ->
+            ) { hookPrefs, _, _ ->
                 mapOf(
-                    ENV_GALLERY_BACKUP_SERVER to prefs.getInt(ConfigKeys.GALLERY_BACKUP_SERVER, 0)
+                    ENV_GALLERY_BACKUP_SERVER to hookPrefs.getInt(
+                        ConfigKeys.GALLERY_BACKUP_SERVER,
+                        0
+                    )
                         .toString(),
                     ENV_GALLERY_ENABLE_HDR_ENHANCED to booleanFlag(
-                        prefs,
+                        hookPrefs,
                         ConfigKeys.GALLERY_ENABLE_HDR_ENHANCED
                     ),
-                    ENV_GALLERY_ENABLE_PDF to booleanFlag(prefs, ConfigKeys.GALLERY_ENABLE_PDF),
-                    ENV_GALLERY_ENABLE_OCR to booleanFlag(prefs, ConfigKeys.GALLERY_ENABLE_OCR),
+                    ENV_GALLERY_ENABLE_PDF to booleanFlag(hookPrefs, ConfigKeys.GALLERY_ENABLE_PDF),
+                    ENV_GALLERY_ENABLE_OCR to booleanFlag(hookPrefs, ConfigKeys.GALLERY_ENABLE_OCR),
                     ENV_GALLERY_ENABLE_OCR_FORM to booleanFlag(
-                        prefs,
+                        hookPrefs,
                         ConfigKeys.GALLERY_ENABLE_OCR_FORM
                     ),
                     ENV_GALLERY_LONGER_TRASHBIN_TIME to booleanFlag(
-                        prefs,
+                        hookPrefs,
                         ConfigKeys.GALLERY_LONGER_TRASHBIN_TIME
                     ),
-                    ENV_GALLERY_TRASH_RETENTION_DAYS to prefs.getInt(
+                    ENV_GALLERY_TRASH_RETENTION_DAYS to hookPrefs.getInt(
                         ConfigKeys.GALLERY_TRASH_RETENTION_DAYS,
                         365
                     ).toString(),
                     ENV_GALLERY_ENABLE_ID_PHOTO to booleanFlag(
-                        prefs,
+                        hookPrefs,
                         ConfigKeys.GALLERY_ENABLE_ID_PHOTO
                     ),
                     ENV_GALLERY_ENABLE_PHOTO_MOVIE to booleanFlag(
-                        prefs,
+                        hookPrefs,
                         ConfigKeys.GALLERY_ENABLE_PHOTO_MOVIE
                     ),
                     ENV_GALLERY_ENABLE_VIDEO_POST to booleanFlag(
-                        prefs,
+                        hookPrefs,
                         ConfigKeys.GALLERY_ENABLE_VIDEO_POST
                     ),
                     ENV_GALLERY_ENABLE_VIDEO_EDITOR to booleanFlag(
-                        prefs,
+                        hookPrefs,
                         ConfigKeys.GALLERY_ENABLE_VIDEO_EDITOR
                     ),
                     ENV_GALLERY_ENABLE_MAGIC_MATTING to booleanFlag(
-                        prefs,
+                        hookPrefs,
                         ConfigKeys.GALLERY_ENABLE_MAGIC_MATTING
                     ),
-                    ENV_GALLERY_ENABLE_PRINT to booleanFlag(prefs, ConfigKeys.GALLERY_ENABLE_PRINT),
+                    ENV_GALLERY_ENABLE_PRINT to booleanFlag(
+                        hookPrefs,
+                        ConfigKeys.GALLERY_ENABLE_PRINT
+                    ),
                     ENV_GALLERY_ENABLE_PRIVACY_WATERMARK to booleanFlag(
-                        prefs,
+                        hookPrefs,
                         ConfigKeys.GALLERY_ENABLE_PRIVACY_WATERMARK
                     ),
                 )
@@ -301,7 +320,7 @@ class NativeEnvWriterHook : YukiBaseHooker() {
         private const val PACKAGE_INDEX = 1
         private const val ABI_INDEX = 8
         private const val BINARY_INDEX = 20
-        private const val ENVS_INDEX = 21
+        private const val ENVS_INDEX = 23
 
         private const val MODULE_ENV_FILE = "reareye_%s.env"
         private const val MODULE_ID_WEATHER = "weather"
@@ -326,10 +345,10 @@ class NativeEnvWriterHook : YukiBaseHooker() {
             "REAREYE_GALLERY_ENABLE_PRIVACY_WATERMARK"
 
         private fun booleanFlag(
-            prefs: HookPrefs,
+            hookPrefs: HookPrefs,
             key: String,
         ): String {
-            return if (prefs.getBoolean(key, false)) "1" else "0"
+            return if (hookPrefs.getBoolean(key, false)) "1" else "0"
         }
     }
 }

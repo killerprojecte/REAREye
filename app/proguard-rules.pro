@@ -23,6 +23,24 @@
 
 -keep class me.weishu.reflection.** {*;}
 
+-keepclassmembers class androidx.compose.foundation.lazy.LazyListState {
+    private androidx.compose.foundation.lazy.LazyListScrollPosition scrollPosition;
+}
+
+-keepclassmembers class androidx.compose.foundation.lazy.LazyListScrollPosition {
+    private androidx.compose.runtime.MutableIntState index$delegate;
+    private java.lang.Object lastKnownFirstItemKey;
+}
+
+-keepclassmembers class androidx.compose.foundation.lazy.grid.LazyGridState {
+    private androidx.compose.foundation.lazy.grid.LazyGridScrollPosition scrollPosition;
+}
+
+-keepclassmembers class androidx.compose.foundation.lazy.grid.LazyGridScrollPosition {
+    private androidx.compose.runtime.MutableIntState index$delegate;
+    private java.lang.Object lastKnownFirstItemKey;
+}
+
 -assumenosideeffects class kotlin.jvm.internal.Intrinsics {
     public static *** throwUninitializedProperty(...);
     public static *** throwUninitializedPropertyAccessException(...);
@@ -42,7 +60,6 @@
 -dontwarn io.github.libxposed.annotation.**
 -dontwarn java.lang.reflect.AnnotatedType
 -keep class hk.uwu.reareye.hook.HookEntry { *; }
--keep class hk.uwu.reareye.hook.core.** { *; }
 
 # --- DexKit 2.2 ABI/native entry ---
 -keepclasseswithmembers,includedescriptorclasses class org.luckypray.dexkit.** {
