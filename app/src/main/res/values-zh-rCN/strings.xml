@@ -860,4 +860,28 @@
     <string name="guide_demo_wallpaper_result_title">壁纸应用演示完成</string>
     <string name="guide_demo_wallpaper_result">真实壁纸列表已把示例标记为当前壁纸。日常使用时可从这里应用壁纸或加入轮播；退出引导后不会保留示例数据。</string>
     <string name="guide_demo_try_action">请操作高亮区域</string>
+
+    <!-- Mary agent landing page -->
+    <string name="mary_title">Mary</string>
+    <string name="mary_action_history">历史</string>
+    <string name="mary_action_new_chat">新对话</string>
+    <string name="mary_action_attach">添加附件</string>
+    <string name="mary_action_send">发送</string>
+    <string name="mary_greeting">Hi，我是 Mary</string>
+    <string name="mary_greeting_subtitle">问问我关于背屏的任何事</string>
+    <string name="mary_shuffle">换一换</string>
+    <string name="mary_input_hint">输入消息…</string>
+    <string name="mary_capability_scope">检索范围</string>
+    <string name="mary_capability_insight">记忆洞察</string>
+    <string name="mary_capability_reminder">提醒速览</string>
+    <string name="mary_capability_review">今日回顾</string>
+    <string name="mary_suggestion_0_0">把音乐切到背屏</string>
+    <string name="mary_suggestion_0_1">现在背屏显示的是什么？</string>
+    <string name="mary_suggestion_0_2">帮我换个背屏壁纸</string>
+    <string name="mary_suggestion_1_0">列出背屏里装好的组件</string>
+    <string name="mary_suggestion_1_1">把微信切回主屏</string>
+    <string name="mary_suggestion_1_2">背屏歌词怎么不显示了？</string>
+    <string name="mary_suggestion_2_0">重启背屏中心</string>
+    <string name="mary_suggestion_2_1">今天背屏用过哪些应用？</string>
+    <string name="mary_suggestion_2_2">把通知路由整理一下</string>
 </resources>

@@ -860,4 +860,28 @@
     <string name="guide_demo_wallpaper_result_title">Wallpaper practice complete</string>
     <string name="guide_demo_wallpaper_result">The normal wallpaper list now marks the sample as current. Use these same controls to apply wallpapers or add them to rotation. Sample data is discarded when the guide ends.</string>
     <string name="guide_demo_try_action">Try the highlighted control</string>
+
+    <!-- Mary agent landing page -->
+    <string name="mary_title">Mary</string>
+    <string name="mary_action_history">History</string>
+    <string name="mary_action_new_chat">New chat</string>
+    <string name="mary_action_attach">Add attachment</string>
+    <string name="mary_action_send">Send</string>
+    <string name="mary_greeting">Hi, I\'m Mary</string>
+    <string name="mary_greeting_subtitle">Ask me anything about your rear screen</string>
+    <string name="mary_shuffle">Shuffle</string>
+    <string name="mary_input_hint">Type a message…</string>
+    <string name="mary_capability_scope">Scope</string>
+    <string name="mary_capability_insight">Insights</string>
+    <string name="mary_capability_reminder">Reminders</string>
+    <string name="mary_capability_review">Daily recap</string>
+    <string name="mary_suggestion_0_0">Switch the music app to the rear screen</string>
+    <string name="mary_suggestion_0_1">What is the rear screen showing right now?</string>
+    <string name="mary_suggestion_0_2">Change my rear screen wallpaper</string>
+    <string name="mary_suggestion_1_0">List the widgets installed on the rear screen</string>
+    <string name="mary_suggestion_1_1">Move WeChat back to the main screen</string>
+    <string name="mary_suggestion_1_2">Why did the rear screen lyrics stop showing?</string>
+    <string name="mary_suggestion_2_0">Restart the rear screen center</string>
+    <string name="mary_suggestion_2_1">Which apps used the rear screen today?</string>
+    <string name="mary_suggestion_2_2">Tidy up my notification routes</string>
 </resources>

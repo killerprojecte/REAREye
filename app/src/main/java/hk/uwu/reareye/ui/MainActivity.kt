@@ -3,6 +3,7 @@ package hk.uwu.reareye.ui
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
@@ -54,6 +55,7 @@ import hk.uwu.reareye.ui.config.rememberRemotePrefsStatusRevision
 import hk.uwu.reareye.ui.screen.AboutScreen
 import hk.uwu.reareye.ui.screen.ConfigScreen
 import hk.uwu.reareye.ui.screen.HomeScreen
+import hk.uwu.reareye.ui.screen.MaryScreen
 import hk.uwu.reareye.ui.screen.RearStoreScreen
 import hk.uwu.reareye.ui.screen.preloadHomeFrameNotice
 import hk.uwu.reareye.ui.theme.AppTheme
@@ -63,7 +65,12 @@ import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-private val MainScreenOrder = listOf("home", "store", "config", "about")
+/**
+ * Screen order drives the horizontal transition direction. The Rear Store is reachable from the
+ * configuration header rather than the bottom bar, so it keeps a slot here for its transition
+ * while [RearNavigationBar] renders only the four bottom-bar destinations.
+ */
+private val MainScreenOrder = listOf("home", "store", "mary", "config", "about")
 
 private data class RemoteUiSettings(
     val themeModeValue: Int,
@@ -201,6 +208,12 @@ class MainActivity : ComponentActivity() {
                 mutableIntStateOf(settings.navigationBarModeValue)
             }
             var currentScreen by remember { mutableStateOf("home") }
+            // The Rear Store is a configuration-level destination, so the system back gesture
+            // returns to Configuration instead of finishing the activity. Deeper store routes
+            // (widget detail) consume back themselves before this handler sees it.
+            BackHandler(enabled = currentScreen == "store") {
+                currentScreen = "config"
+            }
             var showPresetPackDialog by remember { mutableStateOf(false) }
             var presetPackRefreshToken by remember { mutableIntStateOf(0) }
             var navBarVisible by remember { mutableStateOf(false) }
@@ -336,7 +349,17 @@ class MainActivity : ComponentActivity() {
                                             onInitialWidgetHandled = {
                                                 pendingRearStoreWidgetId = null
                                             },
+                                            onBack = {
+                                                configInAppListMode = false
+                                                currentScreen = "config"
+                                            },
                                         )
+
+                                        "mary" -> Box(modifier = Modifier.fillMaxSize()) {
+                                            MaryScreen(
+                                                bottomInnerPadding = stableBottomInset,
+                                            )
+                                        }
 
                                         "config" -> Box(modifier = Modifier.fillMaxSize()) {
                                             if (featureGuideVisible) {
@@ -366,6 +389,10 @@ class MainActivity : ComponentActivity() {
                                                 onThemeModeChange = { themeModeValue = it },
                                                 onNavigationBarModeChange = {
                                                     navigationBarModeValue = it
+                                                },
+                                                onOpenRearStore = {
+                                                    configInAppListMode = false
+                                                    currentScreen = "store"
                                                 },
                                                 onOpenRearStoreDetail = { widgetId ->
                                                     pendingRearStoreWidgetId = widgetId
@@ -421,7 +448,9 @@ class MainActivity : ComponentActivity() {
                                     hiddenOffsetFallback = 28.dp,
                                 ) {
                                     RearNavigationBar(
-                                        currentScreen = currentScreen,
+                                        // The Rear Store is a configuration-level destination,
+                                        // so the Configuration tab stays highlighted while it is open.
+                                        currentScreen = if (currentScreen == "store") "config" else currentScreen,
                                         navigationBarMode = navigationBarMode,
                                         backdrop = backdrop,
                                         shadowVisibilityProgress = navShadowProgress,

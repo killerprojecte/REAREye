@@ -36,8 +36,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BorderStyle
-import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Cottage
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Info
@@ -151,7 +151,7 @@ private data class NavigationQuickActionStyle(
 )
 
 private const val HOME_ROUTE = "home"
-private const val STORE_ROUTE = "store"
+private const val MARY_ROUTE = "mary"
 private const val CONFIG_ROUTE = "config"
 private const val ABOUT_ROUTE = "about"
 private const val EDIT_QUICK_ACTIONS_KEY = "__edit_quick_actions__"
@@ -171,7 +171,7 @@ fun RearNavigationBar(
     onQuickActionSelected: (NavigationQuickTarget) -> Unit = {},
 ) {
     val homeLabel = stringResource(R.string.home_navigation)
-    val storeLabel = stringResource(R.string.store_navigation)
+    val maryLabel = stringResource(R.string.mary_title)
     val configLabel = stringResource(R.string.configuration_navigation)
     val aboutLabel = stringResource(R.string.about_navigation)
     val editLabel = stringResource(R.string.navigation_quick_edit)
@@ -186,7 +186,7 @@ fun RearNavigationBar(
 
     val items = remember(
         homeLabel,
-        storeLabel,
+        maryLabel,
         configLabel,
         aboutLabel,
         enabledQuickActions,
@@ -198,9 +198,9 @@ fun RearNavigationBar(
                 icon = Icons.Rounded.Cottage,
             ),
             NavigationDestination(
-                route = STORE_ROUTE,
-                label = storeLabel,
-                icon = Icons.Rounded.CloudDownload,
+                route = MARY_ROUTE,
+                label = maryLabel,
+                icon = Icons.Rounded.AutoAwesome,
             ),
             NavigationDestination(
                 route = CONFIG_ROUTE,

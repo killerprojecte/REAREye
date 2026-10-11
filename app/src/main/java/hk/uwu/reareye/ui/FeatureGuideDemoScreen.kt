@@ -53,6 +53,7 @@ internal fun FeatureGuideDemoScreen(
             contentPadding = PaddingValues(bottom = bottomPadding),
             scrollBehavior = MiuixScrollBehavior(),
             onOpenCategory = {}, onOpenScriptManagement = {}, onMoreSearchRequested = {},
+            onOpenStore = {},
             onOpenFavoriteCategory = {}, favoriteNodeCount = 0,
             selectedTabIndex = step.dashboardTab ?: 0,
             cardContent = { _, _, _, _, _ ->

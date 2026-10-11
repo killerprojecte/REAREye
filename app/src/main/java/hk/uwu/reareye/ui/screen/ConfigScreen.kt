@@ -158,6 +158,7 @@ fun ConfigScreen(
     onAppListModeChange: (Boolean) -> Unit = {},
     onThemeModeChange: (Int) -> Unit = {},
     onNavigationBarModeChange: (Int) -> Unit = {},
+    onOpenRearStore: () -> Unit = {},
     onOpenRearStoreDetail: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -421,6 +422,7 @@ fun ConfigScreen(
                         moreSearchQuery = ""
                         moreSearchSessionActive = true
                     },
+                    onOpenStore = onOpenRearStore,
                     favoriteNodeCount = favoriteNodes.size,
                     onOpenFavoriteCategory = {
                         dashboardTabIndex = 3
