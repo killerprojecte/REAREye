@@ -884,4 +884,64 @@
     <string name="mary_suggestion_2_0">Restart the rear screen center</string>
     <string name="mary_suggestion_2_1">Which apps used the rear screen today?</string>
     <string name="mary_suggestion_2_2">Tidy up my notification routes</string>
+
+    <!-- Mary agent settings -->
+    <string name="mary_settings_title">Mary settings</string>
+    <string name="mary_settings_provider">Model service</string>
+    <string name="mary_settings_provider_summary">Endpoint, API key and model</string>
+    <string name="mary_settings_behaviour">Behaviour</string>
+    <string name="mary_settings_behaviour_summary">Iteration limit, result size and approval</string>
+    <string name="mary_settings_prompt">System prompt</string>
+    <string name="mary_settings_prompt_summary">Instructions Mary always follows</string>
+
+    <string name="mary_provider_endpoint">Service address</string>
+    <string name="mary_provider_endpoint_hint">For example https://api.deepseek.com/v1</string>
+    <string name="mary_provider_endpoint_desc">Include the API version segment, usually /v1. Mary appends /chat/completions.</string>
+    <string name="mary_provider_api_key">API key</string>
+    <string name="mary_provider_api_key_desc">Stored encrypted with the system keystore. It is never written to the module configuration.</string>
+    <string name="mary_provider_api_key_placeholder">Paste the key</string>
+    <string name="mary_provider_api_key_set">A key is saved. Leave blank to keep it.</string>
+    <string name="mary_provider_api_key_clear">Clear the saved key</string>
+    <string name="mary_provider_api_key_unreadable">The saved key can no longer be decrypted, most likely because the data was restored onto different hardware. Please enter it again.</string>
+    <string name="mary_provider_model">Model</string>
+    <string name="mary_provider_model_hint">For example deepseek-chat</string>
+    <string name="mary_provider_test">Test connection</string>
+    <string name="mary_provider_testing">Testing…</string>
+    <string name="mary_provider_test_ok">Connected. %1$d models available.</string>
+    <string name="mary_provider_test_ok_empty">Reachable, but the endpoint listed no models.</string>
+    <string name="mary_provider_test_failed">Connection failed: %1$s</string>
+
+    <string name="mary_behaviour_iterations">Tool call limit per reply</string>
+    <string name="mary_behaviour_iterations_desc">Stops a runaway loop. Default 10.</string>
+    <string name="mary_behaviour_result_chars">Tool result size limit</string>
+    <string name="mary_behaviour_result_chars_desc">Longer results are truncated before being sent to the model.</string>
+    <string name="mary_behaviour_auto_read">Run read-only tools without asking</string>
+    <string name="mary_behaviour_auto_read_desc">Tools that only read configuration run immediately. Anything that changes data always asks first.</string>
+    <string name="mary_behaviour_temperature">Temperature</string>
+    <string name="mary_behaviour_temperature_desc">Leave empty to use the service default.</string>
+    <string name="mary_behaviour_max_tokens">Max output tokens</string>
+    <string name="mary_behaviour_max_tokens_desc">Leave empty to use the service default.</string>
+    <string name="mary_behaviour_optional_empty">Use service default</string>
+
+    <string name="mary_settings_save">Save</string>
+    <string name="mary_settings_saved">Settings saved</string>
+    <string name="mary_settings_save_failed">Could not save: the module configuration service is not connected.</string>
+    <string name="mary_settings_save_key_failed">Settings saved, but the API key could not be encrypted on this device.</string>
+    <string name="mary_settings_not_ready">The module configuration service is not connected, so settings cannot be loaded or saved.</string>
+
+    <!-- Mary conversation -->
+    <string name="mary_action_stop">Stop</string>
+    <string name="mary_tool_running">Running…</string>
+    <string name="mary_tool_done">Done</string>
+    <string name="mary_tool_failed">Failed</string>
+    <string name="mary_approval_title">Confirm this action</string>
+    <string name="mary_approval_body">Mary wants to run %1$s, which changes saved configuration.</string>
+    <string name="mary_approval_allow">Allow</string>
+    <string name="mary_approval_deny">Deny</string>
+
+    <!-- Mary conversation history -->
+    <string name="mary_history_title">Conversations</string>
+    <string name="mary_history_empty">No saved conversations yet. Send a message and it will be kept here.</string>
+    <string name="mary_history_meta">%1$s · %2$d messages</string>
+    <string name="mary_history_delete">Delete this conversation</string>
 </resources>

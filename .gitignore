@@ -18,6 +18,8 @@ local.properties
 .tmp-ref
 rear-widget-api/build
 rear-script-runtime/build
+# Catch every module's build output, so a newly added module cannot be committed by accident.
+**/build/
 **/.project
 .project
 .settings

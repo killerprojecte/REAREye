@@ -282,6 +282,7 @@ tasks.withType<Test>().configureEach {
 
 dependencies {
     implementation(project(":rear-widget-api"))
+    implementation(project(":agent-engine"))
     implementation(libs.androidx.compose.foundation.layout)
 
     implementation(libs.roxy.libxposed)

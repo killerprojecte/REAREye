@@ -56,6 +56,7 @@ import hk.uwu.reareye.ui.screen.AboutScreen
 import hk.uwu.reareye.ui.screen.ConfigScreen
 import hk.uwu.reareye.ui.screen.HomeScreen
 import hk.uwu.reareye.ui.screen.MaryScreen
+import hk.uwu.reareye.ui.screen.MarySettingsScreen
 import hk.uwu.reareye.ui.screen.RearStoreScreen
 import hk.uwu.reareye.ui.screen.preloadHomeFrameNotice
 import hk.uwu.reareye.ui.theme.AppTheme
@@ -356,9 +357,23 @@ class MainActivity : ComponentActivity() {
                                         )
 
                                         "mary" -> Box(modifier = Modifier.fillMaxSize()) {
-                                            MaryScreen(
-                                                bottomInnerPadding = stableBottomInset,
-                                            )
+                                            var marySettingsOpen by remember {
+                                                mutableStateOf(false)
+                                            }
+                                            BackHandler(enabled = marySettingsOpen) {
+                                                marySettingsOpen = false
+                                            }
+                                            if (marySettingsOpen) {
+                                                MarySettingsScreen(
+                                                    bottomInnerPadding = stableBottomInset,
+                                                    onBack = { marySettingsOpen = false },
+                                                )
+                                            } else {
+                                                MaryScreen(
+                                                    bottomInnerPadding = stableBottomInset,
+                                                    onOpenSettings = { marySettingsOpen = true },
+                                                )
+                                            }
                                         }
 
                                         "config" -> Box(modifier = Modifier.fillMaxSize()) {

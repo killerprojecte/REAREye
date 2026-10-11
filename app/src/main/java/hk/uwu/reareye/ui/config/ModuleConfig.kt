@@ -60,6 +60,17 @@ object ConfigKeys {
 
     const val MISC_HOOK_GMS_UNLOCK = "enable_misc_gms_unlock"
 
+    // Mary agent. The API key is deliberately NOT here: RemotePreferences is shared with the hook
+    // processes and is not a secret store. Only non-sensitive settings live in this group.
+    const val AGENT_BASE_URL = "agent_base_url"
+    const val AGENT_MODEL = "agent_model"
+    const val AGENT_TEMPERATURE = "agent_temperature"
+    const val AGENT_MAX_OUTPUT_TOKENS = "agent_max_output_tokens"
+    const val AGENT_MAX_ITERATIONS = "agent_max_iterations"
+    const val AGENT_MAX_TOOL_RESULT_CHARS = "agent_max_tool_result_chars"
+    const val AGENT_AUTO_APPROVE_READ_ONLY = "agent_auto_approve_read_only"
+    const val AGENT_SYSTEM_PROMPT = "agent_system_prompt"
+
     const val HOOK_UNLOCK_VIDEO_RESTRICTIONS = "enable_unlock_video_restrictions"
     const val HOOK_UNLOCK_TEMPLATE_MAXIMUM_LIMIT = "enable_unlock_template_maximum_limit"
     const val HOOK_UNMUTE_VIDEO_WALLPAPER = "enable_unmute_video_wallpaper"

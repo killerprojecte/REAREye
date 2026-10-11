@@ -884,4 +884,64 @@
     <string name="mary_suggestion_2_0">重启背屏中心</string>
     <string name="mary_suggestion_2_1">今天背屏用过哪些应用？</string>
     <string name="mary_suggestion_2_2">把通知路由整理一下</string>
+
+    <!-- Mary agent settings -->
+    <string name="mary_settings_title">Mary 设置</string>
+    <string name="mary_settings_provider">模型服务</string>
+    <string name="mary_settings_provider_summary">服务地址、API Key 和模型</string>
+    <string name="mary_settings_behaviour">运行行为</string>
+    <string name="mary_settings_behaviour_summary">迭代上限、结果长度和确认方式</string>
+    <string name="mary_settings_prompt">系统提示词</string>
+    <string name="mary_settings_prompt_summary">Mary 始终遵循的指令</string>
+
+    <string name="mary_provider_endpoint">服务地址</string>
+    <string name="mary_provider_endpoint_hint">例如 https://api.deepseek.com/v1</string>
+    <string name="mary_provider_endpoint_desc">需要包含版本路径，通常是 /v1。Mary 会自动拼接 /chat/completions。</string>
+    <string name="mary_provider_api_key">API Key</string>
+    <string name="mary_provider_api_key_desc">使用系统密钥库加密保存，不会写入模块配置。</string>
+    <string name="mary_provider_api_key_placeholder">粘贴密钥</string>
+    <string name="mary_provider_api_key_set">已保存密钥。留空表示不修改。</string>
+    <string name="mary_provider_api_key_clear">清除已保存的密钥</string>
+    <string name="mary_provider_api_key_unreadable">已保存的密钥无法解密，通常是因为数据被恢复到其他设备。请重新输入。</string>
+    <string name="mary_provider_model">模型</string>
+    <string name="mary_provider_model_hint">例如 deepseek-chat</string>
+    <string name="mary_provider_test">测试连接</string>
+    <string name="mary_provider_testing">正在测试…</string>
+    <string name="mary_provider_test_ok">连接成功，可用模型 %1$d 个。</string>
+    <string name="mary_provider_test_ok_empty">服务可达，但没有列出模型。</string>
+    <string name="mary_provider_test_failed">连接失败：%1$s</string>
+
+    <string name="mary_behaviour_iterations">每次回复的工具调用上限</string>
+    <string name="mary_behaviour_iterations_desc">防止无限循环，默认 10 次。</string>
+    <string name="mary_behaviour_result_chars">工具结果长度上限</string>
+    <string name="mary_behaviour_result_chars_desc">超长结果会在发送给模型前截断。</string>
+    <string name="mary_behaviour_auto_read">只读工具无需确认</string>
+    <string name="mary_behaviour_auto_read_desc">只读取配置的工具会直接执行；任何改动数据的操作都会先询问。</string>
+    <string name="mary_behaviour_temperature">温度</string>
+    <string name="mary_behaviour_temperature_desc">留空则使用服务默认值。</string>
+    <string name="mary_behaviour_max_tokens">最大输出长度</string>
+    <string name="mary_behaviour_max_tokens_desc">留空则使用服务默认值。</string>
+    <string name="mary_behaviour_optional_empty">使用服务默认值</string>
+
+    <string name="mary_settings_save">保存</string>
+    <string name="mary_settings_saved">设置已保存</string>
+    <string name="mary_settings_save_failed">保存失败：模块配置服务未连接。</string>
+    <string name="mary_settings_save_key_failed">设置已保存，但本机无法加密 API Key。</string>
+    <string name="mary_settings_not_ready">模块配置服务未连接，无法读取或保存设置。</string>
+
+    <!-- Mary conversation -->
+    <string name="mary_action_stop">停止</string>
+    <string name="mary_tool_running">执行中…</string>
+    <string name="mary_tool_done">已完成</string>
+    <string name="mary_tool_failed">失败</string>
+    <string name="mary_approval_title">确认这次操作</string>
+    <string name="mary_approval_body">Mary 想执行 %1$s，这会修改已保存的配置。</string>
+    <string name="mary_approval_allow">允许</string>
+    <string name="mary_approval_deny">拒绝</string>
+
+    <!-- Mary conversation history -->
+    <string name="mary_history_title">历史对话</string>
+    <string name="mary_history_empty">还没有保存的对话。发一条消息就会出现在这里。</string>
+    <string name="mary_history_meta">%1$s · %2$d 条消息</string>
+    <string name="mary_history_delete">删除这段对话</string>
 </resources>
