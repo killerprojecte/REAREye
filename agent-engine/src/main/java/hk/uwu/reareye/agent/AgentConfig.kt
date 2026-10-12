@@ -50,6 +50,17 @@ data class AgentConfig(
      * turn is ended. Repeating a call that already produced a result is never progress.
      */
     val maxRepeatedToolCalls: Int = DEFAULT_MAX_REPEATED_TOOL_CALLS,
+
+    /**
+     * How many times in a row one tool may fail before the turn is stopped.
+     *
+     * [maxRepeatedToolCalls] compares `name + arguments`, so it cannot see a retry that submits
+     * *different* arguments each time — which is exactly what a "generate, get a validation report,
+     * fix, resubmit" loop looks like. Without this, such a loop runs to [maxIterations], and when
+     * each attempt produces a large document that is a lot of wasted tokens for no progress.
+     */
+    val maxConsecutiveToolFailures: Int = DEFAULT_MAX_CONSECUTIVE_TOOL_FAILURES,
+
     /**
      * When false, even read-only tools ask for confirmation. Mutating tools always ask, whatever
      * this is set to.
@@ -60,12 +71,33 @@ data class AgentConfig(
     companion object {
         const val DEFAULT_MAX_ITERATIONS = 10
 
-        /** Five minutes. Long enough for real work, short enough to bound a runaway turn. */
-        const val DEFAULT_TURN_BUDGET_MS = 5 * 60 * 1000L
+        /**
+         * Fifteen minutes.
+         *
+         * Raised from five: generating a widget means streaming a very large single document, and
+         * five minutes cut real work off mid-generation. The budget only exists to bound a runaway
+         * turn, so it should sit well clear of legitimate slow work rather than dictate the pace of
+         * it.
+         */
+        const val DEFAULT_TURN_BUDGET_MS = 15 * 60 * 1000L
 
         const val DEFAULT_TOOL_TIMEOUT_MS = 30 * 1000L
-        const val DEFAULT_MAX_TOOL_RESULT_CHARS = 8_000
+        /**
+         * Ceiling for a single tool result, in characters.
+         *
+         * Raised from 8,000 because a real back-screen catalog does not fit in that: 36 app cards
+         * serialise to roughly 12,000 characters, so the previous default truncated a normal,
+         * healthy result. Truncation is not free — the head/tail cut produces invalid JSON, which
+         * the model cannot parse and therefore answers from guesswork.
+         *
+         * 0 disables the cap entirely. That is a valid choice here: results come from local
+         * repositories, not from arbitrary commands, so there is no runaway-output risk.
+         */
+        const val DEFAULT_MAX_TOOL_RESULT_CHARS = 24_000
         const val DEFAULT_MAX_REPEATED_TOOL_CALLS = 3
+
+        /** Allow a couple of revisions, then stop rather than burn the whole turn. */
+        const val DEFAULT_MAX_CONSECUTIVE_TOOL_FAILURES = 3
 
         val DEFAULT_SYSTEM_PROMPT = """
             你是 Mary，小米背屏增强模块 REAREye 的内置助手。
@@ -73,11 +105,26 @@ data class AgentConfig(
             你的能力边界：你运行在 REAREye 应用进程内，像普通应用一样工作，
             没有 root 权限。因此你不能切换背屏/主屏、不能结束进程，也不要声称能做这些。
 
-            你能做的是管理 REAREye 自身的配置：背屏卡片与组件、背屏壁纸、场景路由、应用卡片。
+            背屏上的东西分成四类，它们不是同一件事，不要混用这些词：
+
+            - 组件（component）：一个可复用的模板，用 business 作为标识（例如 weather、
+              calendar）。它本身不显示在背屏上。组件是下面「卡片」和「应用卡」的来源。
+            - 卡片（card）：由组件派生、在背屏轮播里显示的一块内容。用卡片自己的 id 标识。
+              日常说的"背屏卡片""加一张卡"指的就是它。
+            - 应用卡（app card）：也由组件派生，但它是一个能跳转到某个 App 的入口，
+              用 appId 标识。用户口语里说的"背屏应用"就是指应用卡。
+              卡片和应用卡是两种不同的东西，不要互相替代。
+            - 壁纸（wallpaper）：背屏的背景图，和上面三类无关。
+
+            所以：组件是原料，卡片和应用卡是两种成品，壁纸是另一回事。
+            用户说"应用"时指的是应用卡，不是你用 list_components 读到的组件。
 
             关于工具，这条最重要：
             - 你只能调用本次会话中明确提供给你的工具。工具列表里没有的能力，就是你没有的能力。
             - 绝对不要自行编造或猜测工具名，也不要在回复文本里模拟工具调用语法。
+            - 特别地：你目前没有操作应用卡的工具，所以你现在既读不到也改不了应用卡。
+              如果用户问起应用卡或"背屏应用"，直接说明你现在还做不到，绝对不要拿
+              list_components 或 list_cards 的结果冒充应用卡。
             - 如果用户的要求需要你没有的工具，就直说"我现在还做不到这件事"，
               并说明你需要什么能力，而不是假装已经做了或尝试调用一个不存在的工具。
             - 需要调用工具时，通过正常的工具调用机制发起；不需要工具时，直接用自然语言回答。

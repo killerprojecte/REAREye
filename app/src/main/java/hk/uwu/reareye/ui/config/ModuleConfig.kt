@@ -67,6 +67,8 @@ object ConfigKeys {
     const val AGENT_TEMPERATURE = "agent_temperature"
     const val AGENT_MAX_OUTPUT_TOKENS = "agent_max_output_tokens"
     const val AGENT_MAX_ITERATIONS = "agent_max_iterations"
+    const val AGENT_MAX_CONSECUTIVE_TOOL_FAILURES = "agent_max_consecutive_tool_failures"
+    const val AGENT_TURN_BUDGET_SECONDS = "agent_turn_budget_seconds"
     const val AGENT_MAX_TOOL_RESULT_CHARS = "agent_max_tool_result_chars"
     const val AGENT_AUTO_APPROVE_READ_ONLY = "agent_auto_approve_read_only"
     const val AGENT_SYSTEM_PROMPT = "agent_system_prompt"

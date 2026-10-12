@@ -1,6 +1,9 @@
 package hk.uwu.reareye.agent.tools
 
 import android.content.Context
+import hk.uwu.reareye.agent.htmlwidget.HtmlWidgetPackage
+import hk.uwu.reareye.agent.htmlwidget.WidgetHtmlValidator
+import hk.uwu.reareye.agent.htmlwidget.WidgetSpec
 import hk.uwu.reareye.agent.model.ToolEnvironment
 import hk.uwu.reareye.agent.model.ToolParam
 import hk.uwu.reareye.agent.model.ToolResult
@@ -11,6 +14,7 @@ import hk.uwu.reareye.hook.support.XposedModuleStatus
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperCatalog
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperRepository
+import hk.uwu.reareye.repository.rearwidget.RearAppCardRepository
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
@@ -27,6 +31,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
+import java.io.File
 import java.util.UUID
 
 /**
@@ -61,6 +66,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 GET_MODULE_STATUS -> getModuleStatus()
                 LIST_COMPONENTS -> listComponents()
                 LIST_CARDS -> listCards()
+                LIST_APP_CARDS -> listAppCards(args)
                 LIST_SCENE_ROUTES -> listSceneRoutes()
                 LIST_WALLPAPERS -> listWallpapers()
 
@@ -69,6 +75,16 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 UPDATE_CARD -> updateCard(args)
                 DELETE_CARD -> deleteCard(args)
                 SET_CARD_ENABLED -> setCardEnabled(args)
+
+                // --- app cards (应用卡 / 应用) — a different entity from cards
+                REGISTER_APP_CARD -> registerAppCard(args)
+                RENAME_APP_CARD -> renameAppCard(args)
+                DELETE_APP_CARD -> deleteAppCard(args)
+                REORDER_APP_CARDS -> reorderAppCards(args)
+
+                // --- generated HTML widgets (create a brand-new component)
+                GET_WIDGET_SPEC -> getWidgetSpec(args)
+                CREATE_HTML_WIDGET -> createHtmlWidget(args)
 
                 // --- components
                 RENAME_COMPONENT -> renameComponent(args)
@@ -175,10 +191,385 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
         )
     }
 
+    /**
+     * Application cards ("应用卡") — the entries a user calls "背屏应用".
+     *
+     * These are **not** cards. Both are derived from a component, but an app card is a launcher
+     * entry addressed by `appId`, whereas a card is display content addressed by its own id. They
+     * live behind different APIs (`RearAppApiClient` vs the remote-preferences widget store), which
+     * is why [requireReadable] is checked here anyway: the app-card service is reached through the
+     * same host process, so an unbound host means the catalog is unavailable too.
+     */
+    private fun listAppCards(args: JsonObject): ToolResult {
+        requireReadable()?.let { return it }
+        val all = RearAppCardRepository.loadCatalog(appContext)
+
+        // Paged and pruned deliberately. A full catalog of a few dozen entries is several thousand
+        // characters of JSON, which lands right on the maxToolResultChars ceiling; going over makes
+        // the engine head/tail-truncate it and the model then receives broken JSON, which reads as
+        // "the interface returned truncated data". Keeping default pages small avoids that, and the
+        // field pruning roughly halves the size again.
+        val limit = (args.int("limit") ?: DEFAULT_APP_CARD_PAGE_SIZE).coerceIn(1, 100)
+        val offset = (args.int("offset") ?: 0).coerceAtLeast(0)
+        val page = all.drop(offset).take(limit)
+
+        return ToolResult.ok(
+            buildJsonObject {
+                put("total", all.size)
+                put("offset", offset)
+                put("count", page.size)
+                val next = offset + page.size
+                put("has_more", next < all.size)
+                if (next < all.size) put("next_offset", next)
+                put(
+                    "note",
+                    "这些是应用卡（应用），不是卡片，也不是组件。" +
+                        if (next < all.size) "还有更多，用 offset=$next 继续读取。" else "",
+                )
+                put("app_cards", buildJsonArray {
+                    page.forEach { card ->
+                        add(buildJsonObject {
+                            put("app_id", card.appId)
+                            put("title", card.title)
+                            card.componentBusiness?.let { put("component_business", it) }
+                            card.bindPackage?.let { put("bind_package", it) }
+                            // Flags are emitted only when they are actionable, so a healthy card
+                            // stays short instead of carrying four `false`s.
+                            if (card.canRename) put("can_rename", true)
+                            if (card.canDelete) put("can_delete", true)
+                            if (!card.ownedByRearEye) put("owned_by_reareye", false)
+                        })
+                    }
+                })
+            }.toString(),
+        )
+    }
+
+    // ================================================================ app cards
+    //
+    // App cards run over a different channel from cards (RearAppApiClient, not the remote-preference
+    // widget store), and their operations report success explicitly instead of silently. They still
+    // go through [mutateWithVerification] so the same rule holds everywhere: the read-back decides,
+    // never the return value of the write.
+
+    private fun registerAppCard(args: JsonObject): ToolResult {
+        val title = args.string("title")?.trim().orEmpty()
+        val business = args.string("component_business")?.trim().orEmpty()
+        if (title.isEmpty()) return invalidArgs("title 是必填的。")
+        if (business.isEmpty()) {
+            return invalidArgs("component_business 是必填的，先用 list_components 获取组件标识。")
+        }
+
+        writeGuard()?.let { return it }
+        val components = RearWidgetManagerRepository.loadBusinesses(prefs)
+        if (components.none { it.business == business }) {
+            return ToolResult.error(
+                json(
+                    "error" to "component_not_found",
+                    "detail" to "组件 '$business' 不存在。应用卡必须由已注册的组件派生。",
+                    "recovery" to "先调用 list_components 获取可用的 business 值，不要凭空编造。",
+                ),
+            )
+        }
+
+        var appId: String? = null
+        return mutateWithVerification(
+            action = "register_app_card",
+            mutate = {
+                val result = RearAppCardRepository.register(appContext, prefs, title, business)
+                if (!result.success) {
+                    error(result.error ?: "注册应用卡失败，模块没有说明原因。")
+                }
+                appId = result.appId
+            },
+            readBack = { RearAppCardRepository.loadCatalog(appContext) },
+            // Identified by title+component rather than appId: the id is only known after the call,
+            // and matching the pair is what proves the card the user asked for actually exists.
+            verify = { saved ->
+                val id = appId
+                if (id != null) {
+                    saved.any { it.appId == id }
+                } else {
+                    saved.any { it.title == title && it.componentBusiness == business }
+                }
+            },
+            detail = buildMap {
+                put("title", title)
+                put("component_business", business)
+                appId?.let { put("app_id", it) }
+            },
+        )
+    }
+
+    private fun renameAppCard(args: JsonObject): ToolResult {
+        val appId = args.string("app_id")?.trim().orEmpty()
+        val title = args.string("title")?.trim().orEmpty()
+        if (appId.isEmpty()) return invalidArgs("app_id 是必填的，先用 list_app_cards 获取。")
+        if (title.isEmpty()) return invalidArgs("title 是必填的。")
+
+        writeGuard()?.let { return it }
+        val existing = RearAppCardRepository.loadCatalog(appContext).firstOrNull { it.appId == appId }
+            ?: return ToolResult.error(
+                json(
+                    "error" to "app_card_not_found",
+                    "detail" to "找不到 app_id 为 '$appId' 的应用卡。",
+                    "recovery" to "先调用 list_app_cards 获取正确的 app_id。",
+                ),
+            )
+
+        if (!existing.canRename) {
+            return ToolResult.error(
+                json(
+                    "error" to "not_renameable",
+                    "detail" to "应用卡 '${existing.title}' 不允许改名（can_rename=false）。",
+                    "recovery" to "直接告知用户这一张改不了，不要重试。",
+                ),
+            )
+        }
+
+        return mutateWithVerification(
+            action = "rename_app_card",
+            mutate = { _ ->
+                val result = RearAppCardRepository.rename(appContext, appId, title)
+                if (!result.success) error(result.error ?: "改名失败，模块没有说明原因。")
+            },
+            readBack = { RearAppCardRepository.loadCatalog(appContext) },
+            verify = { saved -> saved.any { it.appId == appId && it.title == title } },
+            detail = mapOf("app_id" to appId, "title" to title),
+        )
+    }
+
+    private fun deleteAppCard(args: JsonObject): ToolResult {
+        val appId = args.string("app_id")?.trim().orEmpty()
+        if (appId.isEmpty()) return invalidArgs("app_id 是必填的，先用 list_app_cards 获取。")
+
+        writeGuard()?.let { return it }
+        val existing = RearAppCardRepository.loadCatalog(appContext).firstOrNull { it.appId == appId }
+            ?: return ToolResult.error(
+                json(
+                    "error" to "app_card_not_found",
+                    "detail" to "找不到 app_id 为 '$appId' 的应用卡。",
+                    "recovery" to "先调用 list_app_cards 获取正确的 app_id。",
+                ),
+            )
+
+        if (!existing.canDelete) {
+            return ToolResult.error(
+                json(
+                    "error" to "not_deletable",
+                    "detail" to "应用卡 '${existing.title}' 不允许删除（can_delete=false）。",
+                    "recovery" to "直接告知用户这一张删不了，不要重试。",
+                ),
+            )
+        }
+
+        return mutateWithVerification(
+            action = "delete_app_card",
+            mutate = { _ ->
+                val result = RearAppCardRepository.delete(appContext, appId)
+                if (!result.success) error(result.error ?: "删除失败，模块没有说明原因。")
+            },
+            readBack = { RearAppCardRepository.loadCatalog(appContext) },
+            verify = { saved -> saved.none { it.appId == appId } },
+            detail = mapOf("app_id" to appId, "title" to existing.title),
+        )
+    }
+
+    private fun reorderAppCards(args: JsonObject): ToolResult {
+        val ids = args.stringArray("app_ids").map { it.trim() }.filter { it.isNotEmpty() }
+        if (ids.isEmpty()) {
+            return invalidArgs("app_ids 是必填的，先用 list_app_cards 获取全部 app_id。")
+        }
+        if (ids.size != ids.toSet().size) {
+            return invalidArgs("app_ids 里有重复项，每个应用卡只能出现一次。")
+        }
+
+        writeGuard()?.let { return it }
+        val catalog = RearAppCardRepository.loadCatalog(appContext)
+        // The module reorders by the full list, so a partial list would silently drop the rest.
+        val missing = ids.filter { id -> catalog.none { it.appId == id } }
+        if (missing.isNotEmpty()) {
+            return ToolResult.error(
+                json(
+                    "error" to "app_card_not_found",
+                    "detail" to "这些 app_id 不存在：${missing.joinToString()}",
+                    "recovery" to "先调用 list_app_cards 获取正确的 app_id。",
+                ),
+            )
+        }
+        if (ids.size != catalog.size) {
+            return ToolResult.error(
+                json(
+                    "error" to "incomplete_order",
+                    "detail" to "只提供了 ${ids.size} 个 app_id，但当前共有 ${catalog.size} 张应用卡；" +
+                        "顺序必须包含全部应用卡，否则其余会被丢掉。",
+                    "recovery" to "先用 list_app_cards 取出全部 app_id，按期望顺序完整传入。",
+                ),
+            )
+        }
+
+        return mutateWithVerification(
+            action = "reorder_app_cards",
+            mutate = { _ ->
+                val result = RearAppCardRepository.reorder(appContext, ids)
+                if (!result.success) error(result.error ?: "调整顺序失败，模块没有说明原因。")
+            },
+            readBack = { RearAppCardRepository.loadCatalog(appContext) },
+            verify = { saved -> saved.map { it.appId } == ids },
+            detail = mapOf("order" to ids.joinToString()),
+        )
+    }
+
+    // ================================================================ html widget generation
+
+    /**
+     * Registers a generated HTML widget as a component, optionally as an app card too.
+     *
+     * The pipeline is: validate the model's HTML against the specification, write the zip (fixed
+     * manifest + `web/index.html`), add it to the component list, then optionally register an app
+     * card that reuses that component's template.
+     *
+     * Validation runs *before* anything is written. A widget that violates the safe zone or the
+     * touch-target minimums would install as a blank or unusable panel, and the failure would only
+     * surface once it was already on the rear screen — so the report is returned to the model to
+     * revise instead.
+     */
+    /**
+     * Returns the generation guideline with this request's parameters substituted.
+     *
+     * The guideline text itself is never rewritten here — [WidgetSpec] holds it verbatim and only the
+     * parameter values are replaced.
+     */
+    private fun getWidgetSpec(args: JsonObject): ToolResult {
+        val appName = args.string("app_name")?.trim().orEmpty()
+        val content = args.string("content")?.trim().orEmpty()
+        if (content.isEmpty()) {
+            return invalidArgs(
+                "content 是必填的：请把用户想要的功能、状态机、视觉规格和文案写清楚，" +
+                    "它会填进规范里的 CONTENT 参数区。",
+            )
+        }
+
+        val baseWidth = args.int("base_width") ?: DEFAULT_BASE_WIDTH
+        val baseHeight = args.int("base_height") ?: DEFAULT_BASE_HEIGHT
+        val prompt = WidgetSpec.buildPrompt(
+            appName = appName.ifEmpty { "未命名" },
+            baseWidth = baseWidth,
+            baseHeight = baseHeight,
+            content = content,
+        )
+
+        return ToolResult.ok(
+            buildJsonObject {
+                put("base", "${baseWidth}x$baseHeight")
+                put("frame_rate", WidgetSpec.FRAME_RATE.toString())
+                put(
+                    "usage",
+                    "这就是本次生成要遵循的完整规范（已填好参数）。请严格按它写出单文件 HTML，" +
+                        "然后调用 create_html_widget 提交。规范中标注违反=废稿的条目会被程序校验，" +
+                        "校验不通过不会创建任何东西。",
+                )
+                put("spec", prompt)
+            }.toString(),
+        )
+    }
+
+    private fun createHtmlWidget(args: JsonObject): ToolResult {        val html = args.string("html").orEmpty()
+        if (html.isBlank()) {
+            return invalidArgs("html 是必填的：请把完整单文件 HTML 放在这个参数里。")
+        }
+
+        val baseWidth = args.int("base_width") ?: DEFAULT_BASE_WIDTH
+        val baseHeight = args.int("base_height") ?: DEFAULT_BASE_HEIGHT
+        if (baseWidth <= baseHeight) {
+            return invalidArgs(
+                "base_width/base_height 写反了：背屏是横屏，必须 BASE_W > BASE_H（收到 " +
+                    "$baseWidth×$baseHeight）。",
+            )
+        }
+
+        val validation = WidgetHtmlValidator.validate(html, baseWidth, baseHeight)
+        if (!validation.passed) {
+            return ToolResult.error(
+                json(
+                    "error" to "widget_validation_failed",
+                    "detail" to validation.report(),
+                    "recovery" to
+                        "按上面的问题逐条修改 HTML 后重新调用本工具。不要忽略任何一条 ERROR；" +
+                        "尤其注意头注释里的数字必须与 LAYOUT 实算一致。",
+                    "error_count" to validation.errors.size.toString(),
+                ),
+            )
+        }
+
+        writeGuard()?.let { return it }
+
+        val title = args.string("title")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "生成的组件"
+        val requestedBusiness = args.string("business")?.trim()?.takeIf { it.isNotEmpty() }
+        val existing = RearWidgetManagerRepository.loadBusinesses(prefs)
+        val taken = existing.mapTo(mutableSetOf()) { it.business }
+
+        val business = HtmlWidgetPackage.uniqueBusiness(
+            desired = requestedBusiness
+                ?: HtmlWidgetPackage.deriveBusiness(title, fallback = "html_widget"),
+            taken = taken,
+        )
+        val renamed = requestedBusiness != null && business != requestedBusiness
+
+        // Staged outside the repository's managed directory so its copy-and-rename step runs and the
+        // file lands under the expected `{business}_{timestamp}.zip` name.
+        val stagingDir = File(appContext.filesDir, "agent_widget_staging").apply { mkdirs() }
+        val zipFile = File(stagingDir, "${business}_${System.currentTimeMillis()}.zip")
+
+        val component = hk.uwu.reareye.repository.rearwidget.RearBusinessConfig(
+            id = UUID.randomUUID().toString(),
+            packageName = appContext.packageName,
+            business = business,
+            filePath = zipFile.absolutePath,
+            renameable = true,
+        )
+
+        val registerResult = mutateWithVerification(
+            action = "create_html_widget",
+            mutate = {
+                HtmlWidgetPackage.writeZip(zipFile, html)
+                RearWidgetManagerRepository.saveBusinesses(
+                    appContext,
+                    prefs,
+                    existing + component,
+                )
+            },
+            readBack = { RearWidgetManagerRepository.loadBusinesses(prefs) },
+            // Confirmed by business name: `saveBusinesses` swallows API failures internally, so the
+            // only trustworthy signal is the component being present on read-back.
+            verify = { saved -> saved.any { it.business == business } },
+            detail = buildMap {
+                put("business", business)
+                put("title", title)
+                put("base", "${baseWidth}x$baseHeight")
+                put("warnings", validation.warnings.size.toString())
+            },
+        )
+        if (registerResult.isError) return registerResult
+
+        if (!renamed) return registerResult
+
+        // Tell the model the id it wanted was taken, so it can report the final name accurately.
+        return ToolResult.ok(
+            json(
+                "ok" to "true",
+                "action" to "create_html_widget",
+                "business" to business,
+                "title" to title,
+                "note" to "组件名为 $business（你指定的 $requestedBusiness 已存在，自动加了后缀）。",
+            ),
+        )
+    }
+
     private fun listSceneRoutes(): ToolResult {
         requireReadable()?.let { return it }
         val routes = RearWidgetManagerRepository.loadSceneRoutes(prefs)
-
         return ToolResult.ok(
             buildJsonObject {
                 put("count", routes.size)
@@ -927,6 +1318,43 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
         const val GET_MODULE_STATUS = "get_module_status"
         const val LIST_COMPONENTS = "list_components"
         const val LIST_CARDS = "list_cards"
+        const val LIST_APP_CARDS = "list_app_cards"
+
+        /**
+         * App-card pages stay small on purpose: the whole catalog is long enough to run into
+         * [hk.uwu.reareye.agent.AgentConfig.maxToolResultChars], and an over-long result is
+         * head/tail-truncated into invalid JSON rather than rejected.
+         */
+        private const val DEFAULT_APP_CARD_PAGE_SIZE = 12
+
+        /**
+         * The rear screen this targets: a 904×572 landscape panel.
+         *
+         * Supplied as a default so a generation request does not have to restate it, but kept as a
+         * parameter because the specification requires the design base to match the real device.
+         */
+        private const val DEFAULT_BASE_WIDTH = 904
+        private const val DEFAULT_BASE_HEIGHT = 572
+        const val REGISTER_APP_CARD = "register_app_card"
+        const val RENAME_APP_CARD = "rename_app_card"
+        const val DELETE_APP_CARD = "delete_app_card"
+        const val REORDER_APP_CARDS = "reorder_app_cards"
+
+        /**
+         * HTML widget generation. "HTML 组件" is a component built from a fixed manifest plus a
+         * generated `web/index.html`; a future "MAML 组件" would be a different kind entirely, which
+         * is why the tool names say `html`.
+         */
+        const val CREATE_HTML_WIDGET = "create_html_widget"
+
+        /**
+         * Returns the HTML widget guideline with this request's parameters filled in.
+         *
+         * The guideline is long, so it is fetched on demand rather than carried in the system prompt
+         * of every turn. That matches how the specification is meant to be used — it is the *system
+         * prompt of the generation call*, not of the conversation.
+         */
+        const val GET_WIDGET_SPEC = "get_widget_spec"
         const val LIST_SCENE_ROUTES = "list_scene_routes"
         const val LIST_WALLPAPERS = "list_wallpapers"
 
@@ -1008,6 +1436,203 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                     from_store、has_template_values。本工具只读。
                 """.trimIndent(),
                 risk = ToolRisk.READ_ONLY,
+            ),
+            ToolSpec(
+                name = LIST_APP_CARDS,
+                description = """
+                    列出背屏上的应用卡（"应用"）。
+
+                    什么时候用：
+                    - 用户问"背屏有哪些应用""装了什么应用"，或提到"应用卡"时，用这个工具。
+                    - **绝对不要**用 list_components 或 list_cards 回答关于"应用"的问题。
+                      它们读的是组件和卡片，和应用卡是完全不同的东西。
+
+                    概念区分（重要）：
+                    - 组件（component）：可复用模板，用 business 标识，本身不显示在背屏上。
+                    - 卡片（card）：由组件派生的显示内容，用卡片 id 标识。
+                    - 应用卡（app card）：也叫"应用"，由组件派生，但是能跳转到某个 App 的
+                      入口，用 app_id 标识。用户说"背屏应用"指的就是它。
+
+                    返回：total（总数）、offset、count（本次返回数）、has_more、
+                    next_offset（还有更多时给出）、app_cards 数组。
+                    每项含 app_id（后续改名/删除要用）、title、component_business（派生自哪个组件）、
+                    bind_package，以及仅在可用时才出现的 can_rename / can_delete。
+
+                    分页说明：结果默认每页 $DEFAULT_APP_CARD_PAGE_SIZE 条，避免一次性返回过长内容。
+                    如果 has_more 为 true，用 next_offset 再调一次即可继续。
+                    用户要"列出全部应用"时，要一直翻到 has_more 为 false，不要只报第一页。
+
+                    如果 total 为 0，就是真的没有应用卡，照实说即可。本工具只读。
+                """.trimIndent(),
+                risk = ToolRisk.READ_ONLY,
+                params = listOf(
+                    ToolParam(
+                        "offset",
+                        "从第几条开始，默认 0",
+                        ToolParam.ParamType.INTEGER,
+                        required = false,
+                    ),
+                    ToolParam(
+                        "limit",
+                        "本次返回条数，默认 $DEFAULT_APP_CARD_PAGE_SIZE",
+                        ToolParam.ParamType.INTEGER,
+                        required = false,
+                    ),
+                ),
+            ),
+            ToolSpec(
+                name = REGISTER_APP_CARD,
+                description = """
+                    新建一张应用卡（"应用"）。
+
+                    概念：应用卡由组件派生，但是能跳转到某个 App 的入口，和卡片是两种东西。
+                    这个工具**不会**创建卡片；要建卡片请用 create_card。
+
+                    前置条件：component_business 必须是已注册的组件。先调用 list_components 获取。
+
+                    参数：
+                    - title（必填）：应用卡显示名。
+                    - component_business（必填）：来源组件标识，来自 list_components。
+
+                    本操作会修改配置，需要用户确认。返回 ok 与 app_id。
+                    如果返回 component_not_found，先查组件再重试，不要凭空编造标识。
+                """.trimIndent(),
+                risk = ToolRisk.MUTATING,
+                params = listOf(
+                    ToolParam("title", "应用卡显示名", ToolParam.ParamType.STRING),
+                    ToolParam(
+                        "component_business",
+                        "来源组件标识，来自 list_components",
+                        ToolParam.ParamType.STRING,
+                    ),
+                ),
+            ),
+            ToolSpec(
+                name = RENAME_APP_CARD,
+                description = """
+                    重命名一张应用卡。
+
+                    参数：
+                    - app_id（必填）：先用 list_app_cards 获取，注意不是卡片的 id。
+                    - title（必填）：新名称。
+
+                    限制：只有 can_rename=true 的应用卡能改名，否则返回 not_renameable。
+                    遇到时直接告诉用户这一张改不了，不要重试。
+
+                    本操作会修改配置，需要用户确认。
+                """.trimIndent(),
+                risk = ToolRisk.MUTATING,
+                params = listOf(
+                    ToolParam("app_id", "应用卡 id，来自 list_app_cards", ToolParam.ParamType.STRING),
+                    ToolParam("title", "新名称", ToolParam.ParamType.STRING),
+                ),
+            ),
+            ToolSpec(
+                name = DELETE_APP_CARD,
+                description = """
+                    删除一张应用卡。
+
+                    参数：app_id（必填），先用 list_app_cards 获取。
+
+                    这是不可撤销的操作。删除前先用标题向用户复述一遍是哪一张，不要凭猜测删除。
+                    限制：只有 can_delete=true 的应用卡能删，否则返回 not_deletable。
+
+                    本操作会修改配置，需要用户确认。
+                """.trimIndent(),
+                risk = ToolRisk.MUTATING,
+                params = listOf(
+                    ToolParam("app_id", "应用卡 id，来自 list_app_cards", ToolParam.ParamType.STRING),
+                ),
+            ),
+            ToolSpec(
+                name = REORDER_APP_CARDS,
+                description = """
+                    调整应用卡的显示顺序。
+
+                    参数：app_ids（必填）—— 按期望顺序排列的**全部** app_id。
+
+                    重要：必须传入当前所有应用卡的 app_id，不能只传一部分。模块是按完整列表
+                    重排的，少传的会被丢掉。工具会先核对数量，不匹配时返回 incomplete_order
+                    并告诉你当前共有多少张，此时应先调用 list_app_cards 取全再重试。
+
+                    本操作会修改配置，需要用户确认。
+                """.trimIndent(),
+                risk = ToolRisk.MUTATING,
+                params = listOf(
+                    ToolParam(
+                        "app_ids",
+                        "按期望顺序排列的全部 app_id（字符串数组）",
+                        ToolParam.ParamType.STRING_ARRAY,
+                    ),
+                ),
+            ),
+            ToolSpec(
+                name = GET_WIDGET_SPEC,
+                description = """
+                    取回"HTML 组件"的生成规范（已按本次参数填好）。
+
+                    什么时候用：
+                    - 用户要求生成一个背屏上原本没有的卡片/应用/组件时，**第一步先调用本工具**。
+                    - 规范规定了安全区、可用区比例、触控尺寸、分辨率适配、生命周期接口等硬性约束，
+                      违反其中任何一条都会被程序校验拒绝。
+
+                    参数：
+                    - content（必填）：把用户要的东西写清楚——功能、状态机、视觉规格、交互规则、文案。
+                      规范要求界面文案语言与 content 的书写语言一致，所以用中文写就会生成中文界面。
+                    - app_name（可选）：应用名。
+                    - base_width / base_height（可选）：设计基准分辨率，默认 $DEFAULT_BASE_WIDTH×$DEFAULT_BASE_HEIGHT。
+
+                    返回：spec 字段是完整规范原文。拿到后按它写 HTML，再调用 create_html_widget 提交。
+                    本工具只读，不修改任何配置。
+                """.trimIndent(),
+                risk = ToolRisk.READ_ONLY,
+                params = listOf(
+                    ToolParam("content", "功能、状态机、视觉规格、交互规则、文案", ToolParam.ParamType.STRING),
+                    ToolParam("app_name", "应用名", ToolParam.ParamType.STRING, required = false),
+                    ToolParam("base_width", "设计基准宽，默认 $DEFAULT_BASE_WIDTH", ToolParam.ParamType.INTEGER, required = false),
+                    ToolParam("base_height", "设计基准高，默认 $DEFAULT_BASE_HEIGHT", ToolParam.ParamType.INTEGER, required = false),
+                ),
+            ),
+            ToolSpec(
+                name = CREATE_HTML_WIDGET,
+                description = """
+                    把一个生成好的单文件 HTML 注册为一个全新的背屏组件（"HTML 组件"）。
+
+                    什么时候用：
+                    - 用户要求"生成一个 XX 卡片/应用/组件"，而且现有组件满足不了时。
+                    - 你已经按系统提示词里的 HTML 组件规范写好完整 HTML 之后。
+
+                    概念（重要）：
+                    - 组件是根本，卡片和应用都必须由组件派生。本工具创建的是**组件**。
+                    - 组件建好后，再用 register_app_card 把它注册成应用卡（"应用"），
+                      或用 create_card 建成卡片。
+                    - 现有的 create_card / register_app_card 只能使用**已存在**的组件；
+                      要造背屏上原本没有的东西，必须先调用本工具。
+
+                    参数：
+                    - html（必填）：完整的单文件 HTML，遵循系统提示词里的规范。
+                    - title（必填）：显示名，例如"真心话大冒险"。
+                    - business（可选）：组件标识。留空则自动取名；若与已有组件重名会自动加后缀。
+                    - base_width / base_height（可选）：设计基准分辨率，默认 $DEFAULT_BASE_WIDTH×$DEFAULT_BASE_HEIGHT。
+                      背屏是横屏，必须 base_width > base_height。
+
+                    校验：HTML 会先按规范自动校验（安全区、触控尺寸、头注释数值是否与 LAYOUT 实算一致等）。
+                    不通过时返回 widget_validation_failed 和逐条问题清单，**此时不会创建任何东西**；
+                    请按清单修改 HTML 后重新调用，不要跳过任何一条。
+
+                    本操作会创建组件、修改配置，需要用户确认。成功返回 business，后续注册应用卡要用它。
+                """.trimIndent(),
+                risk = ToolRisk.MUTATING,
+                // The result echoes back the submitted HTML, which is large by nature. The global
+                // cap would cut it in half and hand the model broken JSON to reason about.
+                maxResultChars = 200_000,
+                params = listOf(
+                    ToolParam("html", "完整单文件 HTML", ToolParam.ParamType.STRING),
+                    ToolParam("title", "显示名，例如 真心话大冒险", ToolParam.ParamType.STRING),
+                    ToolParam("business", "组件标识，留空自动取名", ToolParam.ParamType.STRING, required = false),
+                    ToolParam("base_width", "设计基准宽，默认 $DEFAULT_BASE_WIDTH", ToolParam.ParamType.INTEGER, required = false),
+                    ToolParam("base_height", "设计基准高，默认 $DEFAULT_BASE_HEIGHT", ToolParam.ParamType.INTEGER, required = false),
+                ),
             ),
             ToolSpec(
                 name = LIST_SCENE_ROUTES,
@@ -1325,3 +1950,9 @@ internal fun JsonObject.int(name: String): Int? =
 
 internal fun JsonObject.boolean(name: String): Boolean? =
     (this[name] as? JsonPrimitive)?.booleanOrNull
+
+/** Reads a list of strings, skipping anything that is not a JSON string. */
+internal fun JsonObject.stringArray(name: String): List<String> =
+    (this[name] as? JsonArray)
+        ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+        .orEmpty()

@@ -1,4 +1,4 @@
-﻿package hk.uwu.reareye.agent.data
+package hk.uwu.reareye.agent.data
 
 import android.content.Context
 import androidx.core.content.edit
@@ -63,6 +63,14 @@ class AgentSettingsStore(private val context: Context) : AgentSettingsSource {
                 ConfigKeys.AGENT_MAX_TOOL_RESULT_CHARS,
                 AgentConfig.DEFAULT_MAX_TOOL_RESULT_CHARS,
             ),
+            maxConsecutiveToolFailures = prefs.getInt(
+                ConfigKeys.AGENT_MAX_CONSECUTIVE_TOOL_FAILURES,
+                AgentConfig.DEFAULT_MAX_CONSECUTIVE_TOOL_FAILURES,
+            ),
+            turnBudgetMs = prefs.getInt(
+                ConfigKeys.AGENT_TURN_BUDGET_SECONDS,
+                (AgentConfig.DEFAULT_TURN_BUDGET_MS / 1000).toInt(),
+            ).toLong() * 1000,
             autoApproveReadOnly = prefs.getBoolean(ConfigKeys.AGENT_AUTO_APPROVE_READ_ONLY, true),
             systemPrompt = prefs.getString(
                 ConfigKeys.AGENT_SYSTEM_PROMPT,
@@ -81,6 +89,14 @@ class AgentSettingsStore(private val context: Context) : AgentSettingsSource {
         } ?: prefs.putFloat(ConfigKeys.AGENT_TEMPERATURE, Float.NaN)
         prefs.putInt(ConfigKeys.AGENT_MAX_OUTPUT_TOKENS, config.provider.maxOutputTokens ?: 0)
         prefs.putInt(ConfigKeys.AGENT_MAX_ITERATIONS, config.maxIterations)
+        prefs.putInt(
+            ConfigKeys.AGENT_MAX_CONSECUTIVE_TOOL_FAILURES,
+            config.maxConsecutiveToolFailures,
+        )
+        prefs.putInt(
+            ConfigKeys.AGENT_TURN_BUDGET_SECONDS,
+            (config.turnBudgetMs / 1000).toInt(),
+        )
         prefs.putInt(ConfigKeys.AGENT_MAX_TOOL_RESULT_CHARS, config.maxToolResultChars)
         prefs.putBoolean(ConfigKeys.AGENT_AUTO_APPROVE_READ_ONLY, config.autoApproveReadOnly)
         prefs.putString(ConfigKeys.AGENT_SYSTEM_PROMPT, config.systemPrompt)

@@ -914,7 +914,11 @@
     <string name="mary_behaviour_iterations">Tool call limit per reply</string>
     <string name="mary_behaviour_iterations_desc">Stops a runaway loop. Default 10.</string>
     <string name="mary_behaviour_result_chars">Tool result size limit</string>
-    <string name="mary_behaviour_result_chars_desc">Longer results are truncated before being sent to the model.</string>
+    <string name="mary_behaviour_result_chars_desc">Longer results are truncated before being sent to the model. Set 0 to never truncate.</string>
+    <string name="mary_behaviour_tool_failures">Consecutive failures per tool</string>
+    <string name="mary_behaviour_tool_failures_desc">Stop the turn after one tool fails this many times in a row, instead of retrying without progress. Generation tools need a revision between attempts, so this is their retry budget.</string>
+    <string name="mary_behaviour_turn_budget">Turn time limit (seconds)</string>
+    <string name="mary_behaviour_turn_budget_desc">How long one turn may run before it is stopped. Generating a full widget HTML is slow by nature — raise this if it keeps getting cut off (default 900s).</string>
     <string name="mary_behaviour_auto_read">Run read-only tools without asking</string>
     <string name="mary_behaviour_auto_read_desc">Tools that only read configuration run immediately. Anything that changes data always asks first.</string>
     <string name="mary_behaviour_temperature">Temperature</string>
@@ -944,4 +948,7 @@
     <string name="mary_history_empty">No saved conversations yet. Send a message and it will be kept here.</string>
     <string name="mary_history_meta">%1$s · %2$d messages</string>
     <string name="mary_history_delete">Delete this conversation</string>
+    <string name="mary_scroll_to_bottom">Back to latest messages</string>
+    <string name="mary_thinking">Thinking…</string>
+    <string name="mary_thought">Thought process</string>
 </resources>

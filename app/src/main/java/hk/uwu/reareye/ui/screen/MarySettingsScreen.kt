@@ -81,6 +81,12 @@ fun MarySettingsScreen(
     var maxIterationsText by remember {
         mutableStateOf(AgentConfig.DEFAULT_MAX_ITERATIONS.toString())
     }
+    var maxToolFailuresText by remember {
+        mutableStateOf(AgentConfig.DEFAULT_MAX_CONSECUTIVE_TOOL_FAILURES.toString())
+    }
+    var turnBudgetText by remember {
+        mutableStateOf((AgentConfig.DEFAULT_TURN_BUDGET_MS / 1000).toString())
+    }
     var maxResultCharsText by remember {
         mutableStateOf(AgentConfig.DEFAULT_MAX_TOOL_RESULT_CHARS.toString())
     }
@@ -101,6 +107,8 @@ fun MarySettingsScreen(
             temperatureText = config.provider.temperature?.toString().orEmpty()
             maxTokensText = config.provider.maxOutputTokens?.toString().orEmpty()
             maxIterationsText = config.maxIterations.toString()
+            maxToolFailuresText = config.maxConsecutiveToolFailures.toString()
+            turnBudgetText = (config.turnBudgetMs / 1000).toString()
             maxResultCharsText = config.maxToolResultChars.toString()
             autoApproveReadOnly = config.autoApproveReadOnly
         }
@@ -117,8 +125,14 @@ fun MarySettingsScreen(
         ),
         maxIterations = maxIterationsText.trim().toIntOrNull()
             ?.coerceIn(1, 50) ?: AgentConfig.DEFAULT_MAX_ITERATIONS,
+        maxConsecutiveToolFailures = maxToolFailuresText.trim().toIntOrNull()
+            ?.coerceIn(1, 20) ?: AgentConfig.DEFAULT_MAX_CONSECUTIVE_TOOL_FAILURES,
+        // Seconds in the UI, milliseconds in the model. 30s..60min.
+        turnBudgetMs = (turnBudgetText.trim().toIntOrNull()?.coerceIn(30, 3600)
+            ?: (AgentConfig.DEFAULT_TURN_BUDGET_MS / 1000).toInt()).toLong() * 1000,
+        // 0 is a meaningful value: it disables the cap. Only negative input falls back.
         maxToolResultChars = maxResultCharsText.trim().toIntOrNull()
-            ?.coerceIn(200, 200_000) ?: AgentConfig.DEFAULT_MAX_TOOL_RESULT_CHARS,
+            ?.coerceIn(0, 200_000) ?: AgentConfig.DEFAULT_MAX_TOOL_RESULT_CHARS,
         autoApproveReadOnly = autoApproveReadOnly,
     )
 
@@ -242,6 +256,10 @@ fun MarySettingsScreen(
                         onMaxTokensChange = { maxTokensText = it },
                         maxIterationsText = maxIterationsText,
                         onMaxIterationsChange = { maxIterationsText = it },
+                        maxToolFailuresText = maxToolFailuresText,
+                        onMaxToolFailuresChange = { maxToolFailuresText = it },
+                        turnBudgetText = turnBudgetText,
+                        onTurnBudgetChange = { turnBudgetText = it },
                         maxResultCharsText = maxResultCharsText,
                         onMaxResultCharsChange = { maxResultCharsText = it },
                         autoApproveReadOnly = autoApproveReadOnly,
@@ -371,6 +389,10 @@ private fun BehaviourCard(
     onMaxTokensChange: (String) -> Unit,
     maxIterationsText: String,
     onMaxIterationsChange: (String) -> Unit,
+    maxToolFailuresText: String,
+    onMaxToolFailuresChange: (String) -> Unit,
+    turnBudgetText: String,
+    onTurnBudgetChange: (String) -> Unit,
     maxResultCharsText: String,
     onMaxResultCharsChange: (String) -> Unit,
     autoApproveReadOnly: Boolean,
@@ -391,6 +413,24 @@ private fun BehaviourCard(
                 singleLine = true,
             )
             Hint(stringResource(R.string.mary_behaviour_iterations_desc))
+
+            TextField(
+                value = maxToolFailuresText,
+                onValueChange = onMaxToolFailuresChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = stringResource(R.string.mary_behaviour_tool_failures),
+                singleLine = true,
+            )
+            Hint(stringResource(R.string.mary_behaviour_tool_failures_desc))
+
+            TextField(
+                value = turnBudgetText,
+                onValueChange = onTurnBudgetChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = stringResource(R.string.mary_behaviour_turn_budget),
+                singleLine = true,
+            )
+            Hint(stringResource(R.string.mary_behaviour_turn_budget_desc))
 
             TextField(
                 value = maxResultCharsText,

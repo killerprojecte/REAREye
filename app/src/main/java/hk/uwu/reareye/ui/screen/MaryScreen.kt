@@ -1,5 +1,18 @@
 package hk.uwu.reareye.ui.screen
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -16,31 +29,44 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -51,12 +77,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.ChatEntry
 import hk.uwu.reareye.agent.MaryController
 import hk.uwu.reareye.agent.data.AgentSessionSummary
 import hk.uwu.reareye.agent.model.ToolRisk
 import hk.uwu.reareye.agent.tools.ReareyeToolEnvironment
+import hk.uwu.reareye.ui.components.markdown.MarkdownText
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -73,8 +101,11 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.AddCircle
 import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.icon.extended.ExpandLess
+import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Mic
+import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Recent
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.icon.extended.Search
@@ -113,11 +144,61 @@ fun MaryScreen(
     var showHistory by remember { mutableStateOf(false) }
     // Bumped after any session mutation so the sheet re-reads the store.
     var historyRevision by remember { mutableIntStateOf(0) }
+    // Expansion of the collapsible rows, held here so it survives LazyColumn recycling.
+    val blocks = rememberBlockExpansion()
 
-    // Keep the newest content in view while a turn streams in.
-    LaunchedEffect(uiState.entries.size, uiState.running) {
-        val last = uiState.entries.lastIndex
-        if (last >= 0) listState.animateScrollToItem(last)
+    // Auto-follow, but never steal the scroll from the user.
+    //
+    // Two traps to avoid here. First, an animated scroll per token never settles, so the follow
+    // scroll must be instant while text is arriving. Second, `atBottom` cannot be used as the
+    // follow condition: a streaming bubble grows continuously, so "the last item's bottom is inside
+    // the viewport" goes false the moment a reply gets taller than the remaining space — the loop
+    // then disables itself and the view stops following, which is exactly the bug this replaces.
+    // So the follow is only cancelled by a real drag upward while already away from the bottom.
+    val isAtBottom by remember {
+        derivedStateOf {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
+            last.index >= listState.layoutInfo.totalItemsCount - 1 &&
+                last.offset + last.size <= listState.layoutInfo.viewportEndOffset + 4
+        }
+    }
+    var followTail by remember { mutableStateOf(true) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }
+            .collect { scrolling ->
+                // Guarded by `isAtBottom` so this only fires for the user's own drag: the follow's
+                // own scrollToItem momentarily reports progress too, and must not cancel it.
+                if (scrolling && !isAtBottom) followTail = false
+            }
+    }
+    LaunchedEffect(isAtBottom) { if (isAtBottom) followTail = true }
+    LaunchedEffect(
+        uiState.entries.size,
+        uiState.entries.lastOrNull(),
+        uiState.running,
+        // The in-flight reasoning card is its own row and grows token by token, so the follow has
+        // to be driven by it too.
+        uiState.reasoning.length,
+    ) {
+        if (!followTail) return@LaunchedEffect
+
+        if (uiState.running) {
+            // Pin the *bottom* edge while text streams in.
+            //
+            // `scrollToItem(index)` aligns the item's top with the viewport top, so once the
+            // streaming bubble grows taller than the screen the scroll amount clamps and the view
+            // stops moving entirely. Scrolling by the exact leftover distance below the last item
+            // keeps the newest line visible instead.
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()
+            if (last != null && last.index == info.totalItemsCount - 1) {
+                val leftover = last.offset + last.size - info.viewportEndOffset
+                if (leftover > 0) listState.scrollBy(leftover.toFloat())
+            }
+        } else {
+            val last = listState.layoutInfo.totalItemsCount - 1
+            if (last >= 0) listState.animateScrollToItem(last)
+        }
     }
 
     Scaffold(
@@ -172,15 +253,48 @@ fun MaryScreen(
                         top = paddingValues.calculateTopPadding() + 8.dp,
                         bottom = 12.dp,
                     ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     overscrollEffect = null,
                 ) {
-                    items(uiState.entries, key = { it.id }) { entry ->
-                        when (entry) {
-                            is ChatEntry.UserMessage -> UserBubble(entry.text)
-                            is ChatEntry.AssistantMessage -> AssistantBubble(entry.text, entry.streaming)
-                            is ChatEntry.ToolCall -> ToolCallCard(entry)
-                            is ChatEntry.Notice -> NoticeCard(entry.text, entry.isError)
+                    itemsIndexed(uiState.entries, key = { _, entry -> entry.id }) { index, entry ->
+                        Column {
+                            // A new speaker gets a wider gap than a continuation, which is what
+                            // makes a turn boundary readable without any extra decoration.
+                            val previous = uiState.entries.getOrNull(index - 1)
+                            val startsTurn = previous == null ||
+                                speakerOf(previous) != speakerOf(entry)
+                            Spacer(modifier = Modifier.height(if (startsTurn && index > 0) 16.dp else 0.dp))
+                            EntryAppearance {
+                                when (entry) {
+                                    is ChatEntry.UserMessage -> UserBubble(entry.text)
+                                    is ChatEntry.AssistantMessage -> AssistantBubble(
+                                        text = entry.text,
+                                        streaming = entry.streaming,
+                                        reasoning = entry.reasoning,
+                                        blocks = blocks,
+                                        stateKey = entry.id,
+                                    )
+                                    is ChatEntry.ToolCall -> ToolCallCard(entry, blocks)
+                                    is ChatEntry.Notice -> NoticeCard(entry.text, entry.isError)
+                                }
+                            }
+                        }
+                    }
+
+                    // In-flight chain of thought, shown while the model is still thinking.
+                    //
+                    // Once the first answer token arrives the buffer is handed to the
+                    // AssistantMessage above, which renders it in the same place — so this row and
+                    // that card swap without the text jumping. Without this the thinking phase
+                    // renders nothing at all.
+                    if (uiState.reasoning.isNotBlank()) {
+                        item(key = "reasoning_live") {
+                            ReasoningCard(
+                                text = uiState.reasoning,
+                                streaming = true,
+                                stateKey = "reasoning_live",
+                                blocks = blocks,
+                            )
                         }
                     }
                 }
@@ -197,17 +311,60 @@ fun MaryScreen(
                 Spacer(modifier = Modifier.height(10.dp))
             }
 
-            Composer(
-                value = input,
-                onValueChange = { input = it },
-                running = uiState.running,
-                onSend = {
-                    controller.send(input)
-                    input = ""
-                },
-                onStop = { controller.cancel() },
-                bottomPadding = paddingValues.calculateBottomPadding() + bottomInnerPadding,
-            )
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Composer(
+                    value = input,
+                    onValueChange = { input = it },
+                    running = uiState.running,
+                    onSend = {
+                        controller.send(input)
+                        input = ""
+                    },
+                    onStop = { controller.cancel() },
+                    bottomPadding = paddingValues.calculateBottomPadding() + bottomInnerPadding,
+                )
+
+                // Shown only once the user has scrolled away from the tail, so the state that
+                // paused auto-follow is visible and reversible.
+                val jumpVisible = !followTail && uiState.entries.isNotEmpty()
+                val jumpProgress by animateFloatAsState(
+                    targetValue = if (jumpVisible) 1f else 0f,
+                    animationSpec = tween(durationMillis = 180, easing = LinearOutSlowInEasing),
+                    label = "jumpToLatest",
+                )
+                if (jumpProgress > 0.01f) {
+                    Surface(
+                        onClick = {
+                            followTail = true
+                            scope.launch {
+                                val last = listState.layoutInfo.totalItemsCount - 1
+                                if (last >= 0) listState.animateScrollToItem(last)
+                            }
+                        },
+                        shape = CircleShape,
+                        color = MiuixTheme.colorScheme.surfaceContainerHighest,
+                        shadowElevation = 3.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(y = (-46).dp)
+                            .size(38.dp)
+                            .graphicsLayer {
+                                alpha = jumpProgress
+                                scaleX = 0.85f + 0.15f * jumpProgress
+                                scaleY = 0.85f + 0.15f * jumpProgress
+                            },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.ArrowDownward,
+                                contentDescription = stringResource(R.string.mary_scroll_to_bottom),
+                                tint = MiuixTheme.colorScheme.onSurfaceContainerHighest,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -451,12 +608,44 @@ private fun ColumnScope.LandingState(
     }
 }
 
+/**
+ * Fades and lifts a row as it first appears.
+ *
+ * Applied per row rather than via `LazyItemScope.animateItem`, because that animates placement and
+ * would also fire for every offset shift while a turn streams in. An already-present row keeps its
+ * animated state, so only genuinely new rows play this.
+ */
+@Composable
+private fun EntryAppearance(content: @Composable () -> Unit) {
+    var shown by remember { mutableStateOf(false) }
+    val progress by animateFloatAsState(
+        targetValue = if (shown) 1f else 0f,
+        animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing),
+        label = "entryAppearance",
+    )
+    LaunchedEffect(Unit) { shown = true }
+
+    Box(
+        modifier = Modifier.graphicsLayer {
+            alpha = progress
+            translationY = (1f - progress) * 14.dp.toPx()
+        },
+    ) {
+        content()
+    }
+}
+
+/**
+ * A message from the user: right-aligned, capped in width, with the corner nearest the sender
+ * squared off so the bubble reads as coming from that side.
+ */
 @Composable
 private fun UserBubble(text: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Card(
-            modifier = Modifier.fillMaxWidth(0.85f),
-            cornerRadius = 20.dp,
+            // Capped rather than a fixed 85%: a short "好的" should not become a wide slab.
+            modifier = Modifier.widthIn(max = 300.dp),
+            cornerRadius = 18.dp,
             colors = CardDefaults.defaultColors(
                 color = MiuixTheme.colorScheme.primary,
                 contentColor = MiuixTheme.colorScheme.onPrimary,
@@ -466,35 +655,78 @@ private fun UserBubble(text: String) {
                 text = text,
                 style = MiuixTheme.textStyles.body1,
                 color = MiuixTheme.colorScheme.onPrimary,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                // Dense CJK text at the default line height is what makes a bubble feel cramped.
+                lineHeight = 24.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomEnd = 6.dp, bottomStart = 18.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
             )
         }
     }
 }
 
+/**
+ * A reply from Mary: left-aligned and allowed to use the full width.
+ *
+ * The chain of thought renders above the text, inside the same bubble, so it reads as part of this
+ * reply rather than as a separate item in the transcript.
+ */
 @Composable
-private fun AssistantBubble(text: String, streaming: Boolean) {
+private fun AssistantBubble(
+    text: String,
+    streaming: Boolean,
+    reasoning: String,
+    blocks: BlockExpansion,
+    stateKey: String,
+) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 20.dp,
-            colors = CardDefaults.defaultColors(
-                color = MiuixTheme.colorScheme.surfaceContainer,
-                contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
-            ),
-        ) {
-            Text(
-                text = text.ifEmpty { if (streaming) "…" else "" },
-                style = MiuixTheme.textStyles.body1,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+        if (reasoning.isNotBlank()) {
+            ReasoningCard(
+                text = reasoning,
+                streaming = streaming,
+                stateKey = stateKey,
+                blocks = blocks,
             )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+            Card(
+                colors = CardDefaults.defaultColors(
+                    color = MiuixTheme.colorScheme.surfaceContainer,
+                    contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
+                ),
+                cornerRadius = 18.dp,
+            ) {
+                if (text.isEmpty() && streaming) {
+                    Text(
+                        text = "…",
+                        style = MiuixTheme.textStyles.body1,
+                        lineHeight = 24.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 18.dp, bottomEnd = 18.dp, bottomStart = 18.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                } else {
+                    // Only Mary's replies are parsed as Markdown: the user's own text is shown
+                    // exactly as typed, so a stray `*` cannot silently reformat it.
+                    MarkdownText(
+                        markdown = text,
+                        textColor = MiuixTheme.colorScheme.onSurfaceContainer,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 18.dp, bottomEnd = 18.dp, bottomStart = 18.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun ToolCallCard(entry: ChatEntry.ToolCall) {
-    var expanded by remember { mutableStateOf(false) }
+private fun ToolCallCard(entry: ChatEntry.ToolCall, blocks: BlockExpansion) {
+    // Defaults to collapsed, unlike the reasoning card.
+    val expanded = blocks.isExpanded(entry.id, default = false)
     val result = entry.result
 
     Card(
@@ -504,7 +736,7 @@ private fun ToolCallCard(entry: ChatEntry.ToolCall) {
             color = MiuixTheme.colorScheme.surfaceContainerHigh,
             contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
         ),
-        onClick = { expanded = !expanded },
+        onClick = { blocks.toggle(entry.id, default = false) },
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -547,6 +779,152 @@ private fun ToolCallCard(entry: ChatEntry.ToolCall) {
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Collapsible display of the model's chain of thought.
+ *
+ * Expanded while the model is still thinking, then collapsed once the answer starts arriving so it
+ * does not push the reply off screen. Tapping toggles it manually.
+ */
+/**
+ * Expansion state for the collapsible blocks, held outside the list.
+ *
+ * `remember` inside a LazyColumn item is destroyed when the row is recycled, so a card scrolled out
+ * of view and back came back expanded — and the collapse-on-finish could never fire again, because
+ * the re-created row had no memory of the block ever having streamed.
+ *
+ * Both facts live here instead, keyed by row id: the current expansion, and whether the block has
+ * been seen streaming. That second one is what makes the automatic collapse work after recycling.
+ */
+@Stable
+private class BlockExpansion {
+    private val expanded = mutableStateMapOf<String, Boolean>()
+    private val everStreamed = mutableStateMapOf<String, Boolean>()
+    private val handToggled = mutableStateMapOf<String, Boolean>()
+
+    fun isExpanded(key: String, default: Boolean = true): Boolean = expanded[key] ?: default
+
+    fun onStreaming(key: String) {
+        everStreamed[key] = true
+        expanded[key] = true
+    }
+
+    /** Collapses a finished block, unless the user opened it by hand. */
+    fun onFinished(key: String) {
+        if (everStreamed[key] == true && handToggled[key] != true) expanded[key] = false
+    }
+
+    fun toggle(key: String, default: Boolean = true) {
+        handToggled[key] = true
+        expanded[key] = !isExpanded(key, default)
+    }
+}
+
+@Composable
+private fun rememberBlockExpansion(): BlockExpansion = remember { BlockExpansion() }
+
+/**
+ * The reasoning header icon while the model is still thinking.
+ *
+ * A separate composable so the infinite transition only exists while it is actually needed.
+ */
+@Composable
+private fun ThinkingPulseIcon() {
+    val pulse = rememberInfiniteTransition(label = "thinkingPulse")
+    val glow by pulse.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "thinkingGlow",
+    )
+    Icon(
+        imageVector = MiuixIcons.More,
+        contentDescription = null,
+        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = glow),
+        modifier = Modifier.size(15.dp),
+    )
+}
+
+@Composable
+private fun ReasoningCard(text: String, streaming: Boolean, stateKey: String, blocks: BlockExpansion) {
+    val expanded = blocks.isExpanded(stateKey)
+
+    LaunchedEffect(streaming) {
+        if (streaming) blocks.onStreaming(stateKey) else blocks.onFinished(stateKey)
+    }
+
+    // Re-created rows (scrolled back into view) still need the finish transition applied, because
+    // their LaunchedEffect runs again with streaming already false.
+    LaunchedEffect(stateKey) {
+        if (!streaming) blocks.onFinished(stateKey)
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            // Animates the height when the body is shown or hidden, instead of snapping.
+            .animateContentSize(animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing)),
+        cornerRadius = 16.dp,
+        colors = CardDefaults.defaultColors(
+            color = MiuixTheme.colorScheme.surfaceContainer,
+            contentColor = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        ),
+        onClick = { blocks.toggle(stateKey) },
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Split into two branches rather than alpha-ing a running animation: an infinite
+                // transition keeps recomposing for as long as it exists, and every collapsed
+                // reasoning card in the transcript would otherwise carry one forever.
+                if (streaming) {
+                    ThinkingPulseIcon()
+                } else {
+                    Icon(
+                        imageVector = MiuixIcons.More,
+                        contentDescription = null,
+                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = stringResource(
+                        if (streaming) R.string.mary_thinking else R.string.mary_thought,
+                    ),
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.weight(1f),
+                )
+                val chevron by animateFloatAsState(
+                    targetValue = if (expanded) 180f else 0f,
+                    animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing),
+                    label = "chevronRotation",
+                )
+                Icon(
+                    imageVector = MiuixIcons.ExpandMore,
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .graphicsLayer { rotationZ = chevron },
+                )
+            }
+
+            if (expanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = text,
+                    style = MiuixTheme.textStyles.footnote1,
+                    lineHeight = 20.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
             }
         }
     }
@@ -684,6 +1062,25 @@ private fun Composer(
     bottomPadding: Dp,
 ) {
     val canSend = value.isNotBlank() && !running
+    // Animated so enabling the button reads as a state change rather than a flicker.
+    val sendBackground by animateColorAsState(
+        targetValue = when {
+            running -> MiuixTheme.colorScheme.secondaryContainer
+            canSend -> MiuixTheme.colorScheme.primary
+            else -> Color.Transparent
+        },
+        animationSpec = tween(durationMillis = 200),
+        label = "sendBackground",
+    )
+    val sendTint by animateColorAsState(
+        targetValue = if (canSend) {
+            MiuixTheme.colorScheme.onPrimary
+        } else {
+            MiuixTheme.colorScheme.onSurfaceVariantActions
+        },
+        animationSpec = tween(durationMillis = 200),
+        label = "sendTint",
+    )
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Card(
@@ -715,6 +1112,10 @@ private fun Composer(
                         backgroundColor = Color.Transparent,
                         borderColor = Color.Transparent,
                     ),
+                    // Must be set explicitly: the default cursor brush is SolidColor(borderColor),
+                    // and the border above is transparent to remove the field outline — which also
+                    // made the caret invisible.
+                    cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
                     label = stringResource(R.string.mary_input_hint),
                     useLabelAsPlaceholder = true,
                     maxLines = 4,
@@ -722,24 +1123,14 @@ private fun Composer(
 
                 IconButton(
                     onClick = if (running) onStop else onSend,
-                    backgroundColor = if (running) {
-                        MiuixTheme.colorScheme.secondaryContainer
-                    } else if (canSend) {
-                        MiuixTheme.colorScheme.primary
-                    } else {
-                        Color.Transparent
-                    },
+                    backgroundColor = sendBackground,
                 ) {
                     Icon(
                         imageVector = MiuixIcons.Send,
                         contentDescription = stringResource(
                             if (running) R.string.mary_action_stop else R.string.mary_action_send,
                         ),
-                        tint = if (canSend) {
-                            MiuixTheme.colorScheme.onPrimary
-                        } else {
-                            MiuixTheme.colorScheme.onSurfaceVariantActions
-                        },
+                        tint = sendTint,
                     )
                 }
             }
@@ -767,4 +1158,15 @@ private fun rememberMarySuggestionPages(): List<List<String>> {
         stringResource(R.string.mary_suggestion_2_2),
     )
     return remember(page0, page1, page2) { listOf(page0, page1, page2) }
+}
+
+/**
+ * Groups consecutive rows by who "said" them, so spacing can be tighter inside one turn and wider
+ * between turns. Tool cards and notices belong to Mary's side.
+ */
+private fun speakerOf(entry: ChatEntry): Int = when (entry) {
+    is ChatEntry.UserMessage -> 0
+    is ChatEntry.AssistantMessage -> 1
+    is ChatEntry.ToolCall -> 1
+    is ChatEntry.Notice -> 2
 }

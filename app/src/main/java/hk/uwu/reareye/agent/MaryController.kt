@@ -40,6 +40,12 @@ sealed interface ChatEntry {
         override val id: String,
         val text: String,
         val streaming: Boolean = false,
+        /**
+         * The chain of thought that led to this reply, captured when the model moved from thinking
+         * to answering. Kept on the message so it always renders directly above the text it
+         * explains, rather than drifting to wherever the list happens to end.
+         */
+        val reasoning: String = "",
     ) : ChatEntry
 
     data class ToolCall(
@@ -64,6 +70,14 @@ data class AgentUiState(
     val running: Boolean = false,
     val pendingApproval: PendingApproval? = null,
     val status: String? = null,
+    /**
+     * The model's chain of thought for the step in flight, before it starts answering.
+     *
+     * Transient: it is handed to the [ChatEntry.AssistantMessage] it belongs to as soon as the
+     * answer starts, and is never persisted or sent back to the provider — the field is
+     * provider-specific and feeding it back as history breaks several backends.
+     */
+    val reasoning: String = "",
 )
 
 /**
@@ -220,7 +234,13 @@ class MaryController(
 
     private suspend fun handleEvent(event: AgentEvent, startedAt: MutableMap<String, Long>) {
         when (event) {
-            is AgentEvent.TurnStarted -> _state.update { it.copy(status = null) }
+            is AgentEvent.TurnStarted -> _state.update { it.copy(status = null, reasoning = "") }
+
+            is AgentEvent.ReasoningDelta -> _state.update {
+                it.copy(reasoning = it.reasoning + event.text)
+            }
+
+            is AgentEvent.Notice -> appendNotice(event.text, isError = false)
 
             is AgentEvent.TextDelta -> _state.update { current ->
                 val entries = current.entries.toMutableList()
@@ -228,9 +248,17 @@ class MaryController(
                 if (last is ChatEntry.AssistantMessage && last.streaming) {
                     entries[entries.lastIndex] = last.copy(text = last.text + event.text)
                 } else {
-                    entries += ChatEntry.AssistantMessage(newId(), event.text, streaming = true)
+                    // The answer has started, so the buffered chain of thought now belongs to it.
+                    // Attaching it here (rather than rendering it as its own list item) is what
+                    // keeps it pinned directly above the reply it explains.
+                    entries += ChatEntry.AssistantMessage(
+                        id = newId(),
+                        text = event.text,
+                        streaming = true,
+                        reasoning = current.reasoning,
+                    )
                 }
-                current.copy(entries = entries)
+                current.copy(entries = entries, reasoning = "")
             }
 
             is AgentEvent.ToolCallStarted -> _state.update { current ->
@@ -290,7 +318,10 @@ class MaryController(
                     toolName = event.name,
                     arguments = "",
                     success = !event.result.isError,
-                    detail = event.result.content.take(400),
+                    // Generous enough to measure a real payload from the log. At 400 this could not
+                    // even show one app card, which made "is this result being truncated?" a
+                    // question that had to be guessed at rather than read off.
+                    detail = event.result.content.take(4_000),
                     durationMs = duration,
                 )
                 _state.update { current ->

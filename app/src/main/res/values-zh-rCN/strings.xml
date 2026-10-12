@@ -914,7 +914,11 @@
     <string name="mary_behaviour_iterations">每次回复的工具调用上限</string>
     <string name="mary_behaviour_iterations_desc">防止无限循环，默认 10 次。</string>
     <string name="mary_behaviour_result_chars">工具结果长度上限</string>
-    <string name="mary_behaviour_result_chars_desc">超长结果会在发送给模型前截断。</string>
+    <string name="mary_behaviour_result_chars_desc">超长结果会在发送给模型前截断。填 0 表示不截断。</string>
+    <string name="mary_behaviour_tool_failures">同一工具连续失败上限</string>
+    <string name="mary_behaviour_tool_failures_desc">同一个工具连续失败这么多次就停止本轮，避免反复重试空耗。生成类工具失败后需要修改再提交，这里给的就是重试机会。</string>
+    <string name="mary_behaviour_turn_budget">单轮时间上限（秒）</string>
+    <string name="mary_behaviour_turn_budget_desc">一轮对话最长跑多久，超时即停止。生成一个完整的组件 HTML 本来就很慢，如果经常被时间上限打断，把这里调大（默认 900 秒）。</string>
     <string name="mary_behaviour_auto_read">只读工具无需确认</string>
     <string name="mary_behaviour_auto_read_desc">只读取配置的工具会直接执行；任何改动数据的操作都会先询问。</string>
     <string name="mary_behaviour_temperature">温度</string>
@@ -944,4 +948,7 @@
     <string name="mary_history_empty">还没有保存的对话。发一条消息就会出现在这里。</string>
     <string name="mary_history_meta">%1$s · %2$d 条消息</string>
     <string name="mary_history_delete">删除这段对话</string>
+    <string name="mary_scroll_to_bottom">回到最新消息</string>
+    <string name="mary_thinking">思考中…</string>
+    <string name="mary_thought">思考过程</string>
 </resources>

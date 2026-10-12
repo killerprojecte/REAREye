@@ -36,6 +36,13 @@ private fun Any?.asString(): String? = asPrimitive()?.contentOrNull
 private fun Any?.asInt(): Int? = asPrimitive()?.intOrNull
 
 /**
+ * Field names different providers use for the model's reasoning stream.
+ *
+ * Ordered by prevalence. Kept in one place so adding a provider is a one-line change.
+ */
+private val REASONING_FIELDS = listOf("reasoning_content", "reasoning", "thinking")
+
+/**
  * Translate one OpenAI-compatible stream chunk into a [ChatEvent].
  *
  * Shape handled: `{"choices":[{"delta":{"content":…,"tool_calls":[{"index":…,"id":…,
@@ -52,9 +59,19 @@ internal fun parseChunk(payload: String, json: Json): ChatEvent? {
     val choice = root["choices"].asArray()?.firstOrNull().asObject() ?: return null
 
     choice["delta"].asObject()?.let { delta ->
+        // `content` wins when both are present: losing the answer is worse than losing a
+        // reasoning fragment, and a frame carrying both means the answer has started.
         delta["content"].asString()
             ?.takeIf { it.isNotEmpty() }
             ?.let { return ChatEvent.TextDelta(it) }
+
+        // Reasoning is provider-specific — DeepSeek `reasoning_content`, OpenRouter `reasoning`,
+        // Anthropic compatibility layers `thinking`. Providers exposing none never hit this.
+        REASONING_FIELDS.forEach { field ->
+            delta[field].asString()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { return ChatEvent.ReasoningDelta(it) }
+        }
 
         val calls = delta["tool_calls"].asArray()
         if (!calls.isNullOrEmpty()) {

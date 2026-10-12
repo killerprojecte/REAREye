@@ -44,6 +44,14 @@ data class ToolSpec(
     val description: String,
     val params: List<ToolParam> = emptyList(),
     val risk: ToolRisk = ToolRisk.MUTATING,
+    /**
+     * Per-tool override for the result-size cap, in characters. `null` uses the global setting.
+     *
+     * Needed because one global value cannot serve both a short status read and a tool that returns
+     * a whole generated document: sizing the cap for the document would let every other result
+     * flood the context, and sizing it for the status read truncates the document in half.
+     */
+    val maxResultChars: Int? = null,
 ) {
     /** Render as a JSON Schema object suitable for OpenAI's `function.parameters`. */
     fun parametersSchema(): JsonObject = buildJsonObject {

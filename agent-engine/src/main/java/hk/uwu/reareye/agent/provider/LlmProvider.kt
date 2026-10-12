@@ -23,6 +23,15 @@ data class ChatRequest(
 sealed interface ChatEvent {
     data class TextDelta(val text: String) : ChatEvent
 
+    /**
+     * A fragment of the model's reasoning / chain of thought.
+     *
+     * There is no standard field for this: DeepSeek uses `reasoning_content`, OpenRouter and
+     * several gateways use `reasoning`, and Anthropic compatibility layers use `thinking`.
+     * Providers that expose none simply never emit this event.
+     */
+    data class ReasoningDelta(val text: String) : ChatEvent
+
     data class ToolCallDelta(
         val index: Int,
         val id: String? = null,

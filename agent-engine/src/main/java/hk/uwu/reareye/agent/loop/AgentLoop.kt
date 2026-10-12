@@ -35,6 +35,17 @@ sealed interface AgentEvent {
 
     data class TextDelta(val text: String) : AgentEvent
 
+    /** A fragment of the model's reasoning, for a collapsible "thinking" view. */
+    data class ReasoningDelta(val text: String) : AgentEvent
+
+    /**
+     * Something the user should be told about that is not a failure, e.g. the reply was cut off by
+     * the output-token ceiling.
+     *
+     * Distinct from [Failed]: the turn produced usable output, it is just incomplete.
+     */
+    data class Notice(val text: String) : AgentEvent
+
     data class ToolCallStarted(val id: String, val name: String) : AgentEvent
 
     /** Argument fragments as they stream in, useful for a live "calling…" hint. */
@@ -82,6 +93,9 @@ class AgentLoop(
         val working = history.toMutableList()
         val startedAtMs = System.currentTimeMillis()
         val repeatCounts = mutableMapOf<String, Int>()
+        // Per-tool consecutive failure count, keyed by tool name only — see the note at the
+        // increment site for why the arguments must not be part of this key.
+        val consecutiveFailures = mutableMapOf<String, Int>()
         var iterations = 0
 
         emit(AgentEvent.TurnStarted(iteration = 0))
@@ -89,11 +103,20 @@ class AgentLoop(
         while (true) {
             // Wall-clock ceiling first: a model that keeps selecting *different* tools can outrun
             // any step count, so the clock is the ceiling that actually bounds the turn.
+            //
+            // Two limits worth knowing: this reads the real clock (so tests can only exercise the
+            // already-expired case), and it is evaluated only at iteration boundaries — a single
+            // long stream can therefore run past the budget before it is noticed. Bounding that
+            // would mean aborting a stream mid-flight, which costs the partial answer.
             if (System.currentTimeMillis() - startedAtMs > config.turnBudgetMs) {
+                val minutes = (config.turnBudgetMs / 60_000).coerceAtLeast(1)
                 emit(
                     AgentEvent.Failed(
                         AgentError.Protocol(
-                            "本轮已超过 ${config.turnBudgetMs / 1000} 秒的时间上限，已停止。",
+                            "本轮已经跑了 $minutes 分钟，达到时间上限，已停止。" +
+                                "生成较长的内容（比如一个完整的组件 HTML）本来就很慢，" +
+                                "如果任务还没做完，可以在设置里把时间上限调大后重试；" +
+                                "已经完成的部分不受影响。",
                         ),
                     ),
                 )
@@ -126,8 +149,10 @@ class AgentLoop(
             )
 
             val text = StringBuilder()
+            val reasoning = StringBuilder()
             val accumulators = sortedMapOf<Int, ToolCallAccumulator>()
             var streamFinished = false
+            var finishReason: String? = null
 
             try {
                 provider.chat(request).collect { event ->
@@ -135,6 +160,11 @@ class AgentLoop(
                         is ChatEvent.TextDelta -> {
                             text.append(event.text)
                             emit(AgentEvent.TextDelta(event.text))
+                        }
+
+                        is ChatEvent.ReasoningDelta -> {
+                            reasoning.append(event.text)
+                            emit(AgentEvent.ReasoningDelta(event.text))
                         }
 
                         is ChatEvent.ToolCallDelta -> {
@@ -151,7 +181,10 @@ class AgentLoop(
                             }
                         }
 
-                        is ChatEvent.Finished -> streamFinished = true
+                        is ChatEvent.Finished -> {
+                            streamFinished = true
+                            finishReason = event.finishReason
+                        }
                     }
                 }
             } catch (cancelled: CancellationException) {
@@ -193,6 +226,17 @@ class AgentLoop(
                     )
                     return@flow
                 }
+                // `length` means the model was cut off by the output-token ceiling, or by its own
+                // context limit. Without this the reply simply stops mid-sentence with no
+                // explanation, which reads as a bug in the app.
+                if (finishReason.equals("length", ignoreCase = true)) {
+                    emit(
+                        AgentEvent.Notice(
+                            "这条回复因达到输出长度上限被截断，内容可能不完整。" +
+                                "可以在设置里调大「最大输出 token」，或让我接着上面继续说。",
+                        ),
+                    )
+                }
                 emit(AgentEvent.TurnFinished(messages = working.toList(), iterations = iterations))
                 return@flow
             }
@@ -206,6 +250,29 @@ class AgentLoop(
                     toolCallId = call.id,
                     name = call.name,
                 )
+
+                // Count failures per tool, ignoring the arguments. A generate-fix-resubmit loop
+                // always has different arguments, so the signature-based guard below cannot catch
+                // it; this is what stops it before it burns the whole turn.
+                val failures = if (result.isError) {
+                    (consecutiveFailures[call.name] ?: 0) + 1
+                } else {
+                    0
+                }
+                consecutiveFailures[call.name] = failures
+
+                if (failures >= config.maxConsecutiveToolFailures) {
+                    emit(
+                        AgentEvent.Failed(
+                            AgentError.Protocol(
+                                "工具 ${call.name} 已经连续失败 $failures 次，停止本轮以免继续浪费。" +
+                                    "最后一次的错误信息在上面，请如实告诉用户发生了什么，" +
+                                    "不要声称操作成功。",
+                            ),
+                        ),
+                    )
+                    return@flow
+                }
             }
 
             // A repeated identical call cannot produce new information, so stop rather than let
@@ -295,7 +362,9 @@ class AgentLoop(
                 ),
             )
         }
-        return result.capped(config.maxToolResultChars)
+        // A tool may raise its own ceiling: one global value cannot serve both a short status read
+        // and a tool whose result embeds a whole generated document.
+        return result.capped(spec.maxResultChars ?: config.maxToolResultChars)
     }
 
     /**
@@ -346,18 +415,121 @@ class AgentLoop(
         }.toString()
 
         /**
+         * Rough token count: ASCII is billed at about a third of a token per character, everything
+         * else at roughly one token each. Deliberately cheap and dependency-free — it only has to
+         * be right enough to decide when a result needs trimming.
+         *
+         * This is why the budget is not measured in characters: 8,000 characters is ~2,700 tokens of
+         * English but ~8,000 tokens of Chinese, so a character threshold is twice as strict for one
+         * language as the other.
+         */
+        fun estimateTokens(text: String): Int {
+            var ascii = 0L
+            var nonAscii = 0L
+            for (char in text) {
+                if (char.code <= 0x7F) ascii++ else nonAscii++
+            }
+            return (nonAscii + (ascii + 2L) / 3L).toInt()
+        }
+
+        /**
+         * Tokens held back so the marker cannot push the result back over budget.
+         *
+         * The marker renders to roughly 24 tokens. For a degenerate budget this may overshoot; the
+         * marker is metadata rather than content, and dropping it would leave the model with
+         * silently missing data.
+         */
+        private const val MARKER_RESERVE_TOKENS = 32
+
+        private const val TRUNCATION_MARKER = "\n…（已省略 %d 个字符以适配长度上限）…\n"
+
+        /**
          * Keep one oversized tool result from flooding the context: keep both ends, because the
          * conclusion of a command — the error, the exit status, the final summary — usually lives
          * at the tail, while the head carries the setup.
+         *
+         * Modelled on how RikkaHub does it (`truncateToolResult`): the budget is measured in
+         * estimated **tokens**, the marker is paid for out of the same budget, and a budget too
+         * small to split keeps only the head rather than letting the two slices overlap.
+         *
+         * What is deliberately not copied is the spill: RikkaHub writes the full text under
+         * `/tool_outputs/` and hands the model a path, but that only works because its agent has a
+         * shell. Mary has no root and cannot read files, so a path would be an instruction she
+         * cannot follow — worse than simply reporting that the result was too large.
+         *
+         * `limitChars <= 0` disables the cap entirely.
          */
-        private fun ToolResult.capped(limit: Int): ToolResult {
-            if (limit <= 0 || content.length <= limit) return this
-            val headLength = (limit * 0.6).toInt()
-            val tailLength = (limit - headLength).coerceAtLeast(0)
-            val head = content.take(headLength)
-            val tail = if (tailLength > 0) content.takeLast(tailLength) else ""
-            val elided = content.length - head.length - tail.length
-            return copy(content = "$head\n…（省略 $elided 个字符）…\n$tail")
+        private fun ToolResult.capped(limitChars: Int): ToolResult {
+            if (limitChars <= 0) return this
+            val totalTokens = estimateTokens(content)
+            // The setting is in characters to stay legible, but the comparison is in tokens so the
+            // same threshold means the same thing in Chinese and in English.
+            val budgetTokens = estimateTokens("x".repeat(limitChars))
+            if (totalTokens <= budgetTokens) return this
+
+            val budget = (budgetTokens - MARKER_RESERVE_TOKENS).coerceAtLeast(1)
+            // At least one token to the head, otherwise a degenerate budget silently drops the
+            // beginning of the result and keeps only the marker plus the tail.
+            val headBudget = ((budget * 0.6).toInt()).coerceIn(1, budget)
+            val tailBudget = budget - headBudget
+
+            val headEnd = advanceByTokens(content, from = 0, to = content.length, budget = headBudget, forward = true)
+            val tailStart = advanceByTokens(content, from = content.length, to = 0, budget = tailBudget, forward = false)
+
+            val rendered = if (tailBudget <= 0 || tailStart <= headEnd) {
+                // Too small to split, or the slices would overlap: head only.
+                val head = content.substring(0, headEnd).trimEnd()
+                head + TRUNCATION_MARKER.format(content.length - head.length)
+            } else {
+                val head = content.substring(0, headEnd)
+                val tail = content.substring(tailStart)
+                head + TRUNCATION_MARKER.format(tailStart - headEnd) + tail
+            }
+            return copy(content = rendered)
+        }
+
+        /**
+         * Walks [text] between [from] (inclusive) and [to] (exclusive), advancing while the running
+         * token estimate stays within [budget], and returns the index reached.
+         *
+         * Forward from 0 yields the end of the head slice; backward from `length` yields the start
+         * of the tail slice.
+         *
+         * A boundary that would land on the low half of a surrogate pair is pulled one step further
+         * out, so a cut can never leave an unpaired surrogate in the text (emoji are pairs).
+         */
+        private fun advanceByTokens(
+            text: String,
+            from: Int,
+            to: Int,
+            budget: Int,
+            forward: Boolean,
+        ): Int {
+            if (budget <= 0) return from
+            var ascii = 0L
+            var nonAscii = 0L
+            var index = from
+            while (index != to) {
+                val char = text[if (forward) index else index - 1]
+                if (char.code <= 0x7F) ascii++ else nonAscii++
+                val tokens = nonAscii + (ascii + 2L) / 3L
+                if (tokens > budget) break
+                index += if (forward) 1 else -1
+            }
+            // Never return an index that would split a surrogate pair.
+            //
+            // A split happens when the character *after* the boundary is a low surrogate whose high
+            // half sits *before* it: that pair straddles the cut. Withdraw by one so the pair stays
+            // together on the far side. Both directions use that same test, because both are
+            // choosing a cut position rather than a direction.
+            return if (index > 0 && index < text.length &&
+                Character.isLowSurrogate(text[index]) &&
+                Character.isHighSurrogate(text[index - 1])
+            ) {
+                index - 1
+            } else {
+                index
+            }
         }
     }
 }

@@ -18,6 +18,7 @@ import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -285,6 +286,96 @@ class OpenAiCompatibleProviderTest {
         assertTrue(parseModelIds("""{"data":[{"noid":1},null]}""", json).isEmpty())
         assertTrue(parseModelIds("""{}""", json).isEmpty())
         assertTrue(parseModelIds("""nonsense""", json).isEmpty())
+    }
+
+    /**
+     * Reasoning has no standard field name, so all three known spellings must be recognised — and
+     * a frame carrying both reasoning and content must not lose the answer.
+     */
+    @Test
+    fun `parses reasoning under each provider spelling`() {
+        val json = OpenAiCompatibleProvider.DEFAULT_JSON
+        assertEquals(
+            ChatEvent.ReasoningDelta("hmm"),
+            parseChunk("""{"choices":[{"delta":{"reasoning_content":"hmm"}}]}""", json),
+        )
+        assertEquals(
+            ChatEvent.ReasoningDelta("hmm"),
+            parseChunk("""{"choices":[{"delta":{"reasoning":"hmm"}}]}""", json),
+        )
+        assertEquals(
+            ChatEvent.ReasoningDelta("hmm"),
+            parseChunk("""{"choices":[{"delta":{"thinking":"hmm"}}]}""", json),
+        )
+        // Content wins when both appear, so the answer is never dropped for a reasoning fragment.
+        assertEquals(
+            ChatEvent.TextDelta("answer"),
+            parseChunk(
+                """{"choices":[{"delta":{"reasoning_content":"hmm","content":"answer"}}]}""",
+                json,
+            ),
+        )
+        // An empty reasoning field must not shadow a real content field.
+        assertEquals(
+            ChatEvent.TextDelta("answer"),
+            parseChunk(
+                """{"choices":[{"delta":{"reasoning_content":"","content":"answer"}}]}""",
+                json,
+            ),
+        )
+    }
+
+    /**
+     * A model without reasoning support must behave exactly as before: no reasoning events, and the
+     * request body must not gain any thinking parameter — a stray field can make strict gateways
+     * reject the call outright.
+     */
+    @Test
+    fun `a non-reasoning model streams plain text and sends no thinking field`() = runTest {
+        server.enqueue(
+            streamResponse(
+                sse(
+                    """{"choices":[{"delta":{"content":"普通回答"}}]}""",
+                    """{"choices":[{"delta":{},"finish_reason":"stop"}]}""",
+                ),
+            ),
+        )
+
+        val events = providerWith().chat(userMessage()).toList()
+
+        assertEquals("普通回答", events.filterIsInstance<ChatEvent.TextDelta>().joinToString("") { it.text })
+        assertTrue(events.none { it is ChatEvent.ReasoningDelta })
+
+        val body = server.takeRequest().body!!.utf8()
+        listOf("reasoning", "thinking", "reasoning_content", "reasoning_effort").forEach { field ->
+            assertFalse("request body must not mention $field: $body", body.contains(field))
+        }
+        assertTrue(body.contains(""""model":""""))
+    }
+
+    @Test
+    fun `streams reasoning then content as separate events`() = runTest {
+        server.enqueue(
+            streamResponse(
+                sse(
+                    """{"choices":[{"delta":{"reasoning_content":"让我想想"}}]}""",
+                    """{"choices":[{"delta":{"reasoning_content":"…"}}]}""",
+                    """{"choices":[{"delta":{"content":"答案是 3"}}]}""",
+                    """{"choices":[{"delta":{},"finish_reason":"stop"}]}""",
+                ),
+            ),
+        )
+
+        val events = providerWith().chat(userMessage()).toList()
+
+        assertEquals(
+            "让我想想…",
+            events.filterIsInstance<ChatEvent.ReasoningDelta>().joinToString("") { it.text },
+        )
+        assertEquals(
+            "答案是 3",
+            events.filterIsInstance<ChatEvent.TextDelta>().joinToString("") { it.text },
+        )
     }
 
     /**

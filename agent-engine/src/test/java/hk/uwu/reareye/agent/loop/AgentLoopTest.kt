@@ -21,6 +21,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -89,6 +90,42 @@ class AgentLoopTest {
         description = "Create a card",
         risk = ToolRisk.MUTATING,
     )
+
+    /**
+     * A reply stopped by the output-token ceiling arrives as a perfectly normal completion
+     * (`finish_reason=length`, every delta present), so without an explicit check the text just
+     * stops mid-sentence and the user is told nothing at all.
+     */
+    @Test
+    fun `a reply cut off by the token ceiling is reported, not silently accepted`() = runTest {
+        val provider = ScriptedProvider(
+            listOf(
+                listOf(
+                    ChatEvent.TextDelta("这是一段被截断的回"),
+                    ChatEvent.Finished("length"),
+                ),
+            ),
+        )
+        val loop = AgentLoop(provider = provider, tools = RecordingTools(listOf(readTool)), config = config())
+
+        val events = loop.run(history()).toList()
+
+        val notice = events.filterIsInstance<AgentEvent.Notice>().single()
+        assertTrue(notice.text.contains("截断"))
+        // The partial answer is still kept: it is useful, just incomplete.
+        assertTrue(events.filterIsInstance<AgentEvent.TurnFinished>().isNotEmpty())
+    }
+
+    @Test
+    fun `a normal stop produces no truncation notice`() = runTest {
+        val provider = ScriptedProvider(listOf(textTurn("完整回答")))
+        val loop = AgentLoop(provider = provider, tools = RecordingTools(listOf(readTool)), config = config())
+
+        val events = loop.run(history()).toList()
+
+        assertTrue(events.none { it is AgentEvent.Notice })
+        assertTrue(events.filterIsInstance<AgentEvent.TurnFinished>().isNotEmpty())
+    }
 
     @Test
     fun `a plain text turn finishes immediately without tools`() = runTest {
@@ -308,21 +345,216 @@ class AgentLoopTest {
     }
 
     @Test
-    fun `the wall-clock budget ends a turn that keeps calling different tools`() = runTest {
-        // Distinct arguments each step, so the repeat guard never fires and only the clock can stop it.
+    fun `a cap of zero disables truncation entirely`() = runTest {
+        val huge = "x".repeat(50_000)
+        val provider = ScriptedProvider(
+            listOf(toolTurn("call_1", "list_cards", "{}"), textTurn("ok")),
+        )
+        val loop = AgentLoop(
+            provider = provider,
+            tools = RecordingTools(listOf(readTool), ToolResult.ok(huge)),
+            config = config().copy(maxToolResultChars = 0),
+        )
+
+        loop.run(history()).toList()
+
+        val toolMessage = provider.requests[1].messages.first { it.role == MessageRole.TOOL }
+        assertEquals(huge, toolMessage.content)
+    }
+
+    /**
+     * The budget is compared in tokens, so the same character cap must bite at roughly the same
+     * token volume in either language. A pure character comparison would treat 8,000 characters of
+     * Chinese as equivalent to 8,000 characters of English, when the former is about three times as
+     * many tokens.
+     */
+    @Test
+    fun `the cap is applied in tokens, not characters`() = runTest {
+        // Each language gets the same character budget; Chinese should be trimmed far more.
+        suspend fun retained(text: String): Int {
+            val provider = ScriptedProvider(
+                listOf(toolTurn("call_1", "list_cards", "{}"), textTurn("ok")),
+            )
+            val loop = AgentLoop(
+                provider = provider,
+                tools = RecordingTools(listOf(readTool), ToolResult.ok(text)),
+                config = config().copy(maxToolResultChars = 3_000),
+            )
+            loop.run(history()).toList()
+            return provider.requests[1].messages
+                .first { it.role == MessageRole.TOOL }.content!!.length
+        }
+
+        val ascii = "a".repeat(30_000)
+        val chinese = "字".repeat(30_000)
+        val keptAscii = retained(ascii)
+        val keptChinese = retained(chinese)
+
+        // 3,000 characters is ~1,000 tokens of ASCII but ~3,000 tokens of Chinese, so the ASCII
+        // result should retain markedly more characters than the Chinese one.
+        assertTrue(
+            "ascii kept $keptAscii, chinese kept $keptChinese",
+            keptAscii > keptChinese * 2,
+        )
+    }
+
+    /**
+     * When the budget is too small to split, keeping both ends would make the slices overlap and
+     * duplicate text. RikkaHub keeps the head only in that case; this mirrors it.
+     */
+    @Test
+    fun `a budget too small to split keeps only the head`() = runTest {
+        val body = "abcdefghij".repeat(500)
+        val provider = ScriptedProvider(
+            listOf(toolTurn("call_1", "list_cards", "{}"), textTurn("ok")),
+        )
+        val loop = AgentLoop(
+            provider = provider,
+            tools = RecordingTools(listOf(readTool), ToolResult.ok(body)),
+            config = config().copy(maxToolResultChars = 1),
+        )
+
+        loop.run(history()).toList()
+
+        val content = provider.requests[1].messages.first { it.role == MessageRole.TOOL }.content!!
+        assertTrue("expected a marker", content.contains("省略"))
+        // With a one-character budget there is room for only a token or two of head, so the
+        // assertion is on the shape: a non-empty head, then the marker, and no tail at all.
+        assertTrue("expected a non-empty head", content.startsWith("abc"))
+        assertTrue("expected no tail", content.length < body.length / 2)
+        // The head must not have been duplicated into a tail.
+        assertFalse("head text should appear once", content.drop(1).contains("abcdefghij"))
+    }
+
+    /**
+     * Cutting a surrogate pair in half would put an unpaired surrogate into the prompt.
+     */
+    @Test
+    fun `truncation does not split a surrogate pair`() = runTest {
+        // Emoji are surrogate pairs; a naive take() at an odd offset lands between the halves.
+        val huge = "🎨".repeat(3_000)
+        val provider = ScriptedProvider(
+            listOf(toolTurn("call_1", "list_cards", "{}"), textTurn("ok")),
+        )
+        val loop = AgentLoop(
+            provider = provider,
+            tools = RecordingTools(listOf(readTool), ToolResult.ok(huge)),
+            config = config().copy(maxToolResultChars = 1_001),
+        )
+
+        loop.run(history()).toList()
+
+        val content = provider.requests[1].messages.first { it.role == MessageRole.TOOL }.content!!
+        for (index in content.indices) {
+            val char = content[index]
+            if (Character.isHighSurrogate(char)) {
+                assertTrue(
+                    "unpaired high surrogate at $index",
+                    index + 1 < content.length && Character.isLowSurrogate(content[index + 1]),
+                )
+            }
+            if (Character.isLowSurrogate(char)) {
+                assertTrue(
+                    "unpaired low surrogate at $index",
+                    index > 0 && Character.isHighSurrogate(content[index - 1]),
+                )
+            }
+        }
+    }
+
+    /**
+     * The generate-fix-resubmit shape: every attempt carries *different* arguments, so the
+     * signature-based repeat guard can never fire. Without a per-tool counter this loop runs to the
+     * step ceiling, and each attempt can be a large document.
+     */
+    @Test
+    fun `a tool that keeps failing with different arguments stops the turn`() = runTest {
+        val batches = (1..20).map { index ->
+            toolTurn("call_$index", "list_cards", """{"attempt":"$index"}""")
+        }
+        val provider = ScriptedProvider(batches)
+        val tools = RecordingTools(
+            listOf(readTool),
+            ToolResult.error("""{"error":"widget_validation_failed"}"""),
+        )
+        val loop = AgentLoop(
+            provider = provider,
+            tools = tools,
+            config = config(maxIterations = 20).copy(maxConsecutiveToolFailures = 3),
+        )
+
+        val events = loop.run(history()).toList()
+
+        val failure = events.filterIsInstance<AgentEvent.Failed>().single().error
+        assertTrue(failure.message!!.contains("连续失败"))
+        // Three attempts allowed, no more.
+        assertEquals(3, provider.calls)
+    }
+
+    /** A success resets the counter, so intermittent failures never trip the limit. */
+    @Test
+    fun `a success resets the consecutive failure count`() = runTest {
+        val batches = (1..6).map { index ->
+            toolTurn("call_$index", "list_cards", """{"attempt":"$index"}""")
+        } + listOf(textTurn("完成"))
+        val provider = ScriptedProvider(batches)
+        var call = 0
+        val tools = object : ToolEnvironment {
+            override fun availableTools(): List<ToolSpec> = listOf(readTool)
+            override suspend fun execute(toolName: String, args: JsonObject): ToolResult {
+                call++
+                // Alternate: fail, succeed, fail, succeed …
+                return if (call % 2 == 1) {
+                    ToolResult.error("""{"error":"nope"}""")
+                } else {
+                    ToolResult.ok("""{"ok":true}""")
+                }
+            }
+        }
+        val loop = AgentLoop(
+            provider = provider,
+            tools = tools,
+            // Enough steps to run the whole script, so neither ceiling interferes.
+            config = config(maxIterations = 10).copy(maxConsecutiveToolFailures = 2),
+        )
+
+        val events = loop.run(history()).toList()
+
+        // Failures never happen twice in a row, so the guard must not fire.
+        assertTrue(
+            "failure guard must not fire, got " +
+                "${events.filterIsInstance<AgentEvent.Failed>().map { it.error.message }}",
+            events.none { it is AgentEvent.Failed },
+        )
+        assertTrue(events.filterIsInstance<AgentEvent.TurnFinished>().isNotEmpty())
+        assertEquals(6, call)
+    }
+
+    @Test
+    fun `the wall-clock budget is checked before spending a model call`() = runTest {
+        // Distinct arguments each step, so the repeat guard never fires, and the step ceiling is far
+        // away, so only the clock can stop it. The budget must be negative rather than zero:
+        // elapsed time starts at 0 and the check is `elapsed > budget`, so 0 would never trip and
+        // the loop would silently run to the step ceiling instead.
+        //
+        // Only the already-expired case is asserted here. The budget reads the real clock, so a
+        // test cannot advance it without actually sleeping; the positive-budget path is covered by
+        // the step-ceiling and loop-guard tests, which exercise the same iteration boundary.
         val batches = List(50) { index -> toolTurn("call_$index", "list_cards", """{"scope":"$index"}""") }
         val provider = ScriptedProvider(batches)
         val loop = AgentLoop(
             provider = provider,
             tools = RecordingTools(listOf(readTool)),
-            config = config(maxIterations = 50).copy(turnBudgetMs = 0L),
+            config = config(maxIterations = 50).copy(turnBudgetMs = -1L),
         )
 
         val events = loop.run(history()).toList()
 
         val failure = events.filterIsInstance<AgentEvent.Failed>().single().error
         assertTrue(failure.message!!.contains("时间上限"))
-        assertEquals(1, provider.calls)
+        // The budget is checked before each model call, so an already-expired budget must not spend
+        // one.
+        assertEquals(0, provider.calls)
     }
 
     @Test
