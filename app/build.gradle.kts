@@ -54,7 +54,21 @@ fun runGitCommand(vararg args: String): String? = runCatching {
         }
 }.getOrNull()
 
+// SCRIPTING.md is the authoritative scripting API reference, written by hand at the repo root.
+// It is copied into assets at build time rather than transcribed into Kotlin, so the text the
+// generator hands to the model can never drift from the text that ships with the project.
+val scriptingDocDir = layout.buildDirectory.dir("generated/scriptingDoc").get().asFile
+val copyScriptingDoc = tasks.register<Copy>("copyScriptingDoc") {
+    from(rootProject.file("SCRIPTING.md"))
+    into(scriptingDocDir)
+    rename { "scripting.md" }
+}
+
 android {
+    sourceSets.getByName("main") {
+        assets.srcDir(scriptingDocDir)
+    }
+
     buildToolsVersion = gropify.project.android.buildToolsVersion
     namespace = gropify.project.app.packageName
     compileSdk {
@@ -154,6 +168,11 @@ android {
         }
     }
     lint { checkReleaseBuilds = false }
+}
+
+// The asset must exist before anything merges assets, so every variant's preBuild depends on it.
+tasks.matching { it.name == "preBuild" || it.name.endsWith("Assets") }.configureEach {
+    dependsOn(copyScriptingDoc)
 }
 
 tasks.register("assemblePublicBetaRelease") {

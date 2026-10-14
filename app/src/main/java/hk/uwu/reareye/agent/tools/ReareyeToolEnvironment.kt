@@ -4,6 +4,7 @@ import android.content.Context
 import hk.uwu.reareye.agent.htmlwidget.HtmlWidgetPackage
 import hk.uwu.reareye.agent.htmlwidget.WidgetHtmlValidator
 import hk.uwu.reareye.agent.htmlwidget.WidgetSpec
+import hk.uwu.reareye.agent.luascript.LuaScriptValidator
 import hk.uwu.reareye.agent.model.ToolEnvironment
 import hk.uwu.reareye.agent.model.ToolParam
 import hk.uwu.reareye.agent.model.ToolResult
@@ -16,6 +17,8 @@ import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperRepository
 import hk.uwu.reareye.repository.rearwidget.RearAppCardRepository
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
+import hk.uwu.reareye.script.ScriptProjectKind
+import hk.uwu.reareye.script.ScriptProjectStore
 import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import hk.uwu.reareye.widgetapi.RearWallpaperScheduleCodec
@@ -85,6 +88,13 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 // --- generated HTML widgets (create a brand-new component)
                 GET_WIDGET_SPEC -> getWidgetSpec(args)
                 CREATE_HTML_WIDGET -> createHtmlWidget(args)
+
+                // --- lua scripts
+                LIST_SCRIPTS -> listScripts()
+                READ_SCRIPT -> readScript(args)
+                GET_SCRIPT_SPEC -> getScriptSpec()
+                CREATE_SCRIPT -> createScript(args)
+                DELETE_SCRIPT -> deleteScript(args)
 
                 // --- components
                 RENAME_COMPONENT -> renameComponent(args)
@@ -418,6 +428,227 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             verify = { saved -> saved.map { it.appId } == ids },
             detail = mapOf("order" to ids.joinToString()),
         )
+    }
+
+    // ================================================================ lua scripts
+
+    /**
+     * Lists the Lua scripts installed in REAREye.
+     *
+     * Read-only and non-executing: a script's descriptor can only be obtained by loading it, which
+     * runs its top-level code, so this reports only what the storage layer knows.
+     */
+    private fun listScripts(): ToolResult {
+        val projects = ScriptProjectStore(appContext).list()
+        return ToolResult.ok(
+            buildJsonObject {
+                put("count", projects.size)
+                put(
+                    "note",
+                    "kind 为 STANDALONE 的是单文件脚本，PROJECT 是带目录的多文件脚本，" +
+                        "COMPONENT 由组件安装、不能单独删除。",
+                )
+                put("scripts", buildJsonArray {
+                    projects.forEach { project ->
+                        add(buildJsonObject {
+                            put("id", project.id)
+                            put("name", project.name)
+                            put("kind", project.kind.name)
+                            put("valid", project.isValid)
+                            project.componentId?.let { put("component_id", it) }
+                            project.error?.let { put("error", it) }
+                        })
+                    }
+                })
+            }.toString(),
+        )
+    }
+
+    private fun readScript(args: JsonObject): ToolResult {
+        val id = args.string("id")?.trim().orEmpty()
+        if (id.isEmpty()) return invalidArgs("id 是必填的，先用 list_scripts 获取。")
+
+        val store = ScriptProjectStore(appContext)
+        val project = store.list().firstOrNull { it.id == id }
+            ?: return ToolResult.error(
+                json(
+                    "error" to "script_not_found",
+                    "detail" to "找不到 id 为 '$id' 的脚本。",
+                    "recovery" to "先调用 list_scripts 获取正确的 id。",
+                ),
+            )
+
+        val source = store.read(project)
+        return ToolResult.ok(
+            buildJsonObject {
+                put("id", project.id)
+                put("name", project.name)
+                put("kind", project.kind.name)
+                put("valid", project.isValid)
+                project.error?.let { put("error", it) }
+                // Surfacing the static checks here lets the model see what would block a rewrite
+                // without this tool having to execute anything.
+                put("issues", LuaScriptValidator.validate(source).report())
+                put("source", source)
+            }.toString(),
+        )
+    }
+
+    /**
+     * Returns the scripting API reference.
+     *
+     * The text comes from `SCRIPTING.md`, copied into assets at build time, so it is the document that
+     * ships with the project rather than a paraphrase that can drift from it.
+     */
+    private fun getScriptSpec(): ToolResult {
+        val spec = runCatching {
+            appContext.assets.open("scripting.md")
+                .bufferedReader(Charsets.UTF_8)
+                .use { it.readText() }
+        }.getOrNull()
+
+        if (spec.isNullOrBlank()) {
+            return ToolResult.error(
+                json(
+                    "error" to "spec_unavailable",
+                    "detail" to "读不到脚本文档（assets/scripting.md）。",
+                    "recovery" to "告知用户应用资源缺失；不要凭记忆编造脚本 API。",
+                ),
+            )
+        }
+
+        return ToolResult.ok(
+            buildJsonObject {
+                put(
+                    "usage",
+                    "这是 REAREye 的脚本文档全文，也是本次生成要遵循的规范。" +
+                        "请严格按它写出脚本源码，然后调用 create_script 提交。",
+                )
+                put("spec", spec)
+            }.toString(),
+        )
+    }
+
+    private fun createScript(args: JsonObject): ToolResult {
+        val source = args.string("source").orEmpty()
+        if (source.isBlank()) {
+            return invalidArgs("source 是必填的：请把完整的 Lua 脚本源码放在这个参数里。")
+        }
+
+        val validation = LuaScriptValidator.validate(source)
+        if (!validation.passed) {
+            return ToolResult.error(
+                json(
+                    "error" to "script_validation_failed",
+                    "detail" to validation.report(),
+                    "recovery" to "按上面的问题修改脚本后重新调用本工具。不要忽略任何一条 ERROR。",
+                    "error_count" to validation.errors.size.toString(),
+                ),
+            )
+        }
+
+        writeGuard()?.let { return it }
+
+        val store = ScriptProjectStore(appContext)
+        val existing = store.list().mapTo(mutableSetOf()) { it.name }
+
+        val requested = args.string("id")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: args.string("name")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "script"
+        val base = sanitizeScriptId(requested)
+        val id = uniqueScriptId(base, existing)
+
+        val result = mutateWithVerification(
+            action = "create_script",
+            mutate = {
+                // createStandalone writes unconditionally, so the id has to be free before the call.
+                // The uniqueness pass above guarantees it; this only fires on a listing/write race.
+                if (store.hasStandalone("$id.lua")) error("脚本 $id 已存在")
+                store.createStandalone(id, source)
+            },
+            readBack = { store.list() },
+            verify = { saved -> saved.any { it.id == id } },
+            detail = buildMap {
+                put("id", id)
+                put("warnings", validation.warnings.size.toString())
+                validation.warnings.firstOrNull()?.let { put("warning", it.code) }
+            },
+        )
+        if (result.isError) return result
+
+        return ToolResult.ok(
+            json(
+                "ok" to "true",
+                "action" to "create_script",
+                "id" to id,
+                "note" to if (id != base) {
+                    "脚本 id 为 $id（$base 已存在，自动加了后缀）。"
+                } else {
+                    "脚本 id 为 $id。"
+                },
+            ),
+        )
+    }
+
+    private fun deleteScript(args: JsonObject): ToolResult {
+        val id = args.string("id")?.trim().orEmpty()
+        if (id.isEmpty()) return invalidArgs("id 是必填的，先用 list_scripts 获取。")
+
+        writeGuard()?.let { return it }
+        val store = ScriptProjectStore(appContext)
+        val project = store.list().firstOrNull { it.id == id }
+            ?: return ToolResult.error(
+                json(
+                    "error" to "script_not_found",
+                    "detail" to "找不到 id 为 '$id' 的脚本。",
+                    "recovery" to "先调用 list_scripts 获取正确的 id。",
+                ),
+            )
+
+        // A component-owned script belongs to the component that installed it. Deleting its
+        // directory here would desynchronise it from that component, and only a reinstall could put
+        // it back.
+        if (project.kind == ScriptProjectKind.COMPONENT) {
+            return ToolResult.error(
+                json(
+                    "error" to "component_owned_script",
+                    "detail" to "脚本 '${project.name}' 由组件安装，不能单独删除。",
+                    "recovery" to "告知用户这一项随组件卸载一起移除，不要重试。",
+                ),
+            )
+        }
+
+        return mutateWithVerification(
+            action = "delete_script",
+            mutate = { store.delete(project) },
+            readBack = { store.list() },
+            verify = { saved -> saved.none { it.id == id } },
+            detail = mapOf("id" to id, "name" to project.name),
+        )
+    }
+
+    /**
+     * Turns a name into a standalone script id.
+     *
+     * The runtime allows dots in a declared id, but a standalone script's id *is* its file name and
+     * the store only accepts `[A-Za-z0-9_-]`, so the stricter rule applies here.
+     */
+    private fun sanitizeScriptId(raw: String): String {
+        val cleaned = raw.trim().removeSuffix(".lua")
+            .map { ch ->
+                if ((ch.isLetterOrDigit() && ch.code < 128) || ch == '_' || ch == '-') ch else '_'
+            }
+            .joinToString("")
+            .trim('_')
+            .take(48)
+        return cleaned.ifBlank { "script" }
+    }
+
+    private fun uniqueScriptId(desired: String, taken: Set<String>): String {
+        if (desired !in taken) return desired
+        var index = 2
+        while ("${desired}_$index" in taken) index++
+        return "${desired}_$index"
     }
 
     // ================================================================ html widget generation
@@ -1355,6 +1586,14 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
          * prompt of the generation call*, not of the conversation.
          */
         const val GET_WIDGET_SPEC = "get_widget_spec"
+
+        /** Lua scripting: listing, reading, authoring and removing script projects. */
+        const val LIST_SCRIPTS = "list_scripts"
+        const val READ_SCRIPT = "read_script"
+        const val GET_SCRIPT_SPEC = "get_script_spec"
+        const val CREATE_SCRIPT = "create_script"
+        const val DELETE_SCRIPT = "delete_script"
+
         const val LIST_SCENE_ROUTES = "list_scene_routes"
         const val LIST_WALLPAPERS = "list_wallpapers"
 
@@ -1564,6 +1803,107 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                         "按期望顺序排列的全部 app_id（字符串数组）",
                         ToolParam.ParamType.STRING_ARRAY,
                     ),
+                ),
+            ),
+            ToolSpec(
+                name = LIST_SCRIPTS,
+                description = """
+                    列出 REAREye 里已安装的 Lua 脚本。
+
+                    什么时候用：
+                    - 用户问"有哪些脚本""装了哪些 Lua 脚本"时。
+                    - 在读取或删除脚本之前，先用它拿到 id。
+
+                    返回：count 和 scripts 数组。每项含 id（读删要用）、name、
+                    kind（STANDALONE 单文件 / PROJECT 多文件 / COMPONENT 由组件安装）、
+                    valid（文件是否齐全）、component_id、error。
+
+                    注意：本工具只报告存储层的已知信息，**不会加载脚本**（加载会执行脚本代码）。
+                    所以要拿到脚本声明了哪些 Provider，需要调用方自己运行它。本工具只读。
+                """.trimIndent(),
+                risk = ToolRisk.READ_ONLY,
+            ),
+            ToolSpec(
+                name = READ_SCRIPT,
+                description = """
+                    读取一个 Lua 脚本的源码，并给出静态检查结果。
+
+                    什么时候用：
+                    - 用户想看看某个脚本写了什么。
+                    - 在修改或重写脚本之前。
+
+                    参数：id（必填），先用 list_scripts 获取。
+
+                    返回：id、name、kind、valid、issues（静态检查报告）、source（源码全文）。
+                    本工具只读，且**不会执行脚本**。
+                """.trimIndent(),
+                risk = ToolRisk.READ_ONLY,
+                params = listOf(
+                    ToolParam("id", "脚本 id，来自 list_scripts", ToolParam.ParamType.STRING),
+                ),
+            ),
+            ToolSpec(
+                name = GET_SCRIPT_SPEC,
+                description = """
+                    取回 REAREye 的 Lua 脚本文档全文。
+
+                    什么时候用：
+                    - 用户要求生成一个脚本时，**第一步先调用本工具**。
+                    - 需要确认脚本 API（context 方法、Provider 声明、配置项、运行限制）时。
+
+                    返回：spec 字段是文档全文。拿到后按它写脚本源码，再调用 create_script 提交。
+                    不要凭记忆编造脚本 API——文档里有准确的方法名和限制（超时、大小上限、
+                    被禁用的标准库等）。本工具只读，不修改任何配置。
+                """.trimIndent(),
+                risk = ToolRisk.READ_ONLY,
+            ),
+            ToolSpec(
+                name = CREATE_SCRIPT,
+                description = """
+                    创建一个新的 Lua 脚本。
+
+                    什么时候用：
+                    - 用户要求"写一个脚本/做一个 Provider"时。
+                    - 调用前应先调用 get_script_spec 拿到文档，并严格按文档编写。
+
+                    参数：
+                    - source（必填）：完整的 Lua 脚本源码。
+                    - name（必填）：显示名，同时用作脚本 id 的来源。
+                    - id（可选）：指定脚本 id；留空则由 name 派生。重名会自动加数字后缀。
+
+                    静态校验（不通过则不创建任何东西，返回 script_validation_failed 和问题清单）：
+                    - 入口必须 return 一个描述表
+                    - 描述表必须声明 providers（必填项）
+                    - 所有 id 字面量只能包含字母、数字、点、下划线和连字符
+
+                    **本工具不会执行脚本**。校验是静态的，脚本加载时才做权威校验；
+                    因此创建成功后请提醒用户可以在脚本页里运行测试。
+
+                    本操作会创建文件、修改配置，需要用户确认。成功返回 id。
+                """.trimIndent(),
+                risk = ToolRisk.MUTATING,
+                params = listOf(
+                    ToolParam("source", "完整的 Lua 脚本源码", ToolParam.ParamType.STRING),
+                    ToolParam("name", "显示名", ToolParam.ParamType.STRING),
+                    ToolParam("id", "脚本 id，留空则由 name 派生", ToolParam.ParamType.STRING, required = false),
+                ),
+            ),
+            ToolSpec(
+                name = DELETE_SCRIPT,
+                description = """
+                    删除一个 Lua 脚本。
+
+                    参数：id（必填），先用 list_scripts 获取。
+
+                    限制：kind 为 COMPONENT 的脚本由组件安装，不能单独删除，会返回
+                    component_owned_script；这时告知用户它随组件卸载一起移除即可，不要重试。
+
+                    这是不可撤销的操作。删除前先用名称向用户复述一遍是哪一个。
+                    本操作会修改配置，需要用户确认。
+                """.trimIndent(),
+                risk = ToolRisk.MUTATING,
+                params = listOf(
+                    ToolParam("id", "脚本 id，来自 list_scripts", ToolParam.ParamType.STRING),
                 ),
             ),
             ToolSpec(
