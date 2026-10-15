@@ -41,6 +41,7 @@ import androidx.core.content.edit
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import hk.uwu.reareye.ui.components.PresetPackDialog
+import hk.uwu.reareye.ui.components.SubscreenNotificationAccessPrompt
 import hk.uwu.reareye.ui.components.motion.ArtVisibilityMotion
 import hk.uwu.reareye.ui.components.navigation.NavigationQuickTarget
 import hk.uwu.reareye.ui.components.navigation.RearNavigationBar
@@ -502,6 +503,10 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             }
+
+                            SubscreenNotificationAccessPrompt(
+                                enabled = !featureGuideVisible && !showPresetPackDialog,
+                            )
 
                             PresetPackDialog(
                                 show = showPresetPackDialog,

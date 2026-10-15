@@ -5,7 +5,9 @@ import android.os.Bundle
 import android.os.IBinder
 import hk.uwu.reareye.hook.hostbridge.HookHostBridgeClient
 import hk.uwu.reareye.internal.notification.INotificationRouteBridgeService
+import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import java.util.ArrayDeque
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -34,7 +36,8 @@ internal class NotificationRouteBridgeClient :
     private val queueLock = Any()
     private val bindInFlight = AtomicBoolean(false)
     private val drainInFlight = AtomicBoolean(false)
-    private val bridgeExecutor = Executors.newSingleThreadExecutor { runnable ->
+    private val retryScheduled = AtomicBoolean(false)
+    private val bridgeExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "REAREye-NotificationBridge").apply { isDaemon = true }
     }
 
@@ -70,6 +73,7 @@ internal class NotificationRouteBridgeClient :
         val appContext = context.applicationContext ?: context
         bindingContext = appContext
         if (isConnected()) {
+            scheduleDrainPendingDispatches()
             onConnected?.invoke()
             return true
         }
@@ -79,7 +83,9 @@ internal class NotificationRouteBridgeClient :
 
     fun dispatch(subchannel: String, payload: Bundle = Bundle()): Boolean {
         val normalizedSubchannel = subchannel.trim()
-        if (normalizedSubchannel.isBlank()) return false
+        if (normalizedSubchannel.isBlank() || normalizedSubchannel ==
+            NotificationRouteBridgeContract.Subchannel.ACTIVITY_CARD_DEFINITION_DELETED
+        ) return false // Definition deletions may only originate in the durable journal.
 
         val payloadCopy = Bundle(payload)
         enqueuePendingDispatch(
@@ -111,6 +117,7 @@ internal class NotificationRouteBridgeClient :
                     )
                 } finally {
                     bindInFlight.set(false)
+                    scheduleDeletionRetry()
                 }
             }
         }.onFailure {
@@ -124,9 +131,10 @@ internal class NotificationRouteBridgeClient :
             bridgeExecutor.execute {
                 var fullyDrained = false
                 try {
-                    fullyDrained = drainPendingDispatches()
+                    fullyDrained = drainDefinitionDeletions() && drainPendingDispatches()
                 } finally {
                     drainInFlight.set(false)
+                    scheduleDeletionRetry()
                 }
                 if (fullyDrained && isConnected() && hasPendingDispatches()) {
                     scheduleDrainPendingDispatches()
@@ -135,6 +143,54 @@ internal class NotificationRouteBridgeClient :
         }.onFailure {
             drainInFlight.set(false)
         }
+    }
+
+    private fun deletionPrefs() = bindingContext
+        ?.takeIf { it.packageName == NotificationRouteBridgeContract.MODULE_PACKAGE }
+        ?.getPrefsManager()
+
+    private fun drainDefinitionDeletions(): Boolean {
+        val prefs = deletionPrefs() ?: return true
+        val records = synchronized(NotificationRouteBridgeContract.deletionJournalLock) {
+            prefs.getStringSet(NotificationRouteBridgeContract.PENDING_DELETIONS_PREF).toList()
+        }
+        for (record in records) {
+            val payload = NotificationRouteBridgeContract.deletionPayload(record) ?: continue
+            val delivered = callRemote { remote ->
+                remote.dispatch(
+                    NotificationRouteBridgeContract.Subchannel.ACTIVITY_CARD_DEFINITION_DELETED,
+                    payload,
+                )
+            } ?: return false
+            if (!delivered) return false
+            synchronized(NotificationRouteBridgeContract.deletionJournalLock) {
+                val remaining = prefs.getStringSet(
+                    NotificationRouteBridgeContract.PENDING_DELETIONS_PREF,
+                ).toMutableSet().apply { remove(record) }
+                if (!prefs.prefs.edit().putStringSet(
+                        NotificationRouteBridgeContract.PENDING_DELETIONS_PREF, remaining,
+                    ).commit()
+                ) return false
+            }
+        }
+        return true
+    }
+
+    private fun scheduleDeletionRetry() {
+        val hasPending = runCatching {
+            deletionPrefs()?.getStringSet(NotificationRouteBridgeContract.PENDING_DELETIONS_PREF)
+                ?.any { NotificationRouteBridgeContract.decodeDeletionRecord(it) != null } == true
+        }.getOrDefault(false)
+        if (!hasPending || !retryScheduled.compareAndSet(false, true)) return
+        runCatching {
+            bridgeExecutor.schedule({
+                retryScheduled.set(false)
+                bindingContext?.let { context ->
+                    bind(context)
+                    if (isConnected()) scheduleDrainPendingDispatches()
+                }
+            }, 5, TimeUnit.SECONDS)
+        }.onFailure { retryScheduled.set(false) }
     }
 
     private fun enqueuePendingDispatch(subchannel: String, payload: Bundle) {

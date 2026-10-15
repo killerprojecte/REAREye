@@ -1158,6 +1158,7 @@ class CardFixtureVariables {
     }
 
     fun getDouble(name: String): Double = (values[name] as? Number)?.toDouble() ?: 0.0
+    fun get(name: String): Any? = values[name]
 }
 
 class CardFixtureRoot(private val context: Context) {
@@ -1183,9 +1184,13 @@ class CardFixtureRoot(private val context: Context) {
     val queue = mutableListOf<Runnable>()
     private val mutex = Any()
     var picker = true
+    var activityPicker = false
     fun getContext() = CardFixtureContext(context)
-    fun getRawAttr(name: String): String? =
-        if (name == "rearWidgetPicker" && picker) "true" else null
+    fun getRawAttr(name: String): String? = when {
+        name == "rearWidgetPicker" && picker -> "true"
+        name == "rearActivityPicker" && activityPicker -> "true"
+        else -> null
+    }
 
     fun getRenderMutex() = mutex
     fun init() {}

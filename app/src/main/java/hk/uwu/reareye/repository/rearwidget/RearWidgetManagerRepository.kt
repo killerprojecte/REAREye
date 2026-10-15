@@ -6,6 +6,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Log
+import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.NotificationRouteBridgeClient
+import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.NotificationRouteBridgeContract
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigRepository.getShowTimeTipForBusiness
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager
@@ -26,6 +28,15 @@ object RearWidgetManagerRepository {
 
     @Volatile
     private var remoteClient: RearWidgetApiClient? = null
+    private val definitionDeletionClient by lazy { NotificationRouteBridgeClient() }
+
+    internal fun computeDefinitionDeletedCards(
+        oldCards: List<RearCardConfig>,
+        newCards: List<RearCardConfig>,
+    ): List<RearCardConfig> {
+        val remainingIds = newCards.mapTo(HashSet()) { it.id }
+        return oldCards.filter { it.id !in remainingIds }
+    }
 
     fun loadBusinesses(prefsManager: PrefsManager): List<RearBusinessConfig> {
         val raw = prefsManager.getString(
@@ -99,10 +110,34 @@ object RearWidgetManagerRepository {
             mergeLockedCards(oldCards, cards, allowLockedEdits),
             loadCardOrderSettings(prefsManager),
         )
-        prefsManager.putString(
-            ConfigKeys.REAR_WIDGET_CARD_DATA,
-            RearWidgetConfigCodec.encodeCards(mergedCards),
-        )
+        // Commit the real definition change and its cleanup outbox together. A disabled
+        // card remains a definition, including cards that were already disabled.
+        synchronized(NotificationRouteBridgeContract.deletionJournalLock) {
+            val pending = prefsManager.getStringSet(
+                NotificationRouteBridgeContract.PENDING_DELETIONS_PREF,
+            ).toMutableSet()
+            val pendingIds = pending.mapNotNull {
+                NotificationRouteBridgeContract.decodeDeletionRecord(it)?.second
+            }.toSet()
+            require(mergedCards.none { it.id in pendingIds }) {
+                "A deleted card UUID cannot be reused while cleanup is pending"
+            }
+            computeDefinitionDeletedCards(oldCards, mergedCards).forEach { card ->
+                if (NotificationRouteBridgeContract.validDeletionTarget(
+                        card.packageName, card.business, card.id,
+                    )
+                ) pending.add("${card.business}:${card.id}")
+            }
+            check(
+                prefsManager.prefs.edit()
+                    .putString(
+                        ConfigKeys.REAR_WIDGET_CARD_DATA,
+                        RearWidgetConfigCodec.encodeCards(mergedCards)
+                    )
+                    .putStringSet(NotificationRouteBridgeContract.PENDING_DELETIONS_PREF, pending)
+                    .commit()
+            ) { "Cannot commit card definitions and deletion journal" }
+        }
         val businesses = loadBusinesses(prefsManager)
         applyCardsViaApi(context, oldCards, mergedCards, businesses)
     }
@@ -398,6 +433,8 @@ object RearWidgetManagerRepository {
         repostStickyCards: Boolean = true,
     ) {
         val prefsManager = context.getPrefsManager()
+        // Durable journal is drained even when API connection is not yet available.
+        definitionDeletionClient.bind(context)
         val businessPathByName = businesses.associate { it.business to it.filePath }
 
         val oldPairs = oldCards.mapTo(LinkedHashSet()) { it.packageName to it.business }

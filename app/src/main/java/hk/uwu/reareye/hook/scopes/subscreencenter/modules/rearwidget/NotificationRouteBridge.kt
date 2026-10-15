@@ -8,6 +8,37 @@ internal object NotificationRouteBridgeContract {
     const val HOOK_HOST_PACKAGE = "com.xiaomi.subscreencenter"
     const val SOURCE_HOST_PACKAGE = "com.android.systemui"
     const val CARD_ID_PREFIX = "__ordinary_channel__"
+    const val MODULE_PACKAGE = "hk.uwu.reareye"
+    const val PENDING_DELETIONS_PREF = "rear_activity_card_pending_deletions"
+    val deletionJournalLock = Any()
+
+    fun validDeletionTarget(pkg: String?, business: String?, cardId: String?): Boolean =
+        pkg == MODULE_PACKAGE && business != null && business.length in 1..128 &&
+                Regex("[A-Za-z0-9_.-]+").matches(business) && cardId != null &&
+                Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").matches(cardId)
+
+    fun validDeletionKeys(keys: Set<String>): Boolean =
+        keys == setOf(Keys.PACKAGE_NAME, Keys.BUSINESS, Keys.CARD_ID)
+
+    fun isTrustedDeletionCaller(callerUid: Int, moduleUid: Int, hostUid: Int): Boolean =
+        callerUid >= 0 && moduleUid >= 0 && hostUid >= 0 && callerUid == moduleUid &&
+                callerUid / 100_000 == hostUid / 100_000
+
+    fun decodeDeletionRecord(record: String): Pair<String, String>? {
+        val parts = record.split(':')
+        return if (parts.size == 2 && validDeletionTarget(MODULE_PACKAGE, parts[0], parts[1])) {
+            parts[0] to parts[1]
+        } else null
+    }
+
+    fun deletionPayload(record: String): Bundle? {
+        val (business, cardId) = decodeDeletionRecord(record) ?: return null
+        return Bundle().apply {
+            putString(Keys.PACKAGE_NAME, MODULE_PACKAGE)
+            putString(Keys.BUSINESS, business)
+            putString(Keys.CARD_ID, cardId)
+        }
+    }
 
     object Action {
         const val REQUEST_BINDER = "hk.uwu.reareye.notification.channel_route.REQUEST_BINDER"
@@ -16,10 +47,13 @@ internal object NotificationRouteBridgeContract {
     object Subchannel {
         const val NOTIFICATION_POSTED = "notification_posted"
         const val NOTIFICATION_REMOVED = "notification_removed"
+        const val ACTIVITY_CARD_DEFINITION_DELETED = "activity_card_definition_deleted"
     }
 
     object Keys {
         const val PACKAGE_NAME = "packageName"
+        const val BUSINESS = "business"
+        const val CARD_ID = "cardId"
         const val NOTIFICATION_ID = "notificationId"
         const val NOTIFICATION_KEY = "notificationKey"
         const val NOTIFICATION_TAG = "notificationTag"

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Screen frameRate="60" screenWidth="1080" version="2">
+    <!-- Independent package: no AppWidget picker state or automatic launch commands. -->
+    <VariableBinders>
+        <RearDisplayBinder name="display" />
+    </VariableBinders>
+    <Var name="displayReady"
+        expression="gt(#display.count,0)*eq(#display.loading,0)*eqs(@display.error,'')*gt(#display.width,0)*gt(#display.height,0)" />
+    <Var name="scale" expression="1080/max(1,#display.width)" />
+    <Var name="padding" expression="8*#scale" />
+    <Var name="safeX" expression="#display.safeLeft*#scale+#padding" />
+    <Var name="safeY" expression="#display.safeTop*#scale+#padding" />
+    <Var name="safeW"
+        expression="max(0,(#display.width-#display.safeLeft-#display.safeRight)*#scale-2*#padding)" />
+    <Var name="safeH"
+        expression="max(0,(#display.height-#display.safeTop-#display.safeBottom)*#scale-2*#padding)" />
+    <Var name="cardH" expression="#safeH*0.34" />
+    <Var name="fontSize" expression="min(#safeW*0.038,#safeH*0.045)" />
+    <!-- boundsExp evaluates one string containing four numeric logical coordinates. -->
+    <Var name="demoRight" expression="#safeW*0.4" />
+    <Var name="demoBottom" expression="#cardH*0.8" />
+    <Rectangle name="opaqueBackground" fillColor="#FF10141C" h="#display.height*#scale" w="1080" />
+    <Group visibility="#displayReady*gt(#safeW,0)*gt(#safeH,0)" x="#safeX" y="#safeY">
+        <Text align="center" color="#FFFFFFFF" size="#fontSize" text="ActivityHost 独立卡片示例" x="#safeW/2"
+            y="0" />
+        <Text align="center" color="#FFCBD9EF" size="#fontSize*0.75" text="点击卡内启动；两侧保留导航区域" x="#safeW/2"
+            y="#safeH*0.06" />
+        <Text color="#FFE4EEFF" size="#fontSize*0.8" text="A：默认内容区域 / DPI 0" x="0"
+            y="#safeH*0.12" />
+        <!-- No bounds, no density override: only carrier x/y/w/h and dpi=0. -->
+        <ActivityHost name="defaultHost" component="com.android.settings/com.android.settings.Settings" dpi="0" h="#cardH" w="#safeW"
+            x="0" y="#safeH*0.17" />
+        <Text color="#FFE4EEFF" size="#fontSize*0.8" text="B：bounds 字符串表达式 / DPI 320" x="0"
+            y="#safeH*0.54" />
+        <ActivityHost name="boundedHost" boundsExp="'0,0,'+#demoRight+','+#demoBottom" component="com.android.settings/com.android.settings.Settings" dpi="320" h="#cardH"
+            w="#safeW" x="0"
+            y="#safeH*0.59" />
+        <Text align="center" color="#FFBECCE0" size="#fontSize*0.65" text="全屏：背屏展开；失败：显式点击主屏正常打开" x="#safeW/2"
+            y="#safeH*0.95" />
+    </Group>
+    <Text align="center" color="#FFFFFFFF" size="28" text="等待背屏尺寸与安全区域" visibility="not(#displayReady)" x="540"
+        y="80" />
+</Screen>

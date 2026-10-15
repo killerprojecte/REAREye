@@ -22,6 +22,27 @@ class RearWidgetManagerRepositoryTest {
     )
 
     @Test
+    fun definitionDeletionIncludesAlreadyDisabledCardsButNotDisableTransitions() {
+        val old = listOf(
+            card("removed-enabled"),
+            card("removed-disabled", enabled = false),
+            card("hidden")
+        )
+        val new = listOf(card("hidden", enabled = false))
+        assertEquals(
+            listOf("removed-enabled", "removed-disabled"),
+            RearWidgetManagerRepository.computeDefinitionDeletedCards(old, new).map { it.id },
+        )
+    }
+
+    @Test
+    fun definitionDeletionUsesIdsNotEnabledStatusOrBusinessPair() {
+        val old = listOf(card("a"), card("b", enabled = false))
+        val new = listOf(card("a", business = "alarm", enabled = false), card("b", enabled = true))
+        assertTrue(RearWidgetManagerRepository.computeDefinitionDeletedCards(old, new).isEmpty())
+    }
+
+    @Test
     fun computeDisabledCardsIncludesCardDisabledWhileSameBusinessStillEnabled() {
         val oldCards = listOf(
             card("card-a", enabled = true),

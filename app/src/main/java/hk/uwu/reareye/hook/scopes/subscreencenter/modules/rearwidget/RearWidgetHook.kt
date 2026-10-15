@@ -10,6 +10,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import hk.uwu.reareye.hook.scopes.subscreencenter.modules.maml.MamlActivityCardInvalidation
 import android.os.Binder
 import android.os.Bundle
 import android.os.Handler
@@ -1922,13 +1923,37 @@ class RearWidgetHook : RoxyHooker() {
     private fun PackageScope.createNotificationRouteBridgeBinder() =
         object : INotificationRouteBridgeService.Stub() {
             override fun dispatch(subchannel: String?, payload: Bundle?): Boolean {
-                enforceNotificationRouteCaller()
                 val normalizedSubchannel = subchannel?.trim().orEmpty()
+                if (normalizedSubchannel == NotificationRouteBridgeContract.Subchannel.ACTIVITY_CARD_DEFINITION_DELETED) {
+                    enforceActivityDefinitionDeletionCaller()
+                    if (subchannel != normalizedSubchannel) return false
+                } else {
+                    enforceNotificationRouteCaller()
+                }
                 if (normalizedSubchannel.isBlank()) return false
 
                 val payloadCopy = Bundle(payload ?: Bundle.EMPTY)
                 return runCatching {
                     when (normalizedSubchannel) {
+                        NotificationRouteBridgeContract.Subchannel.ACTIVITY_CARD_DEFINITION_DELETED -> {
+                            val keys = NotificationRouteBridgeContract.Keys
+                            if (!NotificationRouteBridgeContract.validDeletionKeys(payloadCopy.keySet())) return false
+                            val pkg = payloadCopy.getString(keys.PACKAGE_NAME)
+                            val business = payloadCopy.getString(keys.BUSINESS)
+                            val cardId = payloadCopy.getString(keys.CARD_ID)
+                            if (!NotificationRouteBridgeContract.validDeletionTarget(
+                                    pkg,
+                                    business,
+                                    cardId
+                                )
+                            ) return false
+                            val ctx = hostContext ?: return false
+                            return MamlActivityCardInvalidation.deleteDefinition(
+                                ctx,
+                                business!!,
+                                cardId!!
+                            )
+                        }
                         NotificationRouteBridgeContract.Subchannel.NOTIFICATION_POSTED -> {
                             if (shouldLogNotificationRoutePayloadJson()) {
                                 debugLog("notification route posted payload=${payloadCopy.toJsonStringByGson()}")
@@ -2172,6 +2197,27 @@ class RearWidgetHook : RoxyHooker() {
         }
     }
 
+    private fun PackageScope.enforceActivityDefinitionDeletionCaller() {
+        check(!runtime.isClosed) { "Roxy runtime is closed" }
+        val ctx =
+            hostContext ?: throw SecurityException("context not ready for definition deletion")
+        val uid = Binder.getCallingUid()
+        val moduleUid = runCatching {
+            ctx.packageManager.getApplicationInfo(
+                NotificationRouteBridgeContract.MODULE_PACKAGE,
+                0
+            ).uid
+        }.getOrDefault(-1)
+        if (!NotificationRouteBridgeContract.isTrustedDeletionCaller(
+                uid,
+                moduleUid,
+                Process.myUid()
+            )
+        ) {
+            throw SecurityException("caller uid=$uid is not the current-user module UID")
+        }
+    }
+
     private fun PackageScope.enforceNotificationRouteCaller() {
         check(!runtime.isClosed) { "Roxy runtime is closed" }
         val ctx = hostContext
@@ -2219,7 +2265,19 @@ class RearWidgetHook : RoxyHooker() {
         )
         val businesses = RearWidgetConfigCodec.parseBusinesses(businessRaw)
         val sceneRoutes = RearWidgetConfigCodec.parseSceneRoutes(sceneRouteRaw)
-        val cards = RearWidgetConfigCodec.parseCards(cardRaw).filter { it.enabled }
+        val definitions = RearWidgetConfigCodec.parseCards(cardRaw)
+        val pendingDeletions = hookPrefs.getStringSet(
+            NotificationRouteBridgeContract.PENDING_DELETIONS_PREF, emptySet(),
+        )
+        for (record in pendingDeletions) {
+            val (business, cardId) = NotificationRouteBridgeContract.decodeDeletionRecord(record)
+                ?: continue
+            // Fail closed if a stale preference snapshot still has the definition.
+            if (definitions.any { it.id == cardId }) return false
+            val ctx = hostContext ?: return false
+            if (!MamlActivityCardInvalidation.deleteDefinition(ctx, business, cardId)) return false
+        }
+        val cards = definitions.filter { it.enabled }
         val stickyCards = cards.filter { it.sticky }
         val prefsManager = hookPrefs.getPrefsManager()
         if (!force && businesses.isEmpty() && sceneRoutes.isEmpty() && cards.isEmpty()) {

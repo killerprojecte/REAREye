@@ -24,11 +24,37 @@ data class MamlBackendInputs(
     val visible: Boolean = false,
     /** Ephemeral explicit user action, never restored from the card's persisted selection. */
     val userRequest: String = "",
+    val activityHost: ActivityHostInputs? = null,
+)
+
+/** Activity pixels are independent of MAML units and the requested task density. */
+data class ActivityHostInputs(
+    val component: String,
+    val dpi: Int = 0,
+    val bounds: List<Float>? = null,
+    val mamlScale: Float = 1f,
+    val gutterDp: Float = 24f,
+    /** Carrier logical width, when available, lets the backend recover the actual MAML scale. */
+    val carrierWidth: Float? = null,
+    val validationErrors: List<String> = emptyList(),
+    val instance: String = "",
+    val userRequest: String = "",
+    val launchPermit: ActivityHostLaunchPermit? = null,
+    /** Passive embedding has no native buttons or input-consuming overlays. */
+    val showControls: Boolean = true,
 )
 
 fun interface MamlStringExpressionCompiler {
     /** The returned evaluator must only be called on the native MAML tick thread. */
     fun compile(expression: String): () -> String?
+
+    /** Optional scope-issued capability; a string expression alone is not authorization. */
+    fun activityLaunchPermit(
+        instance: String,
+        component: String,
+        dpi: Int,
+        request: String
+    ): ActivityHostLaunchPermit? = null
 }
 
 class MamlBackendBinding(

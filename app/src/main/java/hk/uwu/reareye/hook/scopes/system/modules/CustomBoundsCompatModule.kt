@@ -54,6 +54,7 @@ class CustomBoundsCompatModule : RoxyHooker() {
                         if (moreDebug) YLog.debug("[$TAG] skip reason=no_activity_record")
                         return@after
                     }
+                    if (ActivityHostTaskConfigurationHook.isOwnedTask(activityRecord)) return@after
                     val packageName = activityRecord.field<String>("packageName") ?: run {
                         if (moreDebug) YLog.debug("[$TAG] skip reason=no_package")
                         return@after

@@ -2,6 +2,7 @@ package hk.uwu.reareye.hook.scopes.system
 
 import hk.uwu.reareye.generated.AppProperties
 import hk.uwu.reareye.hook.scopes.Scope
+import hk.uwu.reareye.hook.scopes.system.modules.ActivityHostTaskConfigurationHook
 import hk.uwu.reareye.hook.scopes.system.modules.BackgroundWhitelistModule
 import hk.uwu.reareye.hook.scopes.system.modules.CustomBoundsCompatModule
 import hk.uwu.reareye.hook.scopes.system.modules.DisableRearScreenCoverHook
@@ -32,6 +33,7 @@ class SystemScope : RoxyHooker(), Scope {
             add(DisableSubScreenDoubleTapSleepHook())
             add(DisableSubScreenDoubleTapWakeHook())
             add(DisableSubScreenHighLoadModeHook())
+            add(ActivityHostTaskConfigurationHook())
             add(CustomBoundsCompatModule())
         } else {
             YLog.debug("This device does not support a rear screen; skipping system rear-screen hooks")

@@ -29,3 +29,6 @@ release-key.jks
 .env
 .kotlin
 .narrafork
+standalone-maml/*.zip
+standalone-maml/**/*.zip
+REFACTOR_PLAN_2.0.md

@@ -3,6 +3,8 @@ package hk.uwu.reareye.hook.hostbridge
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Binder
+import android.os.Process
 import android.os.IBinder
 import android.os.IInterface
 import hk.uwu.reareye.hook.support.YLog
@@ -135,6 +137,15 @@ abstract class HookHostBridgeClient<Remote : IInterface>(
                         onBeforeRequest(forceSync)
                         val callback = object : IHookHostBridgeBootstrap.Stub() {
                             override fun onBinderReady(binder: IBinder?) {
+                                // Never accept a spoofed bootstrap response: cleanup acknowledgements
+                                // must originate from the actual same-user host, not an intent observer.
+                                val hostUid = runCatching {
+                                    context.packageManager.getApplicationInfo(hostPackage, 0).uid
+                                }.getOrDefault(-1)
+                                val callerUid = Binder.getCallingUid()
+                                if (hostUid < 0 || callerUid != hostUid ||
+                                    callerUid / 100_000 != Process.myUid() / 100_000
+                                ) throw SecurityException("Untrusted $serviceLabel bootstrap caller")
                                 installRemote(asRemoteInterface(binder))
                             }
                         }

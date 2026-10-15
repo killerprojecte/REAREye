@@ -9,6 +9,9 @@ import android.view.View
 import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.reareye.hook.support.hookAppContext
 import hk.uwu.reareye.hook.support.hookAppInfo
+import hk.uwu.reareye.hook.support.hookPrefs
+import hk.uwu.reareye.hook.scopes.subscreencenter.modules.rearwidget.NotificationRouteBridgeContract
+import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.hook.support.hookSystemContext
 import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
@@ -121,12 +124,52 @@ class MamlCardScopeHook : RoxyHooker() {
                 fun files(context: Context) =
                     MamlCardScopeFiles(File(context.filesDir, "reareye-maml-cards-v1"))
 
+                runtime.manage(MamlActivityCardInvalidation.observe { identity ->
+                    val targets = synchronized(scopes) {
+                        scopes.entries.filter {
+                            it.value.storageIdentity == identity && bridge.activityPicker(it.key)
+                        }.map { it.key to it.value }
+                    }
+                    targets.forEach { (_, scope) -> scope.deleted = true }
+                    targets.forEach { (root, _) -> bridge.detachDeleted(root) }
+                })
+
+                fun verifyActivityDefinition(root: Any, identity: String) {
+                    if (!bridge.activityPicker(root) || !identity.startsWith("module:")) return
+                    val parts = identity.split(':')
+                    check(parts.size == 4) { "Invalid module card identity" }
+                    val business = parts[2]
+                    val cardId = parts[3]
+                    val pending =
+                        hookPrefs.getStringSet(NotificationRouteBridgeContract.PENDING_DELETIONS_PREF)
+                            .any { NotificationRouteBridgeContract.decodeDeletionRecord(it) == (business to cardId) }
+                    val exists = MamlActivityCardInvalidation.definitionExists(
+                        hookPrefs.getString(ConfigKeys.REAR_WIDGET_CARD_DATA, "[]"),
+                        business,
+                        cardId,
+                    )
+                    if (pending || exists == false) {
+                        check(
+                            MamlActivityCardInvalidation.deleteDefinition(
+                                bridge.context(root),
+                                business,
+                                cardId
+                            )
+                        ) {
+                            "Cannot erase deleted Activity card"
+                        }
+                        error("Activity card definition was deleted")
+                    }
+                    check(exists == true) { "Card definition could not be verified" }
+                }
+
                 fun bind(view: Any, root: Any, declaredId: String? = null): Scope {
                     val id =
                         requireNotNull(owners.nativeLocalId(view)) { "No live independent card instance" }
                     check(declaredId == null || declaredId == id) { "Native card identity changed" }
                     val identity =
                         requireNotNull(owners.storageIdentity(view)) { "Unresolved AppCardWidget identity" }
+                    verifyActivityDefinition(root, identity)
                     return synchronized(scopes) {
                         scopes[root]?.also {
                             check(it.localId == id && it.storageIdentity == identity && !it.deleted) { "Card identity changed" }
@@ -153,6 +196,7 @@ class MamlCardScopeHook : RoxyHooker() {
                                 if (scope.deleted || scopes[owner] !== scope || synchronized(scope) {
                                         scope.generation != generation || scope.completed == generation
                                     }) return@withRootLock
+                                verifyActivityDefinition(owner, scope.storageIdentity)
                                 val firstReady = scope.key == null
                                 scope.key = bridge.initialize(owner, scope.file)
                                 synchronized(scope) { scope.completed = generation }
@@ -352,18 +396,31 @@ class MamlCardScopeHook : RoxyHooker() {
                 }
                 listOf(bridge.saveString, bridge.saveNumber).forEach { method ->
                     handles += method.hook {
-                        before { if (scopes[instance]?.deleted == true) result = null }
+                        before {
+                            val root = instance ?: return@before
+                            if (scopes[root]?.deleted == true ||
+                                (args[0] == "ra_action" && bridge.activityPicker(root))
+                            ) result = null
+                        }
                         after {
-                            if (hasThrowable || args[0] != "rw_selected") return@after
+                            if (hasThrowable) return@after
                             val root = instance ?: return@after
+                            val activity = bridge.activityPicker(root)
+                            val action = args[0] == "ra_action" && activity
+                            if (!action && (activity || args[0] != "rw_selected")) return@after
                             val scope = scopes[root] ?: return@after
                             if (scope.deleted || scope.key == null) return@after
+                            // Reserve before validation/locking/persistence can block across hide or pause.
+                            val acceptedOrder =
+                                if (action) ActivityHostLaunchPermit.newBoundary() else 0L
                             try {
                                 bridge.withRootLock(root) {
-                                    if (!scope.deleted) bridge.commit(
-                                        root,
-                                        scope.file
-                                    )
+                                    if (!scope.deleted) {
+                                        if (action) {
+                                            verifyActivityDefinition(root, scope.storageIdentity)
+                                            bridge.activityAction(root, scope.file, acceptedOrder)
+                                        } else bridge.commit(root, scope.file)
+                                    }
                                 }
                             } catch (error: Exception) {
                                 bridge.fail(root, error.message ?: "Cannot save card selection")
@@ -400,7 +457,18 @@ class MamlCardScopeHook : RoxyHooker() {
                             runCatching { bridge.savedKey(file) }.onSuccess { it?.let(keys::add) }
                                 .onFailure { YLog.warn("Could not read removed card binding", it) }
                             val clean = {
-                                keys.forEach { key ->
+                                runCatching { bridge.deleteActivity(file) }
+                                    .onFailure {
+                                        YLog.warn(
+                                            "Could not erase removed Activity card configuration",
+                                            it
+                                        )
+                                    }
+                                keys.filterNot { key ->
+                                    targets.any { (root, scope) ->
+                                        scope.key == key && bridge.activityPicker(root)
+                                    }
+                                }.forEach { key ->
                                     runCatching {
                                         check(
                                             AppWidgetPlatform.shared(context).sessions.deleteCardBinding(
@@ -427,7 +495,12 @@ class MamlCardScopeHook : RoxyHooker() {
                         })
                     }
                 }
-                runtime.onClose { scopes.clear() }
+                runtime.onClose {
+                    val roots = synchronized(scopes) { scopes.keys.toList() }
+                    roots.filter(bridge::activityPicker)
+                        .forEach { runCatching { bridge.detachDeleted(it) } }
+                    scopes.clear()
+                }
                 YLog.info("Independent MAML card config bridge installed")
             } catch (error: Throwable) {
                 handles.asReversed().forEach { runCatching { it.close() } }

@@ -1,0 +1,641 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Screen frameRate="60" rearActivityPicker="true" screenWidth="1080" version="2">
+    <VariableBinders>
+        <RearDisplayBinder name="display" />
+        <RearActivityAppsBinder name="apps" iconSize="64" limit="3" offsetExp="max(0,#appIndex-1)"
+            queryAtStart="false">
+            <Trigger>
+                <FunctionCommand target="acceptApps" />
+            </Trigger>
+        </RearActivityAppsBinder>
+        <RearActivitiesBinder name="activities" iconSize="64" limit="3"
+            offsetExp="max(0,#activityIndex-1)" packageExp="@draftPackage" queryAtStart="false">
+            <Trigger>
+                <FunctionCommand target="acceptActivities" />
+            </Trigger>
+        </RearActivitiesBinder>
+    </VariableBinders>
+    <ExternalCommands>
+        <Trigger action="init">
+            <FunctionCommand target="initialize" />
+        </Trigger>
+    </ExternalCommands>
+    <Var name="scale" expression="1080/max(1,#display.width)" />
+    <Var name="padding" expression="6*#scale" />
+    <Var name="navigation" expression="24*(#display.densityDpi/160)*#scale" />
+    <Var name="safeX" expression="#display.safeLeft*#scale" />
+    <Var name="safeY" expression="#display.safeTop*#scale" />
+    <Var name="safeW"
+        expression="max(0,(#display.width-#display.safeLeft-#display.safeRight)*#scale)" />
+    <Var name="safeH"
+        expression="max(0,(#display.height-#display.safeTop-#display.safeBottom)*#scale)" />
+    <Var name="pickerX" expression="#safeX+#padding+#navigation" />
+    <Var name="pickerY" expression="#safeY+#padding" />
+    <Var name="pickerW" expression="max(0,#safeW-2*#padding-2*#navigation)" />
+    <Var name="pickerH" expression="max(0,#safeH-2*#padding)" />
+    <Var name="displayReady"
+        expression="gt(#display.count,0)*eq(#display.loading,0)*eqs(@display.error,'')*gt(#display.width,0)*gt(#display.height,0)*ge(#display.safeLeft,0)*ge(#display.safeTop,0)*ge(#display.safeRight,0)*ge(#display.safeBottom,0)*gt(#display.densityDpi,0)*gt(#pickerW,48*#scale)*gt(#pickerH,96*#scale)" />
+    <Var name="liveSelection" expression="#ra_selected*not(eqs(@ra_launchRequest,''))" />
+    <Var name="pickerVisible" expression="#ra_ready*not(#liveSelection)*#displayReady" />
+    <Var name="rowH" expression="#pickerH*0.17" />
+    <Var name="fontSize" expression="min(#pickerW*0.052,#pickerH*0.032)" />
+    <Var name="baseDpi" expression="max(120,min(960,#display.densityDpi))" />
+    <Var name="stepBase" expression="ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi)" />
+    <Var name="loadReady"
+        expression="gt(#ra_loadRevision,#loadRevision)*eqs(@ra_loadedPackage,@draftPackage)" />
+    <Var name="appsGood"
+        expression="#appsReady*eq(#apps.loading,0)*eqs(@apps.error,'')*eq(#apps.offset,#appsOffset)*eq(#apps.requestLimit,3)*eq(#apps.requestIconSize,64)*gt(#apps.revision,#appsRevision)" />
+    <Var name="activitiesGood"
+        expression="#activitiesReady*eq(#activities.loading,0)*eqs(@activities.error,'')*eqs(@activities.packageName,@draftPackage)*eq(#activities.offset,#activitiesOffset)*eq(#activities.requestLimit,3)*eq(#activities.requestIconSize,64)*gt(#activities.revision,#activitiesRevision)" />
+    <Var name="stage" const="true" expression="0" />
+    <Var name="sequence" const="true" expression="0" />
+    <Var name="appIndex" const="true" expression="0" />
+    <Var name="activityIndex" const="true" expression="0" />
+    <Var name="appsReady" const="true" expression="0" />
+    <Var name="activitiesReady" const="true" expression="0" />
+    <Var name="appsOffset" const="true" expression="0" />
+    <Var name="activitiesOffset" const="true" expression="0" />
+    <Var name="appsRevision" const="true" expression="0" />
+    <Var name="activitiesRevision" const="true" expression="0" />
+    <Var name="draftDpi" const="true" expression="0" />
+    <Var name="loadRevision" const="true" expression="0" />
+    <Var name="downX" const="true" expression="0" />
+    <Var name="downY" const="true" expression="0" />
+    <Var name="tapEligible" const="true" expression="0" />
+    <Var name="gestureActive" const="true" expression="0" />
+    <Var name="downStage" const="true" expression="0" />
+    <Var name="downIndex" const="true" expression="0" />
+    <Var name="downRevision" const="true" expression="0" />
+    <Var name="rowSlot" const="true" expression="0" />
+    <Var name="chooseSlot" const="true" expression="0" />
+    <Var name="delta" const="true" expression="0" />
+    <Var name="draftPackage" const="true" expression="''" type="string" />
+    <Var name="draftComponent" const="true" expression="''" type="string" />
+    <Var name="appIcons" type="object" />
+    <Var name="activityIcons" type="object" />
+    <Function name="initialize">
+        <VariableCommand name="stage" expression="0" />
+        <VariableCommand name="appIndex" expression="0" />
+        <FunctionCommand target="queryApps" />
+    </Function>
+    <Function name="queryApps">
+        <VariableCommand name="appsReady" expression="0" />
+        <VariableCommand name="appsOffset" expression="max(0,#appIndex-1)" />
+        <VariableCommand name="appsRevision" expression="#apps.revision" />
+        <BinderCommand name="apps" command="refresh" />
+    </Function>
+    <Function name="acceptApps">
+        <VariableCommand name="appsReady"
+            expression="eq(#apps.loading,0)*eqs(@apps.error,'')*eq(#apps.offset,#appsOffset)*eq(#apps.requestLimit,3)*eq(#apps.requestIconSize,64)*gt(#apps.revision,#appsRevision)*le(#apps.count,3)*ge(#apps.count,0)" />
+        <VariableCommand name="appIcons" condition="#appsReady" expression="'apps.icons'"
+            type="object" />
+    </Function>
+    <Function name="queryActivities">
+        <VariableCommand name="activitiesReady" expression="0" />
+        <VariableCommand name="activitiesOffset" expression="max(0,#activityIndex-1)" />
+        <VariableCommand name="activitiesRevision" expression="#activities.revision" />
+        <BinderCommand name="activities" command="refresh" />
+    </Function>
+    <Function name="acceptActivities">
+        <VariableCommand name="activitiesReady"
+            expression="eq(#activities.loading,0)*eqs(@activities.error,'')*eq(#activities.offset,#activitiesOffset)*eq(#activities.requestLimit,3)*eq(#activities.requestIconSize,64)*gt(#activities.revision,#activitiesRevision)*le(#activities.count,3)*ge(#activities.count,0)*eqs(@activities.packageName,@draftPackage)" />
+        <VariableCommand name="activityIcons" condition="#activitiesReady"
+            expression="'activities.icons'" type="object" />
+    </Function>
+    <Function name="page">
+        <IfCommand
+            ifCondition="(#ra_ready*not((#ra_selected*not(eqs(@ra_launchRequest,''))))*#displayReady)*eq(#stage,0)*(#appsReady*eq(#apps.loading,0)*eqs(@apps.error,'')*eq(#apps.offset,#appsOffset)*eq(#apps.requestLimit,3)*eq(#apps.requestIconSize,64)*gt(#apps.revision,#appsRevision))">
+            <Consequent>
+                <VariableCommand name="appIndex"
+                    expression="max(0,min(max(0,#apps.total-1),#appIndex+#delta))" />
+                <FunctionCommand target="queryApps" />
+            </Consequent>
+        </IfCommand>
+        <IfCommand
+            ifCondition="(#ra_ready*not((#ra_selected*not(eqs(@ra_launchRequest,''))))*#displayReady)*eq(#stage,1)*(#activitiesReady*eq(#activities.loading,0)*eqs(@activities.error,'')*eqs(@activities.packageName,@draftPackage)*eq(#activities.offset,#activitiesOffset)*eq(#activities.requestLimit,3)*eq(#activities.requestIconSize,64)*gt(#activities.revision,#activitiesRevision))">
+            <Consequent>
+                <VariableCommand name="activityIndex"
+                    expression="max(0,min(max(0,#activities.total-1),#activityIndex+#delta))" />
+                <FunctionCommand target="queryActivities" />
+            </Consequent>
+        </IfCommand>
+    </Function>
+    <Function name="pickRow">
+        <IfCommand ifCondition="eq(#stage,0)">
+            <Consequent>
+                <IfCommand
+                    ifCondition="(#ra_ready*not((#ra_selected*not(eqs(@ra_launchRequest,''))))*#displayReady)*eq(#stage,0)*(#appsReady*eq(#apps.loading,0)*eqs(@apps.error,'')*eq(#apps.offset,#appsOffset)*eq(#apps.requestLimit,3)*eq(#apps.requestIconSize,64)*gt(#apps.revision,#appsRevision))*ge(#chooseSlot,0)*lt(#chooseSlot,#apps.count)*not(eqs(@apps.packageNames[#chooseSlot],''))">
+                    <Consequent>
+                        <VariableCommand name="draftPackage"
+                            expression="@apps.packageNames[#chooseSlot]" type="string" />
+                        <VariableCommand name="draftComponent" expression="''" type="string" />
+                        <VariableCommand name="activityIndex" expression="0" />
+                        <VariableCommand name="loadRevision" expression="#ra_loadRevision" />
+                        <VariableCommand name="stage" expression="1" />
+                        <VariableCommand name="sequence"
+                            expression="max(#sequence,#ra_actionSequence)+1" />
+                        <VariableCommand name="ra_action"
+                            expression="@ra_instance+'|load|'+@draftPackage+'|'+''+'|'+0+'|'+#sequence"
+                            persist="true" type="string" />
+                        <FunctionCommand target="queryActivities" />
+                    </Consequent>
+                </IfCommand>
+            </Consequent>
+            <Alternate>
+                <IfCommand
+                    ifCondition="(#ra_ready*not((#ra_selected*not(eqs(@ra_launchRequest,''))))*#displayReady)*eq(#stage,1)*(#activitiesReady*eq(#activities.loading,0)*eqs(@activities.error,'')*eqs(@activities.packageName,@draftPackage)*eq(#activities.offset,#activitiesOffset)*eq(#activities.requestLimit,3)*eq(#activities.requestIconSize,64)*gt(#activities.revision,#activitiesRevision))*(gt(#ra_loadRevision,#loadRevision)*eqs(@ra_loadedPackage,@draftPackage))*ge(#chooseSlot,0)*lt(#chooseSlot,#activities.count)*not(eqs(@draftPackage,''))*not(eqs(@activities.components[#chooseSlot],''))">
+                    <Consequent>
+                        <VariableCommand name="draftComponent"
+                            expression="@activities.components[#chooseSlot]" type="string" />
+                        <VariableCommand name="draftDpi"
+                            expression="ifelse(#ra_savedFound,#ra_savedDpi,(max(120,min(960,#display.densityDpi))))" />
+                        <VariableCommand name="stage" expression="2" />
+                    </Consequent>
+                </IfCommand>
+            </Alternate>
+        </IfCommand>
+    </Function>
+    <Function name="touchDown">
+        <VariableCommand name="gestureActive" expression="1" />
+        <VariableCommand name="tapEligible" expression="1" />
+        <VariableCommand name="downX" expression="#touch_x" />
+        <VariableCommand name="downY" expression="#touch_y" />
+        <VariableCommand name="downStage" expression="#stage" />
+        <VariableCommand name="downIndex"
+            expression="ifelse(eq(#stage,0),#appIndex,#activityIndex)" />
+        <VariableCommand name="downRevision"
+            expression="ifelse(eq(#stage,0),#apps.revision,#activities.revision)" />
+    </Function>
+    <Function name="touchMove">
+        <VariableCommand name="tapEligible" condition="ge(max(abs(#touch_x-#downX),abs(#touch_y-#downY)),8*#scale)"
+            expression="0" />
+    </Function>
+    <Function name="touchCancel">
+        <VariableCommand name="tapEligible" expression="0" />
+        <VariableCommand name="gestureActive" expression="0" />
+    </Function>
+    <Function name="releaseMenu">
+        <FunctionCommand target="touchMove" />
+        <IfCommand
+            ifCondition="#gestureActive*(#ra_ready*not((#ra_selected*not(eqs(@ra_launchRequest,''))))*#displayReady)*eq(#stage,#downStage)*eq(#downIndex,ifelse(eq(#stage,0),#appIndex,#activityIndex))*eq(#downRevision,ifelse(eq(#stage,0),#apps.revision,#activities.revision))">
+            <Consequent>
+                <IfCommand
+                    ifCondition="not(#tapEligible)*ge(abs(#touch_y-#downY),max(12*#scale,#rowH*0.25))*gt(abs(#touch_y-#downY),abs(#touch_x-#downX))">
+                    <Consequent>
+                        <VariableCommand name="delta"
+                            expression="ifelse(lt(#touch_y,#downY),1,-1)" />
+                        <FunctionCommand target="page" />
+                    </Consequent>
+                </IfCommand>
+                <IfCommand ifCondition="#tapEligible">
+                    <Consequent>
+                        <VariableCommand name="rowSlot"
+                            expression="floor((#downY-#pickerY-#pickerH*0.22)/#rowH)" />
+                        <VariableCommand name="chooseSlot"
+                            expression="ifelse(eq(#stage,0),#appIndex-#appsOffset,#activityIndex-#activitiesOffset)+#rowSlot-1" />
+                        <FunctionCommand condition="ge(#rowSlot,0)*lt(#rowSlot,3)"
+                            target="pickRow" />
+                    </Consequent>
+                </IfCommand>
+            </Consequent>
+        </IfCommand>
+        <FunctionCommand target="touchCancel" />
+    </Function>
+    <Function name="adjustDpi">
+        <VariableCommand name="draftDpi"
+            condition="(#ra_ready*not((#ra_selected*not(eqs(@ra_launchRequest,''))))*#displayReady)*eq(#stage,2)*ge((ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi))+#delta,120)*le((ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi))+#delta,960)"
+            expression="(ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi))+#delta" />
+    </Function>
+    <Function name="confirm">
+        <IfCommand
+            ifCondition="(#ra_ready*not((#ra_selected*not(eqs(@ra_launchRequest,''))))*#displayReady)*eq(#stage,2)*(gt(#ra_loadRevision,#loadRevision)*eqs(@ra_loadedPackage,@draftPackage))*(#activitiesReady*eq(#activities.loading,0)*eqs(@activities.error,'')*eqs(@activities.packageName,@draftPackage)*eq(#activities.offset,#activitiesOffset)*eq(#activities.requestLimit,3)*eq(#activities.requestIconSize,64)*gt(#activities.revision,#activitiesRevision))*not(eqs(@draftPackage,''))*not(eqs(@draftComponent,''))*(eq(#draftDpi,0)+ge(#draftDpi,120)*le(#draftDpi,960))">
+            <Consequent>
+                <VariableCommand name="sequence" expression="max(#sequence,#ra_actionSequence)+1" />
+                <VariableCommand name="ra_action"
+                    expression="@ra_instance+'|save|'+@draftPackage+'|'+@draftComponent+'|'+#draftDpi+'|'+#sequence"
+                    persist="true" type="string" />
+            </Consequent>
+        </IfCommand>
+    </Function>
+    <Function name="back">
+        <IfCommand
+            ifCondition="(#ra_ready*not((#ra_selected*not(eqs(@ra_launchRequest,''))))*#displayReady)*eq(#stage,1)">
+            <Consequent>
+                <VariableCommand name="stage" expression="0" />
+                <FunctionCommand target="queryApps" />
+            </Consequent>
+        </IfCommand>
+        <IfCommand
+            ifCondition="(#ra_ready*not((#ra_selected*not(eqs(@ra_launchRequest,''))))*#displayReady)*eq(#stage,2)">
+            <Consequent>
+                <VariableCommand name="stage" expression="1" />
+                <FunctionCommand target="queryActivities" />
+            </Consequent>
+        </IfCommand>
+    </Function>
+    <Rectangle name="background" fillColor="#FF000000" h="#display.height*#scale" w="1080" />
+    <Group visibility="#displayReady" x="#pickerX" y="#pickerY">
+        <Group visibility="#pickerVisible">
+            <Text align="center" color="#FFFFFFFF" size="#fontSize" textExp="ifelse(eq(#stage,0),'选择应用',ifelse(eq(#stage,1),'选择 Activity','显示 DPI'))" x="#pickerW/2"
+                y="0" />
+            <Text color="#FFCBD9EF" size="#fontSize*0.7" textExp="ifelse(eq(#stage,0),'上下拖动一项，点击条目',@draftPackage)" w="#pickerW" x="0"
+                y="#pickerH*0.055" />
+            <Text color="#FFCBD9EF" size="#fontSize*0.6" textExp="ifelse(eq(#stage,1)*#loadReady*#ra_savedFound,'上次：'+@ra_savedActivityClass,'')" w="#pickerW" x="0"
+                y="#pickerH*0.095" />
+            <Group visibility="eq(#stage,0)">
+                <Group visibility="#appsGood*ge(#appsRow0,0)*lt(#appsRow0,#apps.count)"
+                    y="#pickerH*0.22+#rowH*0">
+                    <Rectangle fillColor="#FF1C2533" h="#rowH*0.92" w="#pickerW" />
+                    <Text align="center" color="#FF94A8C1" size="#fontSize" text="·"
+                        x="#rowH*0.3" y="#rowH*0.25" />
+                    <Image h="#rowH*0.46" srcExp="ifelse(#appsGood*ge(#appsRow0,0)*lt(#appsRow0,#apps.count),'appIcons['+(#appsRow0)+']','')" srcType="BitmapVar" w="#rowH*0.46"
+                        x="#rowH*0.08"
+                        y="#rowH*0.18" />
+                    <Text color="#FFFFFFFF" size="#fontSize" textExp="ifelse(#appsGood*ge(#appsRow0,0)*lt(#appsRow0,#apps.count),@apps.appNames[#appsRow0],'')"
+                        w="max(0,#pickerW-#rowH*0.65)" x="#rowH*0.6"
+                        y="#rowH*0.18" />
+                </Group>
+                <Group visibility="#appsGood*ge(#appsRow1,0)*lt(#appsRow1,#apps.count)"
+                    y="#pickerH*0.22+#rowH*1">
+                    <Rectangle fillColor="#FF263449" h="#rowH*0.92" w="#pickerW" />
+                    <Text align="center" color="#FF94A8C1" size="#fontSize" text="·"
+                        x="#rowH*0.3" y="#rowH*0.25" />
+                    <Image h="#rowH*0.46" srcExp="ifelse(#appsGood*ge(#appsRow1,0)*lt(#appsRow1,#apps.count),'appIcons['+(#appsRow1)+']','')" srcType="BitmapVar" w="#rowH*0.46"
+                        x="#rowH*0.08"
+                        y="#rowH*0.18" />
+                    <Text color="#FFFFFFFF" size="#fontSize" textExp="ifelse(#appsGood*ge(#appsRow1,0)*lt(#appsRow1,#apps.count),@apps.appNames[#appsRow1],'')"
+                        w="max(0,#pickerW-#rowH*0.65)" x="#rowH*0.6"
+                        y="#rowH*0.18" />
+                </Group>
+                <Group visibility="#appsGood*ge(#appsRow2,0)*lt(#appsRow2,#apps.count)"
+                    y="#pickerH*0.22+#rowH*2">
+                    <Rectangle fillColor="#FF1C2533" h="#rowH*0.92" w="#pickerW" />
+                    <Text align="center" color="#FF94A8C1" size="#fontSize" text="·"
+                        x="#rowH*0.3" y="#rowH*0.25" />
+                    <Image h="#rowH*0.46" srcExp="ifelse(#appsGood*ge(#appsRow2,0)*lt(#appsRow2,#apps.count),'appIcons['+(#appsRow2)+']','')" srcType="BitmapVar" w="#rowH*0.46"
+                        x="#rowH*0.08"
+                        y="#rowH*0.18" />
+                    <Text color="#FFFFFFFF" size="#fontSize" textExp="ifelse(#appsGood*ge(#appsRow2,0)*lt(#appsRow2,#apps.count),@apps.appNames[#appsRow2],'')"
+                        w="max(0,#pickerW-#rowH*0.65)" x="#rowH*0.6"
+                        y="#rowH*0.18" />
+                </Group>
+                <Text color="#FFFFFFFF" size="#fontSize*0.8" textExp="ifelse(#apps.loading,'加载中…',ifelse(not(eqs(@apps.error,'')),@apps.error,ifelse(eq(#apps.total,0),'没有可选入口（或应用已卸载）','等待最新目录…')))" visibility="not(#appsGood)+eq(#apps.count,0)" w="#pickerW"
+                    x="0"
+                    y="#pickerH*0.42" />
+            </Group>
+            <Group visibility="eq(#stage,1)">
+                <Group visibility="#activitiesGood*ge(#activitiesRow0,0)*lt(#activitiesRow0,#activities.count)"
+                    y="#pickerH*0.22+#rowH*0">
+                    <Rectangle fillColor="#FF1C2533" h="#rowH*0.92" w="#pickerW" />
+                    <Text align="center" color="#FF94A8C1" size="#fontSize" text="·"
+                        x="#rowH*0.3" y="#rowH*0.25" />
+                    <Image h="#rowH*0.46" srcExp="ifelse(#activitiesGood*ge(#activitiesRow0,0)*lt(#activitiesRow0,#activities.count),'activityIcons['+(#activitiesRow0)+']','')" srcType="BitmapVar" w="#rowH*0.46"
+                        x="#rowH*0.08"
+                        y="#rowH*0.18" />
+                    <Text color="#FFFFFFFF" size="#fontSize" textExp="ifelse(#activitiesGood*ge(#activitiesRow0,0)*lt(#activitiesRow0,#activities.count),@activities.activityNames[#activitiesRow0],'')"
+                        w="max(0,#pickerW-#rowH*0.65)" x="#rowH*0.6"
+                        y="#rowH*0.18" />
+                    <Text color="#FFAEBFD7" size="#fontSize*0.6" textExp="ifelse(#activitiesGood*ge(#activitiesRow0,0)*lt(#activitiesRow0,#activities.count),@activities.activityClasses[#activitiesRow0],'')"
+                        w="max(0,#pickerW-#rowH*0.65)" x="#rowH*0.6"
+                        y="#rowH*0.52" />
+                </Group>
+                <Group visibility="#activitiesGood*ge(#activitiesRow1,0)*lt(#activitiesRow1,#activities.count)"
+                    y="#pickerH*0.22+#rowH*1">
+                    <Rectangle fillColor="#FF263449" h="#rowH*0.92" w="#pickerW" />
+                    <Text align="center" color="#FF94A8C1" size="#fontSize" text="·"
+                        x="#rowH*0.3" y="#rowH*0.25" />
+                    <Image h="#rowH*0.46" srcExp="ifelse(#activitiesGood*ge(#activitiesRow1,0)*lt(#activitiesRow1,#activities.count),'activityIcons['+(#activitiesRow1)+']','')" srcType="BitmapVar" w="#rowH*0.46"
+                        x="#rowH*0.08"
+                        y="#rowH*0.18" />
+                    <Text color="#FFFFFFFF" size="#fontSize" textExp="ifelse(#activitiesGood*ge(#activitiesRow1,0)*lt(#activitiesRow1,#activities.count),@activities.activityNames[#activitiesRow1],'')"
+                        w="max(0,#pickerW-#rowH*0.65)" x="#rowH*0.6"
+                        y="#rowH*0.18" />
+                    <Text color="#FFAEBFD7" size="#fontSize*0.6" textExp="ifelse(#activitiesGood*ge(#activitiesRow1,0)*lt(#activitiesRow1,#activities.count),@activities.activityClasses[#activitiesRow1],'')"
+                        w="max(0,#pickerW-#rowH*0.65)" x="#rowH*0.6"
+                        y="#rowH*0.52" />
+                </Group>
+                <Group visibility="#activitiesGood*ge(#activitiesRow2,0)*lt(#activitiesRow2,#activities.count)"
+                    y="#pickerH*0.22+#rowH*2">
+                    <Rectangle fillColor="#FF1C2533" h="#rowH*0.92" w="#pickerW" />
+                    <Text align="center" color="#FF94A8C1" size="#fontSize" text="·"
+                        x="#rowH*0.3" y="#rowH*0.25" />
+                    <Image h="#rowH*0.46" srcExp="ifelse(#activitiesGood*ge(#activitiesRow2,0)*lt(#activitiesRow2,#activities.count),'activityIcons['+(#activitiesRow2)+']','')" srcType="BitmapVar" w="#rowH*0.46"
+                        x="#rowH*0.08"
+                        y="#rowH*0.18" />
+                    <Text color="#FFFFFFFF" size="#fontSize" textExp="ifelse(#activitiesGood*ge(#activitiesRow2,0)*lt(#activitiesRow2,#activities.count),@activities.activityNames[#activitiesRow2],'')"
+                        w="max(0,#pickerW-#rowH*0.65)" x="#rowH*0.6"
+                        y="#rowH*0.18" />
+                    <Text color="#FFAEBFD7" size="#fontSize*0.6" textExp="ifelse(#activitiesGood*ge(#activitiesRow2,0)*lt(#activitiesRow2,#activities.count),@activities.activityClasses[#activitiesRow2],'')"
+                        w="max(0,#pickerW-#rowH*0.65)" x="#rowH*0.6"
+                        y="#rowH*0.52" />
+                </Group>
+                <Text color="#FFFFFFFF" size="#fontSize*0.8" textExp="ifelse(#activities.loading,'加载中…',ifelse(not(eqs(@activities.error,'')),@activities.error,ifelse(eq(#activities.total,0),'没有可选入口（或应用已卸载）','等待最新目录…')))" visibility="not(#activitiesGood)+eq(#activities.count,0)" w="#pickerW"
+                    x="0"
+                    y="#pickerH*0.42" />
+            </Group>
+            <Button name="btn_verticalMenu" h="#rowH*3" interceptTouch="true" visibility="lt(#stage,2)" w="#pickerW"
+                x="0" y="#pickerH*0.22">
+                <Triggers>
+                    <Trigger action="down">
+                        <FunctionCommand target="touchDown" />
+                    </Trigger>
+                    <Trigger action="move">
+                        <FunctionCommand target="touchMove" />
+                    </Trigger>
+                    <Trigger action="up">
+                        <FunctionCommand target="releaseMenu" />
+                    </Trigger>
+                    <Trigger action="cancel">
+                        <FunctionCommand target="touchCancel" />
+                    </Trigger>
+                </Triggers>
+            </Button>
+            <Rectangle fillColor="#FF263449" h="#pickerH*0.065" visibility="lt(#stage,2)" w="#pickerW" x="0"
+                y="#pickerH*0.14" />
+            <Text align="center" color="#FFFFFFFF" size="#fontSize*0.85" text="▲ 上一项"
+                visibility="lt(#stage,2)" x="#pickerW/2" y="#pickerH*0.14" />
+            <Button name="btn_previous" h="#pickerH*0.065" interceptTouch="true" visibility="lt(#stage,2)" w="#pickerW"
+                x="0" y="#pickerH*0.14">
+                <Triggers>
+                    <Trigger action="down">
+                        <FunctionCommand target="touchDown" />
+                    </Trigger>
+                    <Trigger action="move">
+                        <FunctionCommand target="touchMove" />
+                    </Trigger>
+                    <Trigger action="cancel">
+                        <FunctionCommand target="touchCancel" />
+                    </Trigger>
+                    <Trigger action="up">
+                        <FunctionCommand target="touchMove" />
+                        <IfCommand
+                            ifCondition="#gestureActive*#tapEligible*eq(#stage,#downStage)*(lt(#stage,2))">
+                            <Consequent>
+                                <VariableCommand name="delta" expression="-1" />
+                                <FunctionCommand target="page" />
+                            </Consequent>
+                        </IfCommand>
+                        <FunctionCommand target="touchCancel" />
+                    </Trigger>
+                </Triggers>
+            </Button>
+            <Rectangle fillColor="#FF263449" h="#pickerH*0.065" visibility="lt(#stage,2)" w="#pickerW" x="0"
+                y="#pickerH*0.75" />
+            <Text align="center" color="#FFFFFFFF" size="#fontSize*0.85" text="▼ 下一项"
+                visibility="lt(#stage,2)" x="#pickerW/2" y="#pickerH*0.75" />
+            <Button name="btn_next" h="#pickerH*0.065" interceptTouch="true" visibility="lt(#stage,2)" w="#pickerW"
+                x="0" y="#pickerH*0.75">
+                <Triggers>
+                    <Trigger action="down">
+                        <FunctionCommand target="touchDown" />
+                    </Trigger>
+                    <Trigger action="move">
+                        <FunctionCommand target="touchMove" />
+                    </Trigger>
+                    <Trigger action="cancel">
+                        <FunctionCommand target="touchCancel" />
+                    </Trigger>
+                    <Trigger action="up">
+                        <FunctionCommand target="touchMove" />
+                        <IfCommand
+                            ifCondition="#gestureActive*#tapEligible*eq(#stage,#downStage)*(lt(#stage,2))">
+                            <Consequent>
+                                <VariableCommand name="delta" expression="1" />
+                                <FunctionCommand target="page" />
+                            </Consequent>
+                        </IfCommand>
+                        <FunctionCommand target="touchCancel" />
+                    </Trigger>
+                </Triggers>
+            </Button>
+            <Rectangle fillColor="#FF263449" h="#pickerH*0.065" visibility="gt(#stage,0)" w="#pickerW" x="0"
+                y="#pickerH*0.84" />
+            <Text align="center" color="#FFFFFFFF" size="#fontSize*0.85" text="返回"
+                visibility="gt(#stage,0)" x="#pickerW/2" y="#pickerH*0.84" />
+            <Button name="btn_back" h="#pickerH*0.065" interceptTouch="true" visibility="gt(#stage,0)" w="#pickerW"
+                x="0" y="#pickerH*0.84">
+                <Triggers>
+                    <Trigger action="down">
+                        <FunctionCommand target="touchDown" />
+                    </Trigger>
+                    <Trigger action="move">
+                        <FunctionCommand target="touchMove" />
+                    </Trigger>
+                    <Trigger action="cancel">
+                        <FunctionCommand target="touchCancel" />
+                    </Trigger>
+                    <Trigger action="up">
+                        <FunctionCommand target="touchMove" />
+                        <IfCommand
+                            ifCondition="#gestureActive*#tapEligible*eq(#stage,#downStage)*(gt(#stage,0))">
+                            <Consequent>
+                                <FunctionCommand target="back" />
+                            </Consequent>
+                        </IfCommand>
+                        <FunctionCommand target="touchCancel" />
+                    </Trigger>
+                </Triggers>
+            </Button>
+            <Group clip="false" touchable="false" visibility="eq(#stage,2)">
+                <Text align="center" color="#FFFFFFFF" size="#fontSize*1.6" textExp="ifelse(eq(#draftDpi,0),'继承 (0)','#'+#draftDpi)"
+                    x="#pickerW/2"
+                    y="#pickerH*0.14" />
+                <Rectangle fillColor="#FF263449" h="#pickerH*0.08" visibility="ge(#stepBase+-10,120)*le(#stepBase+-10,960)" w="#pickerW"
+                    x="0"
+                    y="#pickerH*0.24" />
+                <Text align="center" color="#FFFFFFFF" size="#fontSize*0.85" text="-10"
+                    visibility="ge(#stepBase+-10,120)*le(#stepBase+-10,960)" x="#pickerW/2"
+                    y="#pickerH*0.24" />
+                <Button name="btn_dpiminus10" h="#pickerH*0.08" interceptTouch="true" visibility="ge(#stepBase+-10,120)*le(#stepBase+-10,960)" w="#pickerW"
+                    x="0" y="#pickerH*0.24">
+                    <Triggers>
+                        <Trigger action="down">
+                            <FunctionCommand target="touchDown" />
+                        </Trigger>
+                        <Trigger action="move">
+                            <FunctionCommand target="touchMove" />
+                        </Trigger>
+                        <Trigger action="cancel">
+                            <FunctionCommand target="touchCancel" />
+                        </Trigger>
+                        <Trigger action="up">
+                            <FunctionCommand target="touchMove" />
+                            <IfCommand
+                                ifCondition="#gestureActive*#tapEligible*eq(#stage,#downStage)*(ge((ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi))+-10,120)*le((ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi))+-10,960))">
+                                <Consequent>
+                                    <VariableCommand name="delta" expression="-10" />
+                                    <FunctionCommand target="adjustDpi" />
+                                </Consequent>
+                            </IfCommand>
+                            <FunctionCommand target="touchCancel" />
+                        </Trigger>
+                    </Triggers>
+                </Button>
+                <Rectangle fillColor="#FF263449" h="#pickerH*0.08" visibility="ge(#stepBase+-1,120)*le(#stepBase+-1,960)" w="#pickerW"
+                    x="0" y="#pickerH*0.33499999999999996" />
+                <Text align="center" color="#FFFFFFFF" size="#fontSize*0.85"
+                    text="-1" visibility="ge(#stepBase+-1,120)*le(#stepBase+-1,960)" x="#pickerW/2"
+                    y="#pickerH*0.33499999999999996" />
+                <Button name="btn_dpiminus1" h="#pickerH*0.08" interceptTouch="true" visibility="ge(#stepBase+-1,120)*le(#stepBase+-1,960)"
+                    w="#pickerW" x="0"
+                    y="#pickerH*0.33499999999999996">
+                    <Triggers>
+                        <Trigger action="down">
+                            <FunctionCommand target="touchDown" />
+                        </Trigger>
+                        <Trigger action="move">
+                            <FunctionCommand target="touchMove" />
+                        </Trigger>
+                        <Trigger action="cancel">
+                            <FunctionCommand target="touchCancel" />
+                        </Trigger>
+                        <Trigger action="up">
+                            <FunctionCommand target="touchMove" />
+                            <IfCommand
+                                ifCondition="#gestureActive*#tapEligible*eq(#stage,#downStage)*(ge((ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi))+-1,120)*le((ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi))+-1,960))">
+                                <Consequent>
+                                    <VariableCommand name="delta" expression="-1" />
+                                    <FunctionCommand target="adjustDpi" />
+                                </Consequent>
+                            </IfCommand>
+                            <FunctionCommand target="touchCancel" />
+                        </Trigger>
+                    </Triggers>
+                </Button>
+                <Rectangle fillColor="#FF263449" h="#pickerH*0.08" visibility="ge(#stepBase+1,120)*le(#stepBase+1,960)" w="#pickerW"
+                    x="0" y="#pickerH*0.43" />
+                <Text align="center" color="#FFFFFFFF" size="#fontSize*0.85" text="+1"
+                    visibility="ge(#stepBase+1,120)*le(#stepBase+1,960)" x="#pickerW/2"
+                    y="#pickerH*0.43" />
+                <Button name="btn_dpi1" h="#pickerH*0.08" interceptTouch="true" visibility="ge(#stepBase+1,120)*le(#stepBase+1,960)" w="#pickerW"
+                    x="0" y="#pickerH*0.43">
+                    <Triggers>
+                        <Trigger action="down">
+                            <FunctionCommand target="touchDown" />
+                        </Trigger>
+                        <Trigger action="move">
+                            <FunctionCommand target="touchMove" />
+                        </Trigger>
+                        <Trigger action="cancel">
+                            <FunctionCommand target="touchCancel" />
+                        </Trigger>
+                        <Trigger action="up">
+                            <FunctionCommand target="touchMove" />
+                            <IfCommand
+                                ifCondition="#gestureActive*#tapEligible*eq(#stage,#downStage)*(ge((ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi))+1,120)*le((ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi))+1,960))">
+                                <Consequent>
+                                    <VariableCommand name="delta" expression="1" />
+                                    <FunctionCommand target="adjustDpi" />
+                                </Consequent>
+                            </IfCommand>
+                            <FunctionCommand target="touchCancel" />
+                        </Trigger>
+                    </Triggers>
+                </Button>
+                <Rectangle fillColor="#FF263449" h="#pickerH*0.08" visibility="ge(#stepBase+10,120)*le(#stepBase+10,960)" w="#pickerW"
+                    x="0" y="#pickerH*0.525" />
+                <Text align="center" color="#FFFFFFFF" size="#fontSize*0.85" text="+10"
+                    visibility="ge(#stepBase+10,120)*le(#stepBase+10,960)" x="#pickerW/2"
+                    y="#pickerH*0.525" />
+                <Button name="btn_dpi10" h="#pickerH*0.08" interceptTouch="true" visibility="ge(#stepBase+10,120)*le(#stepBase+10,960)" w="#pickerW"
+                    x="0" y="#pickerH*0.525">
+                    <Triggers>
+                        <Trigger action="down">
+                            <FunctionCommand target="touchDown" />
+                        </Trigger>
+                        <Trigger action="move">
+                            <FunctionCommand target="touchMove" />
+                        </Trigger>
+                        <Trigger action="cancel">
+                            <FunctionCommand target="touchCancel" />
+                        </Trigger>
+                        <Trigger action="up">
+                            <FunctionCommand target="touchMove" />
+                            <IfCommand
+                                ifCondition="#gestureActive*#tapEligible*eq(#stage,#downStage)*(ge((ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi))+10,120)*le((ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi))+10,960))">
+                                <Consequent>
+                                    <VariableCommand name="delta" expression="10" />
+                                    <FunctionCommand target="adjustDpi" />
+                                </Consequent>
+                            </IfCommand>
+                            <FunctionCommand target="touchCancel" />
+                        </Trigger>
+                    </Triggers>
+                </Button>
+                <Rectangle fillColor="#FF263449" h="#pickerH*0.065" visibility="1" w="#pickerW"
+                    x="0" y="#pickerH*0.63" />
+                <Text align="center" color="#FFFFFFFF" size="#fontSize*0.85" text="继承显示密度 (0)"
+                    visibility="1" x="#pickerW/2" y="#pickerH*0.63" />
+                <Button name="btn_inherit" h="#pickerH*0.065" interceptTouch="true" visibility="1" w="#pickerW"
+                    x="0" y="#pickerH*0.63">
+                    <Triggers>
+                        <Trigger action="down">
+                            <FunctionCommand target="touchDown" />
+                        </Trigger>
+                        <Trigger action="move">
+                            <FunctionCommand target="touchMove" />
+                        </Trigger>
+                        <Trigger action="cancel">
+                            <FunctionCommand target="touchCancel" />
+                        </Trigger>
+                        <Trigger action="up">
+                            <FunctionCommand target="touchMove" />
+                            <IfCommand
+                                ifCondition="#gestureActive*#tapEligible*eq(#stage,#downStage)*(1)">
+                                <Consequent>
+                                    <VariableCommand name="draftDpi" expression="0" />
+                                </Consequent>
+                            </IfCommand>
+                            <FunctionCommand target="touchCancel" />
+                        </Trigger>
+                    </Triggers>
+                </Button>
+                <Rectangle fillColor="#FF263449" h="#pickerH*0.065" visibility="#pickerVisible*#loadReady" w="#pickerW"
+                    x="0" y="#pickerH*0.73" />
+                <Text align="center" color="#FFFFFFFF" size="#fontSize*0.85" text="确认并启动"
+                    visibility="#pickerVisible*#loadReady" x="#pickerW/2" y="#pickerH*0.73" />
+                <Button name="btn_confirm" h="#pickerH*0.065" interceptTouch="true" visibility="#pickerVisible*#loadReady" w="#pickerW"
+                    x="0" y="#pickerH*0.73">
+                    <Triggers>
+                        <Trigger action="down">
+                            <FunctionCommand target="touchDown" />
+                        </Trigger>
+                        <Trigger action="move">
+                            <FunctionCommand target="touchMove" />
+                        </Trigger>
+                        <Trigger action="cancel">
+                            <FunctionCommand target="touchCancel" />
+                        </Trigger>
+                        <Trigger action="up">
+                            <FunctionCommand target="touchMove" />
+                            <IfCommand
+                                ifCondition="#gestureActive*#tapEligible*eq(#stage,#downStage)*((#ra_ready*not((#ra_selected*not(eqs(@ra_launchRequest,''))))*#displayReady)*(gt(#ra_loadRevision,#loadRevision)*eqs(@ra_loadedPackage,@draftPackage)))">
+                                <Consequent>
+                                    <FunctionCommand target="confirm" />
+                                </Consequent>
+                            </IfCommand>
+                            <FunctionCommand target="touchCancel" />
+                        </Trigger>
+                    </Triggers>
+                </Button>
+            </Group>
+            <Text color="#FFFFABAB" size="#fontSize*0.6" textExp="@ra_error" w="#pickerW" x="0"
+                y="#pickerH*0.92" />
+        </Group>
+    </Group>
+    <Var name="appsRow0" expression="#appIndex-#appsOffset+0-1" />
+    <Var name="appsRow1" expression="#appIndex-#appsOffset+1-1" />
+    <Var name="appsRow2" expression="#appIndex-#appsOffset+2-1" />
+    <Var name="activitiesRow0" expression="#activityIndex-#activitiesOffset+0-1" />
+    <Var name="activitiesRow1" expression="#activityIndex-#activitiesOffset+1-1" />
+    <Var name="activitiesRow2" expression="#activityIndex-#activitiesOffset+2-1" />
+    <Group clip="false" touchable="false" visibility="#ra_ready*#liveSelection*#displayReady"
+        x="#safeX" y="#safeY">
+        <ActivityHost name="selectedActivity" componentExp="@ra_component" dpiExp="#ra_dpi" h="#safeH" instanceExp="@ra_instance"
+            navigationGutterDp="0" showControls="false" userRequestExp="@ra_launchRequest"
+            visibility="#ra_ready*#liveSelection*#displayReady" w="#safeW" x="0"
+            y="0" />
+    </Group>
+    <Text color="#FFFFFFFF" size="24" text="等待卡片身份与有效背屏安全区域" visibility="not(#displayReady)+not(#ra_ready)" w="#safeW"
+        x="#safeX" y="#safeY" />
+</Screen>

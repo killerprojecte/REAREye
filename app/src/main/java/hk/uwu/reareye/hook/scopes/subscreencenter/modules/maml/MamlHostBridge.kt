@@ -51,6 +51,7 @@ internal class MamlHostBridge(loader: ClassLoader) {
     private val expressionBuild =
         method(expressionClass, "build", getVariables.returnType, String::class.java)
     private val evaluateString = method(expressionClass, "evaluateStr")
+    private val evaluateNumber = runCatching { method(expressionClass, "evaluate") }.getOrNull()
     private val androidContext = field(rootContext.returnType, "mContext")
     private val getters = listOf(
         "getAbsoluteLeft", "getAbsoluteTop", "getWidth", "getHeight", "getX", "getY",
@@ -100,11 +101,9 @@ internal class MamlHostBridge(loader: ClassLoader) {
 
     fun expressions(root: Any): MamlStringExpressionCompiler {
         val weakRoot = WeakReference(root)
-        return MamlStringExpressionCompiler { source ->
-            // Build lazily on the native tick as well: factory preparation never reads Variables.
-            // Even vendor Expression implementations may retain their root indirectly.
+        fun <T> evaluator(source: String, evaluate: (Any) -> T?): () -> T? {
             var expression: WeakReference<Any>? = null
-            val evaluate: () -> String? = {
+            return {
                 val owner = weakRoot.get()
                 if (owner == null) {
                     expression = null
@@ -112,13 +111,38 @@ internal class MamlHostBridge(loader: ClassLoader) {
                 } else {
                     val built = expression?.get() ?: requireNotNull(
                         expressionBuild.invoke(null, getVariables.invoke(owner), source),
-                    ) { "Invalid MAML STRING expression: $source" }.also {
+                    ) { "Invalid MAML expression: $source" }.also {
                         expression = WeakReference(it)
                     }
-                    evaluateString.invoke(built) as String?
+                    evaluate(built)
                 }
             }
-            evaluate
+        }
+        return object : MamlStringExpressionCompiler, MamlNumericExpressionCompiler {
+            override fun activityLaunchPermit(
+                instance: String,
+                component: String,
+                dpi: Int,
+                request: String
+            ): ActivityHostLaunchPermit? =
+                weakRoot.get()?.let {
+                    MamlActivityCardBridge.getIssuedLaunch(
+                        it,
+                        instance,
+                        component,
+                        dpi,
+                        request
+                    )
+                }
+
+            override fun compile(expression: String): () -> String? =
+                evaluator(expression) { evaluateString.invoke(it) as String? }
+
+            override fun compileNumber(expression: String): () -> Double? =
+                evaluator(expression) {
+                    (requireNotNull(evaluateNumber) { "Numeric MAML expression ABI unavailable" }
+                        .invoke(it) as? Number)?.toDouble()
+                }
         }
     }
 

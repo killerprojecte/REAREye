@@ -9,6 +9,19 @@ internal class MamlCardHostBridge(loader: ClassLoader) {
     val rootClass = loader.loadClass("com.miui.maml.ScreenElementRoot")
     val viewClass = loader.loadClass("com.miui.maml.component.MamlView")
     private val configClass = loader.loadClass("com.miui.maml.util.ConfigFile")
+    private val activityCards by lazy { MamlActivityCardBridge(loader) }
+
+    fun activityPicker(root: Any): Boolean =
+        rawAttribute.invoke(root, "rearActivityPicker") == "true"
+
+    fun activityAction(
+        root: Any,
+        file: File,
+        acceptedOrder: Long = ActivityHostLaunchPermit.newBoundary()
+    ) =
+        activityCards.action(root, file, acceptedOrder)
+
+    fun deleteActivity(file: File) = activityCards.delete(file)
 
     private data class Initialized(val path: String, val config: Any, val key: String)
 
@@ -41,6 +54,8 @@ internal class MamlCardHostBridge(loader: ClassLoader) {
     private val getVariables = MamlHostBridge.method(rootClass, "getVariables")
     private val getNumber =
         MamlHostBridge.method(getVariables.returnType, "getDouble", String::class.java)
+    private val getObject =
+        MamlHostBridge.method(getVariables.returnType, "get", String::class.java)
     private val putNumber = MamlHostBridge.method(
         getVariables.returnType,
         "put",
@@ -74,16 +89,22 @@ internal class MamlCardHostBridge(loader: ClassLoader) {
         MamlHostBridge.method(configClass, "save", String::class.java, Context::class.java)
 
     fun root(view: Any): Any? = viewRoot.get(view)
-    fun enabled(root: Any): Boolean = rawAttribute.invoke(root, "rearWidgetPicker") == "true"
+    fun enabled(root: Any): Boolean {
+        val widget = rawAttribute.invoke(root, "rearWidgetPicker") == "true"
+        val activity = activityPicker(root)
+        // Conflicting root capabilities must never share a Widget config namespace.
+        return widget.xor(activity)
+    }
     fun pickerVisible(root: Any): Boolean = enabled(root) && synchronized(rootMutex(root)) {
         val variables = getVariables.invoke(root)
-        (getNumber.invoke(variables, "rw_ready") as Number).toDouble() == 1.0 &&
-                (getNumber.invoke(variables, "rw_selected") as Number).toDouble() == 0.0
+        val prefix = if (activityPicker(root)) "ra" else "rw"
+        (getNumber.invoke(variables, "${prefix}_ready") as Number).toDouble() == 1.0 &&
+                (getNumber.invoke(variables, "${prefix}_selected") as Number).toDouble() == 0.0
     }
 
     /** Preserve native availability/lock gates even when Android RemoteViews owns the gesture. */
     fun appWidgetTouchable(root: Any): Boolean = runCatching {
-        if (!enabled(root)) return@runCatching false
+        if (!enabled(root) || activityPicker(root)) return@runCatching false
         synchronized(rootMutex(root)) {
             if (MamlHostBridge.method(rootClass, "isFinished").invoke(root) == true ||
                 !field(rootClass, "mLoaded").getBoolean(root) ||
@@ -105,22 +126,31 @@ internal class MamlCardHostBridge(loader: ClassLoader) {
             ) return@synchronized false
             val variables = getVariables.invoke(root)
             fun value(name: String) = (getNumber.invoke(variables, name) as Number).toDouble()
-            if (value("rw_ready") != 1.0 || value("rw_selected") != 0.0 ||
+            val activity = activityPicker(root)
+            val prefix = if (activity) "ra" else "rw"
+            val selected = value("${prefix}_selected")
+            // Restoring a selection is not a launch. Match the template's live-request
+            // state so the saved selection cannot leave its visible picker untouchable.
+            val menuOpen = selected == 0.0 || (activity && selected == 1.0 &&
+                    (getObject.invoke(variables, "ra_launchRequest") as? String).isNullOrEmpty())
+            if (value("${prefix}_ready") != 1.0 || !menuOpen ||
                 value("displayReady") != 1.0
             ) return@synchronized false
-            val gesture = MamlHostBridge.method(rootClass, "findElement", String::class.java)
-                .invoke(root, "gesture") ?: return@synchronized false
-            if (!buttonClass.isInstance(gesture) ||
-                MamlHostBridge.method(gesture.javaClass, "isVisible").invoke(gesture) != true ||
-                !field(gesture.javaClass, "mTouchable").getBoolean(gesture)
-            ) return@synchronized false
+            if (!activity) {
+                val gesture = MamlHostBridge.method(rootClass, "findElement", String::class.java)
+                    .invoke(root, "gesture") ?: return@synchronized false
+                if (!buttonClass.isInstance(gesture) ||
+                    MamlHostBridge.method(gesture.javaClass, "isVisible").invoke(gesture) != true ||
+                    !field(gesture.javaClass, "mTouchable").getBoolean(gesture)
+                ) return@synchronized false
+            }
             val scale =
                 (MamlHostBridge.method(rootClass, "getScale").invoke(root) as Number).toDouble()
             if (!scale.isFinite() || scale <= 0.0) return@synchronized false
-            val left = value("safeX")
-            val top = value("safeY")
-            val width = value("safeW")
-            val height = value("safeH")
+            val left = value(if (activity) "pickerX" else "safeX")
+            val top = value(if (activity) "pickerY" else "safeY")
+            val width = value(if (activity) "pickerW" else "safeW")
+            val height = value(if (activity) "pickerH" else "safeH")
             val right = left + width
             val bottom = top + height
             if (!listOf(left, top, width, height, right, bottom).all { it.isFinite() } ||
@@ -143,11 +173,19 @@ internal class MamlCardHostBridge(loader: ClassLoader) {
 
     /** Both clocks are uptime milliseconds; native animation timestamps use another axis. */
     fun publishFrameTime(root: Any, uptime: Long) = synchronized(rootMutex(root)) {
-        number(root, "rw_frame_time", uptime.toDouble())
+        number(
+            root,
+            if (activityPicker(root)) "ra_frame_time" else "rw_frame_time",
+            uptime.toDouble()
+        )
     }
 
     fun publishTouchTime(root: Any, eventTime: Long) = synchronized(rootMutex(root)) {
-        number(root, "rw_touch_time", eventTime.toDouble())
+        number(
+            root,
+            if (activityPicker(root)) "ra_touch_time" else "rw_touch_time",
+            eventTime.toDouble()
+        )
     }
 
     /** Compatibility entry point: queued restoration must not hide an already chosen widget. */
@@ -155,6 +193,7 @@ internal class MamlCardHostBridge(loader: ClassLoader) {
 
     /** Bind before native root.init so its own loadConfig restores variables before child init. */
     fun prepare(root: Any, file: File) = synchronized(rootMutex(root)) {
+        if (activityPicker(root)) return@synchronized activityCards.prepare(root, file)
         if (file.isFile) read(file)
         if (configPath.get(root) != file.absolutePath) config.set(root, null)
         setSaveViaProvider.invoke(root, false)
@@ -163,6 +202,7 @@ internal class MamlCardHostBridge(loader: ClassLoader) {
 
     /** Restore atomically; native root re-init may have replaced ConfigFile, which must be honored. */
     fun initialize(root: Any, file: File): String = synchronized(rootMutex(root)) {
+        if (activityPicker(root)) return@synchronized activityCards.initialize(root, file)
         val current = config.get(root)
         initialized[root]?.let { previous ->
             if (previous.path == file.absolutePath && previous.config === current &&
@@ -219,6 +259,7 @@ internal class MamlCardHostBridge(loader: ClassLoader) {
     }
 
     fun commit(root: Any, file: File) = synchronized(rootMutex(root)) {
+        if (activityPicker(root)) return@synchronized activityCards.commit(root, file)
         val native = requireNotNull(config.get(root)) { "Missing per-card MAML config" }
         check(configPath.get(root) == file.absolutePath) { "Card config path changed" }
         check(
@@ -231,6 +272,7 @@ internal class MamlCardHostBridge(loader: ClassLoader) {
     }
 
     fun fail(root: Any, message: String) = synchronized(rootMutex(root)) {
+        if (activityPicker(root)) return@synchronized activityCards.fail(root, message)
         number(root, "rw_ready", 0.0)
         text(root, "rw_error", message)
         update.invoke(root)
@@ -238,6 +280,7 @@ internal class MamlCardHostBridge(loader: ClassLoader) {
 
     /** Clearing mConfig prevents a late pause/finish from recreating a deleted file. */
     fun detachDeleted(root: Any) = synchronized(rootMutex(root)) {
+        if (activityPicker(root)) return@synchronized activityCards.detachDeleted(root)
         initialized.remove(root)
         number(root, "rw_ready", 0.0)
         number(root, "rw_selected", 0.0)

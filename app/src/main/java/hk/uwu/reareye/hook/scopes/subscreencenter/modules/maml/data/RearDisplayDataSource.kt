@@ -16,7 +16,11 @@ data class RearDisplayInsets(val left: Int, val top: Int, val right: Int, val bo
 data class RearDisplayGeometry(
     val width: Int,
     val height: Int,
-    val insets: RearDisplayInsets? = null
+    val insets: RearDisplayInsets? = null,
+    val densityDpi: Int = 0,
+    val rotation: Int = 0,
+    val device: String = "",
+    val model: String = "",
 )
 
 fun interface RearDisplayGeometryProvider {
@@ -56,7 +60,7 @@ class RearDisplayDataSource(context: Context, provider: RearDisplayGeometryProvi
                     it.safeInsetRight,
                     it.safeInsetBottom
                 )
-            })
+            }, metrics.densityDpi, display.rotation, Build.DEVICE, Build.MODEL)
         }
     }
     private val subscriptions = linkedMapOf<Any, () -> Unit>()
@@ -191,7 +195,15 @@ class RearDisplayDataSource(context: Context, provider: RearDisplayGeometryProvi
         const val TAG = "RearDisplayBinder"
         const val FALLBACK_LEFT_PX = 296
         val schema = MamlDataSchema(
-            listOf("width", "height", "safeLeft", "safeTop", "safeRight", "safeBottom")
+            listOf(
+                "width",
+                "height",
+                "safeLeft",
+                "safeTop",
+                "safeRight",
+                "safeBottom",
+                "densityDpi"
+            )
                 .map { MamlDataField(it, MamlDataType.NUMBER) })
 
         fun definition() = MamlDataSourceDefinition(
@@ -205,7 +217,13 @@ class RearDisplayDataSource(context: Context, provider: RearDisplayGeometryProvi
             val width = geometry.width
             val height = geometry.height
             if (width <= 0 || height <= 0) return MamlDataResult.Failure("Invalid rear display dimensions")
-            val insets = geometry.insets ?: RearDisplayInsets(FALLBACK_LEFT_PX, 0, 0, 0)
+            // Only this Max landscape pose has a measured fallback. Unknown devices/poses
+            // must not inherit a guessed camera boundary; runtime cutout always wins.
+            val measuredMax = width == 976 && height == 596 && geometry.rotation == 0 &&
+                    geometry.device == "popsicle" && geometry.model == "2509FPN0BC"
+            val insets = geometry.insets ?: RearDisplayInsets(
+                if (measuredMax) FALLBACK_LEFT_PX else 0, 0, 0, 0
+            )
             val left = insets.left.coerceIn(0, width)
             val top = insets.top.coerceIn(0, height)
             val right = width - insets.right.coerceIn(0, width)
@@ -216,6 +234,8 @@ class RearDisplayDataSource(context: Context, provider: RearDisplayGeometryProvi
                     mapOf(
                         "width" to width.toDouble(),
                         "height" to height.toDouble(),
+                        // 0 means unavailable for injected/legacy geometry; never substitute main-screen density.
+                        "densityDpi" to geometry.densityDpi.coerceAtLeast(0).toDouble(),
                         "safeLeft" to left.toDouble(),
                         "safeTop" to top.toDouble(),
                         "safeRight" to (width - right).toDouble(),

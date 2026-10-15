@@ -1,6 +1,7 @@
 package hk.uwu.reareye.hook.scopes.subscreencenter
 
 import hk.uwu.reareye.hook.scopes.Scope
+import hk.uwu.reareye.hook.activityhost.SystemUiActivityHostHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.ForceAppWidgetEnabledHook
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.MusicControlWhitelistModule
 import hk.uwu.reareye.hook.scopes.subscreencenter.modules.PersonalAssistantBackScreenDeviceHook
@@ -43,6 +44,7 @@ class SubscreenCenterScope : RoxyHooker(), Scope {
             RearWidgetHook(),
             RearAppHook(),
             SystemUiNotificationBridgeHook(),
+            SystemUiActivityHostHook(),
             LyriconHook(),
             VideoVolumeHook(),
             ExtraTimeTipHook(),

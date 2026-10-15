@@ -2,6 +2,13 @@
     <string name="app_name">REAREye</string>
     <string name="xposed_desc">Something is always watching from behind</string>
     <string name="status_card">状态</string>
+    <string name="subscreen_notification_access_title">开启背屏通知监听权限</string>
+    <string name="subscreen_notification_access_summary">背屏通知监听服务尚未授权。\nLive Update 通知可能无法显示在背屏。\n确认后将使用 root 开启背屏中心的通知访问。\n授权后背屏中心可读取通知。\n其他通知监听服务的授权保持不变。</string>
+    <string name="subscreen_notification_access_confirm">确认并授权</string>
+    <string name="subscreen_notification_access_later">暂不设置</string>
+    <string name="subscreen_notification_access_granting">正在授权…</string>
+    <string name="subscreen_notification_access_success">通知监听权限已开启，请重新触发一条 Live Update 通知进行测试。</string>
+    <string name="subscreen_notification_access_failed">暂未检测到通知监听权限。\n若系统中已开启，请稍后重试。\n否则请检查 root 授权。</string>
     <string name="module_not_activated">模块未激活</string>
     <string name="module_is_activated">模块已激活</string>
     <string name="home_navigation">主页</string>

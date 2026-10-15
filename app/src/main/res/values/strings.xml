@@ -2,6 +2,13 @@
     <string name="app_name">REAREye</string>
     <string name="xposed_desc">Something is always watching from behind</string>
     <string name="status_card">Status</string>
+    <string name="subscreen_notification_access_title">Enable rear-screen notification access</string>
+    <string name="subscreen_notification_access_summary">Rear-screen notification access is disabled.\nLive Updates may not appear on the rear screen.\nConfirm to grant access using root.\nThe rear-screen center will be able to read notifications.\nOther listeners will keep their existing permissions.</string>
+    <string name="subscreen_notification_access_confirm">Confirm and grant access</string>
+    <string name="subscreen_notification_access_later">Not now</string>
+    <string name="subscreen_notification_access_granting">Granting access…</string>
+    <string name="subscreen_notification_access_success">Notification access granted. Trigger a new Live Update notification to test it.</string>
+    <string name="subscreen_notification_access_failed">Notification access has not been confirmed.\nIf already enabled in system settings, try again shortly.\nOtherwise, check root permission.</string>
     <string name="module_not_activated">Module not activated</string>
     <string name="module_is_activated">Module activated</string>
     <string name="home_navigation">Home</string>

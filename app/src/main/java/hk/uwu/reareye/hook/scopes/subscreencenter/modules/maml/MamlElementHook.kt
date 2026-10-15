@@ -64,6 +64,7 @@ class MamlElementHook(
                 )
                 val registry = MamlElementRegistry().apply {
                     register(AppWidgetElementFactory.TAG, AppWidgetElementFactory())
+                    register(ActivityHostElementFactory.TAG, ActivityHostElementFactory())
                     registerElements()
                 }
 
@@ -239,7 +240,7 @@ class MamlElementHook(
                     sessions.clear()
                 }
                 installed.set(true)
-                YLog.info("MAML View backend registered: ${AppWidgetElementFactory.TAG}")
+                YLog.info("MAML View backends registered: ${AppWidgetElementFactory.TAG}, ${ActivityHostElementFactory.TAG}; ActivityHost requires explicit user launch and verified SystemUI ABI")
             } catch (error: Throwable) {
                 installed.set(false)
                 handles.asReversed().forEach { runCatching { it.close() } }

@@ -40,6 +40,8 @@ class MamlVariableBinderHook(
                     register(AppWidgetCatalogDataSource.definition())
                     register(AppWidgetAppsDataSource.definition())
                     register(RearDisplayDataSource.definition())
+                    register(RearActivityAppsDataSource.definition())
+                    register(RearActivitiesDataSource.definition())
                     registerSources()
                 }
 
