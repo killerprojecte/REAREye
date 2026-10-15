@@ -30,14 +30,15 @@ def build_template():
         'scale':'1080/max(1,#display.width)',
         'padding':'6*#scale',
         'navigation':'24*(#display.densityDpi/160)*#scale',
-        'safeX':'#display.safeLeft*#scale+#padding',
-        'safeY':'#display.safeTop*#scale+#padding',
-        'safeW':'max(0,(#display.width-#display.safeLeft-#display.safeRight)*#scale-2*#padding)',
-        'safeH':'max(0,(#display.height-#display.safeTop-#display.safeBottom)*#scale-2*#padding)',
-        'pickerX':'#safeX+#navigation', 'pickerY':'#safeY',
-        'pickerW':'max(0,#safeW-2*#navigation)', 'pickerH':'#safeH',
+        'safeX':'#display.safeLeft*#scale',
+        'safeY':'#display.safeTop*#scale',
+        'safeW':'max(0,(#display.width-#display.safeLeft-#display.safeRight)*#scale)',
+        'safeH':'max(0,(#display.height-#display.safeTop-#display.safeBottom)*#scale)',
+        'pickerX':'#safeX+#padding+#navigation', 'pickerY':'#safeY+#padding',
+        'pickerW':'max(0,#safeW-2*#padding-2*#navigation)', 'pickerH':'max(0,#safeH-2*#padding)',
         'displayReady':"gt(#display.count,0)*eq(#display.loading,0)*eqs(@display.error,'')*gt(#display.width,0)*gt(#display.height,0)*ge(#display.safeLeft,0)*ge(#display.safeTop,0)*ge(#display.safeRight,0)*ge(#display.safeBottom,0)*gt(#display.densityDpi,0)*gt(#pickerW,48*#scale)*gt(#pickerH,96*#scale)",
-        'pickerVisible':'#ra_ready*not(#ra_selected)*#displayReady',
+        'liveSelection':"#ra_selected*not(eqs(@ra_launchRequest,''))",
+        'pickerVisible':'#ra_ready*not(#liveSelection)*#displayReady',
         'rowH':'#pickerH*0.17', 'fontSize':'min(#pickerW*0.052,#pickerH*0.032)',
         'baseDpi':'max(120,min(960,#display.densityDpi))',
         'stepBase':'ifelse(eq(#draftDpi,0),#display.densityDpi,#draftDpi)',
@@ -121,11 +122,8 @@ def build_template():
     f=function('back')
     p=when(f,'#pickerVisible*eq(#stage,1)');v(p,'stage','0');call(p,'queryApps')
     p=when(f,'#pickerVisible*eq(#stage,2)');v(p,'stage','1');call(p,'queryActivities')
-    f=function('reselect')
-    p=when(f,'#ra_ready*#ra_selected*#displayReady')
-    action(p,'reset',"''","''",'0');v(p,'stage','0');v(p,'appIndex','0');call(p,'queryApps')
     # No widgets, ConfigFile persistence, or native selection/launch variable writes.
-    add(root,'Rectangle',name='background',fillColor='#FF10141C',w='1080',h='#display.height*#scale')
+    add(root,'Rectangle',name='background',fillColor='#FF000000',w='1080',h='#display.height*#scale')
     group=add(root,'Group',x='#pickerX',y='#pickerY',visibility='#displayReady')
     menu=add(group,'Group',visibility='#pickerVisible')
     add(menu,'Text',x='#pickerW/2',y='0',align='center',size='#fontSize',color='#FFFFFFFF',textExp="ifelse(eq(#stage,0),'选择应用',ifelse(eq(#stage,1),'选择 Activity','显示 DPI'))")
@@ -153,7 +151,7 @@ def build_template():
         add(parent,'Rectangle',x='0',y=y,w='#pickerW',h=height,fillColor='#FF263449',visibility=condition)
         add(parent,'Text',x='#pickerW/2',y=y,align='center',size='#fontSize*0.85',color='#FFFFFFFF',text=label,visibility=condition)
         # ScreenElementRoot uses one last-write-wins name map for ALL elements.
-        # Buttons must never shadow Function targets (back/confirm/reselect).
+        # Buttons must never shadow Function targets (back/confirm).
         b=add(parent,'Button',name='btn_'+name,x='0',y=y,w='#pickerW',h=height,interceptTouch='true',visibility=condition)
         t=add(b,'Triggers')
         for event,target in [('down','touchDown'),('move','touchMove'),('cancel','touchCancel')]: call(add(t,'Trigger',action=event),target)
@@ -175,9 +173,8 @@ def build_template():
     button(dpi,'inherit','#pickerH*0.63','继承显示密度 (0)',[('draftDpi','0')])
     button(dpi,'confirm','#pickerH*0.73','确认并启动',[('call','confirm')],condition='#pickerVisible*#loadReady')
     add(menu,'Text',x='0',y='#pickerH*0.92',w='#pickerW',size='#fontSize*0.6',color='#FFFFABAB',textExp='@ra_error')
-    selected=add(group,'Group',visibility='#ra_ready*#ra_selected*#displayReady')
-    button(selected,'reselect','0','重新选择（先关闭当前会话）',[('call','reselect')],condition='#ra_ready*#ra_selected*#displayReady',height='#pickerH*0.09')
-    add(selected,'ActivityHost',name='selectedActivity',x='0',y='#pickerH*0.11',w='#pickerW',h='#pickerH*0.89',componentExp='@ra_component',dpiExp='#ra_dpi',userRequestExp='@ra_launchRequest',instanceExp='@ra_instance',visibility='#ra_ready*#ra_selected*#displayReady')
+    selected=add(root,'Group',x='#safeX',y='#safeY',visibility='#ra_ready*#liveSelection*#displayReady',touchable='false',clip='false')
+    add(selected,'ActivityHost',name='selectedActivity',x='0',y='0',w='#safeW',h='#safeH',navigationGutterDp='0',showControls='false',componentExp='@ra_component',dpiExp='#ra_dpi',userRequestExp='@ra_launchRequest',instanceExp='@ra_instance',visibility='#ra_ready*#liveSelection*#displayReady')
     add(root,'Text',x='#safeX',y='#safeY',w='#safeW',size='24',color='#FFFFFFFF',visibility='not(#displayReady)+not(#ra_ready)',text='等待卡片身份与有效背屏安全区域')
     # MAML derived Var values are tick-cached. Events must use current source fields
     # and mutable drafts directly, not last-frame Good/loadReady/stepBase values.
@@ -186,7 +183,7 @@ def build_template():
         for key in ['ifCondition','condition','expression']:
             expression=element.get(key)
             if expression is None:continue
-            for name in ['pickerVisible','appsGood','activitiesGood','loadReady','stepBase','baseDpi']:
+            for name in ['pickerVisible','appsGood','activitiesGood','loadReady','stepBase','baseDpi','liveSelection']:
                 expression=expression.replace('#'+name,'('+values[name]+')')
             element.set(key,expression)
     ET.indent(root,space='    ')
@@ -206,7 +203,7 @@ class Model:
         for v in root.findall('Var'):
             if v.get('const')=='true' or not v.get('expression'): self.data[v.get('name')]='' if v.get('type')=='string' else 0
             else: self.formulas[v.get('name')]=v.get('expression')
-        self.data.update({'display.count':1,'display.loading':0,'display.error':'','display.width':1080,'display.height':720,'display.safeLeft':296,'display.safeRight':0,'display.safeTop':0,'display.safeBottom':0,'display.densityDpi':320,'ra_ready':1,'ra_selected':0,'ra_instance':'instance','ra_actionSequence':0,'ra_loadRevision':0,'ra_error':'','ra_loadedPackage':'','ra_savedFound':0,'ra_savedDpi':0,'ra_savedComponent':'','ra_savedActivityClass':''})
+        self.data.update({'display.count':1,'display.loading':0,'display.error':'','display.width':1080,'display.height':720,'display.safeLeft':296,'display.safeRight':0,'display.safeTop':0,'display.safeBottom':0,'display.densityDpi':320,'ra_ready':1,'ra_selected':0,'ra_instance':'instance','ra_launchRequest':'','ra_actionSequence':0,'ra_loadRevision':0,'ra_error':'','ra_loadedPackage':'','ra_savedFound':0,'ra_savedDpi':0,'ra_savedComponent':'','ra_savedActivityClass':''})
         for source in ['apps','activities']:
             self.data.update({source+'.'+k:0 for k in ['loading','revision','count','offset','total','requestLimit','requestIconSize']})
             self.data[source+'.error']=''; self.data[source+'.packageName']=''
@@ -300,7 +297,9 @@ class Model:
             self.selected=(package,component,dpi)
             self.data.update(ra_selected=1,ra_package=package,ra_component=component,ra_dpi=dpi)
             # Publish only after successful store and selected state.
-            self.launches.append((self.selected,instance+'|'+component+'|'+str(dpi)+'|'+str(sequence)))
+            request=instance+'|'+component+'|'+str(dpi)+'|'+str(sequence)
+            self.data['ra_launchRequest']=request
+            self.launches.append((self.selected,request))
         elif op=='reset':self.data['ra_selected']=0;self.selected=None
     def publish(self,source,offset=0,total=8,package=None,revision=None):
         revision=self.get(source+'.revision')+1 if revision is None else revision
@@ -355,11 +354,46 @@ class Tests(unittest.TestCase):
         self.m.fail_save=False;self.m.run('confirm');self.assertEqual(self.m.launches[0][0],self.m.selected);self.assertEqual(self.m.records['p0'],('p0/p0.Activity0',320))
         self.m.run('confirm');self.assertEqual(len(self.m.launches),1)
         restored=Model(self.m.root);restored.data.update(ra_selected=1,ra_package='p0',ra_component='p0/p0.Activity0',ra_dpi=320);restored.run('initialize');self.assertFalse(restored.actions);self.assertFalse(restored.launches)
-    def test_reset_keeps_records_back_not_save(self):
+    def test_unauthed_restore_shows_picker_without_automatic_launch_and_confirm_is_fresh_save(self):
+        self.m.data.update(ra_selected=1,ra_package='p0',ra_component='p0/p0.Activity0',ra_dpi=320,ra_launchRequest='')
+        self.m.records['p0']=('p0/p0.Activity0',320)
+        self.m.run('initialize');self.m.publish('apps')
+        self.assertTrue(self.m.get('pickerVisible'));self.assertTrue(self.m.button_shapes())
+        host=self.m.root.find('.//ActivityHost')
+        self.assertFalse(self.m.eval(host.get('visibility')))
+        self.assertFalse(self.m.actions);self.assertFalse(self.m.launches)
+        self.choose_activity();self.tap_button('btn_confirm')
+        self.assertEqual([action.split('|')[1] for action in self.m.actions],['load','save'])
+        self.assertEqual(len(self.m.launches),1);self.assertTrue(self.m.get('ra_launchRequest'))
+        self.assertTrue(self.m.eval(host.get('visibility')));self.assertEqual(self.m.button_shapes(),[])
+    def test_live_selection_event_guard_ignores_tick_cached_visibility(self):
+        self.choose_activity()
+        original=self.m.get
+        frozen={name:original(name) for name in ['pickerVisible','liveSelection']}
+        self.m.get=lambda name:frozen[name] if name in frozen else original(name)
+        self.m.data.update(ra_selected=1,ra_launchRequest='instance|p0/p0.Activity0|320|5')
+        self.m.run('confirm');self.assertFalse(self.m.launches);self.assertFalse(self.m.records)
+        self.m.data['ra_launchRequest']=''
+        frozen.update(pickerVisible=0,liveSelection=1)
+        self.m.run('confirm');self.assertEqual(len(self.m.launches),1)
+        for element in self.m.root.iter():
+            if element.tag in {'IfCommand','VariableCommand','FunctionCommand'}:
+                for value in element.attrib.values():
+                    self.assertNotIn('#pickerVisible',value);self.assertNotIn('#liveSelection',value)
+    def test_restored_save_failure_stays_in_menu_without_launch_permit(self):
+        self.m.data.update(ra_selected=1,ra_component='p0/p0.Activity0',ra_dpi=320,ra_launchRequest='')
+        self.choose_activity();self.m.fail_save=True;self.tap_button('btn_confirm')
+        self.assertTrue(self.m.get('pickerVisible'));self.assertTrue(self.m.button_shapes())
+        self.assertEqual(self.m.get('ra_launchRequest'),'');self.assertFalse(self.m.launches)
+        self.assertFalse(self.m.eval(self.m.root.find('.//ActivityHost').get('visibility')))
+    def test_back_keeps_draft_unsaved_and_selected_has_no_reset_control(self):
         self.choose_activity();self.m.run('back');self.assertEqual(self.m.get('stage'),1);self.assertFalse(self.m.records)
-        self.m.publish('activities');self.m.data['chooseSlot']=0;self.m.run('pickRow');self.m.run('confirm');self.m.run('reselect');self.assertEqual(self.m.get('stage'),0);self.assertEqual(self.m.get('ra_selected'),0);self.assertIn('p0',self.m.records)
+        self.m.publish('activities');self.m.data['chooseSlot']=0;self.m.run('pickRow');self.m.run('confirm')
+        self.assertEqual(self.m.get('ra_selected'),1);self.assertIn('p0',self.m.records)
+        self.assertIsNone(self.m.root.find(".//Button[@name='btn_reselect']"))
+        self.assertIsNone(self.m.root.find("Function[@name='reselect']"))
     def test_physical_insets_not_double_added(self):
-        self.assertEqual(self.m.get('safeX'),302);self.assertEqual(self.m.get('pickerX'),350);self.assertEqual(self.m.get('navigation'),48)
+        self.assertEqual(self.m.get('safeX'),296);self.assertEqual(self.m.get('pickerX'),350);self.assertEqual(self.m.get('navigation'),48)
     def test_reinit_uses_native_nonce_floor(self):
         self.m.data.update(sequence=0,ra_actionSequence=10)
         self.m.run('initialize');self.m.publish('apps');self.m.data['chooseSlot']=0;self.m.run('pickRow')
@@ -399,10 +433,10 @@ class Tests(unittest.TestCase):
             self.assertEqual(self.m.elements[command.get('target')].tag,'Function')
     def test_old_button_names_reproduce_real_maml_noop(self):
         root=copy.deepcopy(self.m.root)
-        for name in ['back','confirm','reselect']:
+        for name in ['back','confirm']:
             root.find(".//Button[@name='btn_"+name+"']").set('name',name)
         legacy=Model(root);legacy.data.update(stage=2,draftPackage='p0',draftComponent='p0/p0.Activity0')
-        for name in ['back','confirm','reselect']:
+        for name in ['back','confirm']:
             self.assertEqual(legacy.elements[name].tag,'Button')
             legacy.run(name)
         self.assertEqual(legacy.get('stage'),2);self.assertFalse(legacy.actions)
@@ -436,12 +470,32 @@ class Tests(unittest.TestCase):
         self.m.touch('down',x,y);self.m.data['stage']=1
         self.m.touch('up',x,y);self.assertEqual(self.m.get('stage'),1)
         self.assertFalse(self.m.records);self.assertEqual(self.m.get('gestureActive'),0)
-    def test_confirm_and_reselect_actual_button_hit_paths(self):
+    def test_confirm_hit_path_selected_mode_has_no_touch_buttons(self):
         self.choose_activity();self.tap_button('btn_confirm')
         self.assertEqual(self.m.selected,('p0','p0/p0.Activity0',320))
         self.assertEqual(len(self.m.launches),1)
-        self.tap_button('btn_reselect');self.assertEqual(self.m.get('stage'),0)
-        self.assertEqual(self.m.get('ra_selected'),0);self.assertIn('p0',self.m.records)
+        self.assertEqual(self.m.button_shapes(),[])
+        self.assertIsNone(self.m.touch('down',500,100))
+        self.assertIsNone(self.m.touch('up',500,100))
+        self.assertEqual(self.m.get('ra_selected'),1);self.assertIn('p0',self.m.records)
+    def test_selected_host_full_safe_rect_black_background_without_controls(self):
+        host=self.m.root.find(".//ActivityHost")
+        for width,height,insets in [(976,596,(296,0,0,0)),(904,572,(180,7,5,9)),(596,976,(0,296,0,0))]:
+            with self.subTest(size=(width,height)):
+                left,top,right,bottom=insets  # Pro inset is synthetic, not a device claim.
+                self.m.data.update({'display.width':width,'display.height':height,'display.safeLeft':left,'display.safeTop':top,'display.safeRight':right,'display.safeBottom':bottom,'display.densityDpi':450,'ra_selected':1,'ra_launchRequest':'instance|p0/p0.Activity0|450|1'})
+                scale=self.m.get('scale')
+                self.assertAlmostEqual(self.m.get('safeX')/scale,left)
+                self.assertAlmostEqual(self.m.get('safeY')/scale,top)
+                self.assertAlmostEqual(self.m.eval(host.get('w'))/scale,width-left-right)
+                self.assertAlmostEqual(self.m.eval(host.get('h'))/scale,height-top-bottom)
+                self.assertEqual(host.get('x'),'0');self.assertEqual(host.get('y'),'0')
+                self.assertEqual(host.get('showControls'),'false');self.assertEqual(host.get('navigationGutterDp'),'0')
+                self.assertEqual(self.m.button_shapes(),[])
+        background=self.m.root.find("Rectangle[@name='background']")
+        self.assertEqual(background.get('fillColor'),'#FF000000')
+        self.assertEqual(self.m.eval(background.get('w')),1080)
+        self.assertAlmostEqual(self.m.eval(background.get('h'))/scale,height)
     def test_confirm_hit_path_keeps_readiness_guard(self):
         self.choose_activity();x,y=self.button_point('btn_confirm')
         self.m.touch('down',x,y);self.m.data['activities.loading']=1
@@ -489,7 +543,14 @@ def validate_structure(root):
     assert not any(v.get('name','').startswith('ra_') for v in root.findall('Var'))
     assert len(list(root.iter('ActivityHost')))==1
     host=next(root.iter('ActivityHost'))
-    for key,value in {'componentExp':'@ra_component','dpiExp':'#ra_dpi','userRequestExp':'@ra_launchRequest','instanceExp':'@ra_instance'}.items():assert host.get(key)==value
+    for key,value in {'componentExp':'@ra_component','dpiExp':'#ra_dpi','userRequestExp':'@ra_launchRequest','instanceExp':'@ra_instance','x':'0','y':'0','w':'#safeW','h':'#safeH','showControls':'false','navigationGutterDp':'0'}.items():assert host.get(key)==value
+    assert host.get('showControlsExp') is None
+    assert root.find("Rectangle[@name='background']").get('fillColor')=='#FF000000'
+    parents={child:parent for parent in root.iter() for child in parent}
+    selected=parents[host]
+    assert selected.get('x')=='#safeX' and selected.get('y')=='#safeY'
+    assert selected in list(root) and not list(selected.iter('Button'))
+    assert root.find(".//Button[@name='btn_reselect']") is None
     images=list(root.iter('Image'));assert len(images)==6 and all(i.get('srcType')=='BitmapVar' for i in images)
     assert not any('Widget' in e.tag for e in root.iter())
     assert all(e.get('name')=='ra_action' for e in root.iter() if e.get('persist'))

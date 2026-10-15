@@ -8,9 +8,7 @@ import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.view.SurfaceControl
-import android.view.SurfaceHolder
 import android.view.SurfaceView
-import android.view.View
 import hk.uwu.roxyhook.PackageScope
 import java.lang.reflect.Proxy
 import java.util.Collections
@@ -23,6 +21,7 @@ internal interface ShellActivityHostOwner {
     val bounds: Rect
     fun initialized()
     fun prepareLaunch(options: ActivityOptions)
+    fun dispatchLaunch(submit: () -> Unit)
     fun taskChanged(info: ActivityManager.RunningTaskInfo)
     fun taskClosed(reason: String)
 }
@@ -47,7 +46,17 @@ internal class ShellActivityHostAdapter(private val loader: ClassLoader) {
     private var factory: Any? = null
 
     fun hasHosts() = views.isNotEmpty()
-    fun available() = factory != null
+    fun available(context: Context): Boolean {
+        if (factory == null) runCatching {
+            // Hook installation may happen after asTaskViewFactory was already called. Resolve
+            // the same live DI graph instead of requiring a SystemUI restart or making a dummy.
+            val component =
+                requireNotNull(reflect.invoke(context.applicationContext, "getWMComponent"))
+            val optional = requireNotNull(reflect.invoke(component, "getTaskViewFactory"))
+            factory = reflect.invoke(optional, "orElse", null)
+        }
+        return factory != null
+    }
 
     fun PackageScope.install() {
         // Validate ABI before exposing a usable broker. Null-controller factory constructors
@@ -64,6 +73,9 @@ internal class ShellActivityHostAdapter(private val loader: ClassLoader) {
         reflect.method(viewClass, "onLocationChanged", Rect::class.java)
         reflect.field(controllerClass, "mTaskViewController")
         reflect.field(controllerClass, "mSurfaceControl")
+        reflect.method(controllerClass, "surfaceCreated", SurfaceControl::class.java)
+        reflect.method(controllerClass, "surfaceDestroyed")
+        reflect.method(controllerClass, "setWindowBounds", Rect::class.java)
         reflect.field(controllerClass, "mTaskInfo")
         reflect.method(factoryClass, "asTaskViewFactory").hook {
             after { if (!hasThrowable) factory = result }
@@ -114,11 +126,12 @@ internal class ShellActivityHostAdapter(private val loader: ClassLoader) {
                 controllers[controller] = owner
                 val listener =
                     Proxy.newProxyInstance(loader, arrayOf(listenerClass)) { proxy, method, args ->
-                        when (method.name) {
+                        try {
+                            when (method.name) {
                             "toString" -> "REAREye ActivityHost listener"
                             "hashCode" -> System.identityHashCode(proxy)
                             "equals" -> proxy === args?.getOrNull(0)
-                            "onInitialized" -> {
+                                "onInitialized", "onSurfaceAlreadyCreated" -> {
                                 owner.initialized(); null
                             }
 
@@ -143,6 +156,10 @@ internal class ShellActivityHostAdapter(private val loader: ClassLoader) {
                             }
 
                             else -> null
+                            }
+                        } catch (error: Throwable) {
+                            runCatching { owner.taskClosed("listener_${method.name}_failed:${error.javaClass.simpleName}") }
+                            null
                         }
                     }
                 reflect.invoke(view, "setListener", mainExecutor, listener)
@@ -155,23 +172,55 @@ internal class ShellActivityHostAdapter(private val loader: ClassLoader) {
         })
     }
 
-    fun attachSurface(view: Any) {
-        reflect.invoke(view, "surfaceCreated", (view as SurfaceView).holder)
+    fun attachSurface(view: Any, surface: SurfaceControl) {
+        check(surface.isValid) { "Host surface was destroyed before native attachment" }
+        val controller = requireNotNull(reflect.invoke(view, "getController"))
+        // Do not fabricate a SurfaceHolder lifecycle for an unattached View. The native Shell
+        // controller owns the task leash and reparents it to this cross-process host surface.
+        reflect.invoke(controller, "surfaceCreated", surface)
+        check(isSurfaceAttached(view, surface)) { "Native surface attachment was not retained" }
+    }
+
+    fun isSurfaceAttached(view: Any, surface: SurfaceControl): Boolean {
+        val controller = reflect.invoke(view, "getController") ?: return false
+        return surface.isValid && reflect.field(controllerClass, "mSurfaceControl")
+            .get(controller) === surface
+    }
+
+    fun retireSurface(view: Any?, surface: SurfaceControl) {
+        val controller = view?.let { reflect.invoke(it, "getController") }
+        val executor = controller?.let {
+            reflect.field(controllerClass, "mShellExecutor").get(it) as Executor
+        }
+        // Native surfaceDestroyed/surfaceCreated enqueue leash transactions. Keep the old
+        // reference valid until those earlier Shell-executor operations have completed.
+        if (executor == null) surface.release() else executor.execute { surface.release() }
+    }
+
+    fun afterSurfaceTransactions(view: Any, applied: () -> Unit) {
+        val controller = requireNotNull(reflect.invoke(view, "getController"))
+        val executor = reflect.field(controllerClass, "mShellExecutor").get(controller) as Executor
+        // surfaceCreated/setWindowBounds enqueue native leash work. Publish the ACK snapshot only
+        // after the earlier Shell operations and after returning to the session's main queue.
+        executor.execute { main.post { applied() } }
     }
 
     fun updateBounds(view: Any, rect: Rect) {
-        reflect.invoke(view, "onLocationChanged", Rect(rect))
+        val controller = requireNotNull(reflect.invoke(view, "getController"))
+        reflect.invoke(controller, "setWindowBounds", Rect(rect))
     }
 
-    fun launch(view: Any, pendingIntent: PendingIntent, options: ActivityOptions, rect: Rect) {
+    fun launch(view: Any, pendingIntent: PendingIntent, options: ActivityOptions) {
         val controller = reflect.invoke(view, "getController") ?: error("Missing task controller")
         val nativeController = reflect.field(controllerClass, "mTaskViewController").get(controller)
             ?: error("Missing native transitions")
         val owner = requireNotNull(controllers[controller])
         val executor = reflect.field(controllerClass, "mShellExecutor").get(controller) as Executor
-        val requestedBounds = Rect(rect)
         executor.execute {
             runCatching {
+                val requestedBounds = Rect(owner.bounds).also {
+                    check(!it.isEmpty) { "Launch bounds became empty" }
+                }
                 // Execute the native preparation, then register its cookie explicitly. This is
                 // not an after-hook whose exception could be swallowed while the launch continues.
                 reflect.invoke(
@@ -193,7 +242,15 @@ internal class ShellActivityHostAdapter(private val loader: ClassLoader) {
                 )
                 val cookie =
                     reflect.invoke(options, "getLaunchCookie") ?: error("Missing launch cookie")
-                reflect.invoke(nativeController, "startTaskView", transaction, controller, cookie)
+                owner.dispatchLaunch {
+                    reflect.invoke(
+                        nativeController,
+                        "startTaskView",
+                        transaction,
+                        controller,
+                        cookie
+                    )
+                }
             }.onFailure { owner.taskClosed("native_launch_failed:${it.javaClass.simpleName}") }
         }
     }
@@ -211,7 +268,7 @@ internal class ShellActivityHostAdapter(private val loader: ClassLoader) {
     }
 
     fun detachSurface(view: Any) {
-        reflect.invoke(view, "surfaceDestroyed", (view as SurfaceView).holder)
+        reflect.invoke(requireNotNull(reflect.invoke(view, "getController")), "surfaceDestroyed")
     }
 
 

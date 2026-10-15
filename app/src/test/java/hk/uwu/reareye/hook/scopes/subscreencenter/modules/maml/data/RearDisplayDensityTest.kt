@@ -31,7 +31,10 @@ class RearDisplayDensityTest {
             320.0,
             RearDisplayDataSource.schema.validate(real.snapshot).values["densityDpi"]
         )
-        assertEquals(296.0, real.snapshot.values["safeLeft"])
+        assertEquals(
+            0.0,
+            real.snapshot.values["safeLeft"]
+        ) // Unknown geometry has no guessed cutout.
     }
 
     @Test

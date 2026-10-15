@@ -27,7 +27,6 @@ import hk.uwu.roxyhook.RoxyHooker
 import hk.uwu.roxyhook.android.lifecycle.lifecycle
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 
 /** Privileged broker; XML never receives a TaskOrganizer, task token or trusted-overlay API. */
 class SystemUiActivityHostHook : RoxyHooker() {
@@ -82,7 +81,7 @@ internal class ActivityHostBroker(
 
     private fun enforceHost(): Int {
         check(!closed.get()) { "ActivityHost broker closed" }
-        val uid = Binder.getCallingUid()
+        val uid = getCallingUid()
         val expected =
             context.packageManager.getApplicationInfo(ActivityHostContract.HOST_PACKAGE, 0).uid
         if (uid != expected || uid / 100000 != Process.myUid() / 100000) {
@@ -112,21 +111,21 @@ internal class ActivityHostBroker(
             ) == true
         ) { "Rear display is not trusted" }
         check(!context.getSystemService(KeyguardManager::class.java).isKeyguardLocked) { "Device is locked" }
-        check(adapter.available()) { "Live Shell TaskViewFactory not captured; restart SystemUI" }
+        check(adapter.available(context)) { "Live Shell TaskViewFactory unavailable" }
         return synchronized(sessions) {
             check(sessions.size < ActivityHostContract.MAX_SESSIONS) { "ActivityHost session quota reached" }
             Session(uid, displayId, generation, callback).also { session ->
                 callback.asBinder().linkToDeath(session.death, 0)
                 sessions += session
                 main.post {
-                    if (!session.finished.get()) adapter.create(
-                        context.createDisplayContext(display),
-                        session
-                    ) { view ->
-                        if (session.finished.get()) adapter.release(
-                            view,
-                            false
-                        ) else session.carrierReady(view)
+                    if (!session.finished.get()) {
+                        session.startTimeout()
+                        runCatching {
+                            adapter.create(context.createDisplayContext(display), session) { view ->
+                                if (session.finished.get()) adapter.release(view, false)
+                                else session.carrierReady(view)
+                            }
+                        }.onFailure { session.dispose("carrier_create_failed:${it.javaClass.simpleName}") }
                     }
                 }
             }
@@ -147,15 +146,12 @@ internal class ActivityHostBroker(
     ) : IActivityHostSession.Stub(), ShellActivityHostOwner {
         val finished = AtomicBoolean()
         val death = IBinder.DeathRecipient { dispose("client_died") }
-        private val lastSequence = AtomicLong()
+        private val launchGuard = ActivityHostLaunchGuard<IBinder>()
         @Volatile
         override var surface: SurfaceControl? = null
             private set
-        @Volatile
-        override var bounds = Rect()
-            private set
-        @Volatile
-        private var clip = Rect()
+        override val bounds: Rect
+            get() = reconcile.desiredLayout()?.let(::Rect) ?: Rect()
         @Volatile
         private var carrier: Any? = null
         @Volatile
@@ -170,8 +166,8 @@ internal class ActivityHostBroker(
         private var pendingIntent: PendingIntent? = null
         @Volatile
         private var registry: IActivityHostTaskRegistry? = null
-        @Volatile
-        private var cookie: IBinder? = null
+        private val cookie: IBinder?
+            get() = launchGuard.cookie()
         @Volatile
         private var ownedTask = false
         @Volatile
@@ -183,26 +179,70 @@ internal class ActivityHostBroker(
         private var taskBounds = Rect()
         @Volatile
         private var existingTaskIds: Set<Int> = emptySet()
+        private var acknowledgedSequence = 0L
+        private var acknowledgedSurfaceEpoch = 0L
+        private val reconcile = ActivityHostReconciler<SurfaceControl, Rect>(
+            post = { action -> main.post { action() } },
+            attach = { value ->
+                surface = value; adapter.attachSurface(
+                requireNotNull(carrier),
+                value
+            )
+            },
+            detach = { carrier?.let(adapter::detachSurface) },
+            release = { value -> adapter.retireSurface(carrier, value) },
+            applyLayout = { value -> adapter.updateBounds(requireNotNull(carrier), value) },
+            applyVisibility = { value -> adapter.setVisible(requireNotNull(carrier), value) },
+            readyToLaunch = { maybeLaunch() },
+            failure = { phase, error -> dispose("${phase}_failed:${error.javaClass.simpleName}") },
+            afterApply = { applied ->
+                adapter.afterSurfaceTransactions(
+                    requireNotNull(carrier),
+                    applied
+                )
+            },
+            settled = { acknowledgeIfAligned() },
+        )
+        private var timeout: Runnable? = null
+
+        fun startTimeout() {
+            if (finished.get()) return
+            timeout?.let(main::removeCallbacks)
+            val check = object : Runnable {
+                override fun run() {
+                    if (finished.get()) return
+                    val phase = when {
+                        carrier == null -> "carrier"
+                        surface == null -> "surface"
+                        !initialized -> "initialized"
+                        component == null -> return // No user-authorized launch request yet.
+                        pendingIntent == null -> "launch_preflight"
+                        !launchQueued -> "launch_dispatch"
+                        !ownedTask -> "task_created"
+                        !configurationConfirmed -> "task_configuration"
+                        reconcile.appliedSnapshot() == null -> "layout_apply"
+                        taskBounds != bounds -> "layout_alignment"
+                        else -> return
+                    }
+                    dispose("timeout:$phase")
+                }
+            }
+            timeout = check
+            main.postDelayed(check, ActivityHostContract.STARTUP_PHASE_TIMEOUT_MS)
+        }
 
         private fun enforceOwner() {
-            if (Binder.getCallingUid() != ownerUid) throw SecurityException("ActivityHost session belongs to another UID")
+            if (getCallingUid() != ownerUid) throw SecurityException("ActivityHost session belongs to another UID")
             check(!finished.get()) { "ActivityHost session closed" }
         }
 
-        private fun acceptLayout(screenBounds: Rect, visibleBounds: Rect, sequence: Long): Boolean {
+        private fun validateLayout(screenBounds: Rect, visibleBounds: Rect, sequence: Long) {
             require(sequence > 0) { "Invalid layout sequence" }
             require(
                 !screenBounds.isEmpty && (screenBounds.right.toLong() - screenBounds.left.toLong()) in 2..ActivityHostContract.MAX_DIMENSION.toLong() &&
                         (screenBounds.bottom.toLong() - screenBounds.top.toLong()) in 2..ActivityHostContract.MAX_DIMENSION.toLong()
             ) { "Invalid task bounds" }
             require(!visibleBounds.isEmpty && screenBounds.contains(visibleBounds)) { "Invalid visible bounds" }
-            synchronized(this) {
-                if (sequence <= lastSequence.get()) return false
-                bounds = Rect(screenBounds)
-                clip = Rect(visibleBounds)
-                lastSequence.set(sequence)
-                return true
-            }
         }
 
         override fun setSurface(
@@ -213,52 +253,29 @@ internal class ActivityHostBroker(
         ) {
             enforceOwner()
             require(surface.isValid) { "Invalid ActivityHost Surface" }
-            if (!acceptLayout(screenBounds, visibleBounds, sequence)) {
-                surface.release(); return
-            }
-            val replacement = this.surface
-            this.surface = surface
-            main.post {
-                if (finished.get() || lastSequence.get() != sequence) {
-                    if (this.surface !== surface) surface.release()
-                    return@post
-                }
-                runCatching {
-                    carrier?.let { view ->
-                        if (replacement != null) adapter.detachSurface(view)
-                        adapter.attachSurface(view)
-                        adapter.updateBounds(view, bounds)
-                    }
-                    replacement?.release()
-                }.onFailure { dispose("surface_attach_failed") }
-            }
+            // A newer geometry message must not invalidate an independently queued surface.
+            validateLayout(screenBounds, visibleBounds, sequence)
+            reconcile.surface(surface, Rect(screenBounds), sequence)
         }
 
         override fun updateLayout(screenBounds: Rect, visibleBounds: Rect, sequence: Long) {
             enforceOwner()
-            if (!acceptLayout(screenBounds, visibleBounds, sequence)) return
-            main.post {
-                if (finished.get() || lastSequence.get() != sequence) return@post
-                runCatching {
-                    carrier?.let {
-                        adapter.updateBounds(
-                            it,
-                            bounds
-                        )
-                    }; acknowledgeIfAligned()
-                }
-                    .onFailure { dispose("layout_update_failed") }
-            }
+            validateLayout(screenBounds, visibleBounds, sequence)
+            reconcile.layout(Rect(screenBounds), sequence)
         }
 
         fun carrierReady(view: Any) {
+            if (finished.get()) {
+                adapter.release(view, false); return
+            }
             carrier = view
-            runCatching { if (surface != null) adapter.attachSurface(view) }
-                .onFailure { dispose("surface_initialization_failed") }
+            reconcile.carrierReady()
         }
 
         override fun initialized() {
-            initialized = true; maybeLaunch()
+            if (finished.get()) return
+            initialized = true
+            reconcile.initialized()
         }
 
         override fun launch(component: String, dpi: Int) {
@@ -271,6 +288,10 @@ internal class ActivityHostBroker(
                 check(this.component == null) { "Launch already requested" }
                 this.component = target
                 this.dpi = dpi
+            }
+            main.post {
+                timeout?.let(main::removeCallbacks)
+                startTimeout()
             }
             worker.execute {
                 runCatching {
@@ -290,11 +311,23 @@ internal class ActivityHostBroker(
                     registry = connected
                     val intent = Intent().setComponent(target)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-                    pendingIntent = PendingIntent.getActivity(
+                    val creatorOptions = ActivityOptions.makeBasic().apply {
+                        setPendingIntentCreatorBackgroundActivityStartMode(
+                            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
+                        )
+                    }
+                    val pending = PendingIntent.getActivity(
                         context, System.identityHashCode(this), intent,
-                        PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                        creatorOptions.toBundle()
                     )
-                    main.post { maybeLaunch() }
+                    synchronized(this) {
+                        if (finished.get()) {
+                            pending.cancel(); return@execute
+                        }
+                        pendingIntent = pending
+                    }
+                    reconcile.retryLaunch()
                 }.onFailure { dispose("launch_preflight_failed:${it.javaClass.simpleName}") }
             }
         }
@@ -304,8 +337,12 @@ internal class ActivityHostBroker(
             val pending = pendingIntent ?: return
             if (!initialized || bounds.isEmpty || launchQueued || finished.get()) return
             launchQueued = true
-            val options = ActivityOptions.makeBasic().setLaunchDisplayId(displayId)
-            runCatching { adapter.launch(view, pending, options, bounds) }
+            val options = ActivityOptions.makeBasic().setLaunchDisplayId(displayId).apply {
+                setPendingIntentBackgroundActivityStartMode(
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
+                )
+            }
+            runCatching { adapter.launch(view, pending, options) }
                 .onFailure { dispose("task_launch_failed") }
         }
 
@@ -313,14 +350,31 @@ internal class ActivityHostBroker(
             check(!finished.get()) { "Session closed before launch" }
             val launchCookie = ActivityHostReflection.invoke(options, "getLaunchCookie") as? IBinder
                 ?: error("Native Shell did not supply a launch cookie")
-            requireNotNull(registry).registerLaunch(
-                launchCookie, asBinder(),
-                requireNotNull(component).flattenToString(), displayId, dpi, Rect(bounds)
+            val connected = requireNotNull(registry)
+            val launchBounds = Rect(
+                ActivityHostReflection.invoke(options, "getLaunchBounds") as? Rect
+                    ?: error("Native Shell did not supply launch bounds")
             )
-            cookie = launchCookie
+            launchGuard.register(
+                launchCookie,
+                register = {
+                    connected.registerLaunch(
+                        launchCookie, asBinder(),
+                        requireNotNull(component).flattenToString(), displayId, dpi, launchBounds
+                    )
+                },
+                unregister = { connected.unregisterLaunch(it) })
+        }
+
+        override fun dispatchLaunch(submit: () -> Unit) {
+            launchGuard.dispatch(submit)
         }
 
         override fun taskChanged(info: ActivityManager.RunningTaskInfo) {
+            if (Looper.myLooper() != main.looper) {
+                main.post { taskChanged(info) }
+                return
+            }
             if (finished.get()) return
             val actualDisplayId = runCatching {
                 ActivityHostReflection.field(info.javaClass, "displayId").getInt(info)
@@ -328,16 +382,17 @@ internal class ActivityHostBroker(
             if (actualDisplayId != displayId || info.taskId in existingTaskIds) {
                 dispose("task_ownership_or_display_mismatch"); return
             }
-            if (!ownedTask) {
+            val firstTask = !ownedTask
+            if (firstTask) {
                 val cookies = runCatching {
                     ActivityHostReflection.field(info.javaClass, "launchCookies")
                         .get(info) as? List<*>
                 }.getOrNull()
-                if (cookie == null || cookies?.contains(cookie) != true) {
+                val launchCookie = cookie
+                if (launchCookie == null || cookies?.contains(launchCookie) != true) {
                     dispose("unverified_task_cookie"); return
                 }
                 ownedTask = true
-                val launchCookie = requireNotNull(cookie)
                 if (configurationCheckQueued.compareAndSet(false, true)) worker.execute {
                     runCatching {
                         check(registry?.isLaunchConfigured(launchCookie) == true) {
@@ -369,30 +424,43 @@ internal class ActivityHostBroker(
                         .get(configuration)
                 Rect(ActivityHostReflection.invoke(window, "getBounds") as Rect)
             }.getOrDefault(Rect())
+            // Native task creation can reset bounds/visibility; replay the latest desired state.
+            if (firstTask) reconcile.taskCreated()
             acknowledgeIfAligned()
         }
 
         private fun acknowledgeIfAligned() {
-            if (finished.get() || !ownedTask || !configurationConfirmed || taskBounds != bounds) return
+            if (finished.get() || !ownedTask || !configurationConfirmed) return
             if (context.getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
                 dispose("device_locked"); return
             }
-            runCatching { callback.onLayoutApplied(generation, lastSequence.get(), Rect(bounds)) }
-                .onFailure { dispose("client_callback_failed") }
+            runCatching {
+                reconcile.withAppliedSnapshot { snapshot ->
+                    if (finished.get() || taskBounds != snapshot.geometry || carrier == null) return@withAppliedSnapshot
+                    if (snapshot.sequence <= acknowledgedSequence &&
+                        snapshot.surfaceEpoch == acknowledgedSurfaceEpoch
+                    ) return@withAppliedSnapshot
+                    check(adapter.isSurfaceAttached(requireNotNull(carrier), snapshot.surface)) {
+                        "Native TaskView did not retain the applied host surface"
+                    }
+                    callback.onLayoutApplied(generation, snapshot.sequence, Rect(snapshot.geometry))
+                    acknowledgedSequence = snapshot.sequence
+                    acknowledgedSurfaceEpoch = snapshot.surfaceEpoch
+                    timeout?.let(main::removeCallbacks)
+                }
+            }.onFailure { dispose("layout_ack_failed:${it.javaClass.simpleName}") }
         }
 
         override fun taskClosed(reason: String) {
-            dispose(reason)
+            // Do not take the reconciler monitor from a synchronous native dispatch callback.
+            if (Looper.myLooper() == main.looper) dispose(reason)
+            else main.post { dispose(reason) }
         }
 
         override fun setVisible(visible: Boolean) {
             enforceOwner()
             wantedVisible = visible
-            main.post {
-                if (finished.get()) return@post
-                runCatching { carrier?.let { adapter.setVisible(it, visible) } }
-                    .onFailure { dispose("visibility_update_failed") }
-            }
+            reconcile.visible(wantedVisible)
         }
 
         override fun moveToFullscreen() {
@@ -407,12 +475,15 @@ internal class ActivityHostBroker(
         }
 
         fun dispose(reason: String) {
-            if (!finished.compareAndSet(false, true)) return
+            val cancellation = launchGuard.cancel() ?: return
+            finished.set(true)
+            reconcile.cancel()
             synchronized(sessions) { sessions.remove(this) }
             runCatching { callback.asBinder().unlinkToDeath(death, 0) }
             runCatching { callback.onClosed(generation, reason) }
-            pendingIntent?.cancel()
-            val launchCookie = cookie
+            synchronized(this) { pendingIntent?.cancel() }
+            timeout?.let(main::removeCallbacks)
+            val launchCookie = cancellation.cookie
             if (launchCookie != null && !worker.isShutdown) worker.execute {
                 runCatching {
                     registry?.unregisterLaunch(
@@ -422,8 +493,8 @@ internal class ActivityHostBroker(
             }
             main.post {
                 carrier?.let { runCatching { adapter.release(it, ownedTask) } }
+                reconcile.close()
                 carrier = null
-                surface?.release()
                 surface = null
             }
         }

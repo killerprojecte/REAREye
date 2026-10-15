@@ -40,6 +40,8 @@ data class ActivityHostInputs(
     val instance: String = "",
     val userRequest: String = "",
     val launchPermit: ActivityHostLaunchPermit? = null,
+    /** Passive embedding has no native buttons or input-consuming overlays. */
+    val showControls: Boolean = true,
 )
 
 fun interface MamlStringExpressionCompiler {

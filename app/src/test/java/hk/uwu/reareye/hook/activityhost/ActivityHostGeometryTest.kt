@@ -1,6 +1,8 @@
 package hk.uwu.reareye.hook.activityhost
 
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ActivityHostGeometryTest {
@@ -17,6 +19,23 @@ class ActivityHostGeometryTest {
         assertEquals(ActivityHostRect(100, 200, 148, 500), layout.leftNavigationBounds)
         assertEquals(ActivityHostRect(452, 200, 500, 500), layout.rightNavigationBounds)
         assertEquals(ActivityHostRect(148, 200, 452, 500), resolve()!!.taskBounds)
+    }
+
+    @Test
+    fun zeroGutterUsesCompleteSafeAreaAndEmptyNavigationBounds() {
+        val safe = ActivityHostRect(296, 0, 976, 596)
+        val layout = ActivityHostGeometry.resolve(safe, safe, 1f, 450f / 160f, 0f)!!
+        assertEquals(safe, layout.taskBounds)
+        assertEquals(safe, layout.visibleBounds)
+        assertEquals(ActivityHostRect(0, 0, 680, 596), layout.surfaceBounds)
+        assertEquals(ActivityHostRect(296, 0, 296, 596), layout.leftNavigationBounds)
+        assertEquals(ActivityHostRect(976, 0, 976, 596), layout.rightNavigationBounds)
+        assertEquals(
+            safe, ActivityHostGeometry.resolve(
+                safe, safe, 1f, 2f, 0f, listOf(0f, 0f, 680f, 596f)
+            )!!.taskBounds
+        )
+        assertNull(ActivityHostGeometry.resolve(safe, safe, 1f, 2f, 0f, listOf(0f, 0f, 681f, 596f)))
     }
 
     @Test
@@ -63,7 +82,7 @@ class ActivityHostGeometryTest {
         listOf(0f, -1f, Float.NaN, Float.POSITIVE_INFINITY).forEach {
             assertNull(ActivityHostGeometry.resolve(outer, outer, it, 1f, 24f))
             assertNull(ActivityHostGeometry.resolve(outer, outer, 1f, it, 24f))
-            assertNull(ActivityHostGeometry.resolve(outer, outer, 1f, 1f, it))
+            if (it != 0f) assertNull(ActivityHostGeometry.resolve(outer, outer, 1f, 1f, it))
         }
         assertNull(ActivityHostGeometry.resolve(outer, outer, 1f, 1f, 200f))
         assertNull(ActivityHostGeometry.resolve(outer, outer, 1f, Float.MAX_VALUE, Float.MAX_VALUE))

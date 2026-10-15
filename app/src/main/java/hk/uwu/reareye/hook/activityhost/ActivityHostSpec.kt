@@ -10,8 +10,8 @@ data class ActivityHostSpec(
     fun validate(): List<String> = buildList {
         if (parseComponent(component) == null) add("component must be an explicit package/class")
         if (!isValidDpi(dpi)) add("dpi must be 0 or in 120..960")
-        if (!navigationGutterDp.isFinite() || navigationGutterDp <= 0f) {
-            add("navigationGutterDp must be finite and positive")
+        if (!navigationGutterDp.isFinite() || navigationGutterDp < 0f) {
+            add("navigationGutterDp must be finite and nonnegative")
         }
         if (bounds != null) {
             try {

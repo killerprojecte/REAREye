@@ -44,10 +44,47 @@ internal class MamlActivityCardBridge(loader: ClassLoader) {
         fun getIssuedLaunch(
             root: Any, instance: String, component: String, dpi: Int,
             request: String
-        ): ActivityHostLaunchPermit? = synchronized(issuedLaunches) {
-            issuedLaunches[root]?.takeIf {
-                it.isValid() && it.instance == instance && it.component == component &&
+        ): ActivityHostLaunchPermit? {
+            val issued = synchronized(issuedLaunches) { issuedLaunches[root] }
+            if (issued != null && !issued.isValid()) {
+                // Called while collecting native inputs. A closed/paused task must return
+                // the passive template to its picker, not keep an expired launch string.
+                // Render mutex precedes the capability map lock, as in the publisher.
+                val mutex = requireNotNull(
+                    MamlHostBridge.method(root.javaClass, "getRenderMutex").invoke(root)
+                )
+                synchronized(mutex) {
+                    val expired = synchronized(issuedLaunches) {
+                        if (issuedLaunches[root] === issued && !issued.isValid()) {
+                            issuedLaunches.remove(root)
+                            true
+                        } else false
+                    }
+                    if (expired) {
+                        val vars = requireNotNull(
+                            MamlHostBridge.method(root.javaClass, "getVariables").invoke(root)
+                        )
+                        val current =
+                            MamlHostBridge.method(vars.javaClass, "get", String::class.java)
+                                .invoke(vars, "ra_launchRequest")
+                        if (current == issued.request) {
+                            MamlHostBridge.method(
+                                vars.javaClass,
+                                "put",
+                                String::class.java,
+                                Any::class.java
+                            )
+                                .invoke(vars, "ra_launchRequest", "")
+                            MamlHostBridge.method(root.javaClass, "requestUpdate").invoke(root)
+                        }
+                    }
+                }
+            }
+            return synchronized(issuedLaunches) {
+                issuedLaunches[root]?.takeIf {
+                    it.isValid() && it.instance == instance && it.component == component &&
                         it.dpi == dpi && it.request == request
+                }
             }
         }
 
