@@ -59,6 +59,7 @@ object ConfigKeys {
     const val BACKGROUND_LOCK_APPS = "background_lock_apps"
 
     const val MISC_HOOK_GMS_UNLOCK = "enable_misc_gms_unlock"
+    const val MISC_HOOK_SIGNATURE_PERMISSION_GRANT = "enable_misc_signature_permission_grant"
 
     // Mary agent. The API key is deliberately NOT here: RemotePreferences is shared with the hook
     // processes and is not a secret store. Only non-sensitive settings live in this group.
@@ -796,6 +797,12 @@ val REAREyeConfig = listOf(
                 titleRes = R.string.enable_misc_unlock_gms,
                 descriptionRes = R.string.category_misc_desc,
                 type = ConfigType.BooleanVal(defaultValue = false)
+            ),
+            ConfigItem(
+                key = ConfigKeys.MISC_HOOK_SIGNATURE_PERMISSION_GRANT,
+                titleRes = R.string.enable_misc_signature_permission_grant,
+                descriptionRes = R.string.enable_misc_signature_permission_grant_desc,
+                type = ConfigType.BooleanVal(defaultValue = true)
             )
         )
     )

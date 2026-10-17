@@ -2,6 +2,7 @@ package hk.uwu.reareye.ui.screen
 
 import android.content.Context
 import android.content.ContextWrapper
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -87,6 +88,7 @@ import hk.uwu.reareye.agent.ChatEntry
 import hk.uwu.reareye.agent.MaryViewModel
 import hk.uwu.reareye.agent.data.AgentSessionSummary
 import hk.uwu.reareye.agent.pendingInteractionToolRowId
+import hk.uwu.reareye.agent.voice.rememberMaryVoiceInput
 import hk.uwu.reareye.ui.components.ContextUsageButton
 import hk.uwu.reareye.ui.components.MaryComposer
 import hk.uwu.reareye.ui.components.MaryFollowConversationTail
@@ -106,10 +108,9 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.Delete
@@ -146,10 +147,23 @@ fun MaryScreen(
     val controller = owner.controller
     val uiState by controller.state.collectAsState()
 
-    val scrollBehavior = MiuixScrollBehavior()
+    // Deliberately no MiuixScrollBehavior here. A collapsing large title changes the bar's measured
+    // height, which the Scaffold reports as the top padding this screen feeds into the list's
+    // contentPadding — so every row would shift by the collapse distance while scrolling. A fixed
+    // bar keeps that padding constant.
     LaunchedEffect(controller) { controller.refreshConfiguration() }
     val listState = rememberLazyListState()
     var input by remember { mutableStateOf("") }
+    val voice = rememberMaryVoiceInput()
+    LaunchedEffect(voice.error) {
+        val message = voice.error ?: return@LaunchedEffect
+        Toast.makeText(
+            context,
+            context.getString(R.string.mary_voice_failed, message),
+            Toast.LENGTH_SHORT,
+        ).show()
+        voice.clearError()
+    }
     var showHistory by remember { mutableStateOf(false) }
     // Bumped after any session mutation so the sheet re-reads the store.
     var historyRevision by remember { mutableIntStateOf(0) }
@@ -168,9 +182,8 @@ fun MaryScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            SmallTopAppBar(
                 title = stringResource(R.string.mary_title),
-                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     MarySessionLockButton(
                         hasSession = controller.sessionId != null,
@@ -197,8 +210,7 @@ fun MaryScreen(
             bottomInset = maxOf(bottomInnerPadding, paddingValues.calculateBottomPadding()),
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(tailFollow.connection)
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
+                .nestedScroll(tailFollow.connection),
             content = { contentPaddingBottom ->
                 if (uiState.entries.isEmpty()) {
                     Column(
@@ -324,6 +336,9 @@ fun MaryScreen(
                         input = ""
                     },
                     onStop = { controller.cancel() },
+                    voicePhase = voice.phase,
+                    onStartVoice = { voice.start(input) { input = it } },
+                    onInterruptVoice = { voice.interrupt() },
                 )
 
                 MaryScrollToLatest(
@@ -336,7 +351,9 @@ fun MaryScreen(
                             tailFollow.followLatest()
                         }
                     },
-                    modifier = Modifier.align(Alignment.TopCenter).offset(y = (-56).dp),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-56).dp),
                 )
             }
         }
@@ -406,15 +423,20 @@ internal fun MarySessionLockButton(hasSession: Boolean, locked: Boolean, onLock:
     IconButton(
         onClick = onLock,
         enabled = hasSession && !locked,
-        modifier = Modifier.size(44.dp).testTag("mary-session-lock").semantics {
-            if (!hasSession || locked) disabled()
-        },
+        modifier = Modifier
+            .size(44.dp)
+            .testTag("mary-session-lock")
+            .semantics {
+                if (!hasSession || locked) disabled()
+            },
     ) {
         Icon(
             imageVector = if (locked) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
             contentDescription = stringResource(if (locked) R.string.mary_session_locked else R.string.mary_session_lock),
             tint = if (hasSession) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            modifier = Modifier.size(24.dp).testTag("mary-session-lock-icon"),
+            modifier = Modifier
+                .size(24.dp)
+                .testTag("mary-session-lock-icon"),
         )
     }
 }
@@ -694,7 +716,14 @@ private fun UserBubble(text: String) {
                 // Dense CJK text at the default line height is what makes a bubble feel cramped.
                 lineHeight = 24.sp,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomEnd = 6.dp, bottomStart = 18.dp))
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = 18.dp,
+                            topEnd = 18.dp,
+                            bottomEnd = 6.dp,
+                            bottomStart = 18.dp
+                        )
+                    )
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             )
         }
@@ -740,7 +769,14 @@ private fun AssistantBubble(
                         style = MiuixTheme.textStyles.body1,
                         lineHeight = 24.sp,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 18.dp, bottomEnd = 18.dp, bottomStart = 18.dp))
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 6.dp,
+                                    topEnd = 18.dp,
+                                    bottomEnd = 18.dp,
+                                    bottomStart = 18.dp
+                                )
+                            )
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                     )
                 } else {
@@ -750,7 +786,14 @@ private fun AssistantBubble(
                         markdown = text,
                         textColor = MiuixTheme.colorScheme.onSurfaceContainer,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 18.dp, bottomEnd = 18.dp, bottomStart = 18.dp))
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 6.dp,
+                                    topEnd = 18.dp,
+                                    bottomEnd = 18.dp,
+                                    bottomStart = 18.dp
+                                )
+                            )
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                     )
                 }
@@ -851,7 +894,12 @@ internal fun ReasoningCard(
         modifier = Modifier
             .fillMaxWidth()
             // Animates the height when the body is shown or hidden, instead of snapping.
-            .animateContentSize(animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing)),
+            .animateContentSize(
+                animationSpec = tween(
+                    durationMillis = 220,
+                    easing = LinearOutSlowInEasing
+                )
+            ),
         cornerRadius = 16.dp,
         colors = CardDefaults.defaultColors(
             color = MiuixTheme.colorScheme.surfaceContainer,
@@ -860,7 +908,9 @@ internal fun ReasoningCard(
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth().testTag("mary-reasoning-header-$stateKey")
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("mary-reasoning-header-$stateKey")
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,

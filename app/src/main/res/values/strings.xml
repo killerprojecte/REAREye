@@ -607,6 +607,8 @@
     <string name="quick_stop_success">Stopped %1$s</string>
     <string name="quick_stop_failed">Failed to stop %1$s</string>
     <string name="enable_misc_unlock_gms">Remove CN Google Play Services restrictions</string>
+    <string name="enable_misc_signature_permission_grant">Grant signature permissions to whitelisted apps</string>
+    <string name="enable_misc_signature_permission_grant_desc">Lets the whitelisted apps obtain permissions protected by the signature level</string>
     <string name="category_misc">Misc</string>
     <string name="category_misc_desc">Options unrelated to the rear screen</string>
     <string name="category_weather">Weather</string>
@@ -947,10 +949,15 @@
     <string name="mary_action_new_chat">New chat</string>
     <string name="mary_action_attach">Add attachment</string>
     <string name="mary_action_send">Send</string>
+    <string name="mary_action_voice">Voice input</string>
+    <string name="mary_action_voice_stop">Stop voice input</string>
+    <string name="mary_action_voice_finalizing">Finishing voice input</string>
     <string name="mary_greeting">Hi, I\'m Mary</string>
     <string name="mary_greeting_subtitle">Ask me anything about your rear screen</string>
     <string name="mary_shuffle">Shuffle</string>
     <string name="mary_input_hint">Type a message…</string>
+    <string name="mary_input_listening">Listening…</string>
+    <string name="mary_voice_failed">Voice input unavailable: %1$s</string>
     <string name="mary_capability_scope">Scope</string>
     <string name="mary_capability_insight">Insights</string>
     <string name="mary_capability_reminder">Reminders</string>

@@ -2,6 +2,7 @@ package hk.uwu.reareye.ui.components
 
 import hk.uwu.reareye.agent.ReasoningEffort
 import hk.uwu.reareye.agent.provider.ChatEvent
+import hk.uwu.reareye.agent.voice.MaryVoicePhase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -52,6 +53,85 @@ class MaryChatControlsTest {
         assertEquals(forward.first(), maryComposerGeometry(196, 96, 44, 44, -1f))
         assertEquals(forward.last(), maryComposerGeometry(196, 96, 44, 44, 2f))
         assertEquals(20, maryComposerGeometry(40, 44, 44, 44, 0f).inputInset)
+    }
+
+    @Test
+    fun emptyDraftShowsDictationAndAnyTextSwitchesToSend() {
+        assertEquals(MaryComposerAction.VOICE, maryComposerAction(false, MaryVoicePhase.IDLE, ""))
+        assertEquals(
+            MaryComposerAction.VOICE,
+            maryComposerAction(false, MaryVoicePhase.IDLE, "   ")
+        )
+        assertEquals(MaryComposerAction.VOICE, maryComposerAction(false, MaryVoicePhase.IDLE, "\n"))
+        // Typed and dictated drafts are indistinguishable here, so both show send.
+        assertEquals(MaryComposerAction.SEND, maryComposerAction(false, MaryVoicePhase.IDLE, "hi"))
+        assertEquals(
+            MaryComposerAction.SEND,
+            maryComposerAction(false, MaryVoicePhase.IDLE, "recognised")
+        )
+    }
+
+    @Test
+    fun aLiveRunOutranksEveryDictationPhase() {
+        assertEquals(
+            MaryComposerAction.STOP,
+            maryComposerAction(true, MaryVoicePhase.IDLE, "draft")
+        )
+        assertEquals(
+            MaryComposerAction.STOP,
+            maryComposerAction(true, MaryVoicePhase.RECORDING, "")
+        )
+        assertEquals(
+            MaryComposerAction.STOP,
+            maryComposerAction(true, MaryVoicePhase.FINALIZING, "")
+        )
+    }
+
+    @Test
+    fun dictationPhasesOutrankTheDraftSoItCannotBeSentMidFinalize() {
+        assertEquals(
+            MaryComposerAction.INTERRUPT,
+            maryComposerAction(false, MaryVoicePhase.RECORDING, "")
+        )
+        assertEquals(
+            MaryComposerAction.INTERRUPT,
+            maryComposerAction(false, MaryVoicePhase.RECORDING, "recognised")
+        )
+        // The punctuated final text is still in flight; sending a half-finalised draft is blocked.
+        assertEquals(
+            MaryComposerAction.FINALIZING,
+            maryComposerAction(false, MaryVoicePhase.FINALIZING, "recognised")
+        )
+        assertEquals(
+            MaryComposerAction.FINALIZING,
+            maryComposerAction(false, MaryVoicePhase.FINALIZING, "")
+        )
+    }
+
+    @Test
+    fun everyActionPaintsItsOwnGlyph() {
+        // The stop square means "stop the agent run"; dictation owns the waveform, and a session
+        // being finalised spins at its edge instead of bobbing.
+        assertEquals(MaryComposerGlyph.WAVEFORM, maryComposerGlyph(MaryComposerAction.VOICE))
+        assertEquals(MaryComposerGlyph.WAVEFORM, maryComposerGlyph(MaryComposerAction.INTERRUPT))
+        assertEquals(MaryComposerGlyph.SPINNER, maryComposerGlyph(MaryComposerAction.FINALIZING))
+        assertEquals(MaryComposerGlyph.ARROW, maryComposerGlyph(MaryComposerAction.SEND))
+        assertEquals(MaryComposerGlyph.STOP, maryComposerGlyph(MaryComposerAction.STOP))
+    }
+
+    @Test
+    fun listeningBarsBobButStayInsideTheirBox() {
+        // A full sweep of phases must never push a bar past the glyph box edge.
+        val phases = (0..64).map { it / 64f * 4f * Math.PI.toFloat() }
+        MaryComposerAction.entries.forEach { action ->
+            if (maryComposerGlyph(action) != MaryComposerGlyph.WAVEFORM) return@forEach
+            (0..4).forEach { index ->
+                phases.forEach { phase ->
+                    val scale = voiceWaveScale(1f, index, phase)
+                    assertTrue("bar $index clipped at phase $phase", scale in 0.2f..1f)
+                }
+            }
+        }
     }
 
     @Test

@@ -1,7 +1,12 @@
 package hk.uwu.reareye.ui.components
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -20,6 +25,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -40,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -95,6 +102,7 @@ import hk.uwu.reareye.agent.ReasoningEffort
 import hk.uwu.reareye.agent.ReasoningPolicy
 import hk.uwu.reareye.agent.interaction.ApprovalMode
 import hk.uwu.reareye.agent.provider.ChatEvent
+import hk.uwu.reareye.agent.voice.MaryVoicePhase
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
@@ -107,6 +115,7 @@ import top.yukonga.miuix.kmp.basic.rememberTooltipState
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.util.Locale
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -528,6 +537,41 @@ internal fun reasoningSliderProgressAt(
     return (if (rtl) 1f - fraction else fraction) * lastIndex.coerceAtLeast(0)
 }
 
+/** What the composer's single primary action does right now. */
+internal enum class MaryComposerAction { STOP, INTERRUPT, FINALIZING, VOICE, SEND }
+
+/**
+ * A live run outranks everything (only "stop" makes sense). A live dictation session outranks the
+ * draft text, because its only manual escape is to finish it — and while the final transcript is
+ * still in flight the action is inert so a half-finalised draft cannot be sent. Otherwise the draft
+ * decides: empty shows dictation, and any text — typed or dictated — shows send.
+ */
+internal fun maryComposerAction(
+    running: Boolean,
+    voice: MaryVoicePhase,
+    value: String
+): MaryComposerAction = when {
+    running -> MaryComposerAction.STOP
+    voice == MaryVoicePhase.FINALIZING -> MaryComposerAction.FINALIZING
+    voice == MaryVoicePhase.RECORDING -> MaryComposerAction.INTERRUPT
+    value.isBlank() -> MaryComposerAction.VOICE
+    else -> MaryComposerAction.SEND
+}
+
+/**
+ * Which glyph the primary action paints. Dictation — idle and recording alike — owns the waveform,
+ * only a live agent run gets the stop square, and a session that is being finalised spins at its
+ * edge. Keeping them apart is what makes "stop the run" and "stop dictating" visually distinct.
+ */
+internal enum class MaryComposerGlyph { STOP, ARROW, WAVEFORM, SPINNER }
+
+internal fun maryComposerGlyph(action: MaryComposerAction): MaryComposerGlyph = when (action) {
+    MaryComposerAction.STOP -> MaryComposerGlyph.STOP
+    MaryComposerAction.SEND -> MaryComposerGlyph.ARROW
+    MaryComposerAction.FINALIZING -> MaryComposerGlyph.SPINNER
+    MaryComposerAction.VOICE, MaryComposerAction.INTERRUPT -> MaryComposerGlyph.WAVEFORM
+}
+
 internal fun isMaryComposerExpanded(
     focused: Boolean,
     value: String,
@@ -557,6 +601,9 @@ internal fun MaryComposer(
     onStop: () -> Unit,
     approvalMode: ApprovalMode = ApprovalMode.ASK,
     onApprovalModeSelected: (ApprovalMode) -> Unit = {},
+    voicePhase: MaryVoicePhase = MaryVoicePhase.IDLE,
+    onStartVoice: () -> Unit = {},
+    onInterruptVoice: () -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
     var reasoningPickerOpen by remember { mutableStateOf(false) }
@@ -606,7 +653,22 @@ internal fun MaryComposer(
     }
     val canSend = value.isNotBlank() && !running && !locked && !configuring
     val send: () -> Unit = { onSend(); focusManager.clearFocus(); keyboard?.hide() }
-    val inputDescription = stringResource(R.string.mary_input_hint)
+    // With nothing typed, the primary action is dictation; a draft (typed or dictated) makes it
+    // send. While a dictation session is live the action is the interrupt that freezes its text.
+    val action = maryComposerAction(running, voicePhase, value)
+    val actionEnabled = when (action) {
+        MaryComposerAction.STOP -> true
+        MaryComposerAction.INTERRUPT -> !locked
+        // The session is already finishing; a second press would have nothing to do.
+        MaryComposerAction.FINALIZING -> false
+        MaryComposerAction.VOICE -> !locked && !configuring
+        MaryComposerAction.SEND -> canSend
+    }
+    val startVoice: () -> Unit = { focusManager.clearFocus(); keyboard?.hide(); onStartVoice() }
+    val inputDescription = stringResource(
+        if (voicePhase == MaryVoicePhase.RECORDING) R.string.mary_input_listening
+        else R.string.mary_input_hint
+    )
     // One reversible clock drives geometry; no input, action or picker is replaced on exit.
     val expansion =
         animateFloatAsState(if (expanded) 1f else 0f, tween(220), label = "maryComposerExpansion")
@@ -705,7 +767,14 @@ internal fun MaryComposer(
                 Spacer(Modifier.width(44.dp))
             }
             ComposerAttachButton(locked)
-            ComposerSendButton(running, canSend, send, onStop)
+            ComposerActionButton(
+                action = action,
+                enabled = actionEnabled,
+                onSend = send,
+                onStop = onStop,
+                onStartVoice = startVoice,
+                onInterruptVoice = onInterruptVoice,
+            )
         },
     ) { measurables, constraints ->
         val width = constraints.maxWidth
@@ -767,25 +836,39 @@ private fun ComposerAttachButton(locked: Boolean) {
 }
 
 @Composable
-private fun ComposerSendButton(
-    running: Boolean,
-    canSend: Boolean,
+private fun ComposerActionButton(
+    action: MaryComposerAction,
+    enabled: Boolean,
     onSend: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onStartVoice: () -> Unit,
+    onInterruptVoice: () -> Unit,
 ) {
-    val description =
-        stringResource(if (running) R.string.mary_action_stop else R.string.mary_action_send)
+    val description = stringResource(
+        when (action) {
+            MaryComposerAction.STOP -> R.string.mary_action_stop
+            MaryComposerAction.INTERRUPT -> R.string.mary_action_voice_stop
+            MaryComposerAction.FINALIZING -> R.string.mary_action_voice_finalizing
+            MaryComposerAction.VOICE -> R.string.mary_action_voice
+            MaryComposerAction.SEND -> R.string.mary_action_send
+        }
+    )
     // Keep an accessible touch target while making the visible circle proportional to the bar.
     Box(
         Modifier
             .size(44.dp)
             .testTag("mary-composer-send")
             .clip(CircleShape)
-            .clickable(
-                enabled = running || canSend,
-                role = Role.Button,
-                onClick = if (running) onStop else onSend
-            )
+            .clickable(enabled = enabled, role = Role.Button) {
+                when (action) {
+                    MaryComposerAction.STOP -> onStop()
+                    MaryComposerAction.INTERRUPT -> onInterruptVoice()
+                    // Inert while the final transcript is in flight; the button is disabled anyway.
+                    MaryComposerAction.FINALIZING -> Unit
+                    MaryComposerAction.VOICE -> onStartVoice()
+                    MaryComposerAction.SEND -> onSend()
+                }
+            }
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
@@ -796,13 +879,119 @@ private fun ComposerSendButton(
                 .background(MiuixTheme.colorScheme.primary, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = if (running) Icons.Filled.Stop else Icons.Outlined.ArrowUpward,
-                contentDescription = null, tint = MiuixTheme.colorScheme.onPrimary,
-                modifier = Modifier
-                    .size(20.dp)
-                    .testTag("mary-composer-send-icon")
+            val tint = MiuixTheme.colorScheme.onPrimary
+            when (val glyph = maryComposerGlyph(action)) {
+                MaryComposerGlyph.WAVEFORM -> VoiceWaveIcon(
+                    // Listening is the live session; the idle dictation glyph holds still.
+                    animated = action == MaryComposerAction.INTERRUPT,
+                    tint = tint,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .testTag("mary-composer-voice-icon")
+                )
+
+                MaryComposerGlyph.SPINNER -> ComposerEdgeSpinner(
+                    tint = tint,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("mary-composer-voice-spinner")
+                )
+
+                MaryComposerGlyph.ARROW, MaryComposerGlyph.STOP -> Icon(
+                    imageVector =
+                        if (glyph == MaryComposerGlyph.ARROW) Icons.Outlined.ArrowUpward
+                        else Icons.Filled.Stop,
+                    contentDescription = null, tint = tint,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .testTag("mary-composer-send-icon")
+                )
+            }
+        }
+    }
+}
+
+/**
+ * An equalizer-style audio glyph for dictation — deliberately not a microphone. Five thick
+ * round-capped bars span the whole box, which reads wider and heavier than the sparse `GraphicEq`
+ * outline it replaces. While [animated] (a live session) each bar bobs on its own staggered phase
+ * so the composer reads as "recording", not as the stop square that ends the conversation.
+ */
+@Composable
+private fun VoiceWaveIcon(animated: Boolean, tint: Color, modifier: Modifier = Modifier) {
+    // Reading the phase only inside the draw scope repaints the bars without recomposing.
+    val phase = if (animated) rememberVoiceWavePhase() else null
+    Canvas(modifier) {
+        val barWidth = size.width / (VoiceWaveWeights.size * 2 - 1)
+        val usableHeight = size.height - barWidth
+        val step = size.width / VoiceWaveWeights.size
+        val centerY = size.height / 2f
+        VoiceWaveWeights.forEachIndexed { index, weight ->
+            val scale = phase?.let { voiceWaveScale(weight, index, it.value) } ?: weight
+            val half = usableHeight * scale / 2f
+            val x = step * index + step / 2f
+            drawLine(
+                color = tint,
+                start = Offset(x, centerY - half),
+                end = Offset(x, centerY + half),
+                strokeWidth = barWidth,
+                cap = StrokeCap.Round,
             )
         }
+    }
+}
+
+/** One bar's height while listening: the resting shape plus a staggered sine bob, kept in-box. */
+internal fun voiceWaveScale(weight: Float, index: Int, phase: Float): Float {
+    val bob = 0.5f + 0.5f * sin(phase + index * VoiceWavePhaseStep)
+    return (weight * VoiceWaveRestWeight + bob * VoiceWaveBobWeight).coerceIn(0.2f, 1f)
+}
+
+@Composable
+private fun rememberVoiceWavePhase(): State<Float> {
+    val transition = rememberInfiniteTransition(label = "maryVoiceWave")
+    return transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart),
+        label = "maryVoiceWavePhase",
+    )
+}
+
+/** Symmetric bar heights, tallest in the middle; hoisted so drawing allocates nothing. */
+private val VoiceWaveWeights = listOf(0.42f, 0.78f, 1f, 0.78f, 0.42f)
+private const val VoiceWavePhaseStep = 0.9f
+private const val VoiceWaveRestWeight = 0.62f
+private const val VoiceWaveBobWeight = 0.38f
+
+/**
+ * An indeterminate arc sweeping along the action circle's edge, shown while a dictation session is
+ * being finalised. It replaces the bobbing waveform so "recording" and "finishing" are distinct.
+ */
+@Composable
+private fun ComposerEdgeSpinner(tint: Color, modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "maryComposerSpinner")
+    // Read inside the draw scope so the arc animates without recomposing the button.
+    val angle = transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
+        label = "maryComposerSpinnerAngle",
+    )
+    Canvas(modifier) {
+        val stroke = 2.5.dp.toPx()
+        val inset = stroke / 2f
+        drawArc(
+            color = tint,
+            startAngle = angle.value,
+            sweepAngle = 110f,
+            useCenter = false,
+            topLeft = Offset(inset, inset),
+            size = Size(
+                (size.width - stroke).coerceAtLeast(0f),
+                (size.height - stroke).coerceAtLeast(0f)
+            ),
+            style = Stroke(stroke, cap = StrokeCap.Round),
+        )
     }
 }

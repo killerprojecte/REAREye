@@ -32,7 +32,8 @@ roxy {
             "com.android.systemui",
             "com.miui.personalassistant",
             "com.miui.weather2",
-            "com.miui.gallery"
+            "com.miui.gallery",
+            "com.miui.voiceassist"
         )
     )
     nativeEntries.set(
@@ -392,4 +393,5 @@ dependencies {
     implementation(libs.lyricon.subscriber)
     implementation(libs.superlyric)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.mispeech)
 }

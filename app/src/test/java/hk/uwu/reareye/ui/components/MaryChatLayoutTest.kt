@@ -108,6 +108,7 @@ import hk.uwu.reareye.agent.model.AgentError
 import hk.uwu.reareye.agent.model.ToolResult
 import hk.uwu.reareye.agent.model.ToolRisk
 import hk.uwu.reareye.agent.provider.ProviderRequestDiagnostics
+import hk.uwu.reareye.agent.voice.MaryVoicePhase
 import hk.uwu.reareye.ui.screen.BlockExpansion
 import hk.uwu.reareye.ui.screen.MaryFloatingChatLayout
 import hk.uwu.reareye.ui.screen.MarySessionLockButton
@@ -174,24 +175,68 @@ class MaryChatLayoutTest {
     }
 
     @Test
-    fun emptyUnfocusedComposerIsCompactWithAttachLeftAndDisabledSendRight() {
+    fun emptyUnfocusedComposerIsCompactWithAttachLeftAndDictationRight() {
         composer()
         node("mary-composer-tools").assertDoesNotExist()
         // Picker owners stay mounted for focus stability, but must leave the accessibility tree.
         compose.onNodeWithTag("mary-reasoning-strength").assertDoesNotExist()
         compose.onNodeWithTag("mary-approval-mode").assertDoesNotExist()
-        node("mary-composer-send").assertIsNotEnabled()
+        // Nothing typed: the primary action is dictation, available immediately.
+        node("mary-composer-send").assertIsEnabled()
+        node("mary-composer-send-icon").assertDoesNotExist()
         val attach = bounds("mary-composer-attach")
         val input = bounds("mary-composer-input")
         val send = bounds("mary-composer-send")
         assertTrue(attach.right <= input.left)
         assertTrue(input.right <= send.left)
         assertEquals(attach.center.y.value, send.center.y.value, 0.5f)
-        assertSendIconCentered()
+        assertActionIconCentered("mary-composer-voice-icon", 20.dp)
         assertAboveNavigation()
         node("mary-composer-send").performClick()
         compose.runOnIdle { assertEquals(0, sent) }
         screenshot("compact.png")
+    }
+
+    @Test
+    fun listeningPaintsTheAnimatedWaveformNotTheStopSquare() {
+        // A live infinite animation is on screen, so drive the clock by hand instead of letting
+        // waitForIdle chase it.
+        compose.mainClock.autoAdvance = false
+        try {
+            composer(voicePhase = MaryVoicePhase.RECORDING)
+            node("mary-composer-send-icon").assertDoesNotExist()
+            node("mary-composer-voice-icon").assertIsDisplayed()
+            assertActionIconCentered("mary-composer-voice-icon", 20.dp)
+            // The bars themselves move between frames, so the session glyph is visibly live.
+            val before = node("mary-composer-voice-icon").captureToImage().toPixelMap()
+            compose.mainClock.advanceTimeBy(300)
+            val after = node("mary-composer-voice-icon").captureToImage().toPixelMap()
+            assertTrue(
+                "the dictation waveform must animate",
+                (0 until before.width).any { x ->
+                    (0 until before.height).any { y -> before[x, y] != after[x, y] }
+                }
+            )
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+    }
+
+    @Test
+    fun finalizingSwapsTheBobbingWaveformForAnEdgeSpinner() {
+        compose.mainClock.autoAdvance = false
+        try {
+            composer(initial = "你好，世界", voicePhase = MaryVoicePhase.FINALIZING)
+            // The waveform is gone while the punctuated final transcript is still in flight, so
+            // "recording" and "finishing" never look the same.
+            node("mary-composer-voice-icon").assertDoesNotExist()
+            node("mary-composer-send-icon").assertDoesNotExist()
+            node("mary-composer-voice-spinner").assertIsDisplayed()
+            // A second press would have nothing to do, so the action is inert.
+            node("mary-composer-send").assertIsNotEnabled()
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
     }
 
     @Test
@@ -207,7 +252,7 @@ class MaryChatLayoutTest {
         assertTrue(bounds("mary-composer-attach").right <= bounds("mary-approval-mode").left)
         assertTrue(bounds("mary-approval-mode").right <= bounds("mary-reasoning-strength").left)
         assertSquare("mary-reasoning-dial", 26.dp)
-        assertSendIconCentered()
+        assertActionIconCentered("mary-composer-voice-icon", 20.dp)
         assertAboveNavigation()
         screenshot("expanded.png")
     }
@@ -1186,7 +1231,9 @@ class MaryChatLayoutTest {
         node("mary-composer-input").performTextClearance()
         compose.runOnIdle { focusManager.clearFocus(force = true) }
         node("mary-composer-tools").assertDoesNotExist()
-        node("mary-composer-send").assertIsNotEnabled()
+        // An empty draft swaps send back to dictation, which stays available.
+        node("mary-composer-send").assertIsEnabled()
+        node("mary-composer-voice-icon").assertIsDisplayed()
         assertEquals(compactHeight.value, bounds("mary-composer").height.value, 0.5f)
         assertAboveNavigation()
     }
@@ -1316,9 +1363,10 @@ class MaryChatLayoutTest {
     }
 
     @Test
-    fun lightComposerIsWhiteAndEmptyDisabledSendStillHasRoundPrimaryFill() {
+    fun lightComposerIsWhiteAndEmptyDictationStillHasRoundPrimaryFill() {
         composer()
-        node("mary-composer-send").assertIsNotEnabled()
+        node("mary-composer-send").assertIsEnabled()
+        node("mary-composer-voice-icon").assertIsDisplayed()
         assertEquals(Color.White, surfaceContainer)
         val pixels = node("layout-container").captureToImage().toPixelMap()
         val container = bounds("layout-container")
@@ -1767,7 +1815,12 @@ class MaryChatLayoutTest {
         requireNotNull(activity).get().getString(resource), useUnmergedTree = true,
     )
 
-    private fun composer(initial: String = "", height: Dp = 640.dp, colorBands: Boolean = false) {
+    private fun composer(
+        initial: String = "",
+        height: Dp = 640.dp,
+        colorBands: Boolean = false,
+        voicePhase: MaryVoicePhase = MaryVoicePhase.IDLE
+    ) {
         val text = mutableStateOf(initial)
         host {
             focusManager = LocalFocusManager.current
@@ -1832,6 +1885,7 @@ class MaryChatLayoutTest {
                             onReasoningSelected = {},
                             onSend = { sent++ },
                             onStop = {},
+                            voicePhase = voicePhase,
                         )
                     },
                 )
@@ -1981,12 +2035,12 @@ class MaryChatLayoutTest {
         }
     }
 
-    private fun assertSendIconCentered() {
-        val send = bounds("mary-composer-send")
-        val icon = bounds("mary-composer-send-icon")
-        assertEquals(send.center.x.value, icon.center.x.value, 0.5f)
-        assertEquals(send.center.y.value, icon.center.y.value, 0.5f)
-        assertSquare("mary-composer-send-icon", 20.dp)
+    private fun assertActionIconCentered(tag: String, size: Dp) {
+        val action = bounds("mary-composer-send")
+        val icon = bounds(tag)
+        assertEquals(action.center.x.value, icon.center.x.value, 0.5f)
+        assertEquals(action.center.y.value, icon.center.y.value, 0.5f)
+        assertSquare(tag, size)
     }
 
     private fun assertSquare(tag: String, size: Dp) {

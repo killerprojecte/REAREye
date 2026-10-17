@@ -37,6 +37,7 @@ compose-icons = "2.2.1"
 sora-editor = "0.23.6"
 monarch-language-pack = "1.0.2"
 luajava = "4.1.0"
+mispeech = "50586a5a15"
 
 [plugins]
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
@@ -120,3 +121,4 @@ sora-language-monarch = { group = "io.github.Rosemoe.sora-editor", name = "langu
 monarch-language-pack = { module = "io.github.dingyi222666.monarch:monarch-language-pack", version.ref = "monarch-language-pack" }
 luajava-luajit = { group = "party.iroiro.luajava", name = "luajit", version.ref = "luajava" }
 luajava-android = { group = "party.iroiro.luajava", name = "android", version.ref = "luajava" }
+mispeech = { group = "com.github.killerprojecte", name = "MiSpeech", version.ref = "mispeech" }

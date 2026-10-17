@@ -607,6 +607,8 @@
     <string name="quick_stop_success">已终止 %1$s</string>
     <string name="quick_stop_failed">终止 %1$s 失败</string>
     <string name="enable_misc_unlock_gms">移除国行GMS服务的限制</string>
+    <string name="enable_misc_signature_permission_grant">向白名单应用授予签名级权限</string>
+    <string name="enable_misc_signature_permission_grant_desc">让白名单应用强制获取受 signature 保护级别保护的权限</string>
     <string name="category_misc">杂项</string>
     <string name="category_misc_desc">与背屏无关的选项</string>
     <string name="category_weather">天气</string>
@@ -947,10 +949,15 @@
     <string name="mary_action_new_chat">新对话</string>
     <string name="mary_action_attach">添加附件</string>
     <string name="mary_action_send">发送</string>
+    <string name="mary_action_voice">语音输入</string>
+    <string name="mary_action_voice_stop">停止语音输入</string>
+    <string name="mary_action_voice_finalizing">正在完成语音输入</string>
     <string name="mary_greeting">Hi，我是 Mary</string>
     <string name="mary_greeting_subtitle">问问我关于背屏的任何事</string>
     <string name="mary_shuffle">换一换</string>
     <string name="mary_input_hint">输入消息…</string>
+    <string name="mary_input_listening">正在聆听…</string>
+    <string name="mary_voice_failed">语音输入不可用：%1$s</string>
     <string name="mary_capability_scope">检索范围</string>
     <string name="mary_capability_insight">记忆洞察</string>
     <string name="mary_capability_reminder">提醒速览</string>
