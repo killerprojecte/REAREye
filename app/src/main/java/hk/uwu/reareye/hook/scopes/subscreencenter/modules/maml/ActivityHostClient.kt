@@ -44,6 +44,9 @@ internal class ActivityHostClient(private val context: Context, private val even
     private var death: IBinder.DeathRecipient? = null
     private var accepted = false
 
+    @Volatile
+    private var taskObservedGeneration = 0L
+
     fun open(displayId: Int, component: String, dpi: Int): Long {
         check(!disposed)
         val token = epoch.incrementAndGet()
@@ -59,7 +62,7 @@ internal class ActivityHostClient(private val context: Context, private val even
                 val bootstrap = object : IHookHostBridgeBootstrap.Stub() {
                     override fun onBinderReady(binder: IBinder?) {
                         // Capture before hopping to the executor; Binder identity does not cross threads.
-                        if (Binder.getCallingUid() != expectedUid || binder == null || !current(
+                        if (getCallingUid() != expectedUid || binder == null || !current(
                                 token
                             )
                         ) return
@@ -76,7 +79,7 @@ internal class ActivityHostClient(private val context: Context, private val even
                                 death = watcher
                                 val callback = object : IActivityHostCallback.Stub() {
                                     private fun trusted(generation: Long) =
-                                        Binder.getCallingUid() == expectedUid && generation == token && current(
+                                        getCallingUid() == expectedUid && generation == token && current(
                                             token
                                         )
 
@@ -103,6 +106,7 @@ internal class ActivityHostClient(private val context: Context, private val even
                                         displayId: Int
                                     ) {
                                         if (trusted(generation)) post(token) {
+                                            taskObservedGeneration = token
                                             events.onTaskCreated(
                                                 token,
                                                 taskId,
@@ -124,6 +128,17 @@ internal class ActivityHostClient(private val context: Context, private val even
                                 // The component/density is the immutable snapshot captured by this click.
                                 pendingLaunch = component to dpi
                                 post(token) { events.onOpened(token) }
+                                main.postDelayed({
+                                    if (current(token) && taskObservedGeneration != token) {
+                                        fail(
+                                            token,
+                                            "ActivityHost任务未出现：Surface初始化或应用启动超时"
+                                        )
+                                    }
+                                    // Broker allows 15s for the carrier, then a fresh 15s
+                                    // for authorized launch/configuration. Leave callback slack;
+                                    // the broker's phase-specific error should arrive first.
+                                }, ActivityHostContract.CLIENT_TASK_TIMEOUT_MS)
                             } catch (error: Exception) {
                                 fail(token, error.message ?: "ActivityHost ABI不可用")
                             }

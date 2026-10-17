@@ -1,8 +1,10 @@
 package hk.uwu.reareye.hook.scopes.subscreencenter.modules.maml
 
-import android.app.Application
 import android.graphics.Rect
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -41,8 +43,33 @@ class ActivityHostElementFactoryTest {
                 "abc",
                 "",
                 "0"
-            ).validationErrors.size >= 3
+            ).validationErrors.size >= 2
         )
+    }
+
+    @Test
+    fun controlsAreFixedBooleanAndZeroGutterIsExplicitlyValid() {
+        val factory = ActivityHostElementFactory()
+        fun sample(attrs: String) = factory.prepare(
+            xml("<ActivityHost component='example/.Main' $attrs/>"),
+            MamlStringExpressionCompiler { error("fixed controls must not compile expressions") }
+        ).evaluateInputs().activityHost!!
+
+        val fullscreen = sample("showControls='false' navigationGutterDp='0'")
+        assertFalse(fullscreen.showControls)
+        assertEquals(0f, fullscreen.gutterDp, 0f)
+        assertTrue(fullscreen.validationErrors.isEmpty())
+        assertTrue(sample("").showControls)
+        assertEquals(24f, sample("").gutterDp, 0f)
+        assertTrue(sample("showControls='0'").validationErrors.isNotEmpty())
+        assertTrue(sample("showControlsExp='false'").validationErrors.isNotEmpty())
+        assertTrue(sample("navigationGutterDp='-1'").validationErrors.isNotEmpty())
+        val element = xml("<ActivityHost component='example/.Main' showControls='false'/>")
+        val binding =
+            factory.prepare(element, MamlStringExpressionCompiler { error("no expressions") })
+        assertFalse(binding.evaluateInputs().activityHost!!.showControls)
+        element.setAttribute("showControls", "true")
+        assertTrue(binding.evaluateInputs().activityHost!!.showControls)
     }
 
     @Test

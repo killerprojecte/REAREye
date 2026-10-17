@@ -1,11 +1,10 @@
 package hk.uwu.reareye.hook.scopes.subscreencenter.modules.maml
 
-import android.app.KeyguardManager
 import android.app.ActivityOptions
+import android.app.KeyguardManager
 import android.content.ComponentName
-import android.content.Intent
-import hk.uwu.reareye.hook.activityhost.ActivityHostSpec
 import android.content.Context
+import android.content.Intent
 import android.graphics.Rect
 import android.view.Gravity
 import android.view.View
@@ -16,6 +15,7 @@ import android.widget.TextView
 import hk.uwu.reareye.hook.activityhost.ActivityHostGeometry
 import hk.uwu.reareye.hook.activityhost.ActivityHostLayout
 import hk.uwu.reareye.hook.activityhost.ActivityHostRect
+import hk.uwu.reareye.hook.activityhost.ActivityHostSpec
 import kotlin.math.roundToInt
 
 /** Main-thread UI owner. A click is required after every close, detach or pause. */
@@ -49,43 +49,71 @@ internal class ActivityHostBackend(private var inputs: ActivityHostInputs? = nul
     override fun createView(context: Context): View {
         check(!finished)
         view?.let { return it }
-        val host = ActivityHostSurfaceView(context)
+        val host =
+            ActivityHostSurfaceView(context).apply { setBackgroundColor(android.graphics.Color.BLACK) }
         view = host
         client = ActivityHostClient(context.applicationContext, this)
-        val panel = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-        }
-        controls = panel
-        status = TextView(context).apply { text = "点击启动独立应用任务"; gravity = Gravity.CENTER }
-        panel.addView(status)
-        panel.addView(Button(context).apply {
-            text = "启动 / 按当前 DPI 重建"; setOnClickListener { launchFromClick() }
-        })
-        panel.addView(Button(context).apply {
-            text = "主屏打开"; setOnClickListener { launchNormallyFromClick() }
-        })
-        host.addView(panel, FrameLayout.LayoutParams(-1, -1))
-        // Keep an explicit exit outside content. Native fullscreen handoff is not yet verified.
-        host.addView(
-            Button(context).apply {
-                fullscreenButton = this
-                text = "退出"; contentDescription = "结束嵌入任务并显示主屏打开入口"
-                setOnClickListener { if (opened) close("已结束嵌入；背屏全屏尚未验证，可在主屏正常打开") }
-            },
-            FrameLayout.LayoutParams(
-                (24f * context.resources.displayMetrics.density).roundToInt(),
-                -1,
-                Gravity.RIGHT
-            )
-        )
+        configurePresentation()
         host.onFrame = { tryExplicitLaunch(); frame() }
-        host.onSurfaceChanged = { needsSurface = true; revoke(); frame() }
-        host.onSurfaceLost = { close("Surface已释放；请重新启动") }
+        host.onSurfaceChanged = { needsSurface = true; last = null; revoke(); frame() }
+        host.onSurfaceLost = { close("Surface已释放；请重新选择并启动") }
         host.onAbiFailure = { reason -> abiError = reason; close(reason) }
-        host.onNavigation = { down -> navigating = down; stableFrames = 0; host.setInputHole(null) }
+        host.onNavigation = { down ->
+            navigating = down
+            last = null
+            revoke()
+            host.postInvalidateOnAnimation()
+        }
         return host
     }
 
+    private fun configurePresentation() {
+        val host = view ?: return
+        controls?.let(host::removeView)
+        fullscreenButton?.let(host::removeView)
+        controls = null
+        fullscreenButton = null
+        val context = host.context
+        val label = TextView(context).apply {
+            text =
+                if (inputs?.showControls == false) "正在等待用户启动请求" else "点击启动独立应用任务"
+            gravity = Gravity.CENTER
+            setTextColor(android.graphics.Color.WHITE)
+            isClickable = false
+            isFocusable = false
+        }
+        status = label
+        val panel = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            isClickable = false
+            isFocusable = false
+            addView(label)
+        }
+        controls = panel
+        if (inputs?.showControls != false) {
+            panel.addView(Button(context).apply {
+                text = "启动 / 按当前 DPI 重建"
+                setOnClickListener { launchFromClick() }
+            })
+            panel.addView(Button(context).apply {
+                text = "主屏打开"
+                setOnClickListener { launchNormallyFromClick() }
+            })
+            host.addView(
+                Button(context).apply {
+                    fullscreenButton = this
+                    text = "退出"
+                    contentDescription = "结束嵌入任务"
+                    setOnClickListener { if (opened) close("已结束嵌入") }
+                }, FrameLayout.LayoutParams(
+                    (24f * context.resources.displayMetrics.density).roundToInt(), -1, Gravity.RIGHT
+                )
+            )
+        }
+        host.addView(panel, FrameLayout.LayoutParams(-1, -1))
+        if (taskCreated) panel.visibility = View.GONE
+    }
     private fun active(): Boolean {
         val host = view ?: return false
         val locked =
@@ -105,7 +133,7 @@ internal class ActivityHostBackend(private var inputs: ActivityHostInputs? = nul
         if (!active()) return show(abiError ?: "卡片尚不可见、未恢复或屏幕已锁定")
         if (!host.inputAbiReady) return show("输入区域ABI不可用，拒绝启动")
         val display = host.display ?: return show("宿主display不可用")
-        close("正在连接SystemUI")
+        close("正在连接SystemUI", preserveLaunchPermit = true)
         requested = true
         generation = client?.open(display.displayId, snapshot.component, snapshot.dpi) ?: return
         show("正在连接SystemUI")
@@ -140,27 +168,42 @@ internal class ActivityHostBackend(private var inputs: ActivityHostInputs? = nul
     }
 
     override fun onInputsChanged(inputs: MamlBackendInputs) {
+        if (finished) {
+            inputs.activityHost?.launchPermit?.revoke()
+            return
+        }
         val next = inputs.activityHost
         val old = this.inputs
         this.inputs = next
-        // Component and fixed DPI are immutable within a session. Never automatically relaunch.
+        if (old?.showControls != next?.showControls) configurePresentation()
+        // Input snapshots include inherited Group visibility; its native callback may be later.
+        if (visible != inputs.visible) onVisibilityChanged(inputs.visible)
         if (requested && old != null && (old.component != next?.component || old.dpi != next?.dpi)) {
-            close("启动配置已变化；点击按新DPI重建")
+            old.launchPermit?.revoke()
+            close("启动配置已变化；请重新选择并启动", preserveLaunchPermit = true)
         } else if (old != next) {
-            last = null; revoke()
+            last = null
+            revoke()
         }
-        if (next?.validationErrors?.isNotEmpty() == true) close(next.validationErrors.joinToString("；"))
-        else if (next != null && next.launchPermit != null &&
+        next?.launchPermit?.let {
+            if (!it.isNewerThan(launchBoundary) || !inputs.visible) it.revoke()
+        }
+        if (next?.validationErrors?.isNotEmpty() == true) {
+            close(next.validationErrors.joinToString("；"))
+        } else if (next != null && inputs.visible && next.launchPermit != null &&
+            next.launchPermit.isNewerThan(launchBoundary) &&
             launches.accept(next.instance, next.component, next.dpi, next.userRequest) &&
             next.launchPermit.claim(next.instance, next.component, next.dpi, next.userRequest)
         ) {
-            // The permit is consumed before waiting for visibility/Surface, and survives no pause.
-            if (next.launchPermit.isNewerThan(launchBoundary) && initialized && resumed && attached && !finished) {
-                pendingLaunch = next
-                view?.postInvalidateOnAnimation()
-                tryExplicitLaunch()
-            } else next.launchPermit.revoke()
+            // A click can precede init/attachment. Actual hide/pause/detach invalidates it.
+            pendingLaunch = next
+            android.util.Log.d("REAREyeActivityHost", "user_request_accepted awaiting_host")
+            view?.postInvalidateOnAnimation()
+            view?.postDelayed({
+                if (pendingLaunch === next && !finished) close("宿主或输入区域初始化超时；请重新选择并启动")
+            }, 5000L)
         }
+        tryExplicitLaunch()
     }
 
     private fun tryExplicitLaunch() {
@@ -203,10 +246,15 @@ internal class ActivityHostBackend(private var inputs: ActivityHostInputs? = nul
     }
 
     override fun onAttachmentChanged(attached: Boolean) {
+        val wasAttached = this.attached
         this.attached = attached
-        if (!attached) {
-            suspendLaunches(); close("卡片已移除；点击重新启动")
-        } else tryExplicitLaunch()
+        if (!attached && wasAttached) {
+            suspendLaunches()
+            close("卡片已移除；请重新选择并启动")
+        } else if (attached) {
+            tryExplicitLaunch()
+            view?.postInvalidateOnAnimation()
+        }
     }
 
     override fun onSizeChanged(widthPx: Int, heightPx: Int) {
@@ -237,7 +285,13 @@ internal class ActivityHostBackend(private var inputs: ActivityHostInputs? = nul
 
     override fun onTaskCreated(generation: Long, taskId: Int, displayId: Int) {
         if (generation != this.generation || view?.display?.displayId != displayId) return
-        taskCreated = true; controls?.visibility = View.GONE; updateHole()
+        taskCreated = true
+        android.util.Log.d("REAREyeActivityHost", "task_created id=$taskId display=$displayId")
+        controls?.visibility = View.GONE
+        fullscreenButton?.visibility =
+            if (inputs?.showControls == false) View.GONE else View.VISIBLE
+        updateHole()
+        view?.postInvalidateOnAnimation()
     }
 
     override fun onClosed(generation: Long, reason: String) {
@@ -256,7 +310,7 @@ internal class ActivityHostBackend(private var inputs: ActivityHostInputs? = nul
         val spec = inputs ?: return
         // SurfaceControl cannot reproduce a rotated/perspective Android view safely.
         var node: View? = host
-        var sx = 1f;
+        var sx = 1f
         var sy = 1f
         while (node != null) {
             if (node.rotation != 0f || node.rotationX != 0f || node.rotationY != 0f || node.scaleX != 1f || node.scaleY != 1f || node.alpha < 0.99f) {
@@ -282,14 +336,16 @@ internal class ActivityHostBackend(private var inputs: ActivityHostInputs? = nul
         val rootScreenOrigin = IntArray(2); host.rootView.getLocationOnScreen(rootScreenOrigin)
         clip.offset(rootScreenOrigin[0], rootScreenOrigin[1])
         // Actual system safe rectangle, not an assumed camera position.
-        host.rootWindowInsets?.displayCutout?.let { cutout ->
-            val root = host.rootView
-            val rootOrigin = IntArray(2); root.getLocationOnScreen(rootOrigin)
+        // Display cutout insets are in physical display coordinates. The window
+        // may already start at x=296; adding its origin would exclude the camera twice.
+        host.display?.let { display ->
+            val cutout = display.cutout ?: return@let
+            val size = android.graphics.Point()
+            @Suppress("DEPRECATION")
+            display.getRealSize(size)
             val safe = Rect(
-                rootOrigin[0] + cutout.safeInsetLeft,
-                rootOrigin[1] + cutout.safeInsetTop,
-                rootOrigin[0] + root.width - cutout.safeInsetRight,
-                rootOrigin[1] + root.height - cutout.safeInsetBottom
+                cutout.safeInsetLeft, cutout.safeInsetTop,
+                size.x - cutout.safeInsetRight, size.y - cutout.safeInsetBottom
             )
             if (!clip.intersect(safe)) {
                 last = null; revoke(); client?.visible(generation, false); return
@@ -357,7 +413,11 @@ internal class ActivityHostBackend(private var inputs: ActivityHostInputs? = nul
         gate.revoke(); stableFrames = 0; view?.setInputHole(null)
     }
 
-    private fun close(reason: String) {
+    private fun close(reason: String, preserveLaunchPermit: Boolean = false) {
+        if (!preserveLaunchPermit) {
+            inputs?.launchPermit?.revoke()
+            pendingLaunch?.launchPermit?.revoke()
+        }
         pendingLaunch = null
         revoke(); client?.close(); opened = false; requested = false; taskCreated = false; last =
             null; needsSurface = true
@@ -365,7 +425,9 @@ internal class ActivityHostBackend(private var inputs: ActivityHostInputs? = nul
     }
 
     private fun show(reason: String) {
-        status?.text = reason; controls?.visibility = View.VISIBLE
+        android.util.Log.d("REAREyeActivityHost", reason)
+        status?.text = reason
+        controls?.visibility = View.VISIBLE
     }
 }
 

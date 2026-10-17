@@ -4,7 +4,12 @@ import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -214,6 +219,36 @@ class MamlActivityCardBridgeTest {
     }
 
     @Test
+    fun revokedLaunchReturnsPickerWithoutErasingSavedSelection() {
+        val root = root()
+        val instance = bridge.initialize(root, file)
+        command(root, instance, "save", 1, "example", "example/example.Main", 320)
+        val request = root.variables.get("ra_launchRequest") as String
+        val permit = MamlActivityCardBridge.getIssuedLaunch(
+            root,
+            instance,
+            "example/example.Main",
+            320,
+            request
+        )!!
+        permit.revoke()
+        assertNull(
+            MamlActivityCardBridge.getIssuedLaunch(
+                root,
+                instance,
+                "example/example.Main",
+                320,
+                request
+            )
+        )
+        assertEquals("", root.variables.get("ra_launchRequest"))
+        assertEquals(1.0, root.variables.getDouble("ra_selected"), 0.0)
+        assertEquals("example/example.Main", root.variables.get("ra_component"))
+        command(root, instance, "load", 2, "example")
+        assertEquals("example/example.Main", root.variables.get("ra_savedComponent"))
+    }
+
+    @Test
     fun activityPickerHitExcludesNavigationAndDoesNotRequireWidgetGesture() {
         val root = root().apply { gesture = null; scale = 0.5f }
         root.variables.put("ra_ready", 1.0); root.variables.put("ra_selected", 0.0)
@@ -224,6 +259,9 @@ class MamlActivityCardBridgeTest {
         assertTrue(adapter.pickerHit(root, 60f, 20f))
         assertFalse(adapter.pickerHit(root, 40f, 20f))
         root.variables.put("ra_selected", 1.0)
-        assertFalse(adapter.pickerHit(root, 60f, 20f))
+        root.variables.put("ra_launchRequest", "")
+        assertTrue(adapter.pickerHit(root, 60f, 20f)) // restored selection can be reselected
+        root.variables.put("ra_launchRequest", "user-authorized-request")
+        assertFalse(adapter.pickerHit(root, 60f, 20f)) // live app owns content input
     }
 }

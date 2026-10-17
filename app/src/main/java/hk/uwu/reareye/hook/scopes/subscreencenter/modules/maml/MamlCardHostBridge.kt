@@ -54,6 +54,8 @@ internal class MamlCardHostBridge(loader: ClassLoader) {
     private val getVariables = MamlHostBridge.method(rootClass, "getVariables")
     private val getNumber =
         MamlHostBridge.method(getVariables.returnType, "getDouble", String::class.java)
+    private val getObject =
+        MamlHostBridge.method(getVariables.returnType, "get", String::class.java)
     private val putNumber = MamlHostBridge.method(
         getVariables.returnType,
         "put",
@@ -126,7 +128,12 @@ internal class MamlCardHostBridge(loader: ClassLoader) {
             fun value(name: String) = (getNumber.invoke(variables, name) as Number).toDouble()
             val activity = activityPicker(root)
             val prefix = if (activity) "ra" else "rw"
-            if (value("${prefix}_ready") != 1.0 || value("${prefix}_selected") != 0.0 ||
+            val selected = value("${prefix}_selected")
+            // Restoring a selection is not a launch. Match the template's live-request
+            // state so the saved selection cannot leave its visible picker untouchable.
+            val menuOpen = selected == 0.0 || (activity && selected == 1.0 &&
+                    (getObject.invoke(variables, "ra_launchRequest") as? String).isNullOrEmpty())
+            if (value("${prefix}_ready") != 1.0 || !menuOpen ||
                 value("displayReady") != 1.0
             ) return@synchronized false
             if (!activity) {

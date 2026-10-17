@@ -26,30 +26,32 @@ class RearDisplayDataSourceTest {
         ).values
 
     @Test
-    fun absentCutoutUsesPhysical296PixelLeftFallback() {
-        val output = values(RearDisplayGeometry(1000, 600))
-        assertEquals(1000.0, output["width"])
-        assertEquals(600.0, output["height"])
-        assertEquals(296.0, output["safeLeft"])
-        assertEquals(0.0, output["safeTop"])
-        assertEquals(0.0, output["safeRight"])
-        assertEquals(0.0, output["safeBottom"])
-        assertTrue(
-            RearDisplayDataSource.snapshot(
-                RearDisplayGeometry(
-                    296,
-                    600
-                )
-            ) is MamlDataResult.Failure
-        )
-        assertTrue(
-            RearDisplayDataSource.snapshot(
-                RearDisplayGeometry(
-                    200,
-                    600
-                )
-            ) is MamlDataResult.Failure
-        )
+    fun absentCutoutFallbackOnlyAppliesToMeasuredMaxPoseRegardlessOfDensity() {
+        val max = RearDisplayGeometry(976, 596, device = "popsicle", model = "2509FPN0BC")
+        for (density in listOf(0, 320, 450, 600)) {
+            val output = values(max.copy(densityDpi = density))
+            assertEquals(976.0, output["width"])
+            assertEquals(596.0, output["height"])
+            assertEquals(296.0, output["safeLeft"])
+            assertEquals(0.0, output["safeTop"])
+            assertEquals(0.0, output["safeRight"])
+            assertEquals(0.0, output["safeBottom"])
+        }
+        for (unknown in listOf(
+            RearDisplayGeometry(904, 572), RearDisplayGeometry(976, 596),
+            max.copy(rotation = 1), max.copy(width = 596, height = 976),
+            max.copy(model = "unknown"), max.copy(device = "unknown")
+        )) assertEquals(0.0, values(unknown)["safeLeft"])
+        assertEquals(12.0, values(max.copy(insets = RearDisplayInsets(12, 0, 0, 0)))["safeLeft"])
+    }
+
+    @Test
+    fun injectedProCutoutIsRuntimeDataNotAnAssumedCameraBoundary() {
+        val output = values(RearDisplayGeometry(904, 572, RearDisplayInsets(180, 7, 5, 9)))
+        assertEquals(180.0, output["safeLeft"])
+        assertEquals(7.0, output["safeTop"])
+        assertEquals(5.0, output["safeRight"])
+        assertEquals(9.0, output["safeBottom"])
     }
 
     @Test
@@ -169,7 +171,7 @@ class RearDisplayDataSourceTest {
         var callbacks = 0
         val handle = source.query(MamlDataRequest(emptyMap())) {
             callbacks++
-            assertEquals(296.0, (it as MamlDataResult.Success).snapshot.values["safeLeft"])
+            assertEquals(0.0, (it as MamlDataResult.Success).snapshot.values["safeLeft"])
         }
         assertEquals(1, callbacks)
         handle.close(); handle.close() // Synchronous completion leaves no queued work to cancel.
@@ -182,6 +184,28 @@ class RearDisplayDataSourceTest {
         source.query(MamlDataRequest(emptyMap())) { callbacks++ }
         assertEquals(2, reads)
         assertEquals(2, callbacks)
+    }
+
+    @Test
+    fun everyQueryUsesCurrentRearSizeRotationAndCutout() {
+        var geometry = RearDisplayGeometry(976, 596, RearDisplayInsets(296, 0, 0, 0), 450)
+        val source = RearDisplayDataSource(context, RearDisplayGeometryProvider { geometry })
+        try {
+            source.query(MamlDataRequest(emptyMap())) {
+                assertEquals(296.0, (it as MamlDataResult.Success).snapshot.values["safeLeft"])
+            }
+            geometry = RearDisplayGeometry(596, 976, RearDisplayInsets(0, 296, 0, 0), 320, 1)
+            source.query(MamlDataRequest(emptyMap())) {
+                val output = (it as MamlDataResult.Success).snapshot.values
+                assertEquals(596.0, output["width"])
+                assertEquals(976.0, output["height"])
+                assertEquals(0.0, output["safeLeft"])
+                assertEquals(296.0, output["safeTop"])
+                assertEquals(320.0, output["densityDpi"])
+            }
+        } finally {
+            source.close()
+        }
     }
 
     @Test

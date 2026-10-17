@@ -1,6 +1,11 @@
 package hk.uwu.reareye.hook.activityhost
 
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class ActivityHostSpecTest {
@@ -35,7 +40,8 @@ class ActivityHostSpecTest {
         listOf(-1, 1, 119, 961, Int.MAX_VALUE).forEach {
             assertFalse(ActivityHostSpec("a/.B", it).validate().isEmpty())
         }
-        listOf(0f, -1f, Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY).forEach {
+        assertTrue(ActivityHostSpec("a/.B", navigationGutterDp = 0f).validate().isEmpty())
+        listOf(-1f, Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY).forEach {
             assertFalse(ActivityHostSpec("a/.B", navigationGutterDp = it).validate().isEmpty())
         }
     }

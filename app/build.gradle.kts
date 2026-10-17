@@ -32,7 +32,8 @@ roxy {
             "com.android.systemui",
             "com.miui.personalassistant",
             "com.miui.weather2",
-            "com.miui.gallery"
+            "com.miui.gallery",
+            "com.miui.voiceassist"
         )
     )
     nativeEntries.set(
@@ -54,7 +55,21 @@ fun runGitCommand(vararg args: String): String? = runCatching {
         }
 }.getOrNull()
 
+// SCRIPTING.md is the authoritative scripting API reference, written by hand at the repo root.
+// It is copied into assets at build time rather than transcribed into Kotlin, so the text the
+// generator hands to the model can never drift from the text that ships with the project.
+val scriptingDocDir = layout.buildDirectory.dir("generated/scriptingDoc").get().asFile
+val copyScriptingDoc = tasks.register<Copy>("copyScriptingDoc") {
+    from(rootProject.file("SCRIPTING.md"))
+    into(scriptingDocDir)
+    rename { "scripting.md" }
+}
+
 android {
+    sourceSets.getByName("main") {
+        assets.srcDir(scriptingDocDir)
+    }
+
     buildToolsVersion = gropify.project.android.buildToolsVersion
     namespace = gropify.project.app.packageName
     compileSdk {
@@ -153,7 +168,18 @@ android {
             }
         }
     }
+    testOptions {
+        // Resource APK requires the app's minSdk (36); keep existing SDK-35 JVM tests
+        // resource-free. Opt into only Mary UI tests with -PmaryUiResources=true.
+        unitTests.isIncludeAndroidResources = providers.gradleProperty("maryUiResources")
+            .map(String::toBoolean).getOrElse(false)
+    }
     lint { checkReleaseBuilds = false }
+}
+
+// The asset must exist before anything merges assets, so every variant's preBuild depends on it.
+tasks.matching { it.name == "preBuild" || it.name.endsWith("Assets") }.configureEach {
+    dependsOn(copyScriptingDoc)
 }
 
 tasks.register("assemblePublicBetaRelease") {
@@ -278,10 +304,29 @@ tasks.withType<KotlinJvmCompile>().configureEach {
 // Android 16 Robolectric uses SharedSecrets to create ApplicationSharedMemory on JDK 17+.
 tasks.withType<Test>().configureEach {
     jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+    val maryUiResources = providers.gradleProperty("maryUiResources")
+        .map(String::toBoolean).getOrElse(false)
+    systemProperty("mary.ui.resources", maryUiResources.toString())
+    systemProperty(
+        "mary.ui.screenshotDir",
+        rootProject.layout.buildDirectory.dir("reports/mary-ui").get().asFile.absolutePath
+    )
+    filter {
+        if (maryUiResources) {
+            includeTestsMatching("hk.uwu.reareye.ui.components.Mary*LayoutTest")
+            includeTestsMatching("hk.uwu.reareye.ui.components.MaryContextRingRenderingTest")
+            includeTestsMatching("hk.uwu.reareye.ui.components.markdown.*")
+        } else {
+            excludeTestsMatching("hk.uwu.reareye.ui.components.Mary*LayoutTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.components.MaryContextRingRenderingTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.components.markdown.*")
+        }
+    }
 }
 
 dependencies {
     implementation(project(":rear-widget-api"))
+    implementation(project(":agent-engine"))
     implementation(libs.androidx.compose.foundation.layout)
 
     implementation(libs.roxy.libxposed)
@@ -323,6 +368,10 @@ dependencies {
     implementation(libs.compose.icons.material.symbols.sharp.filled.cmp)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.markdown.renderer)
+    implementation(libs.markdown.code)
+    implementation(libs.markdown.coil3)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.miuix.ui)
     implementation(libs.miuix.preference)
     implementation(libs.miuix.icons)
@@ -344,4 +393,5 @@ dependencies {
     implementation(libs.lyricon.subscriber)
     implementation(libs.superlyric)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.mispeech)
 }

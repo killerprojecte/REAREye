@@ -3,7 +3,8 @@ package hk.uwu.reareye.hook.scopes.subscreencenter.modules.maml
 import android.graphics.Rect
 import android.view.SurfaceControl
 import hk.uwu.reareye.internal.activityhost.IActivityHostSession
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -92,4 +93,14 @@ class ActivityHostClientRaceTest {
     fun disposeDuringSetSurfaceDoesNotLaunch() = exercise(true, true)
     @Test
     fun currentGenerationStillLaunchesOnce() = exercise(false)
+
+    @Test
+    fun clientDeadlineAllowsBothBrokerPhasesAndCallbackDelivery() {
+        val contract = hk.uwu.reareye.hook.activityhost.ActivityHostContract
+        assertTrue(contract.CLIENT_TASK_TIMEOUT_MS > 2 * contract.STARTUP_PHASE_TIMEOUT_MS)
+        assertEquals(
+            contract.STARTUP_CALLBACK_SLACK_MS,
+            contract.CLIENT_TASK_TIMEOUT_MS - 2 * contract.STARTUP_PHASE_TIMEOUT_MS
+        )
+    }
 }
