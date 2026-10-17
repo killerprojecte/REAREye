@@ -49,18 +49,18 @@ object WidgetHtmlValidator {
         if (!html.contains("<!doctype html>", ignoreCase = true) &&
             !html.contains("<!DOCTYPE html>", ignoreCase = true)
         ) {
-            issues.error("missing_doctype", "文件开头缺少 <!doctype html>。")
+            issues.error("missing_doctype", "Missing <!doctype html> at the start of the file.")
         }
         if (!Regex("""<meta[^>]+name=["']viewport["']""", RegexOption.IGNORE_CASE).containsMatchIn(html)) {
             issues.error(
                 "missing_viewport",
-                "缺少 viewport meta；WebView 会退回 980 默认布局视口，显示会不全或发糊。",
+                "Missing viewport meta; WebView will use its default 980-wide layout viewport, causing clipping or blurry scaling.",
             )
         }
         if (!html.contains("cachePage")) {
             issues.warn(
                 "missing_cache_notice",
-                "文件头建议写清「引擎 cachePage=\"true\"，改文件后需清缓存/重装小部件才生效」。",
+                "Add a header reminder: the engine uses cachePage=\"true\"; clear the cache or reinstall the widget after editing the file.",
             )
         }
 
@@ -74,24 +74,26 @@ object WidgetHtmlValidator {
         if (external.isNotEmpty()) {
             issues.error(
                 "external_resource",
-                "出现疑似外部资源：${external.distinct().take(3).joinToString()}。页面必须完全离线可用。",
+                "Possible external resources: ${
+                    external.distinct().take(3).joinToString()
+                }. The page must work entirely offline.",
             )
         }
         if (Regex("""\bconsole\.log\s*\(""").containsMatchIn(html)) {
-            issues.error("debug_output", "交付版里残留了 console.log。")
+            issues.error("debug_output", "Release output still contains console.log.")
         }
         if (Regex("""\balert\s*\(""").containsMatchIn(html)) {
-            issues.error("debug_output", "交付版里残留了 alert。")
+            issues.error("debug_output", "Release output still contains alert.")
         }
 
         // --- lifecycle contract ----------------------------------------------------------
         listOf("__fit", "__setAod").forEach { hook ->
             if (!html.contains(hook)) {
-                issues.error("missing_hook", "缺少必须暴露到 window 的 $hook。")
+                issues.error("missing_hook", "Missing required window hook: $hook.")
             }
         }
         if (!html.contains("__DIAL_NO_ANIM")) {
-            issues.error("missing_dial_no_anim", "缺少 __DIAL_NO_ANIM 定格帧分支。")
+            issues.error("missing_dial_no_anim", "Missing __DIAL_NO_ANIM freeze-frame branch.")
         }
         checkTransformOrder(html, issues)
 
@@ -103,8 +105,10 @@ object WidgetHtmlValidator {
         if (cssPixelSizes.isNotEmpty()) {
             issues.error(
                 "hardcoded_css_px",
-                "CSS/代码里出现具体像素尺寸 ${cssPixelSizes.distinct().take(5).joinToString()}；" +
-                    "尺寸必须由 __fit 计算。",
+                "CSS/code contains concrete pixel dimensions: ${
+                    cssPixelSizes.distinct().take(5).joinToString()
+                }; " +
+                        "dimensions must be computed by __fit.",
             )
         }
 
@@ -113,7 +117,7 @@ object WidgetHtmlValidator {
         if (layout.isEmpty()) {
             issues.error(
                 "missing_layout",
-                "没有找到可解析的 LAYOUT 常量区；坐标必须集中声明在那里。",
+                "No parseable LAYOUT constants section found; declare all coordinates there.",
             )
             return WidgetValidation(issues)
         }
@@ -130,7 +134,7 @@ object WidgetHtmlValidator {
         if (violations.isNotEmpty()) {
             issues.error(
                 "safe_zone_violation",
-                "以下内容矩形越过安全区（要求 x ≥ ${camera + EDGE_MARGIN} 且 x+w ≤ ${baseWidth - EDGE_MARGIN}）：" +
+                "Content rectangles violate the safe zone (require x ≥ ${camera + EDGE_MARGIN} and x+w ≤ ${baseWidth - EDGE_MARGIN}): " +
                     violations.joinToString { "${it.name}(x=${it.rect.x}, w=${it.rect.w})" },
             )
         }
@@ -141,15 +145,18 @@ object WidgetHtmlValidator {
         // OUTER must cover the usable area.
         val outer = layout.firstOrNull { it.name.equals("OUTER", ignoreCase = true) }
         if (outer == null) {
-            issues.error("missing_outer", "LAYOUT 里没有 OUTER 底板；它是强制的外层容器。")
+            issues.error(
+                "missing_outer",
+                "LAYOUT has no OUTER backing plate; this outer container is mandatory."
+            )
         } else {
             val dw = abs(outer.rect.w - avail.w)
             val dh = abs(outer.rect.h - avail.h)
             if (dw > avail.w * 0.15 || dh > avail.h * 0.15) {
                 issues.error(
                     "outer_mismatch",
-                    "OUTER 是 ${outer.rect.w}×${outer.rect.h}，可用区是 ${avail.w}×${avail.h}，偏差过大。" +
-                        "OUTER 应铺满右侧可用画面。",
+                    "OUTER is ${outer.rect.w}×${outer.rect.h}, but the usable area is ${avail.w}×${avail.h}; the deviation is too large. " +
+                            "OUTER must fill the usable right-hand display.",
                 )
             }
         }
@@ -163,9 +170,9 @@ object WidgetHtmlValidator {
             if (fillW < MIN_FILL || fillH < MIN_FILL) {
                 issues.error(
                     "child_fill",
-                    "内容包围盒 ${child.w}×${child.h} 相对 OUTER ${outer.rect.w}×${outer.rect.h} 的" +
-                        "填充率是 ${(fillW * 100).roundToInt()}%×${(fillH * 100).roundToInt()}%，" +
-                        "要求双向 ≥80% —— 这通常是竖长条或细横条布局。",
+                    "Content bounding box ${child.w}×${child.h} fills OUTER ${outer.rect.w}×${outer.rect.h} by " +
+                            "${(fillW * 100).roundToInt()}%×${(fillH * 100).roundToInt()}%; " +
+                            "require ≥80% in both axes. This usually indicates a tall narrow or thin horizontal layout.",
                 )
             }
             val childRatio = child.w.toDouble() / child.h
@@ -174,8 +181,8 @@ object WidgetHtmlValidator {
             if (deviation > MAX_RATIO_DEVIATION) {
                 issues.error(
                     "child_ratio",
-                    "内容包围盒宽高比 ${"%.2f".format(childRatio)} 与可用区 " +
-                        "${"%.2f".format(availRatio)} 偏差 ${(deviation * 100).roundToInt()}%，超过 25%。",
+                    "Content bounding-box aspect ratio ${"%.2f".format(childRatio)} differs from the usable-area ratio " +
+                            "${"%.2f".format(availRatio)} by ${(deviation * 100).roundToInt()}%, exceeding 25%.",
                 )
             }
         }
@@ -186,7 +193,7 @@ object WidgetHtmlValidator {
             if (item.rect.w < MIN_TOUCH || item.rect.h < MIN_TOUCH) {
                 issues.error(
                     "touch_too_small",
-                    "可点矩形 ${item.name} 是 ${item.rect.w}×${item.rect.h}，小于 ${MIN_TOUCH}×${MIN_TOUCH}。",
+                    "Tappable rectangle ${item.name} is ${item.rect.w}×${item.rect.h}, below ${MIN_TOUCH}×${MIN_TOUCH}.",
                 )
             }
         }
@@ -196,7 +203,7 @@ object WidgetHtmlValidator {
                 if (gap in 0..<MIN_TOUCH_GAP) {
                     issues.error(
                         "touch_gap",
-                        "可点矩形 ${touches[i].name} 与 ${touches[j].name} 间距只有 $gap，要求 ≥$MIN_TOUCH_GAP。",
+                        "Tappable rectangles ${touches[i].name} and ${touches[j].name} are only $gap apart; require ≥$MIN_TOUCH_GAP.",
                     )
                 }
             }
@@ -219,7 +226,7 @@ object WidgetHtmlValidator {
         if (transform < widthAssign) {
             issues.error(
                 "transform_order",
-                "setTransform() 出现在 canvas 宽高赋值之前。改宽高会清零变换，顺序反了会整体缩放发糊。",
+                "setTransform() precedes canvas dimension assignments. Resizing resets transforms; this order causes blurry overall scaling.",
             )
         }
     }
@@ -267,7 +274,7 @@ object WidgetHtmlValidator {
         if (hits.isNotEmpty()) {
             issues.error(
                 "coordinate_literal",
-                "绘制函数里出现坐标字面量（${hits.joinToString()}）；坐标必须全部引用 LAYOUT。",
+                "Drawing functions contain coordinate literals (${hits.joinToString()}); all coordinates must reference LAYOUT.",
             )
         }
     }
@@ -283,14 +290,14 @@ object WidgetHtmlValidator {
         val head = html.take(2000)
 
         if (!head.contains("SAFE_ZONE:", ignoreCase = true)) {
-            issues.error("missing_header", "文件头缺少 SAFE_ZONE 注释行。")
+            issues.error("missing_header", "Missing SAFE_ZONE comment line in the file header.")
         } else {
             // The claimed BASE_CAM must match the computed one.
             val claimedCam = Regex("""SAFE_ZONE:\s*BASE_CAM=(\d+)""").find(head)?.groupValues?.get(1)?.toIntOrNull()
             if (claimedCam != null && claimedCam != camera) {
                 issues.error(
                     "header_mismatch",
-                    "头注释写 BASE_CAM=$claimedCam，实算是 $camera。",
+                    "Header claims BASE_CAM=$claimedCam; the computed value is $camera.",
                 )
             }
             val claimedMin = Regex("""min_x=(\d+)""").find(head)?.groupValues?.get(1)?.toIntOrNull()
@@ -300,13 +307,13 @@ object WidgetHtmlValidator {
             if (claimedMin != null && actualMin != null && claimedMin != actualMin) {
                 issues.error(
                     "header_mismatch",
-                    "头注释写 min_x=$claimedMin，LAYOUT 实算最小值是 $actualMin。",
+                    "Header claims min_x=$claimedMin; the minimum computed from LAYOUT is $actualMin.",
                 )
             }
         }
 
         if (!head.contains("AVAIL:", ignoreCase = true)) {
-            issues.error("missing_header", "文件头缺少 AVAIL 注释行。")
+            issues.error("missing_header", "Missing AVAIL comment line in the file header.")
         } else {
             val claimed = Regex("""AVAIL:\s*(\d+)x(\d+)""").find(head)
             if (claimed != null) {
@@ -315,14 +322,14 @@ object WidgetHtmlValidator {
                 if (cw != null && ch != null && (cw != avail.w || ch != avail.h)) {
                     issues.error(
                         "header_mismatch",
-                        "头注释写 AVAIL=${cw}x$ch，实算是 ${avail.w}x${avail.h}。",
+                        "Header claims AVAIL=${cw}x$ch; the computed size is ${avail.w}x${avail.h}.",
                     )
                 }
             }
         }
 
         if (!head.contains("TOUCH:", ignoreCase = true)) {
-            issues.error("missing_header", "文件头缺少 TOUCH 注释行。")
+            issues.error("missing_header", "Missing TOUCH comment line in the file header.")
         }
     }
 
@@ -425,13 +432,13 @@ class WidgetValidation(
     /** Human- and model-readable report, fed back when asking for a corrected revision. */
     fun report(): String = buildString {
         if (passed) {
-            append("校验通过")
+            append("Validation passed")
             if (warnings.isNotEmpty()) {
-                append("（有 ${warnings.size} 条提示）")
+                append(" (${warnings.size} warnings)")
             }
             return@buildString
         }
-        append("校验未通过，发现 ${errors.size} 个问题：\n")
+        append("Validation failed: ${errors.size} issues found:\n")
         errors.forEachIndexed { index, issue ->
             append("${index + 1}. [${issue.code}] ${issue.message}\n")
         }

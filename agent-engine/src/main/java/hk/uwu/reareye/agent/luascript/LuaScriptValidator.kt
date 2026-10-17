@@ -30,7 +30,7 @@ object LuaScriptValidator {
         val issues = mutableListOf<LuaScriptIssue>()
 
         if (source.isBlank()) {
-            issues.error("empty_source", "脚本内容为空。")
+            issues.error("empty_source", "Script source is empty.")
             return LuaScriptValidation(issues)
         }
 
@@ -44,27 +44,25 @@ object LuaScriptValidator {
         if (!Regex("""\breturn\b""").containsMatchIn(code)) {
             issues.error(
                 "missing_return",
-                "脚本没有 return。入口必须返回一个描述表（至少包含 providers），" +
-                    "否则运行时会报「Entry must return a metadata table」。",
+                "No return statement found. The entry must return a descriptor table; otherwise the runtime reports 'Entry must return a metadata table'.",
             )
         }
 
         if (!Regex("""\bproviders\b""").containsMatchIn(code)) {
-            issues.error(
+            issues.warn(
                 "missing_providers",
-                "脚本没有声明 providers。描述表里的 providers 是必填项，" +
-                    "没有 Provider 的脚本没有任何可调用的功能。",
+                "No providers declaration was found statically. The descriptor requires providers, but it may be constructed dynamically. Verify the returned descriptor with runtime validation before use.",
             )
         }
 
-        // Every `id = "..."` literal, including config entries. Both are required by the runtime to
-        // match the same pattern, so validating all of them cannot misfire.
+        // An arbitrary `id` may belong to provider output or an OPTIONS value. Without a Lua
+        // parser its structural role is unknown, so never reject it using a global regex.
         DECLARED_ID.findAll(code).forEach { match ->
             val id = match.groupValues[1]
             if (!ID.matches(id)) {
-                issues.error(
-                    "invalid_id",
-                    "id \"$id\" 不合法：只允许字母、数字、点、下划线和连字符。",
+                issues.warn(
+                    "unverified_id",
+                    "Found id literal '$id'. Descriptor/provider/config ids must use letters, digits, dots, underscores or hyphens; business data and option values need not. Verify its role at runtime.",
                 )
             }
         }
@@ -75,12 +73,14 @@ object LuaScriptValidator {
         if (Regex("""context\s*\.\s*root\b""").containsMatchIn(code)) {
             issues.warn(
                 "uses_root",
-                "脚本使用了 context.root:exec，运行时会以 root 执行命令；" +
-                    "这需要用户已在 Root 管理器中授予 REAREye。",
+                "The script references context.root and may execute root commands at runtime. REAREye needs authorization in the user's root manager.",
             )
         }
         if (Regex("""context\s*\.\s*http\b""").containsMatchIn(code)) {
-            issues.warn("uses_network", "脚本使用了 context.http，运行时会发起网络请求。")
+            issues.warn(
+                "uses_network",
+                "The script references context.http and may make network requests at runtime."
+            )
         }
 
         return LuaScriptValidation(issues)
@@ -190,16 +190,15 @@ class LuaScriptValidation(val issues: List<LuaScriptIssue>) {
     /** Report fed back to the model when a generation is rejected. */
     fun report(): String = buildString {
         if (passed) {
-            append("校验通过")
-            if (warnings.isNotEmpty()) append("（有 ${warnings.size} 条提示）")
-            return@buildString
-        }
-        append("脚本校验未通过，发现 ${errors.size} 个问题：\n")
-        errors.forEachIndexed { index, issue ->
-            append("${index + 1}. [${issue.code}] ${issue.message}\n")
+            append("Static validation passed; runtime descriptor validation is still required.\n")
+        } else {
+            append("Script validation failed with ${errors.size} errors:\n")
+            errors.forEachIndexed { index, issue ->
+                append("${index + 1}. [${issue.code}] ${issue.message}\n")
+            }
         }
         if (warnings.isNotEmpty()) {
-            append("\n另需注意：\n")
+            append("\nWarnings (${warnings.size}):\n")
             warnings.forEach { append("- [${it.code}] ${it.message}\n") }
         }
     }

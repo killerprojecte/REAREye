@@ -71,20 +71,23 @@ class LuaScriptValidatorTest {
         assertTrue("expected no errors, got ${result.report()}", result.passed)
     }
 
-    /**
-     * Config entries carry their own `id`, so a check that only looked at the top-level id would
-     * miss a malformed one.
-     */
+    /** A global id match is only advisory; the runtime knows which table is a config entry. */
     @Test
     fun `an invalid id inside a config entry is caught`() {
         val bad = withConfigs.replace("""id = "count"""", """id = "count total"""")
-        assertTrue("invalid_id" in codes(bad))
+        val result = LuaScriptValidator.validate(bad)
+        assertTrue("Static heuristics must defer to runtime validation", result.passed)
+        assertTrue("unverified_id" in result.warnings.map { it.code })
+        assertTrue(result.report().contains("runtime"))
     }
 
     @Test
     fun `an invalid declared id is caught`() {
         val bad = minimal.replace("""id = "hello_script"""", """id = "hello script"""")
-        assertTrue("invalid_id" in codes(bad))
+        val result = LuaScriptValidator.validate(bad)
+        assertTrue("Static heuristics must defer to runtime validation", result.passed)
+        assertTrue("unverified_id" in result.warnings.map { it.code })
+        assertTrue(result.report().contains("runtime"))
     }
 
     @Test
@@ -93,8 +96,11 @@ class LuaScriptValidatorTest {
     }
 
     @Test
-    fun `a script with no providers is rejected`() {
-        assertTrue("missing_providers" in codes("""return { id = "x", name = "X" }"""))
+    fun `providers not found statically warns for runtime verification`() {
+        val result = LuaScriptValidator.validate("""return { id = "x", name = "X" }""")
+        assertTrue(result.passed)
+        assertTrue("missing_providers" in result.warnings.map { it.code })
+        assertTrue(result.report().contains("missing_providers"))
     }
 
     @Test
@@ -145,7 +151,7 @@ class LuaScriptValidatorTest {
         val source = """local x = 1 -- no return, no providers"""
         val found = codes(source)
         assertTrue("expected missing_return, got $found", "missing_return" in found)
-        assertTrue("expected missing_providers, got $found", "missing_providers" in found)
+        assertTrue("missing_providers" in LuaScriptValidator.validate(source).warnings.map { it.code })
     }
 
     /**

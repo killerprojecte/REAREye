@@ -12,10 +12,12 @@ import hk.uwu.reareye.agent.model.ToolRisk
 import hk.uwu.reareye.agent.model.ToolSpec
 import hk.uwu.reareye.agent.provider.ChatEvent
 import hk.uwu.reareye.agent.provider.ChatRequest
-import hk.uwu.reareye.agent.provider.LlmProvider
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -30,13 +32,12 @@ class AgentLoopTest {
     /** Replays a scripted list of event batches, one batch per model call. */
     private class ScriptedProvider(
         private val batches: List<List<ChatEvent>>,
-    ) : LlmProvider {
-        override val id = "scripted"
+    ) : FixtureKoogExecutor() {
         var calls = 0
             private set
         val requests = mutableListOf<ChatRequest>()
 
-        override fun chat(request: ChatRequest): Flow<ChatEvent> = flow {
+        override fun fixture(request: ChatRequest): Flow<ChatEvent> = flow {
             requests += request
             val batch = batches.getOrElse(calls) { emptyList() }
             calls++
@@ -90,6 +91,103 @@ class AgentLoopTest {
         description = "Create a card",
         risk = ToolRisk.MUTATING,
     )
+
+    @Test
+    fun `suspended read checkpoint is recovery only and success replaces its own call`() = runTest {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val events = mutableListOf<AgentEvent>()
+        val tools = object : ToolEnvironment {
+            override fun availableTools() = listOf(readTool)
+            override suspend fun execute(toolName: String, args: JsonObject): ToolResult {
+                entered.complete(Unit)
+                release.await()
+                return ToolResult.ok("read succeeded")
+            }
+        }
+        val provider =
+            ScriptedProvider(listOf(toolTurn("read-1", readTool.name, "{}"), textTurn("done")))
+        val job = launch { AgentLoop(provider, tools, config()).run(history()).toList(events) }
+        entered.await()
+        val pending = events.filterIsInstance<AgentEvent.Checkpoint>().last()
+        assertTrue(pending.fullTranscript.last().content!!.contains("read was interrupted"))
+        assertFalse(
+            pending.fullTranscript.last().content!!.contains(
+                "side effects",
+                ignoreCase = true
+            )
+        )
+        assertTrue(events.none { it is AgentEvent.ToolResultEvent })
+        release.complete(Unit)
+        job.join()
+        val finished = events.filterIsInstance<AgentEvent.TurnFinished>().single()
+        assertEquals(
+            listOf("read succeeded"),
+            finished.fullTranscript.filter { it.role == MessageRole.TOOL }.map { it.content })
+        assertEquals("read-1", events.filterIsInstance<AgentEvent.ToolResultEvent>().single().id)
+        assertTrue(finished.fullTranscript.none { it.content.orEmpty().contains("interrupted") })
+    }
+
+    @Test
+    fun `cancelled tool retains risk specific recovery without replay`() = runTest {
+        for (spec in listOf(readTool, mutatingTool)) {
+            val entered = CompletableDeferred<Unit>()
+            val events = mutableListOf<AgentEvent>()
+            var executions = 0
+            val tools = object : ToolEnvironment {
+                override fun availableTools() = listOf(spec)
+                override suspend fun execute(toolName: String, args: JsonObject): ToolResult {
+                    executions++
+                    entered.complete(Unit)
+                    CompletableDeferred<Unit>().await()
+                    return ToolResult.ok("unreachable")
+                }
+            }
+            val provider = ScriptedProvider(listOf(toolTurn("cancelled", spec.name, "{}")))
+            val loop = AgentLoop(provider, tools, config(), approve = { true })
+            val job = launch { loop.run(history()).toList(events) }
+            entered.await()
+            job.cancelAndJoin()
+            val marker = events.filterIsInstance<AgentEvent.Checkpoint>()
+                .last().fullTranscript.last().content!!
+            assertEquals(
+                spec.risk != ToolRisk.READ_ONLY,
+                marker.contains("side effects are UNKNOWN")
+            )
+            assertTrue(marker.contains("Do not replay", ignoreCase = true))
+            assertEquals(1, executions)
+            assertEquals(1, provider.calls)
+            assertTrue(events.none { it is AgentEvent.ToolResultEvent || it is AgentEvent.TurnFinished || it is AgentEvent.Failed })
+        }
+    }
+
+    @Test
+    fun `approval pending and denied keep not executed marker without unknown effects`() = runTest {
+        val events = mutableListOf<AgentEvent>()
+        val tools = RecordingTools(listOf(mutatingTool))
+        val provider = ScriptedProvider(
+            listOf(
+                toolTurn("approval", mutatingTool.name, "{}"),
+                textTurn("denied")
+            )
+        )
+        val loop = AgentLoop(provider, tools, config(), approve = {
+            val marker = events.filterIsInstance<AgentEvent.Checkpoint>()
+                .last().fullTranscript.last().content!!
+            assertTrue(marker.contains("not executed"))
+            assertFalse(marker.contains("UNKNOWN"))
+            false
+        })
+        loop.run(history()).toList(events)
+        assertTrue(tools.invoked.isEmpty())
+        assertTrue(events.filterIsInstance<AgentEvent.Checkpoint>().none { checkpoint ->
+            checkpoint.fullTranscript.any { it.content.orEmpty().contains("UNKNOWN") }
+        })
+        assertTrue(
+            events.filterIsInstance<AgentEvent.ToolResultEvent>()
+                .single().result.content.contains("Approval denied")
+        )
+    }
 
     /**
      * A reply stopped by the output-token ceiling arrives as a perfectly normal completion
@@ -211,10 +309,10 @@ class AgentLoopTest {
         assertTrue(tools.invoked.isEmpty())
         val denial = events.filterIsInstance<AgentEvent.ToolResultEvent>().single().result
         assertTrue(denial.isError)
-        assertTrue(denial.content.contains("用户拒绝"))
+        assertTrue(denial.content.contains("Approval denied"))
 
         val toolMessage = provider.requests[1].messages.first { it.role == MessageRole.TOOL }
-        assertTrue(toolMessage.content!!.contains("用户拒绝"))
+        assertTrue(toolMessage.content!!.contains("Approval denied"))
     }
 
     @Test
@@ -302,14 +400,16 @@ class AgentLoopTest {
         val result = events.filterIsInstance<AgentEvent.ToolResultEvent>().single().result
         assertTrue(result.isError)
         assertTrue(result.content.contains("boom"))
+        assertTrue(result.content.contains("tool_failed"))
+        assertTrue(result.content.contains("The read failed"))
+        assertFalse(result.content.contains("side effects", ignoreCase = true))
         assertTrue(events.any { it is AgentEvent.TurnFinished })
     }
 
     @Test
     fun `a transport failure ends the turn with that error`() = runTest {
-        val failing = object : LlmProvider {
-            override val id = "failing"
-            override fun chat(request: ChatRequest): Flow<ChatEvent> = flow {
+        val failing = object : FixtureKoogExecutor() {
+            override fun fixture(request: ChatRequest): Flow<ChatEvent> = flow {
                 throw AgentError.Auth("bad key")
             }
         }
@@ -338,7 +438,7 @@ class AgentLoopTest {
 
         val toolMessage = provider.requests[1].messages.first { it.role == MessageRole.TOOL }
         assertTrue(toolMessage.content!!.length < huge.length)
-        assertTrue(toolMessage.content!!.contains("省略"))
+        assertTrue(toolMessage.content!!.contains("omitted"))
         // Both ends are kept: the tail is where a command's conclusion lives.
         assertTrue("should preserve the head", toolMessage.content!!.startsWith("xxx"))
         assertTrue("should preserve the tail", toolMessage.content!!.endsWith("xxx"))
@@ -417,7 +517,7 @@ class AgentLoopTest {
         loop.run(history()).toList()
 
         val content = provider.requests[1].messages.first { it.role == MessageRole.TOOL }.content!!
-        assertTrue("expected a marker", content.contains("省略"))
+        assertTrue("expected a marker", content.contains("omitted"))
         // With a one-character budget there is room for only a token or two of head, so the
         // assertion is on the shape: a non-empty head, then the marker, and no tail at all.
         assertTrue("expected a non-empty head", content.startsWith("abc"))
@@ -563,9 +663,10 @@ class AgentLoopTest {
         // the step ceiling, because a repeat cannot yield new information.
         val batches = List(20) { toolTurn("call_$it", "list_cards", "{}") }
         val provider = ScriptedProvider(batches)
+        val tools = RecordingTools(listOf(readTool))
         val loop = AgentLoop(
             provider = provider,
-            tools = RecordingTools(listOf(readTool)),
+            tools = tools,
             config = config(maxIterations = 20).copy(maxRepeatedToolCalls = 2),
         )
 
@@ -573,6 +674,7 @@ class AgentLoopTest {
 
         val failure = events.filterIsInstance<AgentEvent.Failed>().single().error
         assertTrue(failure.message!!.contains("重复"))
+        assertEquals("The rejected repetition must not execute side effects", 2, tools.invoked.size)
         assertTrue("should stop early, not at the ceiling", provider.calls < 20)
     }
 
@@ -599,8 +701,41 @@ class AgentLoopTest {
         val result = events.filterIsInstance<AgentEvent.ToolResultEvent>().single().result
         assertTrue(result.isError)
         assertTrue(result.content.contains("tool_timeout"))
+        assertTrue(result.content.contains("The read did not complete"))
+        assertFalse(result.content.contains("side effects", ignoreCase = true))
+        assertFalse(result.content.contains("tool_failed"))
         // The turn still completes and the model gets to react.
         assertTrue(events.any { it is AgentEvent.TurnFinished })
+    }
+
+    @Test
+    fun `mutating timeout keeps uncertain effects and prohibition on replay`() = runTest {
+        var executions = 0
+        val slow = object : ToolEnvironment {
+            override fun availableTools() = listOf(mutatingTool)
+            override suspend fun execute(toolName: String, args: JsonObject): ToolResult {
+                executions++
+                kotlinx.coroutines.delay(5_000)
+                return ToolResult.ok("unreachable")
+            }
+        }
+        val provider = ScriptedProvider(
+            listOf(
+                toolTurn("write-timeout", mutatingTool.name, "{}"),
+                textTurn("timeout")
+            )
+        )
+        val events =
+            AgentLoop(provider, slow, config().copy(toolTimeoutMs = 50), approve = { true }).run(
+                history()
+            ).toList()
+        val result = events.filterIsInstance<AgentEvent.ToolResultEvent>().single().result
+        assertTrue(result.isError)
+        assertTrue(result.content.contains("tool_timeout"))
+        assertTrue(result.content.contains("Side effects may be unknown"))
+        assertTrue(result.content.contains("Do not replay this action"))
+        assertTrue(events.any { it is AgentEvent.TurnFinished })
+        assertEquals(1, executions)
     }
 
     @Test

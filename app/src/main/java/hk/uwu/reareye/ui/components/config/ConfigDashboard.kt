@@ -17,7 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Refresh
@@ -130,6 +130,15 @@ internal fun ConfigDashboard(
                     DashboardTab.MORE -> R.string.configuration_title
                 }
             ),
+            navigationIcon = {
+                IconButton(onClick = onOpenStore) {
+                    Icon(
+                        Icons.Outlined.CloudDownload,
+                        contentDescription = stringResource(R.string.store_navigation),
+                    )
+                }
+            },
+            navigationIconPadding = 12.dp,
             actions = {
                 when (selectedTab) {
                     DashboardTab.CARDS -> IconButton(onClick = {
@@ -175,15 +184,6 @@ internal fun ConfigDashboard(
                             contentDescription = stringResource(R.string.config_more_search),
                         )
                     }
-                }
-
-                // The Rear Store lives one level above the tabs, so it stays reachable from
-                // every dashboard tab instead of occupying a bottom-bar slot of its own.
-                IconButton(onClick = onOpenStore) {
-                    Icon(
-                        Icons.Rounded.CloudDownload,
-                        contentDescription = stringResource(R.string.store_navigation),
-                    )
                 }
             },
             scrollBehavior = scrollBehavior,

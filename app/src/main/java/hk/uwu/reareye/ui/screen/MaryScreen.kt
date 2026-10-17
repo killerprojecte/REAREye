@@ -1,8 +1,9 @@
 package hk.uwu.reareye.ui.screen
 
-import androidx.compose.animation.AnimatedVisibility
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.activity.ComponentActivity
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -11,11 +12,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,47 +28,52 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -77,39 +81,41 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
+import androidx.lifecycle.ViewModelProvider
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.ChatEntry
-import hk.uwu.reareye.agent.MaryController
+import hk.uwu.reareye.agent.MaryViewModel
 import hk.uwu.reareye.agent.data.AgentSessionSummary
-import hk.uwu.reareye.agent.model.ToolRisk
-import hk.uwu.reareye.agent.tools.ReareyeToolEnvironment
+import hk.uwu.reareye.agent.pendingInteractionToolRowId
+import hk.uwu.reareye.ui.components.ContextUsageButton
+import hk.uwu.reareye.ui.components.MaryComposer
+import hk.uwu.reareye.ui.components.MaryFollowConversationTail
+import hk.uwu.reareye.ui.components.MaryQuestionCard
+import hk.uwu.reareye.ui.components.MaryScrollToLatest
+import hk.uwu.reareye.ui.components.MaryToolCallCard
+import hk.uwu.reareye.ui.components.MaryUsageSummary
+import hk.uwu.reareye.ui.components.ToolCardExpansion
 import hk.uwu.reareye.ui.components.markdown.MarkdownText
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import hk.uwu.reareye.ui.components.maryErrorColors
+import hk.uwu.reareye.ui.components.rememberMaryTailFollowState
+import hk.uwu.reareye.ui.components.scrollMaryConversationToBottom
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TextFieldDefaults
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Add
-import top.yukonga.miuix.kmp.icon.extended.AddCircle
 import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.ExpandLess
 import top.yukonga.miuix.kmp.icon.extended.ExpandMore
-import top.yukonga.miuix.kmp.icon.extended.Image
-import top.yukonga.miuix.kmp.icon.extended.Mic
 import top.yukonga.miuix.kmp.icon.extended.More
-import top.yukonga.miuix.kmp.icon.extended.Recent
 import top.yukonga.miuix.kmp.icon.extended.Refresh
-import top.yukonga.miuix.kmp.icon.extended.Search
-import top.yukonga.miuix.kmp.icon.extended.Send
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -132,13 +138,16 @@ fun MaryScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val controller = remember {
-        MaryController(context, scope, tools = ReareyeToolEnvironment(context))
+    val owner = remember(context) {
+        val activity = generateSequence<Context>(context) { (it as? ContextWrapper)?.baseContext }
+            .filterIsInstance<ComponentActivity>().first()
+        ViewModelProvider(activity)[MaryViewModel::class.java]
     }
+    val controller = owner.controller
     val uiState by controller.state.collectAsState()
 
-    // No collapsing large title here: the app bar stays a fixed height so content is laid out
-    // below it deterministically.
+    val scrollBehavior = MiuixScrollBehavior()
+    LaunchedEffect(controller) { controller.refreshConfiguration() }
     val listState = rememberLazyListState()
     var input by remember { mutableStateOf("") }
     var showHistory by remember { mutableStateOf(false) }
@@ -146,224 +155,189 @@ fun MaryScreen(
     var historyRevision by remember { mutableIntStateOf(0) }
     // Expansion of the collapsible rows, held here so it survives LazyColumn recycling.
     val blocks = rememberBlockExpansion()
+    val toolExpansion = remember(controller.sessionId) { ToolCardExpansion() }
+    val askToolRowId = pendingInteractionToolRowId(uiState.entries, uiState.pendingAsk?.toolCallId)
+    val approvalToolRowId =
+        pendingInteractionToolRowId(uiState.entries, uiState.pendingApproval?.request?.id)
 
-    // Auto-follow, but never steal the scroll from the user.
-    //
-    // Two traps to avoid here. First, an animated scroll per token never settles, so the follow
-    // scroll must be instant while text is arriving. Second, `atBottom` cannot be used as the
-    // follow condition: a streaming bubble grows continuously, so "the last item's bottom is inside
-    // the viewport" goes false the moment a reply gets taller than the remaining space — the loop
-    // then disables itself and the view stops following, which is exactly the bug this replaces.
-    // So the follow is only cancelled by a real drag upward while already away from the bottom.
-    val isAtBottom by remember {
-        derivedStateOf {
-            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
-            last.index >= listState.layoutInfo.totalItemsCount - 1 &&
-                last.offset + last.size <= listState.layoutInfo.viewportEndOffset + 4
-        }
-    }
-    var followTail by remember { mutableStateOf(true) }
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress }
-            .collect { scrolling ->
-                // Guarded by `isAtBottom` so this only fires for the user's own drag: the follow's
-                // own scrollToItem momentarily reports progress too, and must not cancel it.
-                if (scrolling && !isAtBottom) followTail = false
-            }
-    }
-    LaunchedEffect(isAtBottom) { if (isAtBottom) followTail = true }
-    LaunchedEffect(
-        uiState.entries.size,
-        uiState.entries.lastOrNull(),
-        uiState.running,
-        // The in-flight reasoning card is its own row and grows token by token, so the follow has
-        // to be driven by it too.
-        uiState.reasoning.length,
-    ) {
-        if (!followTail) return@LaunchedEffect
-
-        if (uiState.running) {
-            // Pin the *bottom* edge while text streams in.
-            //
-            // `scrollToItem(index)` aligns the item's top with the viewport top, so once the
-            // streaming bubble grows taller than the screen the scroll amount clamps and the view
-            // stops moving entirely. Scrolling by the exact leftover distance below the last item
-            // keeps the newest line visible instead.
-            val info = listState.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull()
-            if (last != null && last.index == info.totalItemsCount - 1) {
-                val leftover = last.offset + last.size - info.viewportEndOffset
-                if (leftover > 0) listState.scrollBy(leftover.toFloat())
-            }
-        } else {
-            val last = listState.layoutInfo.totalItemsCount - 1
-            if (last >= 0) listState.animateScrollToItem(last)
-        }
-    }
+    val tailFollow = rememberMaryTailFollowState(listState, controller.sessionId)
+    MaryFollowConversationTail(
+        listState, following = tailFollow.following, sessionKey = controller.sessionId,
+        canFollow = { tailFollow.following },
+    )
 
     Scaffold(
         topBar = {
-            // The title style follows the screen state:
-            //  - landing: a large title. Nothing is scrollable there, so it simply stays expanded.
-            //  - conversation: always the small single-line title.
-            if (uiState.entries.isEmpty()) {
-                TopAppBar(
-                    title = stringResource(R.string.mary_title),
-                    actions = {
-                        TopBarActions(
-                            onOpenHistory = { showHistory = true },
-                            onOpenSettings = onOpenSettings,
-                        )
-                    },
-                )
-            } else {
-                SmallTopAppBar(
-                    title = stringResource(R.string.mary_title),
-                    actions = {
-                        TopBarActions(
-                            onOpenHistory = { showHistory = true },
-                            onOpenSettings = onOpenSettings,
-                            onNewChat = { controller.newSession() },
-                        )
-                    },
-                )
-            }
+            TopAppBar(
+                title = stringResource(R.string.mary_title),
+                scrollBehavior = scrollBehavior,
+                navigationIcon = {
+                    MarySessionLockButton(
+                        hasSession = controller.sessionId != null,
+                        locked = uiState.locked,
+                        onLock = { controller.lockSession() },
+                    )
+                },
+                actions = {
+                    TopBarActions(
+                        summary = MaryUsageSummary(
+                            uiState.estimatedInputTokens.takeIf { uiState.entries.any { it is ChatEntry.UserMessage } },
+                            uiState.contextWindowTokens, uiState.usage
+                        ),
+                        onOpenHistory = { showHistory = true },
+                        onOpenSettings = onOpenSettings,
+                        onNewChat = if (uiState.entries.isNotEmpty()) ({ controller.newSession() }) else null,
+                    )
+                },
+            )
         },
         contentWindowInsets = WindowInsets.systemBars,
     ) { paddingValues ->
-        Column(
+        MaryFloatingChatLayout(
+            bottomInset = maxOf(bottomInnerPadding, paddingValues.calculateBottomPadding()),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-        ) {
-            if (uiState.entries.isEmpty()) {
-                LandingState(
-                    appBarInset = paddingValues.calculateTopPadding(),
-                    onPick = { controller.send(it) },
-                )
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .scrollEndHaptic()
-                        .overScrollVertical(),
-                    contentPadding = PaddingValues(
-                        top = paddingValues.calculateTopPadding() + 8.dp,
-                        bottom = 12.dp,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    overscrollEffect = null,
-                ) {
-                    itemsIndexed(uiState.entries, key = { _, entry -> entry.id }) { index, entry ->
-                        Column {
-                            // A new speaker gets a wider gap than a continuation, which is what
-                            // makes a turn boundary readable without any extra decoration.
-                            val previous = uiState.entries.getOrNull(index - 1)
-                            val startsTurn = previous == null ||
-                                speakerOf(previous) != speakerOf(entry)
-                            Spacer(modifier = Modifier.height(if (startsTurn && index > 0) 16.dp else 0.dp))
-                            EntryAppearance {
-                                when (entry) {
-                                    is ChatEntry.UserMessage -> UserBubble(entry.text)
-                                    is ChatEntry.AssistantMessage -> AssistantBubble(
-                                        text = entry.text,
-                                        streaming = entry.streaming,
-                                        reasoning = entry.reasoning,
-                                        blocks = blocks,
-                                        stateKey = entry.id,
-                                    )
-                                    is ChatEntry.ToolCall -> ToolCallCard(entry, blocks)
-                                    is ChatEntry.Notice -> NoticeCard(entry.text, entry.isError)
+                .nestedScroll(tailFollow.connection)
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            content = { contentPaddingBottom ->
+                if (uiState.entries.isEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = contentPaddingBottom),
+                    ) {
+                        LandingState(
+                            appBarInset = paddingValues.calculateTopPadding(),
+                            onPick = { controller.send(it) },
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .scrollEndHaptic()
+                            .overScrollVertical(),
+                        contentPadding = PaddingValues(
+                            top = paddingValues.calculateTopPadding() + 8.dp,
+                            bottom = contentPaddingBottom,
+                            start = 16.dp,
+                            end = 16.dp,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        overscrollEffect = null,
+                    ) {
+                        itemsIndexed(
+                            uiState.entries,
+                            key = { _, entry -> entry.id }) { index, entry ->
+                            Column {
+                                // A new speaker gets a wider gap than a continuation, which is what
+                                // makes a turn boundary readable without any extra decoration.
+                                val previous = uiState.entries.getOrNull(index - 1)
+                                val startsTurn = previous == null ||
+                                        speakerOf(previous) != speakerOf(entry)
+                                Spacer(modifier = Modifier.height(if (startsTurn && index > 0) 16.dp else 0.dp))
+                                EntryAppearance {
+                                    when (entry) {
+                                        is ChatEntry.UserMessage -> UserBubble(entry.text)
+                                        is ChatEntry.AssistantMessage -> AssistantBubble(
+                                            text = entry.text,
+                                            streaming = entry.streaming,
+                                            reasoning = entry.reasoning,
+                                            blocks = blocks,
+                                            stateKey = entry.id,
+                                        )
+
+                                        is ChatEntry.ToolCall -> MaryToolCallCard(
+                                            entry = entry,
+                                            expansion = toolExpansion,
+                                            pendingAsk = uiState.pendingAsk?.takeIf { entry.id == askToolRowId },
+                                            pendingApproval = uiState.pendingApproval?.takeIf { entry.id == approvalToolRowId },
+                                            onAnswer = { id, selected, custom ->
+                                                controller.answerAsk(
+                                                    id,
+                                                    selected,
+                                                    custom
+                                                )
+                                            },
+                                            onApprove = { id, allowed ->
+                                                controller.answerApproval(
+                                                    allowed,
+                                                    interactionId = id
+                                                )
+                                            },
+                                        )
+
+                                        is ChatEntry.Question -> MaryQuestionCard(
+                                            entry = entry,
+                                            expansion = toolExpansion,
+                                            pending = uiState.pendingAsk?.id == entry.request.id,
+                                            onAnswer = { id, selected, custom ->
+                                                controller.answerAsk(
+                                                    id,
+                                                    selected,
+                                                    custom
+                                                )
+                                            },
+                                        )
+
+                                        is ChatEntry.Notice -> NoticeCard(entry.text, entry.isError)
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // In-flight chain of thought, shown while the model is still thinking.
-                    //
-                    // Once the first answer token arrives the buffer is handed to the
-                    // AssistantMessage above, which renders it in the same place — so this row and
-                    // that card swap without the text jumping. Without this the thinking phase
-                    // renders nothing at all.
-                    if (uiState.reasoning.isNotBlank()) {
-                        item(key = "reasoning_live") {
-                            ReasoningCard(
-                                text = uiState.reasoning,
-                                streaming = true,
-                                stateKey = "reasoning_live",
-                                blocks = blocks,
-                            )
+                        // In-flight chain of thought, shown while the model is still thinking.
+                        //
+                        // Once the first answer token arrives the buffer is handed to the
+                        // AssistantMessage above, which renders it in the same place — so this row and
+                        // that card swap without the text jumping. Without this the thinking phase
+                        // renders nothing at all.
+                        if (uiState.reasoning.isNotBlank()) {
+                            item(key = "reasoning_live") {
+                                ReasoningCard(
+                                    text = uiState.reasoning,
+                                    streaming = true,
+                                    stateKey = "reasoning_live",
+                                    blocks = blocks,
+                                )
+                            }
                         }
                     }
                 }
-            }
-
-            uiState.pendingApproval?.let { pending ->
-                ApprovalCard(
-                    toolName = pending.request.name,
-                    argumentsJson = pending.request.argumentsJson,
-                    risk = pending.request.risk,
-                    onAllow = { controller.answerApproval(true) },
-                    onDeny = { controller.answerApproval(false) },
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-            }
-
+            },
+        ) {
             Box(modifier = Modifier.fillMaxWidth()) {
-                Composer(
+                MaryComposer(
                     value = input,
                     onValueChange = { input = it },
                     running = uiState.running,
+                    locked = uiState.locked,
+                    configuring = uiState.configuring,
+                    provider = uiState.provider,
+                    onReasoningSelected = { controller.setReasoningEffort(it) },
+                    approvalMode = uiState.approvalMode,
+                    onApprovalModeSelected = { controller.setApprovalMode(it) },
                     onSend = {
                         controller.send(input)
                         input = ""
                     },
                     onStop = { controller.cancel() },
-                    bottomPadding = paddingValues.calculateBottomPadding() + bottomInnerPadding,
                 )
 
-                // Shown only once the user has scrolled away from the tail, so the state that
-                // paused auto-follow is visible and reversible.
-                val jumpVisible = !followTail && uiState.entries.isNotEmpty()
-                val jumpProgress by animateFloatAsState(
-                    targetValue = if (jumpVisible) 1f else 0f,
-                    animationSpec = tween(durationMillis = 180, easing = LinearOutSlowInEasing),
-                    label = "jumpToLatest",
-                )
-                if (jumpProgress > 0.01f) {
-                    Surface(
-                        onClick = {
-                            followTail = true
-                            scope.launch {
-                                val last = listState.layoutInfo.totalItemsCount - 1
-                                if (last >= 0) listState.animateScrollToItem(last)
-                            }
-                        },
-                        shape = CircleShape,
-                        color = MiuixTheme.colorScheme.surfaceContainerHighest,
-                        shadowElevation = 3.dp,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .offset(y = (-46).dp)
-                            .size(38.dp)
-                            .graphicsLayer {
-                                alpha = jumpProgress
-                                scaleX = 0.85f + 0.15f * jumpProgress
-                                scaleY = 0.85f + 0.15f * jumpProgress
-                            },
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.ArrowDownward,
-                                contentDescription = stringResource(R.string.mary_scroll_to_bottom),
-                                tint = MiuixTheme.colorScheme.onSurfaceContainerHighest,
-                                modifier = Modifier.size(20.dp),
-                            )
+                MaryScrollToLatest(
+                    awayFromBottom = !tailFollow.following && uiState.entries.isNotEmpty(),
+                    scrolling = listState.isScrollInProgress,
+                    sessionKey = controller.sessionId,
+                    onClick = {
+                        scope.launch {
+                            scrollMaryConversationToBottom(listState)
+                            tailFollow.followLatest()
                         }
-                    }
-                }
+                    },
+                    modifier = Modifier.align(Alignment.TopCenter).offset(y = (-56).dp),
+                )
             }
         }
     }
@@ -386,19 +360,80 @@ fun MaryScreen(
 }
 
 /**
+ * The transcript never resizes for the composer or IME: they float over its full viewport.
+ * Only the transparent footer avoids the larger of the keyboard and the fixed navigation bar.
+ * Scroll padding keeps the final message reachable above the composer, without creating a dock.
+ */
+@Composable
+internal fun MaryFloatingChatLayout(
+    bottomInset: Dp,
+    modifier: Modifier = Modifier,
+    content: @Composable (contentPaddingBottom: Dp) -> Unit,
+    footer: @Composable ColumnScope.() -> Unit,
+) {
+    val density = LocalDensity.current
+    var footerHeightPx by remember { mutableIntStateOf(0) }
+    // Union, not sum: when the keyboard covers navigation the composer only clears the
+    // keyboard. Apply this to the footer alone, never the transcript or app navigation.
+    val bottomObstruction = WindowInsets.ime.union(WindowInsets(bottom = bottomInset))
+    val footerBottom = with(density) { bottomObstruction.getBottom(this).toDp() } + 8.dp
+    val contentPaddingBottom = with(density) { footerHeightPx.toDp() } + footerBottom + 12.dp
+
+    Box(modifier = modifier) {
+        content(contentPaddingBottom)
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(bottomObstruction)
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 8.dp)
+                .fillMaxWidth(),
+        ) {
+            // Keep the measured composer/tools separate from the navigation gap, so scroll
+            // padding follows the animated composer height without reserving the gap twice.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onSizeChanged { footerHeightPx = it.height },
+                content = footer,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun MarySessionLockButton(hasSession: Boolean, locked: Boolean, onLock: () -> Unit) {
+    IconButton(
+        onClick = onLock,
+        enabled = hasSession && !locked,
+        modifier = Modifier.size(44.dp).testTag("mary-session-lock").semantics {
+            if (!hasSession || locked) disabled()
+        },
+    ) {
+        Icon(
+            imageVector = if (locked) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
+            contentDescription = stringResource(if (locked) R.string.mary_session_locked else R.string.mary_session_lock),
+            tint = if (hasSession) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            modifier = Modifier.size(24.dp).testTag("mary-session-lock-icon"),
+        )
+    }
+}
+/**
  * Shared top-bar actions for both title styles.
  *
  * "New chat" only makes sense once a conversation exists, so the landing page omits it.
  */
 @Composable
 private fun RowScope.TopBarActions(
+    summary: MaryUsageSummary,
     onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit,
     onNewChat: (() -> Unit)? = null,
 ) {
+    ContextUsageButton(summary)
     IconButton(onClick = onOpenHistory) {
         Icon(
-            imageVector = MiuixIcons.Recent,
+            imageVector = Icons.Outlined.History,
             contentDescription = stringResource(R.string.mary_history_title),
         )
     }
@@ -435,7 +470,10 @@ private fun ConversationHistorySheet(
     onDelete: (String) -> Unit,
 ) {
     // Re-read whenever the sheet opens or a session is deleted.
-    val sessions = remember(show, revision) { if (show) load() else emptyList() }
+    var sessions by remember { mutableStateOf(emptyList<AgentSessionSummary>()) }
+    LaunchedEffect(show, revision) {
+        sessions = if (show) withContext(Dispatchers.IO) { load() } else emptyList()
+    }
     val formatter = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
 
     OverlayBottomSheet(
@@ -523,11 +561,8 @@ private fun ConversationHistorySheet(
 /**
  * Empty-chat state: brand mark, greeting and rotating suggestions.
  *
- * Deliberately **not scrollable** — it exists to be read once, and a scrollable landing page can
- * be dragged into a half-empty state that looks broken.
- *
- * The content is vertically centred, but the app bar's inset is subtracted first. Without that,
- * centring ignores the space the large title occupies and pushes the brand mark up behind it.
+ * A real scroll container drives the same collapsing title as the conversation and remains
+ * usable when the IME leaves too little space for the centred suggestions.
  */
 @Composable
 private fun ColumnScope.LandingState(
@@ -551,7 +586,8 @@ private fun ColumnScope.LandingState(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = appBarInset),
+                .verticalScroll(rememberScrollState())
+                .padding(top = appBarInset, bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
@@ -613,11 +649,11 @@ private fun ColumnScope.LandingState(
  *
  * Applied per row rather than via `LazyItemScope.animateItem`, because that animates placement and
  * would also fire for every offset shift while a turn streams in. An already-present row keeps its
- * animated state, so only genuinely new rows play this.
+ * saveable state across LazyColumn recycling, so only genuinely new rows play this.
  */
 @Composable
-private fun EntryAppearance(content: @Composable () -> Unit) {
-    var shown by remember { mutableStateOf(false) }
+internal fun EntryAppearance(content: @Composable () -> Unit) {
+    var shown by rememberSaveable { mutableStateOf(false) }
     val progress by animateFloatAsState(
         targetValue = if (shown) 1f else 0f,
         animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing),
@@ -723,66 +759,6 @@ private fun AssistantBubble(
     }
 }
 
-@Composable
-private fun ToolCallCard(entry: ChatEntry.ToolCall, blocks: BlockExpansion) {
-    // Defaults to collapsed, unlike the reasoning card.
-    val expanded = blocks.isExpanded(entry.id, default = false)
-    val result = entry.result
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 16.dp,
-        colors = CardDefaults.defaultColors(
-            color = MiuixTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
-        ),
-        onClick = { blocks.toggle(entry.id, default = false) },
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = entry.name,
-                    style = MiuixTheme.textStyles.footnote1,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = when {
-                        entry.running -> stringResource(R.string.mary_tool_running)
-                        result?.isError == true -> stringResource(R.string.mary_tool_failed)
-                        else -> stringResource(R.string.mary_tool_done)
-                    },
-                    style = MiuixTheme.textStyles.footnote2,
-                    color = if (result?.isError == true) {
-                        MiuixTheme.colorScheme.error
-                    } else {
-                        MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    },
-                )
-            }
-            if (expanded) {
-                if (entry.argumentsJson.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = entry.argumentsJson,
-                        style = MiuixTheme.textStyles.footnote2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    )
-                }
-                result?.let {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = it.content,
-                        style = MiuixTheme.textStyles.footnote2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        maxLines = if (expanded) 40 else 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-        }
-    }
-}
 
 /**
  * Collapsible display of the model's chain of thought.
@@ -801,7 +777,7 @@ private fun ToolCallCard(entry: ChatEntry.ToolCall, blocks: BlockExpansion) {
  * been seen streaming. That second one is what makes the automatic collapse work after recycling.
  */
 @Stable
-private class BlockExpansion {
+internal class BlockExpansion {
     private val expanded = mutableStateMapOf<String, Boolean>()
     private val everStreamed = mutableStateMapOf<String, Boolean>()
     private val handToggled = mutableStateMapOf<String, Boolean>()
@@ -853,7 +829,12 @@ private fun ThinkingPulseIcon() {
 }
 
 @Composable
-private fun ReasoningCard(text: String, streaming: Boolean, stateKey: String, blocks: BlockExpansion) {
+internal fun ReasoningCard(
+    text: String,
+    streaming: Boolean,
+    stateKey: String,
+    blocks: BlockExpansion
+) {
     val expanded = blocks.isExpanded(stateKey)
 
     LaunchedEffect(streaming) {
@@ -876,10 +857,17 @@ private fun ReasoningCard(text: String, streaming: Boolean, stateKey: String, bl
             color = MiuixTheme.colorScheme.surfaceContainer,
             contentColor = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         ),
-        onClick = { blocks.toggle(stateKey) },
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth().testTag("mary-reasoning-header-$stateKey")
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        role = androidx.compose.ui.semantics.Role.Button
+                    ) { blocks.toggle(stateKey) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 // Split into two branches rather than alpha-ing a running animation: an infinite
                 // transition keeps recomposing for as long as it exists, and every collapsed
                 // reasoning card in the transcript would otherwise carry one forever.
@@ -919,11 +907,10 @@ private fun ReasoningCard(text: String, streaming: Boolean, stateKey: String, bl
 
             if (expanded) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = text,
-                    style = MiuixTheme.textStyles.footnote1,
-                    lineHeight = 20.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                MarkdownText(
+                    markdown = text,
+                    modifier = Modifier.testTag("mary-reasoning-markdown-$stateKey"),
+                    textColor = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
         }
@@ -931,18 +918,19 @@ private fun ReasoningCard(text: String, streaming: Boolean, stateKey: String, bl
 }
 
 @Composable
-private fun NoticeCard(text: String, isError: Boolean) {
+internal fun NoticeCard(text: String, isError: Boolean) {
+    val errorColors = maryErrorColors()
     Card(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 16.dp,
         colors = CardDefaults.defaultColors(
             color = if (isError) {
-                MiuixTheme.colorScheme.errorContainer
+                errorColors.container
             } else {
                 MiuixTheme.colorScheme.surfaceContainerHigh
             },
             contentColor = if (isError) {
-                MiuixTheme.colorScheme.onErrorContainer
+                errorColors.content
             } else {
                 MiuixTheme.colorScheme.onSurfaceContainer
             },
@@ -952,67 +940,12 @@ private fun NoticeCard(text: String, isError: Boolean) {
             text = text,
             style = MiuixTheme.textStyles.footnote1,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            color = if (isError) errorColors.content else MiuixTheme.colorScheme.onSurfaceContainer,
         )
     }
 }
 
-/** Confirmation for a mutating tool. Anything that changes data always lands here. */
-@Composable
-private fun ApprovalCard(
-    toolName: String,
-    argumentsJson: String,
-    risk: ToolRisk,
-    onAllow: () -> Unit,
-    onDeny: () -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 18.dp,
-        colors = CardDefaults.defaultColors(
-            color = MiuixTheme.colorScheme.surfaceContainerHighest,
-            contentColor = MiuixTheme.colorScheme.onSurfaceContainerHighest,
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.mary_approval_title),
-                style = MiuixTheme.textStyles.body1,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = stringResource(R.string.mary_approval_body, toolName),
-                style = MiuixTheme.textStyles.footnote1,
-            )
-            if (argumentsJson.isNotBlank()) {
-                Text(
-                    text = argumentsJson,
-                    style = MiuixTheme.textStyles.footnote2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    maxLines = 6,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onDeny,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(stringResource(R.string.mary_approval_deny))
-                }
-                Button(
-                    onClick = onAllow,
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(stringResource(R.string.mary_approval_allow))
-                }
-            }
-        }
-    }
-}
+
 
 @Composable
 private fun MaryBrandMark() {
@@ -1052,92 +985,6 @@ private fun SuggestionCard(text: String, onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun Composer(
-    value: String,
-    onValueChange: (String) -> Unit,
-    running: Boolean,
-    onSend: () -> Unit,
-    onStop: () -> Unit,
-    bottomPadding: Dp,
-) {
-    val canSend = value.isNotBlank() && !running
-    // Animated so enabling the button reads as a state change rather than a flicker.
-    val sendBackground by animateColorAsState(
-        targetValue = when {
-            running -> MiuixTheme.colorScheme.secondaryContainer
-            canSend -> MiuixTheme.colorScheme.primary
-            else -> Color.Transparent
-        },
-        animationSpec = tween(durationMillis = 200),
-        label = "sendBackground",
-    )
-    val sendTint by animateColorAsState(
-        targetValue = if (canSend) {
-            MiuixTheme.colorScheme.onPrimary
-        } else {
-            MiuixTheme.colorScheme.onSurfaceVariantActions
-        },
-        animationSpec = tween(durationMillis = 200),
-        label = "sendTint",
-    )
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 28.dp,
-            colors = CardDefaults.defaultColors(
-                color = MiuixTheme.colorScheme.surfaceContainer,
-                contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
-            ),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = { }, backgroundColor = Color.Transparent) {
-                    Icon(
-                        imageVector = MiuixIcons.AddCircle,
-                        contentDescription = stringResource(R.string.mary_action_attach),
-                    )
-                }
-
-                TextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    modifier = Modifier.weight(1f),
-                    colors = TextFieldDefaults.textFieldColors(
-                        backgroundColor = Color.Transparent,
-                        borderColor = Color.Transparent,
-                    ),
-                    // Must be set explicitly: the default cursor brush is SolidColor(borderColor),
-                    // and the border above is transparent to remove the field outline — which also
-                    // made the caret invisible.
-                    cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
-                    label = stringResource(R.string.mary_input_hint),
-                    useLabelAsPlaceholder = true,
-                    maxLines = 4,
-                )
-
-                IconButton(
-                    onClick = if (running) onStop else onSend,
-                    backgroundColor = sendBackground,
-                ) {
-                    Icon(
-                        imageVector = MiuixIcons.Send,
-                        contentDescription = stringResource(
-                            if (running) R.string.mary_action_stop else R.string.mary_action_send,
-                        ),
-                        tint = sendTint,
-                    )
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp + bottomPadding))
-    }
-}
 
 /** Suggestion prompts split into pages; the shuffle control cycles between them. */
 @Composable
@@ -1168,5 +1015,6 @@ private fun speakerOf(entry: ChatEntry): Int = when (entry) {
     is ChatEntry.UserMessage -> 0
     is ChatEntry.AssistantMessage -> 1
     is ChatEntry.ToolCall -> 1
+    is ChatEntry.Question -> 1
     is ChatEntry.Notice -> 2
 }

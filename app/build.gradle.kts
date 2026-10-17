@@ -167,6 +167,12 @@ android {
             }
         }
     }
+    testOptions {
+        // Resource APK requires the app's minSdk (36); keep existing SDK-35 JVM tests
+        // resource-free. Opt into only Mary UI tests with -PmaryUiResources=true.
+        unitTests.isIncludeAndroidResources = providers.gradleProperty("maryUiResources")
+            .map(String::toBoolean).getOrElse(false)
+    }
     lint { checkReleaseBuilds = false }
 }
 
@@ -297,6 +303,24 @@ tasks.withType<KotlinJvmCompile>().configureEach {
 // Android 16 Robolectric uses SharedSecrets to create ApplicationSharedMemory on JDK 17+.
 tasks.withType<Test>().configureEach {
     jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+    val maryUiResources = providers.gradleProperty("maryUiResources")
+        .map(String::toBoolean).getOrElse(false)
+    systemProperty("mary.ui.resources", maryUiResources.toString())
+    systemProperty(
+        "mary.ui.screenshotDir",
+        rootProject.layout.buildDirectory.dir("reports/mary-ui").get().asFile.absolutePath
+    )
+    filter {
+        if (maryUiResources) {
+            includeTestsMatching("hk.uwu.reareye.ui.components.Mary*LayoutTest")
+            includeTestsMatching("hk.uwu.reareye.ui.components.MaryContextRingRenderingTest")
+            includeTestsMatching("hk.uwu.reareye.ui.components.markdown.*")
+        } else {
+            excludeTestsMatching("hk.uwu.reareye.ui.components.Mary*LayoutTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.components.MaryContextRingRenderingTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.components.markdown.*")
+        }
+    }
 }
 
 dependencies {
@@ -343,6 +367,10 @@ dependencies {
     implementation(libs.compose.icons.material.symbols.sharp.filled.cmp)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.markdown.renderer)
+    implementation(libs.markdown.code)
+    implementation(libs.markdown.coil3)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.miuix.ui)
     implementation(libs.miuix.preference)
     implementation(libs.miuix.icons)

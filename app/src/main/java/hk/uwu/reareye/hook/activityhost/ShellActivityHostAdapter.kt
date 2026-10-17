@@ -8,6 +8,7 @@ import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.view.SurfaceControl
+import android.view.SurfaceHolder
 import android.view.SurfaceView
 import hk.uwu.roxyhook.PackageScope
 import java.lang.reflect.Proxy
@@ -40,6 +41,9 @@ internal class ShellActivityHostAdapter(private val loader: ClassLoader) {
     private val views = Collections.synchronizedMap(IdentityHashMap<Any, ShellActivityHostOwner>())
     private val controllers =
         Collections.synchronizedMap(IdentityHashMap<Any, ShellActivityHostOwner>())
+    private val surfaceAbi = ActivityHostSurfaceAbi.resolve(
+        viewClass, controllerClass, SurfaceControl::class.java, SurfaceHolder::class.java
+    )
     private val main = Handler(Looper.getMainLooper())
     private val mainExecutor = Executor { main.post(it) }
     @Volatile
@@ -59,54 +63,53 @@ internal class ShellActivityHostAdapter(private val loader: ClassLoader) {
     }
 
     fun PackageScope.install() {
-        // Validate ABI before exposing a usable broker. Null-controller factory constructors
-        // are deliberately not used: only capture the live, dependency-injected factory.
+        // Resolve every hook target before installing any hook. Only use the live DI factory.
         reflect.method(viewClass, "getController")
         reflect.method(
-            viewClass,
-            "startActivity",
-            PendingIntent::class.java,
-            android.content.Intent::class.java,
-            ActivityOptions::class.java,
-            Rect::class.java
+            viewClass, "startActivity", PendingIntent::class.java,
+            android.content.Intent::class.java, ActivityOptions::class.java, Rect::class.java
         )
         reflect.method(viewClass, "onLocationChanged", Rect::class.java)
         reflect.field(controllerClass, "mTaskViewController")
         reflect.field(controllerClass, "mSurfaceControl")
-        reflect.method(controllerClass, "surfaceCreated", SurfaceControl::class.java)
-        reflect.method(controllerClass, "surfaceDestroyed")
-        reflect.method(controllerClass, "setWindowBounds", Rect::class.java)
+        reflect.field(controllerClass, "mShellExecutor")
         reflect.field(controllerClass, "mTaskInfo")
-        reflect.method(factoryClass, "asTaskViewFactory").hook {
-            after { if (!hasThrowable) factory = result }
-        }
-        reflect.method(viewClass, "getCurrentBoundsOnScreen").hook {
-            before { views[instance]?.let { result = Rect(it.bounds) } }
-        }
-        // The real carrier is never attached; its Surface belongs to SubScreenCenter.
-        reflect.method(SurfaceView::class.java, "getSurfaceControl").hook {
-            before { views[instance]?.let { result = it.surface } }
-        }
-        reflect.method(
-            viewClass, "setResizeBgColor", SurfaceControl.Transaction::class.java,
-            Int::class.javaPrimitiveType!!
-        ).hook {
-            before { if (views.containsKey(instance)) result = null }
-        }
-        reflect.method(viewClass, "onTaskInfoChanged", ActivityManager.RunningTaskInfo::class.java)
-            .hook {
-                before {
-                    views[instance]?.let { owner ->
-                        (args(0).value as? ActivityManager.RunningTaskInfo)?.let(owner::taskChanged)
-                        result = null
-                    }
-                }
-            }
         reflect.method(
             transitionsClass, "prepareActivityOptions", ActivityOptions::class.java,
             Rect::class.java, controllerClass
         )
         loader.loadClass("android.window.WindowContainerTransaction").getConstructor()
+        val factoryMethod = reflect.method(factoryClass, "asTaskViewFactory")
+        val boundsMethod = reflect.method(viewClass, "getCurrentBoundsOnScreen")
+        val surfaceMethod = reflect.method(SurfaceView::class.java, "getSurfaceControl")
+        val resizeMethod = reflect.method(
+            viewClass, "setResizeBgColor", SurfaceControl.Transaction::class.java,
+            Int::class.javaPrimitiveType!!
+        )
+        val infoMethod = reflect.method(
+            viewClass, "onTaskInfoChanged", ActivityManager.RunningTaskInfo::class.java
+        )
+        factoryMethod.hook {
+            after { if (!hasThrowable) factory = result }
+        }
+        boundsMethod.hook {
+            before { views[instance]?.let { result = Rect(it.bounds) } }
+        }
+        // Only our unattached carriers borrow a host surface, including inside ROM callbacks.
+        surfaceMethod.hook {
+            before { views[instance]?.let { result = it.surface } }
+        }
+        resizeMethod.hook {
+            before { if (views.containsKey(instance)) result = null }
+        }
+        infoMethod.hook {
+            before {
+                views[instance]?.let { owner ->
+                    (args(0).value as? ActivityManager.RunningTaskInfo)?.let(owner::taskChanged)
+                    result = null
+                }
+            }
+        }
     }
 
     fun create(context: Context, owner: ShellActivityHostOwner, ready: (Any) -> Unit) {
@@ -175,9 +178,9 @@ internal class ShellActivityHostAdapter(private val loader: ClassLoader) {
     fun attachSurface(view: Any, surface: SurfaceControl) {
         check(surface.isValid) { "Host surface was destroyed before native attachment" }
         val controller = requireNotNull(reflect.invoke(view, "getController"))
-        // Do not fabricate a SurfaceHolder lifecycle for an unattached View. The native Shell
-        // controller owns the task leash and reparents it to this cross-process host surface.
-        reflect.invoke(controller, "surfaceCreated", surface)
+        // On inlined ROMs, the real carrier callback reads the host surface through our hook.
+        // No synthetic holder or attached SurfaceView is needed.
+        surfaceAbi.attach(view, controller, surface)
         check(isSurfaceAttached(view, surface)) { "Native surface attachment was not retained" }
     }
 
@@ -200,14 +203,13 @@ internal class ShellActivityHostAdapter(private val loader: ClassLoader) {
     fun afterSurfaceTransactions(view: Any, applied: () -> Unit) {
         val controller = requireNotNull(reflect.invoke(view, "getController"))
         val executor = reflect.field(controllerClass, "mShellExecutor").get(controller) as Executor
-        // surfaceCreated/setWindowBounds enqueue native leash work. Publish the ACK snapshot only
+        // Surface callbacks/onLocationChanged enqueue native leash work. Publish the ACK snapshot only
         // after the earlier Shell operations and after returning to the session's main queue.
         executor.execute { main.post { applied() } }
     }
 
     fun updateBounds(view: Any, rect: Rect) {
-        val controller = requireNotNull(reflect.invoke(view, "getController"))
-        reflect.invoke(controller, "setWindowBounds", Rect(rect))
+        reflect.invoke(view, "onLocationChanged", Rect(rect))
     }
 
     fun launch(view: Any, pendingIntent: PendingIntent, options: ActivityOptions) {
@@ -268,7 +270,7 @@ internal class ShellActivityHostAdapter(private val loader: ClassLoader) {
     }
 
     fun detachSurface(view: Any) {
-        reflect.invoke(requireNotNull(reflect.invoke(view, "getController")), "surfaceDestroyed")
+        surfaceAbi.detach(view, requireNotNull(reflect.invoke(view, "getController")))
     }
 
 

@@ -33,6 +33,17 @@ data class ChatMessage(
     val toolCalls: List<ToolCall> = emptyList(),
     val toolCallId: String? = null,
     val name: String? = null,
+    /** Opaque native reasoning items / signed thinking blocks for faithful continuation. */
+    val protocolItems: List<JsonObject> = emptyList(),
+    /** Authoritative Koog message. Projection edits must explicitly discard/rebuild this encoding. */
+    val nativeEncoding: NativeMessageEncoding? = null,
+)
+
+/** Versioned, lossless native payload; absent for legacy text/tool messages. */
+@Serializable
+data class NativeMessageEncoding(
+    val version: Int = 1,
+    val message: JsonObject,
 )
 
 @Serializable

@@ -23,6 +23,16 @@ data class ChatRequest(
 sealed interface ChatEvent {
     data class TextDelta(val text: String) : ChatEvent
 
+    /** Absolute counts for this request; null means the provider did not report that count. */
+    data class Usage(
+        val inputTokens: Int? = null,
+        val outputTokens: Int? = null,
+        val cachedInputTokens: Int? = null,
+        val cacheCreationInputTokens: Int? = null,
+    ) : ChatEvent
+
+    data class ProtocolItem(val item: kotlinx.serialization.json.JsonObject) : ChatEvent
+
     /**
      * A fragment of the model's reasoning / chain of thought.
      *
@@ -53,4 +63,11 @@ interface LlmProvider {
 
     /** Best-effort model listing; returns an empty list when the endpoint does not support it. */
     suspend fun listModels(): List<String> = emptyList()
+
+    /** Preserves explicit capability metadata; legacy implementations remain source-compatible. */
+    suspend fun listModelDetails(): List<hk.uwu.reareye.agent.ModelDescriptor> =
+        listModels().map { hk.uwu.reareye.agent.ModelDescriptor(it) }
+
+    /** Best effort only: null unless the endpoint has a verified capacity metadata contract. */
+    suspend fun modelContextWindow(model: String): Int? = null
 }

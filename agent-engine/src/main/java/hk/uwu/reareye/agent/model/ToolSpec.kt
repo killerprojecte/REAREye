@@ -4,16 +4,16 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-/**
- * How dangerous a tool is. Only two levels exist on purpose: Mary runs without root, so the
- * blast radius of any single tool is bounded by what the module can do as an ordinary app.
- */
+/** Risk classification used for consent; execution-layer safety checks always remain active. */
 enum class ToolRisk {
     /** Pure reads. Safe to run without asking. */
     READ_ONLY,
 
     /** Changes persisted configuration or device state. Requires user confirmation. */
     MUTATING,
+
+    /** Irreversible or destructive changes; AUTO must obtain human confirmation. */
+    DESTRUCTIVE,
 }
 
 /** One parameter of a tool, described well enough for a model to fill in correctly. */

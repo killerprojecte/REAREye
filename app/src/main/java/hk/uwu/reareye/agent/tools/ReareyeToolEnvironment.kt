@@ -16,6 +16,7 @@ import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperCatalog
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperRepository
 import hk.uwu.reareye.repository.rearwidget.RearAppCardRepository
+import hk.uwu.reareye.repository.rearwidget.RearWidgetConfigCodec
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.script.ScriptProjectKind
 import hk.uwu.reareye.script.ScriptProjectStore
@@ -23,6 +24,8 @@ import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import hk.uwu.reareye.widgetapi.RearWallpaperScheduleCodec
 import hk.uwu.reareye.widgetapi.RearWallpaperScheduleEntry
+import hk.uwu.reareye.widgetapi.RearWidgetSceneRouteSpec
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -59,11 +62,19 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
     private val appContext = context.applicationContext
     private val prefs: PrefsManager get() = appContext.getPrefsManager()
+    private val scriptEditing by lazy { MaryScriptEditingTools(appContext) }
+    private val componentEditing by lazy { MaryComponentEditingTools(appContext) }
+    private val configEditing by lazy { MaryConfigEditingTools(appContext) }
 
     override fun availableTools(): List<ToolSpec> = ALL
 
+    internal fun scriptingModelReference(): String = SCRIPT_MODEL_SPEC
+
     override suspend fun execute(toolName: String, args: JsonObject): ToolResult =
         withContext(Dispatchers.IO) {
+            scriptEditing.execute(toolName, args)?.let { return@withContext it }
+            componentEditing.execute(toolName, args)?.let { return@withContext it }
+            configEditing.execute(toolName, args)?.let { return@withContext it }
             when (toolName) {
                 // --- diagnostics
                 GET_MODULE_STATUS -> getModuleStatus()
@@ -111,7 +122,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 DELETE_WALLPAPER -> deleteWallpaper(args)
                 UPDATE_WALLPAPER_METADATA -> updateWallpaperMetadata(args)
 
-                else -> ToolResult.error("未知工具：$toolName")
+                else -> ToolResult.error("Unknown tool: $toolName")
             }
         }
 
@@ -123,16 +134,16 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
         val explanation = when (state) {
             ModuleActivationState.ACTIVE ->
-                "模块正在运行，至少有一个作用域目标进程处于活动状态。"
+                "Module active; at least one scoped target process is running."
 
             ModuleActivationState.NO_RUNNING_TARGET ->
-                "模块已启用且作用域已授权，但当前没有目标进程在运行（背屏中心、主题管理或系统界面可能未启动）。"
+                "Module enabled and scope authorized, but no target process is running (rear-screen center, themes or system UI may be inactive)."
 
             ModuleActivationState.SCOPE_NOT_AUTHORIZED ->
-                "模块已在框架中启用，但还没有授权任何作用域。需要到 LSPosed 里勾选作用域。"
+                "Module enabled, but no scope authorized. Select target scopes in LSPosed."
 
             ModuleActivationState.SERVICE_UNAVAILABLE ->
-                "无法连接到 libxposed 服务：模块可能没有在 LSPosed 中启用，或当前框架不支持。"
+                "Cannot connect to libxposed; the module may be disabled in LSPosed or the framework unsupported."
         }
 
         return ToolResult.ok(
@@ -177,12 +188,13 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
     private fun listCards(): ToolResult {
         requireReadable()?.let { return it }
         val cards = RearWidgetManagerRepository.loadCards(prefs)
+        val order = RearWidgetManagerRepository.loadCardOrderSettings(prefs)
 
         return ToolResult.ok(
             buildJsonObject {
                 put("count", cards.size)
                 put("cards", buildJsonArray {
-                    cards.forEach { card ->
+                    cards.forEachIndexed { index, card ->
                         add(buildJsonObject {
                             put("id", card.id)
                             put("title", card.title)
@@ -191,6 +203,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                             put("enabled", card.enabled)
                             put("sticky", card.sticky)
                             put("priority", card.priority)
+                            put("automatic_priority", order[card.id]?.automatic ?: true)
+                            put("order_position", order[card.id]?.position ?: index)
                             put("renameable", card.renameable)
                             put("from_store", card.downloadedFromStore)
                             put("has_template_values", !card.oneConfigJson.isNullOrBlank())
@@ -233,8 +247,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 if (next < all.size) put("next_offset", next)
                 put(
                     "note",
-                    "这些是应用卡（应用），不是卡片，也不是组件。" +
-                        if (next < all.size) "还有更多，用 offset=$next 继续读取。" else "",
+                    "These are app launch entries, not display cards or components. " +
+                            if (next < all.size) "More results available; continue with offset=$next." else "",
                 )
                 put("app_cards", buildJsonArray {
                     page.forEach { card ->
@@ -265,9 +279,9 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
     private fun registerAppCard(args: JsonObject): ToolResult {
         val title = args.string("title")?.trim().orEmpty()
         val business = args.string("component_business")?.trim().orEmpty()
-        if (title.isEmpty()) return invalidArgs("title 是必填的。")
+        if (title.isEmpty()) return invalidArgs("title is required.")
         if (business.isEmpty()) {
-            return invalidArgs("component_business 是必填的，先用 list_components 获取组件标识。")
+            return invalidArgs("component_business is required; get it from list_components.")
         }
 
         writeGuard()?.let { return it }
@@ -276,8 +290,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "component_not_found",
-                    "detail" to "组件 '$business' 不存在。应用卡必须由已注册的组件派生。",
-                    "recovery" to "先调用 list_components 获取可用的 business 值，不要凭空编造。",
+                    "detail" to "Component '$business' does not exist. App cards require a registered component.",
+                    "recovery" to "Call list_components for a valid business value; do not invent identifiers.",
                 ),
             )
         }
@@ -288,7 +302,10 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             mutate = {
                 val result = RearAppCardRepository.register(appContext, prefs, title, business)
                 if (!result.success) {
-                    error(result.error ?: "注册应用卡失败，模块没有说明原因。")
+                    error(
+                        result.error
+                            ?: "App card registration failed without a reason from the module."
+                    )
                 }
                 appId = result.appId
             },
@@ -314,16 +331,16 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
     private fun renameAppCard(args: JsonObject): ToolResult {
         val appId = args.string("app_id")?.trim().orEmpty()
         val title = args.string("title")?.trim().orEmpty()
-        if (appId.isEmpty()) return invalidArgs("app_id 是必填的，先用 list_app_cards 获取。")
-        if (title.isEmpty()) return invalidArgs("title 是必填的。")
+        if (appId.isEmpty()) return invalidArgs("app_id is required; get it from list_app_cards.")
+        if (title.isEmpty()) return invalidArgs("title is required.")
 
         writeGuard()?.let { return it }
         val existing = RearAppCardRepository.loadCatalog(appContext).firstOrNull { it.appId == appId }
             ?: return ToolResult.error(
                 json(
                     "error" to "app_card_not_found",
-                    "detail" to "找不到 app_id 为 '$appId' 的应用卡。",
-                    "recovery" to "先调用 list_app_cards 获取正确的 app_id。",
+                    "detail" to "App card '$appId' not found.",
+                    "recovery" to "Call list_app_cards for a valid app_id.",
                 ),
             )
 
@@ -331,8 +348,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "not_renameable",
-                    "detail" to "应用卡 '${existing.title}' 不允许改名（can_rename=false）。",
-                    "recovery" to "直接告知用户这一张改不了，不要重试。",
+                    "detail" to "App card '${existing.title}' cannot be renamed (can_rename=false).",
+                    "recovery" to "Tell the user this entry cannot be renamed; do not retry.",
                 ),
             )
         }
@@ -341,7 +358,9 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             action = "rename_app_card",
             mutate = { _ ->
                 val result = RearAppCardRepository.rename(appContext, appId, title)
-                if (!result.success) error(result.error ?: "改名失败，模块没有说明原因。")
+                if (!result.success) error(
+                    result.error ?: "Rename failed without a reason from the module."
+                )
             },
             readBack = { RearAppCardRepository.loadCatalog(appContext) },
             verify = { saved -> saved.any { it.appId == appId && it.title == title } },
@@ -351,15 +370,15 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
     private fun deleteAppCard(args: JsonObject): ToolResult {
         val appId = args.string("app_id")?.trim().orEmpty()
-        if (appId.isEmpty()) return invalidArgs("app_id 是必填的，先用 list_app_cards 获取。")
+        if (appId.isEmpty()) return invalidArgs("app_id is required; get it from list_app_cards.")
 
         writeGuard()?.let { return it }
         val existing = RearAppCardRepository.loadCatalog(appContext).firstOrNull { it.appId == appId }
             ?: return ToolResult.error(
                 json(
                     "error" to "app_card_not_found",
-                    "detail" to "找不到 app_id 为 '$appId' 的应用卡。",
-                    "recovery" to "先调用 list_app_cards 获取正确的 app_id。",
+                    "detail" to "App card '$appId' not found.",
+                    "recovery" to "Call list_app_cards for a valid app_id.",
                 ),
             )
 
@@ -367,8 +386,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "not_deletable",
-                    "detail" to "应用卡 '${existing.title}' 不允许删除（can_delete=false）。",
-                    "recovery" to "直接告知用户这一张删不了，不要重试。",
+                    "detail" to "App card '${existing.title}' cannot be deleted (can_delete=false).",
+                    "recovery" to "Tell the user this entry cannot be deleted; do not retry.",
                 ),
             )
         }
@@ -377,7 +396,9 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             action = "delete_app_card",
             mutate = { _ ->
                 val result = RearAppCardRepository.delete(appContext, appId)
-                if (!result.success) error(result.error ?: "删除失败，模块没有说明原因。")
+                if (!result.success) error(
+                    result.error ?: "Deletion failed without a reason from the module."
+                )
             },
             readBack = { RearAppCardRepository.loadCatalog(appContext) },
             verify = { saved -> saved.none { it.appId == appId } },
@@ -388,10 +409,10 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
     private fun reorderAppCards(args: JsonObject): ToolResult {
         val ids = args.stringArray("app_ids").map { it.trim() }.filter { it.isNotEmpty() }
         if (ids.isEmpty()) {
-            return invalidArgs("app_ids 是必填的，先用 list_app_cards 获取全部 app_id。")
+            return invalidArgs("app_ids is required; obtain all ids from list_app_cards.")
         }
         if (ids.size != ids.toSet().size) {
-            return invalidArgs("app_ids 里有重复项，每个应用卡只能出现一次。")
+            return invalidArgs("app_ids contains duplicates; each entry must appear exactly once.")
         }
 
         writeGuard()?.let { return it }
@@ -402,8 +423,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "app_card_not_found",
-                    "detail" to "这些 app_id 不存在：${missing.joinToString()}",
-                    "recovery" to "先调用 list_app_cards 获取正确的 app_id。",
+                    "detail" to "Unknown app ids: ${missing.joinToString()}",
+                    "recovery" to "Call list_app_cards for a valid app_id.",
                 ),
             )
         }
@@ -411,9 +432,9 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "incomplete_order",
-                    "detail" to "只提供了 ${ids.size} 个 app_id，但当前共有 ${catalog.size} 张应用卡；" +
-                        "顺序必须包含全部应用卡，否则其余会被丢掉。",
-                    "recovery" to "先用 list_app_cards 取出全部 app_id，按期望顺序完整传入。",
+                    "detail" to "Received ${ids.size} ids but there are ${catalog.size} app cards; " +
+                            "the order must include every entry to avoid dropping others.",
+                    "recovery" to "Fetch all ids with list_app_cards and supply the complete desired order.",
                 ),
             )
         }
@@ -422,7 +443,9 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             action = "reorder_app_cards",
             mutate = { _ ->
                 val result = RearAppCardRepository.reorder(appContext, ids)
-                if (!result.success) error(result.error ?: "调整顺序失败，模块没有说明原因。")
+                if (!result.success) error(
+                    result.error ?: "Reorder failed without a reason from the module."
+                )
             },
             readBack = { RearAppCardRepository.loadCatalog(appContext) },
             verify = { saved -> saved.map { it.appId } == ids },
@@ -445,13 +468,14 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 put("count", projects.size)
                 put(
                     "note",
-                    "kind 为 STANDALONE 的是单文件脚本，PROJECT 是带目录的多文件脚本，" +
-                        "COMPONENT 由组件安装、不能单独删除。",
+                    "STANDALONE is a single-file script; PROJECT is a multi-file directory; " +
+                            "COMPONENT is component-owned and cannot be independently deleted. Use type-qualified ids.",
                 )
                 put("scripts", buildJsonArray {
                     projects.forEach { project ->
                         add(buildJsonObject {
-                            put("id", project.id)
+                            put("id", qualifiedScriptId(project.kind.name, project.id))
+                            put("local_id", project.id)
                             put("name", project.name)
                             put("kind", project.kind.name)
                             put("valid", project.isValid)
@@ -466,22 +490,31 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
     private fun readScript(args: JsonObject): ToolResult {
         val id = args.string("id")?.trim().orEmpty()
-        if (id.isEmpty()) return invalidArgs("id 是必填的，先用 list_scripts 获取。")
+        if (id.isEmpty()) return invalidArgs("id is required; use the type-qualified id from list_scripts.")
 
         val store = ScriptProjectStore(appContext)
-        val project = store.list().firstOrNull { it.id == id }
+        val matches = store.list().filter { scriptIdMatches(id, it.kind.name, it.id) }
+        if (matches.size > 1) return ToolResult.error(
+            json(
+                "error" to "ambiguous_script_id",
+                "detail" to "Multiple scripts match '$id'; no script was read or deleted.",
+                "recovery" to "Call list_scripts and use the exact type-qualified id (KIND:local_id).",
+            )
+        )
+        val project = matches.singleOrNull()
             ?: return ToolResult.error(
                 json(
                     "error" to "script_not_found",
-                    "detail" to "找不到 id 为 '$id' 的脚本。",
-                    "recovery" to "先调用 list_scripts 获取正确的 id。",
+                    "detail" to "Script '$id' not found.",
+                    "recovery" to "Call list_scripts for the exact type-qualified id.",
                 ),
             )
 
         val source = store.read(project)
         return ToolResult.ok(
             buildJsonObject {
-                put("id", project.id)
+                put("id", qualifiedScriptId(project.kind.name, project.id))
+                put("local_id", project.id)
                 put("name", project.name)
                 put("kind", project.kind.name)
                 put("valid", project.isValid)
@@ -497,32 +530,20 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
     /**
      * Returns the scripting API reference.
      *
-     * The text comes from `SCRIPTING.md`, copied into assets at build time, so it is the document that
-     * ships with the project rather than a paraphrase that can drift from it.
+     * The model-facing English reference mirrors SCRIPTING.md. Keep it synchronized with that
+     * user-facing document and the authoritative runtime when changing scripting APIs.
      */
     private fun getScriptSpec(): ToolResult {
-        val spec = runCatching {
-            appContext.assets.open("scripting.md")
-                .bufferedReader(Charsets.UTF_8)
-                .use { it.readText() }
-        }.getOrNull()
-
-        if (spec.isNullOrBlank()) {
-            return ToolResult.error(
-                json(
-                    "error" to "spec_unavailable",
-                    "detail" to "读不到脚本文档（assets/scripting.md）。",
-                    "recovery" to "告知用户应用资源缺失；不要凭记忆编造脚本 API。",
-                ),
-            )
-        }
+        val spec = SCRIPT_MODEL_SPEC
 
         return ToolResult.ok(
             buildJsonObject {
                 put(
                     "usage",
-                    "这是 REAREye 的脚本文档全文，也是本次生成要遵循的规范。" +
-                        "请严格按它写出脚本源码，然后调用 create_script 提交。",
+                    "This is the complete REAREye scripting specification. " +
+                            "Follow it exactly. Use create_script only for a new script. " +
+                            "For edits, list_script_files/read_script first, then update_script with the returned full-file sha256; " +
+                            "do not delete and recreate an existing project.",
                 )
                 put("spec", spec)
             }.toString(),
@@ -532,7 +553,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
     private fun createScript(args: JsonObject): ToolResult {
         val source = args.string("source").orEmpty()
         if (source.isBlank()) {
-            return invalidArgs("source 是必填的：请把完整的 Lua 脚本源码放在这个参数里。")
+            return invalidArgs("source is required and must contain the complete Lua script.")
         }
 
         val validation = LuaScriptValidator.validate(source)
@@ -541,7 +562,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 json(
                     "error" to "script_validation_failed",
                     "detail" to validation.report(),
-                    "recovery" to "按上面的问题修改脚本后重新调用本工具。不要忽略任何一条 ERROR。",
+                    "recovery" to "Fix the reported script issues and retry. Do not ignore any ERROR.",
                     "error_count" to validation.errors.size.toString(),
                 ),
             )
@@ -563,13 +584,13 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             mutate = {
                 // createStandalone writes unconditionally, so the id has to be free before the call.
                 // The uniqueness pass above guarantees it; this only fires on a listing/write race.
-                if (store.hasStandalone("$id.lua")) error("脚本 $id 已存在")
+                if (store.hasStandalone("$id.lua")) error("Script $id already exists")
                 store.createStandalone(id, source)
             },
             readBack = { store.list() },
-            verify = { saved -> saved.any { it.id == id } },
+            verify = { saved -> saved.any { it.id == id && it.kind == ScriptProjectKind.STANDALONE } },
             detail = buildMap {
-                put("id", id)
+                put("id", qualifiedScriptId(ScriptProjectKind.STANDALONE.name, id))
                 put("warnings", validation.warnings.size.toString())
                 validation.warnings.firstOrNull()?.let { put("warning", it.code) }
             },
@@ -580,11 +601,11 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             json(
                 "ok" to "true",
                 "action" to "create_script",
-                "id" to id,
+                "id" to qualifiedScriptId(ScriptProjectKind.STANDALONE.name, id),
                 "note" to if (id != base) {
-                    "脚本 id 为 $id（$base 已存在，自动加了后缀）。"
+                    "Local script id is $id ($base existed, so a suffix was added)."
                 } else {
-                    "脚本 id 为 $id。"
+                    "Local script id is $id."
                 },
             ),
         )
@@ -592,16 +613,24 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
     private fun deleteScript(args: JsonObject): ToolResult {
         val id = args.string("id")?.trim().orEmpty()
-        if (id.isEmpty()) return invalidArgs("id 是必填的，先用 list_scripts 获取。")
+        if (id.isEmpty()) return invalidArgs("id is required; use the type-qualified id from list_scripts.")
 
         writeGuard()?.let { return it }
         val store = ScriptProjectStore(appContext)
-        val project = store.list().firstOrNull { it.id == id }
+        val matches = store.list().filter { scriptIdMatches(id, it.kind.name, it.id) }
+        if (matches.size > 1) return ToolResult.error(
+            json(
+                "error" to "ambiguous_script_id",
+                "detail" to "Multiple scripts match '$id'; no script was read or deleted.",
+                "recovery" to "Call list_scripts and use the exact type-qualified id (KIND:local_id).",
+            )
+        )
+        val project = matches.singleOrNull()
             ?: return ToolResult.error(
                 json(
                     "error" to "script_not_found",
-                    "detail" to "找不到 id 为 '$id' 的脚本。",
-                    "recovery" to "先调用 list_scripts 获取正确的 id。",
+                    "detail" to "Script '$id' not found.",
+                    "recovery" to "Call list_scripts for the exact type-qualified id.",
                 ),
             )
 
@@ -612,8 +641,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "component_owned_script",
-                    "detail" to "脚本 '${project.name}' 由组件安装，不能单独删除。",
-                    "recovery" to "告知用户这一项随组件卸载一起移除，不要重试。",
+                    "detail" to "Script '${project.name}' is component-owned and cannot be independently deleted.",
+                    "recovery" to "Explain that this entry is removed with its component; do not retry.",
                 ),
             )
         }
@@ -622,8 +651,11 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             action = "delete_script",
             mutate = { store.delete(project) },
             readBack = { store.list() },
-            verify = { saved -> saved.none { it.id == id } },
-            detail = mapOf("id" to id, "name" to project.name),
+            verify = { saved -> saved.none { it.id == project.id && it.kind == project.kind } },
+            detail = mapOf(
+                "id" to qualifiedScriptId(project.kind.name, project.id),
+                "name" to project.name
+            ),
         )
     }
 
@@ -676,8 +708,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
         val content = args.string("content")?.trim().orEmpty()
         if (content.isEmpty()) {
             return invalidArgs(
-                "content 是必填的：请把用户想要的功能、状态机、视觉规格和文案写清楚，" +
-                    "它会填进规范里的 CONTENT 参数区。",
+                "content is required: describe functions, state machine, visual design and text; " +
+                        "this fills the CONTENT section.",
             )
         }
 
@@ -696,9 +728,10 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 put("frame_rate", WidgetSpec.FRAME_RATE.toString())
                 put(
                     "usage",
-                    "这就是本次生成要遵循的完整规范（已填好参数）。请严格按它写出单文件 HTML，" +
-                        "然后调用 create_html_widget 提交。规范中标注违反=废稿的条目会被程序校验，" +
-                        "校验不通过不会创建任何东西。",
+                    "Follow this complete parameterized specification for single-file HTML, " +
+                            "then submit new widgets using create_html_widget. To edit an existing component, " +
+                            "read_component first and use update_component with the returned content hash, preserving its identity. " +
+                            "Mandatory requirements are checked; validation failures do not save the requested edit.",
                 )
                 put("spec", prompt)
             }.toString(),
@@ -707,14 +740,14 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
     private fun createHtmlWidget(args: JsonObject): ToolResult {        val html = args.string("html").orEmpty()
         if (html.isBlank()) {
-            return invalidArgs("html 是必填的：请把完整单文件 HTML 放在这个参数里。")
+            return invalidArgs("html is required: supply complete single-file HTML.")
         }
 
         val baseWidth = args.int("base_width") ?: DEFAULT_BASE_WIDTH
         val baseHeight = args.int("base_height") ?: DEFAULT_BASE_HEIGHT
         if (baseWidth <= baseHeight) {
             return invalidArgs(
-                "base_width/base_height 写反了：背屏是横屏，必须 BASE_W > BASE_H（收到 " +
+                "Dimensions are reversed: landscape requires BASE_W > BASE_H (received " +
                     "$baseWidth×$baseHeight）。",
             )
         }
@@ -726,8 +759,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                     "error" to "widget_validation_failed",
                     "detail" to validation.report(),
                     "recovery" to
-                        "按上面的问题逐条修改 HTML 后重新调用本工具。不要忽略任何一条 ERROR；" +
-                        "尤其注意头注释里的数字必须与 LAYOUT 实算一致。",
+                            "Fix every reported HTML issue and retry; do not ignore any ERROR. " +
+                            "Header numbers must match calculated LAYOUT values.",
                     "error_count" to validation.errors.size.toString(),
                 ),
             )
@@ -763,12 +796,14 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
         val registerResult = mutateWithVerification(
             action = "create_html_widget",
-            mutate = {
+            mutate = { current ->
+                check(current.none { it.business == business }) { "Component identifier is no longer available." }
+                check(!zipFile.exists()) { "Staging file already exists; refusing to overwrite it." }
                 HtmlWidgetPackage.writeZip(zipFile, html)
                 RearWidgetManagerRepository.saveBusinesses(
                     appContext,
                     prefs,
-                    existing + component,
+                    current + component,
                 )
             },
             readBack = { RearWidgetManagerRepository.loadBusinesses(prefs) },
@@ -793,7 +828,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 "action" to "create_html_widget",
                 "business" to business,
                 "title" to title,
-                "note" to "组件名为 $business（你指定的 $requestedBusiness 已存在，自动加了后缀）。",
+                "note" to "Component name is $business ($requestedBusiness existed; suffix added).",
             ),
         )
     }
@@ -867,7 +902,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
         val title = args.string("title")?.trim().orEmpty()
         val business = args.string("business")?.trim().orEmpty()
         if (title.isEmpty() || business.isEmpty()) {
-            return invalidArgs("title 和 business 都是必填的。")
+            return invalidArgs("title and business are required.")
         }
 
         writeGuard()?.let { return it }
@@ -876,8 +911,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ?: return ToolResult.error(
                 json(
                     "error" to "component_not_found",
-                    "detail" to "组件 '$business' 没有注册。",
-                    "recovery" to "先调用 list_components 查看可用组件，再用其中的 business 值重试。",
+                    "detail" to "Component '$business' is not registered.",
+                    "recovery" to "Call list_components and retry with an existing business.",
                 ),
             )
 
@@ -886,8 +921,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "duplicate_card",
-                    "detail" to "已经存在一张标题为 '$title' 且使用组件 '$business' 的卡片。",
-                    "recovery" to "换一个标题，或用 update_card 修改现有卡片。",
+                    "detail" to "A card titled '$title' already uses component '$business'.",
+                    "recovery" to "Choose another title or update the existing card using update_card.",
                 ),
             )
         }
@@ -918,7 +953,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
     private fun updateCard(args: JsonObject): ToolResult {
         val id = args.string("id")?.trim().orEmpty()
-        if (id.isEmpty()) return invalidArgs("id 是必填的，先用 list_cards 获取。")
+        if (id.isEmpty()) return invalidArgs("id is required; get it from list_cards.")
 
         writeGuard()?.let { return it }
         val cards = RearWidgetManagerRepository.loadCards(prefs)
@@ -926,19 +961,21 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ?: return ToolResult.error(
                 json(
                     "error" to "card_not_found",
-                    "detail" to "找不到 id 为 '$id' 的卡片。",
-                    "recovery" to "先调用 list_cards 获取正确的 id。",
+                    "detail" to "Card '$id' not found.",
+                    "recovery" to "Call list_cards for a valid id.",
                 ),
             )
 
         val changes = buildList {
-            args.string("title")?.trim()?.takeIf { it.isNotEmpty() }?.let { add("标题改为 $it") }
-            args.boolean("enabled")?.let { add(if (it) "启用" else "停用") }
-            args.boolean("sticky")?.let { add(if (it) "常驻显示" else "取消常驻") }
-            args.int("priority")?.let { add("优先级改为 $it") }
+            args.string("title")?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { add("Set title to $it") }
+            args.boolean("enabled")?.let { add(if (it) "enabled" else "disabled") }
+            args.boolean("sticky")
+                ?.let { add(if (it) "persistent display" else "disable persistence") }
+            args.int("priority")?.let { add("Set priority to $it") }
         }
         if (changes.isEmpty()) {
-            return invalidArgs("没有提供任何要修改的字段（title / enabled / sticky / priority）。")
+            return invalidArgs("No changes supplied (title / enabled / sticky / priority).")
         }
 
         // Changing a store-installed card requires bypassing the locked merge, which is the same
@@ -949,8 +986,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "locked_card",
-                    "detail" to "卡片 '${existing.title}' 由组件仓库安装，默认受保护、不允许直接修改。",
-                    "recovery" to "先向用户说明这会修改仓库安装的卡片；用户同意后，带 confirm_locked_edit=true 重试。",
+                    "detail" to "Card '${existing.title}' is repository-installed and protected from direct edits.",
+                    "recovery" to "Explain the repository-installed card protection; retry with confirm_locked_edit=true only after explicit consent.",
                 ),
             )
         }
@@ -979,6 +1016,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 after != null &&
                     after.title == updated.title &&
                     after.enabled == updated.enabled &&
+                        after.sticky == updated.sticky &&
                     after.priority == updated.priority
             },
             detail = mapOf("card_id" to id, "changes" to changes.joinToString("、")),
@@ -987,13 +1025,13 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
     private fun deleteCard(args: JsonObject): ToolResult {
         val id = args.string("id")?.trim().orEmpty()
-        if (id.isEmpty()) return invalidArgs("id 是必填的，先用 list_cards 获取。")
+        if (id.isEmpty()) return invalidArgs("id is required; get it from list_cards.")
 
         writeGuard()?.let { return it }
         val cards = RearWidgetManagerRepository.loadCards(prefs)
         val existing = cards.firstOrNull { it.id == id }
             ?: return ToolResult.error(
-                json("error" to "card_not_found", "detail" to "找不到 id 为 '$id' 的卡片。"),
+                json("error" to "card_not_found", "detail" to "Card '$id' not found."),
             )
 
         return mutateWithVerification(
@@ -1014,16 +1052,19 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
     private fun setCardEnabled(args: JsonObject): ToolResult {
         val id = args.string("id")?.trim().orEmpty()
         val enabled = args.boolean("enabled")
-        if (id.isEmpty() || enabled == null) return invalidArgs("id 和 enabled 都是必填的。")
+        if (id.isEmpty() || enabled == null) return invalidArgs("id and enabled are required.")
 
         writeGuard()?.let { return it }
         val before = RearWidgetManagerRepository.loadCards(prefs).firstOrNull { it.id == id }
             ?: return ToolResult.error(
-                json("error" to "card_not_found", "detail" to "找不到 id 为 '$id' 的卡片。"),
+                json("error" to "card_not_found", "detail" to "Card '$id' not found."),
             )
         if (before.enabled == enabled) {
             return ToolResult.ok(
-                json("no_change" to true, "detail" to "卡片 '${before.title}' 已经是该状态。"),
+                json(
+                    "no_change" to true,
+                    "detail" to "Card '${before.title}' already has this state."
+                ),
             )
         }
 
@@ -1037,8 +1078,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ToolResult.error(
                 json(
                     "error" to "verify_failed",
-                    "detail" to "已请求${if (enabled) "启用" else "停用"}卡片，但回读状态没有变化。",
-                    "recovery" to "可能是该卡片被锁定（renameable=false）。用 list_cards 确认后告知用户。",
+                    "detail" to "Requested state ${if (enabled) "enabled" else "disabled"}, but read-back did not change.",
+                    "recovery" to "The card may be locked (renameable=false). Check list_cards and inform the user.",
                 ),
             )
         }
@@ -1049,7 +1090,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
     private fun renameComponent(args: JsonObject): ToolResult {
         val from = args.string("business")?.trim().orEmpty()
         val to = args.string("new_business")?.trim().orEmpty()
-        if (from.isEmpty() || to.isEmpty()) return invalidArgs("business 和 new_business 都是必填的。")
+        if (from.isEmpty() || to.isEmpty()) return invalidArgs("business and new_business are required.")
 
         writeGuard()?.let { return it }
         val components = RearWidgetManagerRepository.loadBusinesses(prefs)
@@ -1057,41 +1098,63 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ?: return ToolResult.error(
                 json(
                     "error" to "component_not_found",
-                    "detail" to "组件 '$from' 不存在。",
-                    "recovery" to "先调用 list_components。",
+                    "detail" to "Component '$from' does not exist.",
+                    "recovery" to "Call list_components first.",
                 ),
             )
         if (components.any { it.business == to }) {
             return ToolResult.error(
-                json("error" to "duplicate_component", "detail" to "组件 '$to' 已经存在。"),
+                json(
+                    "error" to "duplicate_component",
+                    "detail" to "Component '$to' already exists."
+                ),
             )
         }
-        if (!existing.renameable && !(args.boolean("confirm_locked_edit") ?: false)) {
+        if (!existing.renameable) {
             return ToolResult.error(
                 json(
                     "error" to "locked_component",
-                    "detail" to "组件 '$from' 由仓库安装，默认受保护。",
-                    "recovery" to "征得用户同意后，带 confirm_locked_edit=true 重试。",
+                    "detail" to "Component '$from' is locked (renameable=false) and cannot be renamed.",
+                    "recovery" to "Confirmation cannot override this restriction. Do not retry renaming this component.",
                 ),
             )
         }
 
         val cards = RearWidgetManagerRepository.loadCards(prefs)
         val affected = cards.filter { it.business == from }
+        if (!canRenameComponent(existing.renameable, affected.map { it.renameable })) {
+            return ToolResult.error(
+                json(
+                    "error" to "locked_dependent_card",
+                    "detail" to "A locked card references this component; renaming would leave a partial migration.",
+                    "recovery" to "Do not retry with a confirmation override. Keep the component identifier unchanged.",
+                )
+            )
+        }
 
         return mutateWithVerification(
             action = "rename_component",
             mutate = { current ->
+                val cardsNow = RearWidgetManagerRepository.loadCards(prefs)
+                check(current.singleOrNull { it.business == from }?.renameable == true) {
+                    "Component is missing or locked; no changes were made."
+                }
+                check(current.none { it.business == to }) { "Target component already exists." }
+                check(
+                    canRenameComponent(
+                        true,
+                        cardsNow.filter { it.business == from }.map { it.renameable })
+                ) {
+                    "A dependent card is locked; no changes were made."
+                }
                 RearWidgetManagerRepository.saveBusinesses(
                     appContext,
                     prefs,
                     current.map { if (it.business == from) it.copy(business = to) else it },
-                    allowLockedEdits = !existing.renameable,
                 )
                 // A card points at its component by name, so renaming the component orphans every
                 // card that referenced it unless they are updated in the same operation.
-                if (affected.isNotEmpty()) {
-                    val cardsNow = RearWidgetManagerRepository.loadCards(prefs)
+                if (cardsNow.any { it.business == from }) {
                     RearWidgetManagerRepository.saveCards(
                         appContext,
                         prefs,
@@ -1101,7 +1164,12 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             },
             readBack = { RearWidgetManagerRepository.loadBusinesses(prefs) },
             verify = { saved ->
-                saved.any { it.business == to } && saved.none { it.business == from }
+                saved.any { it.business == to } && saved.none { it.business == from } &&
+                        RearWidgetManagerRepository.loadCards(prefs).let { savedCards ->
+                            savedCards.none { it.business == from } && affected.all { original ->
+                                savedCards.any { it.id == original.id && it.business == to }
+                            }
+                        }
             },
             detail = mapOf(
                 "from" to from,
@@ -1113,13 +1181,16 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
     private fun deleteComponent(args: JsonObject): ToolResult {
         val business = args.string("business")?.trim().orEmpty()
-        if (business.isEmpty()) return invalidArgs("business 是必填的。")
+        if (business.isEmpty()) return invalidArgs("business is required.")
 
         writeGuard()?.let { return it }
         val components = RearWidgetManagerRepository.loadBusinesses(prefs)
         if (components.none { it.business == business }) {
             return ToolResult.error(
-                json("error" to "component_not_found", "detail" to "组件 '$business' 不存在。"),
+                json(
+                    "error" to "component_not_found",
+                    "detail" to "Component '$business' does not exist."
+                ),
             )
         }
 
@@ -1128,10 +1199,10 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "component_in_use",
-                    "detail" to "还有 ${dependent.size} 张卡片在用这个组件：${
+                    "detail" to "This component is used by ${dependent.size} cards: ${
                         dependent.joinToString("、") { it.title }
                     }。",
-                    "recovery" to "先告知用户这些卡片会失效；用户同意后带 confirm_orphan_cards=true 重试，或先删除相关卡片。",
+                    "recovery" to "Explain these cards will stop working. Retry with confirm_orphan_cards=true only after consent, or remove dependent cards first.",
                 ),
             )
         }
@@ -1155,10 +1226,10 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
     private fun registerSceneRoute(args: JsonObject): ToolResult {
         val packageName = args.string("package_name")?.trim().orEmpty()
-        val scene = args.string("scene")?.trim().orEmpty()
+        val scene = RearWidgetSceneRouteSpec.normalizeScenePattern(args.string("scene").orEmpty())
         val business = args.string("business")?.trim().orEmpty()
         if (packageName.isEmpty() || scene.isEmpty() || business.isEmpty()) {
-            return invalidArgs("package_name、scene、business 都是必填的。")
+            return invalidArgs("package_name, scene and business are required.")
         }
 
         writeGuard()?.let { return it }
@@ -1166,8 +1237,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "component_not_found",
-                    "detail" to "目标组件 '$business' 没有注册。",
-                    "recovery" to "先调用 list_components。",
+                    "detail" to "Target component '$business' is not registered.",
+                    "recovery" to "Call list_components first.",
                 ),
             )
         }
@@ -1176,9 +1247,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
         val regexError = validateScenePattern(scene)
         if (regexError != null) return invalidArgs(regexError)
 
-        val routes = RearWidgetManagerRepository.loadSceneRoutes(prefs)
         val route = hk.uwu.reareye.repository.rearwidget.RearWidgetSceneRouteConfig(
-            id = "$packageName::$scene::$business",
+            id = RearWidgetConfigCodec.newSceneRouteId(packageName, scene),
             packageName = packageName,
             scene = scene,
             business = business,
@@ -1194,14 +1264,19 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 )
             },
             readBack = { RearWidgetManagerRepository.loadSceneRoutes(prefs) },
-            verify = { saved -> saved.any { it.id == route.id } },
+            verify = { saved ->
+                saved.any {
+                    it.id == route.id && it.packageName == route.packageName &&
+                            it.business == route.business && it.scene == route.scene
+                }
+            },
             detail = mapOf("package_name" to packageName, "scene" to scene, "business" to business),
         )
     }
 
     private fun deleteSceneRoute(args: JsonObject): ToolResult {
         val id = args.string("id")?.trim().orEmpty()
-        if (id.isEmpty()) return invalidArgs("id 是必填的，先用 list_scene_routes 获取。")
+        if (id.isEmpty()) return invalidArgs("id is required; get it from list_scene_routes.")
 
         writeGuard()?.let { return it }
         val routes = RearWidgetManagerRepository.loadSceneRoutes(prefs)
@@ -1209,8 +1284,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "route_not_found",
-                    "detail" to "找不到 id 为 '$id' 的场景路由。",
-                    "recovery" to "先调用 list_scene_routes。",
+                    "detail" to "Scene route '$id' not found.",
+                    "recovery" to "Call list_scene_routes first.",
                 ),
             )
         }
@@ -1234,7 +1309,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
     private suspend fun switchWallpaper(args: JsonObject): ToolResult {
         val id = args.int("wallpaper_id")
-            ?: return invalidArgs("wallpaper_id 是必填的，先用 list_wallpapers 获取。")
+            ?: return invalidArgs("wallpaper_id is required; get it from list_wallpapers.")
         writeGuard()?.let { return it }
 
         val catalog = RearWallpaperRepository.loadCatalog(appContext)
@@ -1242,8 +1317,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ?: return ToolResult.error(
                 json(
                     "error" to "wallpaper_not_found",
-                    "detail" to "找不到 wallpaper_id=$id 的壁纸。",
-                    "recovery" to "先调用 list_wallpapers 获取有效的 id。",
+                    "detail" to "Wallpaper $id not found.",
+                    "recovery" to "Call list_wallpapers for a valid id.",
                 ),
             )
 
@@ -1253,15 +1328,15 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 json(
                     "wallpaper_id" to id,
                     "title" to target.name,
-                    "note" to "已发送切换请求。注意：主屏处于编辑模式时切换会被系统忽略，而接口仍报告成功，因此请以用户实际观察到的结果为准。",
+                    "note" to "Switch request sent. Main-screen edit mode may silently ignore it despite API success; rely on what the user observes.",
                 ),
             )
         } else {
             ToolResult.error(
                 json(
                     "error" to "switch_failed",
-                    "detail" to "切换壁纸的请求未被接受。",
-                    "recovery" to "可能是背屏中心（com.xiaomi.subscreencenter）没有运行，可先调用 get_module_status。",
+                    "detail" to "Wallpaper switch request was rejected.",
+                    "recovery" to "Rear-screen center (com.xiaomi.subscreencenter) may not be running; call get_module_status.",
                 ),
             )
         }
@@ -1269,31 +1344,21 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
 
     private suspend fun setWallpaperRotation(args: JsonObject): ToolResult {
         val id = args.int("wallpaper_id")
-            ?: return invalidArgs("wallpaper_id 是必填的。")
+            ?: return invalidArgs("wallpaper_id is required.")
         val inRotation = args.boolean("in_rotation")
-            ?: return invalidArgs("in_rotation 是必填的（true 加入轮播 / false 移出）。")
+            ?: return invalidArgs("in_rotation is required (true adds, false removes).")
         val intervalMs = args.int("interval_ms")
         writeGuard()?.let { return it }
 
         val catalog = RearWallpaperRepository.loadCatalog(appContext)
         if (catalog.wallpapers.none { it.wallpaperId == id }) {
             return ToolResult.error(
-                json("error" to "wallpaper_not_found", "detail" to "找不到 wallpaper_id=$id 的壁纸。"),
+                json("error" to "wallpaper_not_found", "detail" to "Wallpaper $id not found."),
             )
         }
 
         val current = RearWallpaperRepository.loadSchedule(prefs)
-        val next = if (inRotation) {
-            val base = current.filterNot { it.wallpaperId == id }
-            // Keep the array order: it *is* the rotation order.
-            base + RearWallpaperScheduleEntry(
-                wallpaperId = id,
-                // The codec clamps to MIN_DELAY_MS; mirror its default so a caller may omit it.
-                delayMs = intervalMs?.toLong() ?: RearWallpaperScheduleCodec.DEFAULT_DELAY_MS,
-            )
-        } else {
-            current.filterNot { it.wallpaperId == id }
-        }
+        val next = updatedMaryWallpaperSchedule(current, id, inRotation, intervalMs?.toLong())
 
         RearWallpaperRepository.saveSchedule(prefs, next)
         val enabled = RearWallpaperRepository.isScheduleEnabled(prefs) && next.isNotEmpty()
@@ -1301,7 +1366,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
         RearWallpaperRepository.syncSchedule(appContext, enabled, next)
 
         val saved = RearWallpaperRepository.loadSchedule(prefs)
-        val ok = saved.any { it.wallpaperId == id } == inRotation
+        val ok = saved == next && RearWallpaperRepository.isScheduleEnabled(prefs) == enabled
         return if (ok) {
             ToolResult.ok(
                 json(
@@ -1315,14 +1380,14 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ToolResult.error(
                 json(
                     "error" to "verify_failed",
-                    "detail" to "轮播列表修改后回读结果不一致。",
+                    "detail" to "Rotation read-back does not match requested changes.",
                 ),
             )
         }
     }
 
     private suspend fun setRotationEnabled(args: JsonObject): ToolResult {
-        val enabled = args.boolean("enabled") ?: return invalidArgs("enabled 是必填的。")
+        val enabled = args.boolean("enabled") ?: return invalidArgs("enabled is required.")
         writeGuard()?.let { return it }
 
         val schedule = RearWallpaperRepository.loadSchedule(prefs)
@@ -1330,8 +1395,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "empty_rotation",
-                    "detail" to "轮播列表是空的，不能开启轮播。",
-                    "recovery" to "先用 set_wallpaper_rotation 把至少一张壁纸加入轮播。",
+                    "detail" to "Cannot enable an empty rotation list.",
+                    "recovery" to "Add a wallpaper using set_wallpaper_rotation first.",
                 ),
             )
         }
@@ -1343,18 +1408,23 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
         return if (actual == enabled) {
             ToolResult.ok(json("rotation_enabled" to actual, "rotation_count" to schedule.size.toString()))
         } else {
-            ToolResult.error(json("error" to "verify_failed", "detail" to "轮播开关回读不一致。"))
+            ToolResult.error(
+                json(
+                    "error" to "verify_failed",
+                    "detail" to "Rotation enabled-state verification failed."
+                )
+            )
         }
     }
 
     private suspend fun deleteWallpaper(args: JsonObject): ToolResult {
-        val id = args.int("wallpaper_id") ?: return invalidArgs("wallpaper_id 是必填的。")
+        val id = args.int("wallpaper_id") ?: return invalidArgs("wallpaper_id is required.")
         writeGuard()?.let { return it }
 
         val catalog = RearWallpaperRepository.loadCatalog(appContext)
         val target = catalog.wallpapers.firstOrNull { it.wallpaperId == id }
             ?: return ToolResult.error(
-                json("error" to "wallpaper_not_found", "detail" to "找不到 wallpaper_id=$id 的壁纸。"),
+                json("error" to "wallpaper_not_found", "detail" to "Wallpaper $id not found."),
             )
 
         // `imported` is the only gate the module enforces for delete; checking it here turns an
@@ -1363,8 +1433,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "not_imported",
-                    "detail" to "壁纸 '${target.name}' 不是 REAREye 导入或仓库安装的，模块不允许删除系统自带壁纸。",
-                    "recovery" to "告知用户这张壁纸不能删除，不要重试。",
+                    "detail" to "Wallpaper '${target.name}' is not imported or repository-installed; system wallpapers cannot be deleted.",
+                    "recovery" to "Tell the user this wallpaper cannot be deleted; do not retry.",
                 ),
             )
         }
@@ -1374,7 +1444,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             return ToolResult.error(
                 json(
                     "error" to "delete_failed",
-                    "detail" to (result.error ?: "模块拒绝了删除请求。"),
+                    "detail" to (result.error ?: "The module rejected the deletion request."),
                 ),
             )
         }
@@ -1395,20 +1465,20 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
     }
 
     private suspend fun updateWallpaperMetadata(args: JsonObject): ToolResult {
-        val id = args.int("wallpaper_id") ?: return invalidArgs("wallpaper_id 是必填的。")
+        val id = args.int("wallpaper_id") ?: return invalidArgs("wallpaper_id is required.")
         writeGuard()?.let { return it }
 
         val catalog = RearWallpaperRepository.loadCatalog(appContext)
         val target = catalog.wallpapers.firstOrNull { it.wallpaperId == id }
             ?: return ToolResult.error(
-                json("error" to "wallpaper_not_found", "detail" to "找不到 wallpaper_id=$id 的壁纸。"),
+                json("error" to "wallpaper_not_found", "detail" to "Wallpaper $id not found."),
             )
         if (!target.canEditMetadata) {
             return ToolResult.error(
                 json(
                     "error" to "not_editable",
-                    "detail" to "壁纸 '${target.name}' 不是 REAREye 导入的，不允许修改信息。",
-                    "recovery" to "告知用户这张壁纸改不了，不要重试。",
+                    "detail" to "Wallpaper '${target.name}' is not imported; metadata cannot be modified.",
+                    "recovery" to "Tell the user this wallpaper cannot be edited; do not retry.",
                 ),
             )
         }
@@ -1436,7 +1506,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ToolResult.error(
                 json(
                     "error" to "update_failed",
-                    "detail" to (result.error ?: "模块拒绝了修改请求。"),
+                    "detail" to (result.error ?: "The module rejected the update request."),
                 ),
             )
         }
@@ -1481,18 +1551,20 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                     json(
                         "error" to "verify_failed",
                         "action" to action,
-                        "detail" to "改动已提交，但回读没有看到预期结果。模块的接口失败是静默的，所以不能当作成功。",
-                        "recovery" to "重新读取一次当前状态并向用户如实说明，不要声称已成功。",
+                        "detail" to "Changes were submitted but read-back did not match. Module APIs can fail silently; do not claim success.",
+                        "recovery" to "Read current state again and report accurately; do not claim success.",
                     ),
                 )
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (t: Throwable) {
             ToolResult.error(
                 json(
                     "error" to "write_failed",
                     "action" to action,
                     "detail" to (t.message ?: t.javaClass.simpleName).take(300),
-                    "recovery" to "写入失败，配置未被改动。请如实告知用户。",
+                    "recovery" to "The operation failed and may have partially changed state. Re-read current state and report accurately; do not assume rollback.",
                 ),
             )
         }
@@ -1508,8 +1580,8 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ToolResult.error(
                 json(
                     "error" to "config_unavailable",
-                    "detail" to "模块配置服务未连接，无法读取或修改卡片、组件或壁纸。",
-                    "recovery" to "先调用 get_module_status 查看状态；不要告诉用户「没有配置」，因为实际是读不到。",
+                    "detail" to "Module configuration service is disconnected; cards, components and wallpapers cannot be read or modified.",
+                    "recovery" to "Call get_module_status. Do not report empty configuration when it is actually unreadable.",
                 ),
             )
         }
@@ -1521,7 +1593,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
         json(
             "error" to "invalid_args",
             "detail" to detail,
-            "recovery" to "请补齐参数后重试。",
+            "recovery" to "Supply valid required arguments and retry.",
         ),
     )
 
@@ -1539,10 +1611,10 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             looksLikeRegex -> scene.substring(1, scene.length - 1)
             else -> return null
         }
-        if (pattern.isEmpty()) return "场景规则是空的正则表达式。"
+        if (pattern.isEmpty()) return "Scene pattern is an empty regular expression."
         return runCatching { Regex(pattern) }
             .exceptionOrNull()
-            ?.let { "场景规则的正则表达式不合法（${it.message}）。模块会接受它但永远不会匹配，所以请修正后重试。" }
+            ?.let { "Invalid scene regular expression (${it.message}). The module would accept but never match it; fix and retry." }
     }
 
     private companion object {
@@ -1626,94 +1698,125 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             }
         }.toString()
 
-        val ALL: List<ToolSpec> = readTools() + writeTools()
+        val SCRIPT_MODEL_SPEC = """
+            REAREye LuaJIT scripting API
+            The entry must return a descriptor table. Example:
+            local function hello(params, config, context)
+                return "Hello " .. tostring(params.name or "REAREye")
+            end
+            return { id = "hello_script", name = "Hello Script", providers = { hello = hello } }
+
+            Descriptor: optional id (default main filename; letters, digits, dot, underscore, hyphen),
+            name (default project name), description, group; required providers map; optional configs array.
+            Provider ids and config ids follow the same id character rule. Business data and OPTIONS
+            values are not descriptor ids. Providers can be functions or tables with required handler,
+            optional name (default provider id), description, mimeType (default text/plain), mode
+            (IMMEDIATE, CACHE_FIRST, CACHE_ONLY, REFRESH) and ttlMillis (0..86400000).
+            Handler signature: function(params, config, context) -> any. params are caller arguments;
+            config contains normalized declared settings. Return strings, numbers, booleans, arrays,
+            or tables with string keys.
+
+            configs example: { { id="city", type="STRING", default="Shanghai", note="City" },
+                { id="count", type="NUMBER", default=3, min=1, max=10, step=1 },
+                { id="enabled", type="BOOLEAN", default=true },
+                { id="unit", type="OPTIONS", default="celsius",
+                  options={ {id="celsius",name="Celsius"}, {id="fahrenheit",name="Fahrenheit"} } } }
+            STRING converts to text, default empty. NUMBER normalizes min/max/step, default 0.
+            BOOLEAN accepts true or string "true". OPTIONS requires an option value, otherwise uses
+            the first option. Do not confuse option values with config entry ids.
+
+            context:now() returns host timestamp in milliseconds.
+            context:log(message), or print(...), writes debug logs (4096 chars per entry, 200 per run).
+            context:readText(path) reads UTF-8 project-root files. Path must be relative with no dot
+            or parent segments, backslashes, absolute paths or drive letters. Not available to standalone scripts.
+            Project require("a.b") searches a/b.lua then a/b/init.lua. Module names allow Lua
+            identifiers and dots only, not absolute paths or traversal. Standalone scripts cannot
+            load arbitrary project files.
+
+            context.root:exec(command, options) executes su -c with user-granted root authorization.
+            options: stdin (string), timeoutMillis (default 10000, range 100..120000).
+            Returns exitCode, stdout, stderr, timedOut, outputLimitExceeded. stdout/stderr have host
+            size limits. Nonzero exits do not throw automatically: inspect exitCode, timedOut, stderr.
+            Root commands can be destructive; obtain explicit user consent and minimize privileges.
+
+            context.http:request({url=..., method="GET", query={}, headers={}, body="...",
+                timeoutMillis=15000, followRedirects=true, followSslRedirects=true}) uses host OkHttp.
+            url is required and must be HTTP/HTTPS. Methods: GET, HEAD, POST, PUT, PATCH, DELETE.
+            query/headers are string-keyed tables; query values are URL encoded and duplicate request
+            headers replace prior values. body is a string. Timeout applies to connect/read/write/call
+            and is clamped to 100..120000 ms. Both redirect flags default true.
+            Returns statusCode, ok (2xx), headers (duplicate values comma-joined), body, contentType,
+            url (final URL). Network errors throw Lua errors; 4xx/5xx return tables with ok=false.
+            Shortcuts: context.http:get(url, options), :delete(url, options),
+            :post(url, body, options), :put(url, body, options), :patch(url, body, options).
+            Shortcut options match request query/headers/timeouts/redirects. For JSON set Content-Type
+            and Accept headers explicitly and pass serialized body. Responses are not JSON-decoded;
+            include a project Lua JSON module or let the caller interpret the declared mimeType.
+            Use pcall for thrown network errors and inspect response.ok for HTTP failures.
+
+            Debug UI executes providers directly. External ContentProvider forms:
+            content://hk.uwu.reareye.script/{projectId}/{providerId}?name=REAREye
+            content://hk.uwu.reareye.script/run?project=my_project&provider=hello&name=REAREye
+            Result columns: project_id, provider_id, mime_type, data, error, elapsed_millis.
+            Tool ids KIND:local_id are storage selection handles, not these runtime project ids.
+
+            Limits: default execution 5 seconds, runtime maximum 30 seconds; project file maximum
+            2 MiB; returned values maximum depth 24, 10000 elements and 262144 string characters.
+            UTF-8 source only; bytecode is forbidden. io, package, debug, ffi, jit, java and luajava
+            are disabled. os exposes only time/date/difftime/clock. Root and HTTP are host-injected;
+            pure rear-script-runtime tests do not provide real root or network access.
+            Prefer documented context APIs; never depend on Android internals, LuaJIT private APIs
+            or host Java reflection. Static creation checks are not a Lua parser or sandbox;
+            runtime descriptor validation remains authoritative. Test generated scripts in the UI.
+        """.trimIndent()
+
+        val ALL: List<ToolSpec> = run {
+            val editing =
+                MaryScriptEditingTools.SPECS + MaryComponentEditingTools.SPECS + MaryConfigEditingTools.SPECS
+            check(editing.map { it.name }
+                .distinct().size == editing.size) { "Duplicate editing tool names" }
+            val replacements = editing.mapTo(mutableSetOf()) { it.name }
+            (readTools() + writeTools()).filterNot { it.name in replacements } + editing
+        }
 
         private fun readTools(): List<ToolSpec> = listOf(
             ToolSpec(
                 name = GET_MODULE_STATUS,
                 description = """
-                    查询 REAREye 模块自身的运行状态：是否已激活、作用域是否授权、模块配置当前是否可读。
-
-                    什么时候用：
-                    - 用户问"背屏功能怎么没生效""模块装好了吗""为什么改了没反应"时，先调用它。
-                    - 在任何其他查询或修改之前调用它，可以提前发现配置服务没连接的情况。
-
-                    返回：activation_state（SERVICE_UNAVAILABLE / SCOPE_NOT_AUTHORIZED /
-                    NO_RUNNING_TARGET / ACTIVE）、module_active、config_readable，以及中文说明。
-                    本工具只读。
+                    Read module activation, scope authorization and configuration availability before other operations. Returns activation_state, module_active, config_readable and explanation. Read-only.
                 """.trimIndent(),
                 risk = ToolRisk.READ_ONLY,
             ),
             ToolSpec(
                 name = LIST_COMPONENTS,
                 description = """
-                    列出背屏上已经装好的组件（"组件"），以及每个组件被哪些卡片使用。
-
-                    什么时候用：
-                    - 用户问"背屏装了什么""列一下组件""有哪些组件"时，这是正确的工具。
-                    - 在新增卡片之前，用它确认目标组件确实存在，并拿到 business 值。
-
-                    返回：count 和 components 数组。每项含 business（组件标识，建卡片要用）、
-                    package_name、template_path、default_priority、renameable、
-                    from_store、store_widget、used_by_cards。
-
-                    本工具只读。返回 config_unavailable 时不要告诉用户"没有组件"，那是读不到。
+                    List reusable component templates and dependent cards. Returns business, package_name, template_path, default_priority, renameable, from_store and used_by_cards. Use business when creating cards. Components are not app cards. config_unavailable means unreadable, not empty. Read-only.
                 """.trimIndent(),
                 risk = ToolRisk.READ_ONLY,
             ),
             ToolSpec(
                 name = LIST_CARDS,
                 description = """
-                    列出背屏上配置好的卡片（"卡片"）。
-
-                    什么时候用：
-                    - 用户问"背屏有哪些卡片"时。
-                    - 在修改、开关或删除卡片之前，先用它拿到卡片的 id。
-
-                    返回：count 和 cards 数组。每项含 id（改删要用）、title、package_name、
-                    business、enabled、sticky、priority、renameable（false 表示仓库安装、受保护）、
-                    from_store、has_template_values。本工具只读。
+                    List display cards with id, title, package_name, business, enabled, sticky, priority, renameable, from_store and has_template_values. Get ids before changes. Not application launch entries. Read-only.
                 """.trimIndent(),
                 risk = ToolRisk.READ_ONLY,
             ),
             ToolSpec(
                 name = LIST_APP_CARDS,
                 description = """
-                    列出背屏上的应用卡（"应用"）。
-
-                    什么时候用：
-                    - 用户问"背屏有哪些应用""装了什么应用"，或提到"应用卡"时，用这个工具。
-                    - **绝对不要**用 list_components 或 list_cards 回答关于"应用"的问题。
-                      它们读的是组件和卡片，和应用卡是完全不同的东西。
-
-                    概念区分（重要）：
-                    - 组件（component）：可复用模板，用 business 标识，本身不显示在背屏上。
-                    - 卡片（card）：由组件派生的显示内容，用卡片 id 标识。
-                    - 应用卡（app card）：也叫"应用"，由组件派生，但是能跳转到某个 App 的
-                      入口，用 app_id 标识。用户说"背屏应用"指的就是它。
-
-                    返回：total（总数）、offset、count（本次返回数）、has_more、
-                    next_offset（还有更多时给出）、app_cards 数组。
-                    每项含 app_id（后续改名/删除要用）、title、component_business（派生自哪个组件）、
-                    bind_package，以及仅在可用时才出现的 can_rename / can_delete。
-
-                    分页说明：结果默认每页 $DEFAULT_APP_CARD_PAGE_SIZE 条，避免一次性返回过长内容。
-                    如果 has_more 为 true，用 next_offset 再调一次即可继续。
-                    用户要"列出全部应用"时，要一直翻到 has_more 为 false，不要只报第一页。
-
-                    如果 total 为 0，就是真的没有应用卡，照实说即可。本工具只读。
+                    List application launch entries, not cards or components. Use this for rear-screen apps; never substitute list_cards or list_components. Returns total, offset, count, has_more, next_offset and app_cards (app_id, title, component_business, bind_package, optional can_rename/can_delete). Follow next_offset until has_more=false to list all. Default page size: $DEFAULT_APP_CARD_PAGE_SIZE. total=0 means empty. Read-only.
                 """.trimIndent(),
                 risk = ToolRisk.READ_ONLY,
                 params = listOf(
                     ToolParam(
                         "offset",
-                        "从第几条开始，默认 0",
+                        "Zero-based starting index; default 0",
                         ToolParam.ParamType.INTEGER,
                         required = false,
                     ),
                     ToolParam(
                         "limit",
-                        "本次返回条数，默认 $DEFAULT_APP_CARD_PAGE_SIZE",
+                        "Maximum entries; default $DEFAULT_APP_CARD_PAGE_SIZE",
                         ToolParam.ParamType.INTEGER,
                         required = false,
                     ),
@@ -1722,26 +1825,14 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ToolSpec(
                 name = REGISTER_APP_CARD,
                 description = """
-                    新建一张应用卡（"应用"）。
-
-                    概念：应用卡由组件派生，但是能跳转到某个 App 的入口，和卡片是两种东西。
-                    这个工具**不会**创建卡片；要建卡片请用 create_card。
-
-                    前置条件：component_business 必须是已注册的组件。先调用 list_components 获取。
-
-                    参数：
-                    - title（必填）：应用卡显示名。
-                    - component_business（必填）：来源组件标识，来自 list_components。
-
-                    本操作会修改配置，需要用户确认。返回 ok 与 app_id。
-                    如果返回 component_not_found，先查组件再重试，不要凭空编造标识。
+                    Create application launch entry from title and existing component_business from list_components. Does not create a display card. Returns ok and app_id. Never invent identifiers. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
                 params = listOf(
-                    ToolParam("title", "应用卡显示名", ToolParam.ParamType.STRING),
+                    ToolParam("title", "Display title", ToolParam.ParamType.STRING),
                     ToolParam(
                         "component_business",
-                        "来源组件标识，来自 list_components",
+                        "Existing component from list_components",
                         ToolParam.ParamType.STRING,
                     ),
                 ),
@@ -1749,58 +1840,42 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ToolSpec(
                 name = RENAME_APP_CARD,
                 description = """
-                    重命名一张应用卡。
-
-                    参数：
-                    - app_id（必填）：先用 list_app_cards 获取，注意不是卡片的 id。
-                    - title（必填）：新名称。
-
-                    限制：只有 can_rename=true 的应用卡能改名，否则返回 not_renameable。
-                    遇到时直接告诉用户这一张改不了，不要重试。
-
-                    本操作会修改配置，需要用户确认。
+                    Rename app_id from list_app_cards to title. Requires can_rename=true; report not_renameable without retrying. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
                 params = listOf(
-                    ToolParam("app_id", "应用卡 id，来自 list_app_cards", ToolParam.ParamType.STRING),
-                    ToolParam("title", "新名称", ToolParam.ParamType.STRING),
+                    ToolParam(
+                        "app_id",
+                        "App card id from list_app_cards",
+                        ToolParam.ParamType.STRING
+                    ),
+                    ToolParam("title", "Display title", ToolParam.ParamType.STRING),
                 ),
             ),
             ToolSpec(
                 name = DELETE_APP_CARD,
                 description = """
-                    删除一张应用卡。
-
-                    参数：app_id（必填），先用 list_app_cards 获取。
-
-                    这是不可撤销的操作。删除前先用标题向用户复述一遍是哪一张，不要凭猜测删除。
-                    限制：只有 can_delete=true 的应用卡能删，否则返回 not_deletable。
-
-                    本操作会修改配置，需要用户确认。
+                    Permanently delete app_id from list_app_cards. Confirm intended title first. Requires can_delete=true; do not retry not_deletable. Requires explicit user confirmation.
                 """.trimIndent(),
-                risk = ToolRisk.MUTATING,
+                risk = ToolRisk.DESTRUCTIVE,
                 params = listOf(
-                    ToolParam("app_id", "应用卡 id，来自 list_app_cards", ToolParam.ParamType.STRING),
+                    ToolParam(
+                        "app_id",
+                        "App card id from list_app_cards",
+                        ToolParam.ParamType.STRING
+                    ),
                 ),
             ),
             ToolSpec(
                 name = REORDER_APP_CARDS,
                 description = """
-                    调整应用卡的显示顺序。
-
-                    参数：app_ids（必填）—— 按期望顺序排列的**全部** app_id。
-
-                    重要：必须传入当前所有应用卡的 app_id，不能只传一部分。模块是按完整列表
-                    重排的，少传的会被丢掉。工具会先核对数量，不匹配时返回 incomplete_order
-                    并告诉你当前共有多少张，此时应先调用 list_app_cards 取全再重试。
-
-                    本操作会修改配置，需要用户确认。
+                    Reorder every current app_id exactly once. Partial orders are rejected to prevent dropped entries. Fetch all list_app_cards pages first. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
                 params = listOf(
                     ToolParam(
                         "app_ids",
-                        "按期望顺序排列的全部 app_id（字符串数组）",
+                        "All app card ids in desired order",
                         ToolParam.ParamType.STRING_ARRAY,
                     ),
                 ),
@@ -1808,202 +1883,141 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ToolSpec(
                 name = LIST_SCRIPTS,
                 description = """
-                    列出 REAREye 里已安装的 Lua 脚本。
-
-                    什么时候用：
-                    - 用户问"有哪些脚本""装了哪些 Lua 脚本"时。
-                    - 在读取或删除脚本之前，先用它拿到 id。
-
-                    返回：count 和 scripts 数组。每项含 id（读删要用）、name、
-                    kind（STANDALONE 单文件 / PROJECT 多文件 / COMPONENT 由组件安装）、
-                    valid（文件是否齐全）、component_id、error。
-
-                    注意：本工具只报告存储层的已知信息，**不会加载脚本**（加载会执行脚本代码）。
-                    所以要拿到脚本声明了哪些 Provider，需要调用方自己运行它。本工具只读。
+                    List Lua scripts without execution. Returns type-qualified id (KIND:local_id), local_id, name, kind (STANDALONE/PROJECT/COMPONENT), valid, component_id and error. Use returned ids for read/delete; ambiguous legacy ids rejected. Does not load providers. Read-only.
                 """.trimIndent(),
                 risk = ToolRisk.READ_ONLY,
             ),
             ToolSpec(
                 name = READ_SCRIPT,
                 description = """
-                    读取一个 Lua 脚本的源码，并给出静态检查结果。
-
-                    什么时候用：
-                    - 用户想看看某个脚本写了什么。
-                    - 在修改或重写脚本之前。
-
-                    参数：id（必填），先用 list_scripts 获取。
-
-                    返回：id、name、kind、valid、issues（静态检查报告）、source（源码全文）。
-                    本工具只读，且**不会执行脚本**。
+                    Read Lua source and static diagnostics without execution. Use type-qualified id from list_scripts. Legacy local ids must be unique across kinds. Returns id, name, kind, valid, issues and source. Read-only.
                 """.trimIndent(),
                 risk = ToolRisk.READ_ONLY,
                 params = listOf(
-                    ToolParam("id", "脚本 id，来自 list_scripts", ToolParam.ParamType.STRING),
+                    ToolParam(
+                        "id",
+                        "Exact id from the list tool; scripts use KIND:local_id",
+                        ToolParam.ParamType.STRING
+                    ),
                 ),
             ),
             ToolSpec(
                 name = GET_SCRIPT_SPEC,
                 description = """
-                    取回 REAREye 的 Lua 脚本文档全文。
-
-                    什么时候用：
-                    - 用户要求生成一个脚本时，**第一步先调用本工具**。
-                    - 需要确认脚本 API（context 方法、Provider 声明、配置项、运行限制）时。
-
-                    返回：spec 字段是文档全文。拿到后按它写脚本源码，再调用 create_script 提交。
-                    不要凭记忆编造脚本 API——文档里有准确的方法名和限制（超时、大小上限、
-                    被禁用的标准库等）。本工具只读，不修改任何配置。
+                    Fetch complete Lua API documentation before authoring or editing scripts. Follow documented APIs and runtime limits. Use create_script for new projects; read_script then update_script for existing files, preserving identity. Never invent APIs. Read-only.
                 """.trimIndent(),
                 risk = ToolRisk.READ_ONLY,
             ),
             ToolSpec(
                 name = CREATE_SCRIPT,
                 description = """
-                    创建一个新的 Lua 脚本。
-
-                    什么时候用：
-                    - 用户要求"写一个脚本/做一个 Provider"时。
-                    - 调用前应先调用 get_script_spec 拿到文档，并严格按文档编写。
-
-                    参数：
-                    - source（必填）：完整的 Lua 脚本源码。
-                    - name（必填）：显示名，同时用作脚本 id 的来源。
-                    - id（可选）：指定脚本 id；留空则由 name 派生。重名会自动加数字后缀。
-
-                    静态校验（不通过则不创建任何东西，返回 script_validation_failed 和问题清单）：
-                    - 入口必须 return 一个描述表
-                    - 描述表必须声明 providers（必填项）
-                    - 所有 id 字面量只能包含字母、数字、点、下划线和连字符
-
-                    **本工具不会执行脚本**。校验是静态的，脚本加载时才做权威校验；
-                    因此创建成功后请提醒用户可以在脚本页里运行测试。
-
-                    本操作会创建文件、修改配置，需要用户确认。成功返回 id。
+                    Create standalone Lua from source after get_script_spec. name supplies filename unless optional id is given; collisions get suffixes. Reliable failures are errors; heuristic descriptor/id checks are warnings. No execution; authoritative validation occurs at runtime. Suggest script-screen testing. Returns type-qualified id. Generated code may access root or network when run, so explicit user confirmation is mandatory.
                 """.trimIndent(),
-                risk = ToolRisk.MUTATING,
+                risk = ToolRisk.DESTRUCTIVE,
                 params = listOf(
-                    ToolParam("source", "完整的 Lua 脚本源码", ToolParam.ParamType.STRING),
-                    ToolParam("name", "显示名", ToolParam.ParamType.STRING),
-                    ToolParam("id", "脚本 id，留空则由 name 派生", ToolParam.ParamType.STRING, required = false),
+                    ToolParam("source", "Complete Lua source", ToolParam.ParamType.STRING),
+                    ToolParam(
+                        "name",
+                        "Display name used to derive filename",
+                        ToolParam.ParamType.STRING
+                    ),
+                    ToolParam(
+                        "id",
+                        "Exact id from the list tool; scripts use KIND:local_id",
+                        ToolParam.ParamType.STRING,
+                        required = false
+                    ),
                 ),
             ),
             ToolSpec(
                 name = DELETE_SCRIPT,
                 description = """
-                    删除一个 Lua 脚本。
-
-                    参数：id（必填），先用 list_scripts 获取。
-
-                    限制：kind 为 COMPONENT 的脚本由组件安装，不能单独删除，会返回
-                    component_owned_script；这时告知用户它随组件卸载一起移除即可，不要重试。
-
-                    这是不可撤销的操作。删除前先用名称向用户复述一遍是哪一个。
-                    本操作会修改配置，需要用户确认。
+                    Permanently delete type-qualified id from list_scripts. Ambiguous legacy ids rejected. COMPONENT scripts cannot be deleted independently; explain removal with owning component and do not retry. Confirm intended name. Requires explicit user confirmation.
                 """.trimIndent(),
-                risk = ToolRisk.MUTATING,
+                risk = ToolRisk.DESTRUCTIVE,
                 params = listOf(
-                    ToolParam("id", "脚本 id，来自 list_scripts", ToolParam.ParamType.STRING),
+                    ToolParam(
+                        "id",
+                        "Exact id from the list tool; scripts use KIND:local_id",
+                        ToolParam.ParamType.STRING
+                    ),
                 ),
             ),
             ToolSpec(
                 name = GET_WIDGET_SPEC,
                 description = """
-                    取回"HTML 组件"的生成规范（已按本次参数填好）。
-
-                    什么时候用：
-                    - 用户要求生成一个背屏上原本没有的卡片/应用/组件时，**第一步先调用本工具**。
-                    - 规范规定了安全区、可用区比例、触控尺寸、分辨率适配、生命周期接口等硬性约束，
-                      违反其中任何一条都会被程序校验拒绝。
-
-                    参数：
-                    - content（必填）：把用户要的东西写清楚——功能、状态机、视觉规格、交互规则、文案。
-                      规范要求界面文案语言与 content 的书写语言一致，所以用中文写就会生成中文界面。
-                    - app_name（可选）：应用名。
-                    - base_width / base_height（可选）：设计基准分辨率，默认 $DEFAULT_BASE_WIDTH×$DEFAULT_BASE_HEIGHT。
-
-                    返回：spec 字段是完整规范原文。拿到后按它写 HTML，再调用 create_html_widget 提交。
-                    本工具只读，不修改任何配置。
+                    Get HTML widget specification before generation. content describes functions, state machine, visuals, interactions and text in desired UI language. Optional app_name and dimensions default to $DEFAULT_BASE_WIDTH x $DEFAULT_BASE_HEIGHT. Follow spec then create_html_widget for new widgets, or read_component/update_component to edit an existing one in place. Read-only.
                 """.trimIndent(),
                 risk = ToolRisk.READ_ONLY,
                 params = listOf(
-                    ToolParam("content", "功能、状态机、视觉规格、交互规则、文案", ToolParam.ParamType.STRING),
-                    ToolParam("app_name", "应用名", ToolParam.ParamType.STRING, required = false),
-                    ToolParam("base_width", "设计基准宽，默认 $DEFAULT_BASE_WIDTH", ToolParam.ParamType.INTEGER, required = false),
-                    ToolParam("base_height", "设计基准高，默认 $DEFAULT_BASE_HEIGHT", ToolParam.ParamType.INTEGER, required = false),
+                    ToolParam(
+                        "content",
+                        "Functions, state machine, visuals, interactions and UI text",
+                        ToolParam.ParamType.STRING
+                    ),
+                    ToolParam(
+                        "app_name",
+                        "Application name",
+                        ToolParam.ParamType.STRING,
+                        required = false
+                    ),
+                    ToolParam(
+                        "base_width",
+                        "Design width; default $DEFAULT_BASE_WIDTH",
+                        ToolParam.ParamType.INTEGER,
+                        required = false
+                    ),
+                    ToolParam(
+                        "base_height",
+                        "Design height; default $DEFAULT_BASE_HEIGHT",
+                        ToolParam.ParamType.INTEGER,
+                        required = false
+                    ),
                 ),
             ),
             ToolSpec(
                 name = CREATE_HTML_WIDGET,
                 description = """
-                    把一个生成好的单文件 HTML 注册为一个全新的背屏组件（"HTML 组件"）。
-
-                    什么时候用：
-                    - 用户要求"生成一个 XX 卡片/应用/组件"，而且现有组件满足不了时。
-                    - 你已经按系统提示词里的 HTML 组件规范写好完整 HTML 之后。
-
-                    概念（重要）：
-                    - 组件是根本，卡片和应用都必须由组件派生。本工具创建的是**组件**。
-                    - 组件建好后，再用 register_app_card 把它注册成应用卡（"应用"），
-                      或用 create_card 建成卡片。
-                    - 现有的 create_card / register_app_card 只能使用**已存在**的组件；
-                      要造背屏上原本没有的东西，必须先调用本工具。
-
-                    参数：
-                    - html（必填）：完整的单文件 HTML，遵循系统提示词里的规范。
-                    - title（必填）：显示名，例如"真心话大冒险"。
-                    - business（可选）：组件标识。留空则自动取名；若与已有组件重名会自动加后缀。
-                    - base_width / base_height（可选）：设计基准分辨率，默认 $DEFAULT_BASE_WIDTH×$DEFAULT_BASE_HEIGHT。
-                      背屏是横屏，必须 base_width > base_height。
-
-                    校验：HTML 会先按规范自动校验（安全区、触控尺寸、头注释数值是否与 LAYOUT 实算一致等）。
-                    不通过时返回 widget_validation_failed 和逐条问题清单，**此时不会创建任何东西**；
-                    请按清单修改 HTML 后重新调用，不要跳过任何一条。
-
-                    本操作会创建组件、修改配置，需要用户确认。成功返回 business，后续注册应用卡要用它。
+                    Create a new component from complete html and title after get_widget_spec. Follow layout, safe-area, touch, lifecycle and header rules. Optional business is made unique. Dimensions default to $DEFAULT_BASE_WIDTH x $DEFAULT_BASE_HEIGHT; width must exceed height. Validation failure creates nothing; fix all errors. Returns business; then register_app_card or create_card creates display entries. Generated active content requires explicit user confirmation.
                 """.trimIndent(),
-                risk = ToolRisk.MUTATING,
+                risk = ToolRisk.DESTRUCTIVE,
                 // The result echoes back the submitted HTML, which is large by nature. The global
                 // cap would cut it in half and hand the model broken JSON to reason about.
                 maxResultChars = 200_000,
                 params = listOf(
-                    ToolParam("html", "完整单文件 HTML", ToolParam.ParamType.STRING),
-                    ToolParam("title", "显示名，例如 真心话大冒险", ToolParam.ParamType.STRING),
-                    ToolParam("business", "组件标识，留空自动取名", ToolParam.ParamType.STRING, required = false),
-                    ToolParam("base_width", "设计基准宽，默认 $DEFAULT_BASE_WIDTH", ToolParam.ParamType.INTEGER, required = false),
-                    ToolParam("base_height", "设计基准高，默认 $DEFAULT_BASE_HEIGHT", ToolParam.ParamType.INTEGER, required = false),
+                    ToolParam("html", "Complete single-file HTML", ToolParam.ParamType.STRING),
+                    ToolParam("title", "Display title", ToolParam.ParamType.STRING),
+                    ToolParam(
+                        "business",
+                        "Component identifier",
+                        ToolParam.ParamType.STRING,
+                        required = false
+                    ),
+                    ToolParam(
+                        "base_width",
+                        "Design width; default $DEFAULT_BASE_WIDTH",
+                        ToolParam.ParamType.INTEGER,
+                        required = false
+                    ),
+                    ToolParam(
+                        "base_height",
+                        "Design height; default $DEFAULT_BASE_HEIGHT",
+                        ToolParam.ParamType.INTEGER,
+                        required = false
+                    ),
                 ),
             ),
             ToolSpec(
                 name = LIST_SCENE_ROUTES,
                 description = """
-                    列出背屏的场景路由规则：把某个应用的通知场景映射到指定组件。
-
-                    什么时候用：用户问"通知怎么显示的""场景路由配了哪些"时。
-
-                    返回：count 和 routes 数组，每项含 id（删除要用）、package_name、scene、
-                    business、from_store。
-
-                    注意：只管场景路由，系统级通知路由不在本模块可读范围内。本工具只读。
+                    List scene routes with id, package_name, scene and business. Excludes system-level notification routing. Read-only.
                 """.trimIndent(),
                 risk = ToolRisk.READ_ONLY,
             ),
             ToolSpec(
                 name = LIST_WALLPAPERS,
                 description = """
-                    列出背屏壁纸：全部可用壁纸、当前正在使用的那张，以及轮播列表。
-
-                    什么时候用：
-                    - 用户问"有哪些壁纸""现在用哪张""轮播怎么设的"时。
-                    - 切换壁纸、改信息、删除、调轮播之前，先拿 wallpaper_id 并确认 imported。
-
-                    返回：count、current_wallpaper_id、rotation_enabled、rotation_count；
-                    wallpapers 数组（wallpaper_id、title、name、is_current、in_rotation、imported、
-                    can_edit_metadata、can_delete、has_template_config、author）；
-                    rotation 数组（wallpaper_id、interval_ms）。
-
-                    重要：只有 imported=true 的壁纸能改或删，系统壁纸会被模块拒绝。
-                    本工具只读。
+                    List wallpapers, current_wallpaper_id, rotation_enabled and rotation entries (wallpaper_id, interval_ms). Inspect imported/can_edit_metadata before edits; system wallpapers cannot be deleted. Read-only.
                 """.trimIndent(),
                 risk = ToolRisk.READ_ONLY,
             ),
@@ -2013,273 +2027,316 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ToolSpec(
                 name = CREATE_CARD,
                 description = """
-                    在背屏上新建一张卡片。
-
-                    前置条件：目标组件必须已经注册。先调用 list_components 拿到 business 值。
-
-                    参数：
-                    - title（必填）：卡片显示名。
-                    - business（必填）：要使用的组件标识，来自 list_components。
-                    - package_name（可选）：通知投递的目标包名；留空则沿用组件自身的包名。
-                    - enabled（可选，默认 true）：是否启用。
-                    - sticky（可选，默认 true）：是否常驻显示。
-                    - priority（可选）：优先级，数字越大越靠前；留空则用组件默认值。
-
-                    注意：如果标题和组件都相同的卡片已存在，会被拒绝，避免重复。
-
-                    本操作会修改配置，需要用户确认。返回 ok 与 card_id。
-                    如果返回 component_not_found，先查组件再重试，不要凭空编造 business。
+                    Create card from title and existing business from list_components. package_name defaults to component package, enabled/sticky to true, priority to component default. Duplicate title/business rejected. Returns card_id. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
                 params = listOf(
-                    ToolParam("title", "卡片显示名", ToolParam.ParamType.STRING),
-                    ToolParam("business", "组件标识，来自 list_components", ToolParam.ParamType.STRING),
-                    ToolParam("package_name", "通知投递目标包名，可省略", ToolParam.ParamType.STRING, required = false),
-                    ToolParam("enabled", "是否启用，默认 true", ToolParam.ParamType.BOOLEAN, required = false),
-                    ToolParam("sticky", "是否常驻显示，默认 true", ToolParam.ParamType.BOOLEAN, required = false),
-                    ToolParam("priority", "优先级，越大越靠前", ToolParam.ParamType.INTEGER, required = false),
+                    ToolParam("title", "Display title", ToolParam.ParamType.STRING),
+                    ToolParam("business", "Component identifier", ToolParam.ParamType.STRING),
+                    ToolParam(
+                        "package_name",
+                        "Application package name",
+                        ToolParam.ParamType.STRING,
+                        required = false
+                    ),
+                    ToolParam(
+                        "enabled",
+                        "Whether enabled",
+                        ToolParam.ParamType.BOOLEAN,
+                        required = false
+                    ),
+                    ToolParam(
+                        "sticky",
+                        "Whether persistently displayed",
+                        ToolParam.ParamType.BOOLEAN,
+                        required = false
+                    ),
+                    ToolParam(
+                        "priority",
+                        "Priority; larger values appear first",
+                        ToolParam.ParamType.INTEGER,
+                        required = false
+                    ),
                 ),
             ),
             ToolSpec(
                 name = UPDATE_CARD,
                 description = """
-                    修改一张已存在的卡片。只改传入的字段，其余保持不变。
-
-                    参数：
-                    - id（必填）：卡片 id，先用 list_cards 获取。
-                    - title / enabled / sticky / priority（可选，至少给一个）：要修改的字段。
-                    - confirm_locked_edit（可选，默认 false）：仅当卡片被仓库锁定时才需要。
-
-                    受保护的卡片：来自组件仓库的卡片 renameable=false，模块默认不允许直接修改。
-                    遇到 locked_card 错误时，先向用户说明这是仓库安装的卡片，得到同意后才带
-                    confirm_locked_edit=true 重试；不要自己决定绕过保护。
-
-                    本操作会修改配置，需要用户确认。
+                    Update supplied title/enabled/sticky/priority fields of id from list_cards; at least one required. For renameable=false cards, explain protection and get explicit consent before confirm_locked_edit=true. Never bypass protection yourself. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
                 params = listOf(
-                    ToolParam("id", "卡片 id，来自 list_cards", ToolParam.ParamType.STRING),
-                    ToolParam("title", "新的显示名", ToolParam.ParamType.STRING, required = false),
-                    ToolParam("enabled", "启用或停用", ToolParam.ParamType.BOOLEAN, required = false),
-                    ToolParam("sticky", "是否常驻显示", ToolParam.ParamType.BOOLEAN, required = false),
-                    ToolParam("priority", "新的优先级", ToolParam.ParamType.INTEGER, required = false),
-                    ToolParam("confirm_locked_edit", "确认修改仓库锁定的卡片", ToolParam.ParamType.BOOLEAN, required = false),
+                    ToolParam(
+                        "id",
+                        "Exact id from the list tool; scripts use KIND:local_id",
+                        ToolParam.ParamType.STRING
+                    ),
+                    ToolParam(
+                        "title",
+                        "Display title",
+                        ToolParam.ParamType.STRING,
+                        required = false
+                    ),
+                    ToolParam(
+                        "enabled",
+                        "Whether enabled",
+                        ToolParam.ParamType.BOOLEAN,
+                        required = false
+                    ),
+                    ToolParam(
+                        "sticky",
+                        "Whether persistently displayed",
+                        ToolParam.ParamType.BOOLEAN,
+                        required = false
+                    ),
+                    ToolParam(
+                        "priority",
+                        "Priority; larger values appear first",
+                        ToolParam.ParamType.INTEGER,
+                        required = false
+                    ),
+                    ToolParam(
+                        "confirm_locked_edit",
+                        "Explicit user consent to modify a locked card",
+                        ToolParam.ParamType.BOOLEAN,
+                        required = false
+                    ),
                 ),
             ),
             ToolSpec(
                 name = DELETE_CARD,
                 description = """
-                    删除一张卡片。
-
-                    参数：id（必填），先用 list_cards 获取。
-
-                    这是不可撤销的操作。删除前要确认用户指的是哪一张（用标题复述一遍），
-                    不要凭猜测删除。本操作会修改配置，需要用户确认。
+                    Permanently delete id from list_cards. Confirm intended title; never guess. Requires explicit user confirmation.
                 """.trimIndent(),
-                risk = ToolRisk.MUTATING,
-                params = listOf(ToolParam("id", "卡片 id，来自 list_cards", ToolParam.ParamType.STRING)),
+                risk = ToolRisk.DESTRUCTIVE,
+                params = listOf(
+                    ToolParam(
+                        "id",
+                        "Exact id from the list tool; scripts use KIND:local_id",
+                        ToolParam.ParamType.STRING
+                    )
+                ),
             ),
             ToolSpec(
                 name = SET_CARD_ENABLED,
                 description = """
-                    单独启用或停用一张卡片。比 update_card 更明确，用于"把某张卡关掉"这类请求。
-
-                    参数：id（必填）、enabled（必填，true 启用 / false 停用）。
-
-                    如果卡片被仓库锁定，模块会拒绝，返回 verify_failed。
-                    本操作会修改配置，需要用户确认。
+                    Set enabled for id from list_cards. Locked cards may reject changes; report verification failure honestly. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
                 params = listOf(
-                    ToolParam("id", "卡片 id，来自 list_cards", ToolParam.ParamType.STRING),
-                    ToolParam("enabled", "true 启用 / false 停用", ToolParam.ParamType.BOOLEAN),
+                    ToolParam(
+                        "id",
+                        "Exact id from the list tool; scripts use KIND:local_id",
+                        ToolParam.ParamType.STRING
+                    ),
+                    ToolParam("enabled", "Whether enabled", ToolParam.ParamType.BOOLEAN),
                 ),
             ),
             ToolSpec(
                 name = RENAME_COMPONENT,
                 description = """
-                    重命名一个组件标识（business）。
-
-                    参数：
-                    - business（必填）：现有组件标识，来自 list_components。
-                    - new_business（必填）：新的组件标识，不能与已有组件重名。
-                    - confirm_locked_edit（可选）：仅当组件由仓库安装、renameable=false 时需要。
-
-                    这个操作会自动把所有引用该组件的卡片一起改过去，否则它们会指向一个
-                    不存在的组件而失效。操作是原子的，失败时组件和卡片都不会被改动。
-
-                    本操作会修改配置，需要用户确认。
+                    Rename business to unused new_business and migrate cards. renameable=false components can never be renamed. Locked dependent cards block writing. Writes are not atomic; never report verification failure as success. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
                 params = listOf(
-                    ToolParam("business", "现有组件标识", ToolParam.ParamType.STRING),
-                    ToolParam("new_business", "新的组件标识", ToolParam.ParamType.STRING),
-                    ToolParam("confirm_locked_edit", "确认修改仓库锁定的组件", ToolParam.ParamType.BOOLEAN, required = false),
+                    ToolParam("business", "Component identifier", ToolParam.ParamType.STRING),
+                    ToolParam(
+                        "new_business",
+                        "New unused component identifier",
+                        ToolParam.ParamType.STRING
+                    ),
                 ),
             ),
             ToolSpec(
                 name = DELETE_COMPONENT,
                 description = """
-                    删除一个组件。
-
-                    参数：
-                    - business（必填）：组件标识。
-                    - confirm_orphan_cards（可选，默认 false）：当还有卡片在用这个组件时需要。
-
-                    重要：删除组件不会自动删除引用它的卡片，那些卡片会失效。
-                    如果还有卡片在用，工具会先返回 component_in_use 并列出是哪几张。
-                    请把这件事告诉用户，得到同意后才带 confirm_orphan_cards=true 重试。
-
-                    本操作会修改配置，需要用户确认。
+                    Delete business. Dependent cards become unusable, not deleted. Explain component_in_use and obtain explicit consent before confirm_orphan_cards=true, or remove dependent cards first. Requires explicit user confirmation.
                 """.trimIndent(),
-                risk = ToolRisk.MUTATING,
+                risk = ToolRisk.DESTRUCTIVE,
                 params = listOf(
-                    ToolParam("business", "组件标识", ToolParam.ParamType.STRING),
-                    ToolParam("confirm_orphan_cards", "确认让引用它的卡片失效", ToolParam.ParamType.BOOLEAN, required = false),
+                    ToolParam("business", "Component identifier", ToolParam.ParamType.STRING),
+                    ToolParam(
+                        "confirm_orphan_cards",
+                        "Explicit consent to make dependent cards unusable",
+                        ToolParam.ParamType.BOOLEAN,
+                        required = false
+                    ),
                 ),
             ),
             ToolSpec(
                 name = REGISTER_SCENE_ROUTE,
                 description = """
-                    新增一条场景路由：把某个应用的通知场景映射到指定组件。
-
-                    参数（都必填）：
-                    - package_name：来源应用包名。
-                    - scene：场景名。普通场景名直接写，例如 carHailing、foodDelivery、incall、
-                      countdown；也可以写正则，前缀 regex: 或 re:，或用 /.../ 包裹。
-                    - business：目标组件标识，必须已在 list_components 中存在。
-
-                    工具会在写入前校验正则语法。模块本身接受非法正则却永远不匹配，
-                    所以这里宁可先报错，避免产生一条静默失效的路由。
-
-                    本操作会修改配置，需要用户确认。
+                    Route package_name and scene to existing business from list_components. scene accepts plain names or regex prefixed regex:, re: or /.../. Invalid regex rejected before writing. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
                 params = listOf(
-                    ToolParam("package_name", "来源应用包名", ToolParam.ParamType.STRING),
-                    ToolParam("scene", "场景名或正则", ToolParam.ParamType.STRING),
-                    ToolParam("business", "目标组件标识", ToolParam.ParamType.STRING),
+                    ToolParam(
+                        "package_name",
+                        "Application package name",
+                        ToolParam.ParamType.STRING
+                    ),
+                    ToolParam("scene", "Scene name or regex", ToolParam.ParamType.STRING),
+                    ToolParam("business", "Component identifier", ToolParam.ParamType.STRING),
                 ),
             ),
             ToolSpec(
                 name = DELETE_SCENE_ROUTE,
                 description = """
-                    删除一条场景路由。
-
-                    参数：id（必填），先用 list_scene_routes 获取。
-                    本操作会修改配置，需要用户确认。
+                    Delete id from list_scene_routes. Requires explicit user confirmation.
                 """.trimIndent(),
-                risk = ToolRisk.MUTATING,
-                params = listOf(ToolParam("id", "路由 id，来自 list_scene_routes", ToolParam.ParamType.STRING)),
+                risk = ToolRisk.DESTRUCTIVE,
+                params = listOf(
+                    ToolParam(
+                        "id",
+                        "Exact id from the list tool; scripts use KIND:local_id",
+                        ToolParam.ParamType.STRING
+                    )
+                ),
             ),
             ToolSpec(
                 name = SWITCH_WALLPAPER,
                 description = """
-                    把当前背屏壁纸切换为指定的一张。
-
-                    参数：wallpaper_id（必填），先用 list_wallpapers 获取。
-
-                    重要限制：如果主屏正处于编辑模式，系统会忽略这次切换，但接口仍然报告成功。
-                    因此不要向用户断言"已经换好了"，应该说"已发送切换请求"。
-                    另外，背屏中心没有运行时切换也会失败。
-
-                    本操作会修改设备状态，需要用户确认。
+                    Request wallpaper_id from list_wallpapers. Main-screen edit mode may silently ignore API success. Report request sent, not visible success. Inactive rear-screen host may also fail. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
-                params = listOf(ToolParam("wallpaper_id", "壁纸 id，来自 list_wallpapers", ToolParam.ParamType.INTEGER)),
+                params = listOf(
+                    ToolParam(
+                        "wallpaper_id",
+                        "Wallpaper id from list_wallpapers",
+                        ToolParam.ParamType.INTEGER
+                    )
+                ),
             ),
             ToolSpec(
                 name = SET_WALLPAPER_ROTATION,
                 description = """
-                    把一张壁纸加入或移出轮播列表，并可同时设置它的切换间隔。
-
-                    参数：
-                    - wallpaper_id（必填）。
-                    - in_rotation（必填）：true 加入轮播 / false 移出。
-                    - interval_ms（可选）：该壁纸的切换间隔，毫秒；留空用模块默认值（60000）。
-                      模块会把小于 100 的值提升到 100。
-
-                    说明：轮播列表的顺序就是数组顺序，新加入的会排在末尾。
-                    移出后如果列表为空，轮播会被自动关闭。
-
-                    本操作会修改配置，需要用户确认。
+                    Add/remove wallpaper_id using in_rotation. interval_ms defaults to 60000, minimum 100. New entries append; removing last disables rotation. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
                 params = listOf(
-                    ToolParam("wallpaper_id", "壁纸 id", ToolParam.ParamType.INTEGER),
-                    ToolParam("in_rotation", "true 加入 / false 移出", ToolParam.ParamType.BOOLEAN),
-                    ToolParam("interval_ms", "切换间隔（毫秒），可省略", ToolParam.ParamType.INTEGER, required = false),
+                    ToolParam(
+                        "wallpaper_id",
+                        "Wallpaper id from list_wallpapers",
+                        ToolParam.ParamType.INTEGER
+                    ),
+                    ToolParam(
+                        "in_rotation",
+                        "True adds to rotation; false removes",
+                        ToolParam.ParamType.BOOLEAN
+                    ),
+                    ToolParam(
+                        "interval_ms",
+                        "Rotation interval in milliseconds",
+                        ToolParam.ParamType.INTEGER,
+                        required = false
+                    ),
                 ),
             ),
             ToolSpec(
                 name = SET_ROTATION_ENABLED,
                 description = """
-                    开启或关闭背屏壁纸轮播。
-
-                    参数：enabled（必填）。
-
-                    如果轮播列表是空的，工具会返回 empty_rotation 并拒绝开启——
-                    模块本身也拒绝这种状态。请先把至少一张壁纸加入轮播。
-
-                    本操作会修改配置，需要用户确认。
+                    Set enabled for rotation. Empty lists cannot be enabled; add wallpaper using set_wallpaper_rotation first. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
-                params = listOf(ToolParam("enabled", "true 开启 / false 关闭", ToolParam.ParamType.BOOLEAN)),
+                params = listOf(
+                    ToolParam(
+                        "enabled",
+                        "Whether enabled",
+                        ToolParam.ParamType.BOOLEAN
+                    )
+                ),
             ),
             ToolSpec(
                 name = DELETE_WALLPAPER,
                 description = """
-                    删除一张由 REAREye 导入或组件仓库安装的壁纸。
-
-                    参数：wallpaper_id（必填）。
-
-                    限制：只有 imported=true 的壁纸能删除。系统自带壁纸会被模块拒绝，
-                    工具会提前返回 not_imported，这时应当直接告诉用户"这张删不了"，不要重试。
-
-                    删除后会自动把它从轮播列表中移除，保持一致。这是不可撤销的操作。
-                    本操作会修改配置，需要用户确认。
+                    Permanently delete imported=true wallpaper_id and its rotation entries. System wallpapers return not_imported; do not retry. Requires explicit user confirmation.
                 """.trimIndent(),
-                risk = ToolRisk.MUTATING,
-                params = listOf(ToolParam("wallpaper_id", "壁纸 id，来自 list_wallpapers", ToolParam.ParamType.INTEGER)),
+                risk = ToolRisk.DESTRUCTIVE,
+                params = listOf(
+                    ToolParam(
+                        "wallpaper_id",
+                        "Wallpaper id from list_wallpapers",
+                        ToolParam.ParamType.INTEGER
+                    )
+                ),
             ),
             ToolSpec(
                 name = UPDATE_WALLPAPER_METADATA,
                 description = """
-                    修改壁纸的信息（标题、描述、作者、设计者、分类等）。
-
-                    参数：
-                    - wallpaper_id（必填）。
-                    - title / title_zh / description / description_zh / author / designer /
-                      category / res_sub_type（可选）：要改的文本字段。
-                    - editable / third_parties / support_aon（可选）：布尔标记。
-
-                    只传要改的字段即可。留空的字段表示保持原值不变——模块把空字符串当作
-                    "不修改"，所以不要为了让某个字段为空而传空串。
-
-                    限制：只有 can_edit_metadata=true（即 imported=true）的壁纸可以改，
-                    否则返回 not_editable，这时告知用户即可，不要重试。
-
-                    本操作会修改配置，需要用户确认。
+                    Update supplied metadata for wallpaper_id: title/title_zh, description/description_zh, author, designer, category, res_sub_type, editable, third_parties, support_aon. Empty strings preserve values. Requires can_edit_metadata=true (imported); do not retry not_editable. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
                 params = listOf(
-                    ToolParam("wallpaper_id", "壁纸 id", ToolParam.ParamType.INTEGER),
-                    ToolParam("title", "标题（默认语言）", ToolParam.ParamType.STRING, required = false),
-                    ToolParam("title_zh", "中文标题", ToolParam.ParamType.STRING, required = false),
-                    ToolParam("description", "描述（默认语言）", ToolParam.ParamType.STRING, required = false),
-                    ToolParam("description_zh", "中文描述", ToolParam.ParamType.STRING, required = false),
-                    ToolParam("author", "作者", ToolParam.ParamType.STRING, required = false),
-                    ToolParam("designer", "设计者", ToolParam.ParamType.STRING, required = false),
-                    ToolParam("category", "分类", ToolParam.ParamType.STRING, required = false),
-                    ToolParam("res_sub_type", "资源子类型", ToolParam.ParamType.STRING, required = false),
-                    ToolParam("editable", "是否允许编辑", ToolParam.ParamType.BOOLEAN, required = false),
-                    ToolParam("third_parties", "第三方标记", ToolParam.ParamType.BOOLEAN, required = false),
-                    ToolParam("support_aon", "是否支持息屏显示", ToolParam.ParamType.BOOLEAN, required = false),
+                    ToolParam(
+                        "wallpaper_id",
+                        "Wallpaper id from list_wallpapers",
+                        ToolParam.ParamType.INTEGER
+                    ),
+                    ToolParam(
+                        "title",
+                        "Display title",
+                        ToolParam.ParamType.STRING,
+                        required = false
+                    ),
+                    ToolParam(
+                        "title_zh",
+                        "Chinese title",
+                        ToolParam.ParamType.STRING,
+                        required = false
+                    ),
+                    ToolParam(
+                        "description",
+                        "Description in default language",
+                        ToolParam.ParamType.STRING,
+                        required = false
+                    ),
+                    ToolParam(
+                        "description_zh",
+                        "Chinese description",
+                        ToolParam.ParamType.STRING,
+                        required = false
+                    ),
+                    ToolParam("author", "Author", ToolParam.ParamType.STRING, required = false),
+                    ToolParam("designer", "Designer", ToolParam.ParamType.STRING, required = false),
+                    ToolParam("category", "Category", ToolParam.ParamType.STRING, required = false),
+                    ToolParam(
+                        "res_sub_type",
+                        "Resource subtype",
+                        ToolParam.ParamType.STRING,
+                        required = false
+                    ),
+                    ToolParam(
+                        "editable",
+                        "Whether editing is allowed",
+                        ToolParam.ParamType.BOOLEAN,
+                        required = false
+                    ),
+                    ToolParam(
+                        "third_parties",
+                        "Third-party flag",
+                        ToolParam.ParamType.BOOLEAN,
+                        required = false
+                    ),
+                    ToolParam(
+                        "support_aon",
+                        "Whether always-on display is supported",
+                        ToolParam.ParamType.BOOLEAN,
+                        required = false
+                    ),
                 ),
             ),
         )
     }
 }
+
+internal fun canRenameComponent(renameable: Boolean, dependentRenameable: List<Boolean>): Boolean =
+    renameable && dependentRenameable.all { it }
+
+internal fun qualifiedScriptId(kind: String, localId: String): String = "$kind:$localId"
+
+/** Legacy ids are accepted only when the caller subsequently finds exactly one match. */
+internal fun scriptIdMatches(requested: String, kind: String, localId: String): Boolean =
+    if (':' in requested) requested == qualifiedScriptId(kind, localId) else requested == localId
 
 /** Null-safe argument readers: `JsonNull` is an object, so `as?` is the only safe navigation. */
 internal fun JsonObject.string(name: String): String? =
@@ -2296,3 +2353,18 @@ internal fun JsonObject.stringArray(name: String): List<String> =
     (this[name] as? JsonArray)
         ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
         .orEmpty()
+
+/** Editing an existing rotation member must not silently move it or reset its delay. */
+internal fun updatedMaryWallpaperSchedule(
+    current: List<RearWallpaperScheduleEntry>,
+    id: Int,
+    inRotation: Boolean,
+    intervalMs: Long?,
+): List<RearWallpaperScheduleEntry> {
+    if (!inRotation) return current.filterNot { it.wallpaperId == id }
+    val previous = current.firstOrNull { it.wallpaperId == id }
+    val delay = (intervalMs ?: previous?.delayMs ?: RearWallpaperScheduleCodec.DEFAULT_DELAY_MS)
+        .coerceAtLeast(RearWallpaperScheduleCodec.MIN_DELAY_MS)
+    val updated = RearWallpaperScheduleEntry(wallpaperId = id, delayMs = delay)
+    return if (previous == null) current + updated else current.map { if (it.wallpaperId == id) updated else it }
+}

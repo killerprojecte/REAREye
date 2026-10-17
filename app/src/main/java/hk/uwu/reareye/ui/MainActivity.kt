@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
@@ -90,6 +91,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Keep the window edge-to-edge: Compose, not decor resizing/panning, owns IME avoidance.
+        enableEdgeToEdge()
 
         try {
             val permissionInfo = applicationContext.packageManager
@@ -268,10 +271,13 @@ class MainActivity : ComponentActivity() {
                 var stableBottomInset by remember { mutableStateOf(0.dp) }
 
                 CompositionLocalProvider(LocalFeatureGuideAnchors provides guideAnchors.takeIf { featureGuideVisible }) {
+                    // Keep the popup host full-window: MIUIX dialogs own their IME avoidance.
                     Scaffold { _ ->
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
+                                // Navigation stays at the physical window bottom. Screens own
+                                // IME avoidance; never shrink this shared root or its popup host.
                                 .graphicsLayer { clip = true }
                         ) {
                             Box(
@@ -441,66 +447,73 @@ class MainActivity : ComponentActivity() {
                                 label = "NavigationShadowProgress",
                             )
                             if (showNavigation || navShadowProgress > 0.001f) {
-                                ArtVisibilityMotion(
-                                    visible = showNavigation,
+                                // This bar does not avoid the IME: it stays put behind the keyboard.
+                                // Measure only the bar; Mary combines this gap with (not adds it to) IME.
+                                Box(
                                     modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .featureGuideAnchor("bottom_navigation")
-                                        .onGloballyPositioned { coordinates ->
-                                            val totalHeight = with(density) {
-                                                coordinates.size.height.toDp()
-                                            }
-                                            if (totalHeight != stableBottomInset) {
-                                                stableBottomInset = totalHeight
-                                            }
-                                        },
-                                    enterAlphaDurationMillis = 260,
-                                    enterTransformDurationMillis = 380,
-                                    exitAlphaDurationMillis = 180,
-                                    exitTransformDurationMillis = 240,
-                                    hiddenEnterScale = 1f,
-                                    hiddenExitScale = 1f,
-                                    slideDivisor = 3,
-                                    hiddenOffsetFallback = 28.dp,
+                                        .align(Alignment.BottomCenter),
                                 ) {
-                                    RearNavigationBar(
-                                        // The Rear Store is a configuration-level destination,
-                                        // so the Configuration tab stays highlighted while it is open.
-                                        currentScreen = if (currentScreen == "store") "config" else currentScreen,
-                                        navigationBarMode = navigationBarMode,
-                                        backdrop = backdrop,
-                                        shadowVisibilityProgress = navShadowProgress,
-                                        quickActionIds = navigationQuickActionIds,
-                                        onQuickActionIdsChanged = { nextIds ->
-                                            val normalizedIds = parseNavigationQuickActionIds(
-                                                encodeNavigationQuickActionIds(nextIds)
-                                            )
-                                            navigationQuickActionIds = normalizedIds
-                                            remotePrefsManager.putString(
-                                                ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS,
-                                                encodeNavigationQuickActionIds(normalizedIds),
-                                            )
-                                        },
-                                        onScreenSelected = { currentScreen = it },
-                                        onQuickActionSelected = { target ->
-                                            when (target) {
-                                                is NavigationQuickTarget.ConfigManager -> {
-                                                    pendingConfigQuickManagerTarget =
-                                                        target.managerType
-                                                    pendingQuickActionTransition = true
-                                                    // Dashboard managers stay inside the new configuration
-                                                    // workbench and keep the navigation bar visible. Only
-                                                    // dedicated More pages use the full-screen overlay mode.
-                                                    configInAppListMode =
-                                                        target.managerType in setOf(
-                                                            ConfigType.ManagerType.SCENE_ROUTE,
-                                                            ConfigType.ManagerType.BOUNDS,
-                                                        )
-                                                    currentScreen = "config"
+                                    ArtVisibilityMotion(
+                                        visible = showNavigation,
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .featureGuideAnchor("bottom_navigation")
+                                            .onGloballyPositioned { coordinates ->
+                                                val totalHeight = with(density) {
+                                                    coordinates.size.height.toDp()
                                                 }
-                                            }
-                                        },
-                                    )
+                                                if (totalHeight != stableBottomInset) {
+                                                    stableBottomInset = totalHeight
+                                                }
+                                            },
+                                        enterAlphaDurationMillis = 260,
+                                        enterTransformDurationMillis = 380,
+                                        exitAlphaDurationMillis = 180,
+                                        exitTransformDurationMillis = 240,
+                                        hiddenEnterScale = 1f,
+                                        hiddenExitScale = 1f,
+                                        slideDivisor = 3,
+                                        hiddenOffsetFallback = 28.dp,
+                                    ) {
+                                        RearNavigationBar(
+                                            // The Rear Store is a configuration-level destination,
+                                            // so the Configuration tab stays highlighted while it is open.
+                                            currentScreen = if (currentScreen == "store") "config" else currentScreen,
+                                            navigationBarMode = navigationBarMode,
+                                            backdrop = backdrop,
+                                            shadowVisibilityProgress = navShadowProgress,
+                                            quickActionIds = navigationQuickActionIds,
+                                            onQuickActionIdsChanged = { nextIds ->
+                                                val normalizedIds = parseNavigationQuickActionIds(
+                                                    encodeNavigationQuickActionIds(nextIds)
+                                                )
+                                                navigationQuickActionIds = normalizedIds
+                                                remotePrefsManager.putString(
+                                                    ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS,
+                                                    encodeNavigationQuickActionIds(normalizedIds),
+                                                )
+                                            },
+                                            onScreenSelected = { currentScreen = it },
+                                            onQuickActionSelected = { target ->
+                                                when (target) {
+                                                    is NavigationQuickTarget.ConfigManager -> {
+                                                        pendingConfigQuickManagerTarget =
+                                                            target.managerType
+                                                        pendingQuickActionTransition = true
+                                                        // Dashboard managers stay inside the new configuration
+                                                        // workbench and keep the navigation bar visible. Only
+                                                        // dedicated More pages use the full-screen overlay mode.
+                                                        configInAppListMode =
+                                                            target.managerType in setOf(
+                                                                ConfigType.ManagerType.SCENE_ROUTE,
+                                                                ConfigType.ManagerType.BOUNDS,
+                                                            )
+                                                        currentScreen = "config"
+                                                    }
+                                                }
+                                            },
+                                        )
+                                    }
                                 }
                             }
 

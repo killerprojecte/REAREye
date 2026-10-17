@@ -27,11 +27,13 @@
         android:extractNativeLibs="false"
         android:multiArch="true"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.AppDefault">
 
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.AppDefault">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

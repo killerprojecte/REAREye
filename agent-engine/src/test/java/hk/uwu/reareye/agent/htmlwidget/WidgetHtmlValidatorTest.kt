@@ -278,6 +278,37 @@ class WidgetHtmlValidatorTest {
      * problems rather than just say "invalid".
      */
     @Test
+    fun `model-facing specification is English and preserves caller content`() {
+        val content = "用户自己的组件内容"
+        val prompt = WidgetSpec.buildPrompt("My widget", baseW, baseH, content)
+        assertTrue(prompt.contains(content))
+        assertFalse(Regex("[\\p{IsHan}]").containsMatchIn(WidgetSpec.GUIDELINE))
+        assertFalse(Regex("[\\p{IsHan}]").containsMatchIn(prompt.replace(content, "")))
+        assertTrue(prompt.contains("window.__fit=__fit;"))
+        assertTrue(prompt.contains("FIT=Math.min((W-CAM)/(BASE_W-BASE_CAM),H/BASE_H);"))
+        assertTrue(prompt.contains("FRAME_RATE: 30"))
+    }
+
+    @Test
+    fun `validation reports and issue messages are English`() {
+        val passed = validate(goodHtml())
+        assertTrue(passed.report().startsWith("Validation passed"))
+        val failed = validate("<html></html>")
+        assertTrue(failed.report().startsWith("Validation failed"))
+        assertTrue(failed.issues.all { !Regex("[\\p{IsHan}]").containsMatchIn(it.message) })
+        val warnings = WidgetValidation(
+            listOf(
+                WidgetIssue(
+                    "warning",
+                    "Example",
+                    WidgetIssue.Severity.WARNING
+                )
+            )
+        )
+        assertTrue(warnings.report().contains("1 warnings"))
+    }
+
+    @Test
     fun `the report lists every error with its code`() {
         val report = validate(goodHtml(cardX = 100)).report()
         assertTrue(report.contains("safe_zone_violation"))

@@ -20,7 +20,6 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -46,7 +45,7 @@ class OpenAiCompatibleProviderTest {
     }
 
     private fun sse(vararg chunks: String): String =
-        chunks.joinToString(separator = "") { "data: $it\n\n" } + "data: [DONE]\n\n"
+        chunks.joinToString(separator = "") { "data: ${nativeFixture(it)}\n\n" } + "data: [DONE]\n\n"
 
     private fun providerWith(apiKey: String = "sk-test"): OpenAiCompatibleProvider {
         val config = ProviderConfig(
@@ -71,21 +70,23 @@ class OpenAiCompatibleProviderTest {
         messages = listOf(ChatMessage(MessageRole.USER, "hi")),
     )
 
-    /** Isolates the chunk decoder from the transport so a failure points at the right layer. */
     @Test
-    fun `parses the chunk shapes used by the streaming tests`() {
-        val json = OpenAiCompatibleProvider.DEFAULT_JSON
-        assertNull(
-            parseChunk("""{"choices":[{"delta":{"role":"assistant","content":""}}]}""", json),
+    fun `native client handles role-only text and finish chunk shapes`() = runTest {
+        server.enqueue(
+            streamResponse(
+                sse(
+                    """{"choices":[{"delta":{"role":"assistant","content":""}}]}""",
+                    """{"choices":[{"delta":{"content":"A"}}]}""",
+                    """{"choices":[{"delta":{},"finish_reason":"stop"}]}""",
+                )
+            )
         )
+        val events = providerWith().chat(userMessage()).toList()
         assertEquals(
-            ChatEvent.TextDelta("A"),
-            parseChunk("""{"choices":[{"delta":{"content":"A"}}]}""", json),
+            listOf(ChatEvent.TextDelta("A")),
+            events.filterIsInstance<ChatEvent.TextDelta>()
         )
-        assertEquals(
-            ChatEvent.Finished("stop"),
-            parseChunk("""{"choices":[{"delta":{},"finish_reason":"stop"}]}""", json),
-        )
+        assertEquals(ChatEvent.Finished("stop"), events.last())
     }
 
     @Test
@@ -228,16 +229,13 @@ class OpenAiCompatibleProviderTest {
     }
 
     @Test
-    fun `a stream without a finish reason still delivers its text`() = runTest {
+    fun `a stream without termination reports truncation`() = runTest {
         server.enqueue(
             streamResponse("""data: {"choices":[{"delta":{"content":"part"}}]}""" + "\n\n"),
         )
-        val events = providerWith().chat(userMessage()).toList()
-        assertEquals(
-            "part",
-            events.filterIsInstance<ChatEvent.TextDelta>().joinToString("") { it.text },
-        )
-        assertTrue(events.none { it is ChatEvent.Finished })
+        assertFailsWithAgentError<AgentError.Protocol> {
+            providerWith().chat(userMessage()).toList()
+        }
     }
 
     /**
@@ -245,16 +243,29 @@ class OpenAiCompatibleProviderTest {
      * an object rather than a Kotlin null, unwrapping it threw and killed the whole stream.
      */
     @Test
-    fun `tolerates a null choices field on a trailing usage frame`() {
-        val json = OpenAiCompatibleProvider.DEFAULT_JSON
-        assertNull(parseChunk("""{"choices":null,"usage":{"total_tokens":5}}""", json))
-        assertNull(parseChunk("""{"choices":[]}""", json))
-        assertNull(parseChunk("""{"choices":[{"delta":null}]}""", json))
-        assertNull(parseChunk("""{"choices":[{"delta":{"content":null}}]}""", json))
-        assertNull(parseChunk("""{"choices":[{"delta":{"tool_calls":null}}]}""", json))
-        assertNull(parseChunk("""{"error":null}""", json))
-        assertNull(parseChunk("""null""", json))
-        assertNull(parseChunk("""not json at all""", json))
+    fun `tolerates null choices and nullable content while rejecting malformed native DTOs`() =
+        runTest {
+            for (payload in listOf(
+                """{"choices":null}""", """{"choices":[]}""",
+                """{"choices":[{"delta":{"content":null,"tool_calls":null}}]}"""
+            )) {
+                server.enqueue(streamResponse(sse(payload)))
+                assertEquals(
+                    ChatEvent.Finished("stop"),
+                    providerWith().chat(userMessage()).toList().last()
+                )
+            }
+            for (payload in listOf(
+                """{"choices":[{"delta":null}]}""",
+                """{"error":null}""",
+                "null",
+                "not json at all"
+            )) {
+                server.enqueue(streamResponse(sse(payload)))
+                assertFailsWithAgentError<AgentError.Protocol> {
+                    providerWith().chat(userMessage()).toList()
+                }
+            }
     }
 
     @Test
@@ -279,13 +290,25 @@ class OpenAiCompatibleProviderTest {
     }
 
     @Test
-    fun `model listing tolerates an unexpected shape`() {
-        val json = OpenAiCompatibleProvider.DEFAULT_JSON
-        assertEquals(listOf("a", "b"), parseModelIds("""{"data":[{"id":"b"},{"id":"a"}]}""", json))
-        assertTrue(parseModelIds("""{"data":null}""", json).isEmpty())
-        assertTrue(parseModelIds("""{"data":[{"noid":1},null]}""", json).isEmpty())
-        assertTrue(parseModelIds("""{}""", json).isEmpty())
-        assertTrue(parseModelIds("""nonsense""", json).isEmpty())
+    fun `native model listing sorts ids and reports malformed responses`() = runTest {
+        server.enqueue(
+            MockResponse.Builder().setHeader("Content-Type", "application/json").body(
+                """{"object":"list","data":[{"id":"b","object":"model","created":1,"owned_by":"test"},{"id":"a","object":"model","created":1,"owned_by":"test"}]}"""
+            ).build()
+        )
+        assertEquals(listOf("a", "b"), providerWith().listModels())
+        for (payload in listOf(
+            """{"data":null}""",
+            """{"data":[{"noid":1},null]}""",
+            "{}",
+            "nonsense"
+        )) {
+            server.enqueue(
+                MockResponse.Builder().setHeader("Content-Type", "application/json").body(payload)
+                    .build()
+            )
+            assertFailsWithAgentError<AgentError.Protocol> { providerWith().listModels() }
+        }
     }
 
     /**
@@ -293,35 +316,22 @@ class OpenAiCompatibleProviderTest {
      * a frame carrying both reasoning and content must not lose the answer.
      */
     @Test
-    fun `parses reasoning under each provider spelling`() {
-        val json = OpenAiCompatibleProvider.DEFAULT_JSON
+    fun `native reasoning spellings preserve reasoning and answer in the same frame`() = runTest {
+        for (field in listOf("reasoning_content", "reasoning", "thinking")) {
+            server.enqueue(streamResponse(sse("""{"choices":[{"delta":{"$field":"hmm","content":"answer"},"finish_reason":"stop"}]}""")))
+            val events = providerWith().chat(userMessage()).toList()
+            assertEquals(
+                "hmm",
+                events.filterIsInstance<ChatEvent.ReasoningDelta>().joinToString("") { it.text })
+            assertEquals(
+                "answer",
+                events.filterIsInstance<ChatEvent.TextDelta>().joinToString("") { it.text })
+        }
+        server.enqueue(streamResponse(sse("""{"choices":[{"delta":{"reasoning_content":"","content":"answer"},"finish_reason":"stop"}]}""")))
         assertEquals(
-            ChatEvent.ReasoningDelta("hmm"),
-            parseChunk("""{"choices":[{"delta":{"reasoning_content":"hmm"}}]}""", json),
-        )
-        assertEquals(
-            ChatEvent.ReasoningDelta("hmm"),
-            parseChunk("""{"choices":[{"delta":{"reasoning":"hmm"}}]}""", json),
-        )
-        assertEquals(
-            ChatEvent.ReasoningDelta("hmm"),
-            parseChunk("""{"choices":[{"delta":{"thinking":"hmm"}}]}""", json),
-        )
-        // Content wins when both appear, so the answer is never dropped for a reasoning fragment.
-        assertEquals(
-            ChatEvent.TextDelta("answer"),
-            parseChunk(
-                """{"choices":[{"delta":{"reasoning_content":"hmm","content":"answer"}}]}""",
-                json,
-            ),
-        )
-        // An empty reasoning field must not shadow a real content field.
-        assertEquals(
-            ChatEvent.TextDelta("answer"),
-            parseChunk(
-                """{"choices":[{"delta":{"reasoning_content":"","content":"answer"}}]}""",
-                json,
-            ),
+            "answer",
+            providerWith().chat(userMessage()).toList().filterIsInstance<ChatEvent.TextDelta>()
+                .single().text
         )
     }
 
@@ -383,26 +393,40 @@ class OpenAiCompatibleProviderTest {
      * reach the user and the address must be shown for a misconfigured endpoint to be obvious.
      */
     @Test
-    fun `network errors surface their root cause and the address`() {
+    fun `network errors surface their root cause and the address`() = runTest {
         val wrapped = IOException(
             "unexpected end of stream",
             SocketException("Software caused connection abort"),
         )
-        val message = wrapped.toNetworkError("https://api.example.com/v1/").message!!
+        val message = nativeNetworkError(wrapped).message!!
 
         assertTrue("should name the root cause: $message", message.contains("Software caused connection abort"))
         assertTrue("should identify the exception type: $message", message.contains("SocketException"))
         assertTrue("should show the host: $message", message.contains("https://api.example.com"))
-        assertTrue("should not leak the path: $message", !message.contains("/v1"))
+        assertTrue(
+            "should preserve configured base path for diagnosis: $message",
+            message.contains("/v1")
+        )
     }
 
     @Test
-    fun `unknown host and timeout get their own explanations`() {
-        val dns = UnknownHostException("api.example.com").toNetworkError("https://api.example.com/v1")
+    fun `unknown host and timeout get their own explanations`() = runTest {
+        val dns = nativeNetworkError(UnknownHostException("api.example.com"))
         assertTrue(dns.message!!.contains("找不到主机"))
-
-        val timeout = SocketTimeoutException("timeout").toNetworkError("https://api.example.com/v1")
+        val timeout = nativeNetworkError(SocketTimeoutException("timeout"))
         assertTrue(timeout.message!!.contains("超时"))
+    }
+
+    private suspend fun nativeNetworkError(error: IOException): AgentError.Network {
+        val client =
+            OpenAiCompatibleProvider.defaultClient().newBuilder().addInterceptor { throw error }
+                .build()
+        val config = ProviderConfig("https://api.example.com/v1", model = "test")
+        return assertFailsWithAgentError {
+            OpenAiCompatibleProvider(client, { config }).chat(
+                userMessage()
+            ).toList()
+        }
     }
 
     @Test
@@ -415,8 +439,9 @@ class OpenAiCompatibleProviderTest {
                 .body("""data: {"choices":[{"delta":{"content":"半"}}]}""" + "\n\n")
                 .build(),
         )
-        val events = providerWith().chat(userMessage()).toList()
-        assertEquals("半", events.filterIsInstance<ChatEvent.TextDelta>().joinToString("") { it.text })
+        assertFailsWithAgentError<AgentError.Protocol> {
+            providerWith().chat(userMessage()).toList()
+        }
     }
 
     @Test

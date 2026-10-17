@@ -33,3 +33,9 @@
 
 # kotlinx.serialization runtime internals reached reflectively.
 -dontwarn kotlinx.serialization.**
+
+# Ktor 3.3.3's IntellijIdeaDebugDetectorJvm probes JMX inside try/catch(Throwable)
+# and returns false when unavailable. Android has no JMX; these two references are
+# optional debugger detection, not networking requirements. Do not suppress all Ktor warnings.
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean
