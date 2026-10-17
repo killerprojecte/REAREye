@@ -5,9 +5,14 @@ plugins {
 
 android {
     namespace = "hk.uwu.reareye.agent"
-    compileSdk = 36
+    compileSdk {
+        version =
+            release(gropify.project.android.compileSdk) {
+                minorApiLevel = gropify.project.android.compileSdkMinor
+            }
+    }
     defaultConfig {
-        minSdk = 26
+        minSdk = gropify.project.android.minSdk
         consumerProguardFiles("consumer-rules.pro")
     }
     compileOptions {
