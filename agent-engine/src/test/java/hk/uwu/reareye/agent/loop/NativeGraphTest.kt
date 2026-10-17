@@ -196,6 +196,56 @@ class NativeGraphTest {
     }
 
     @Test
+    fun `empty text completion keeps the streamed answer instead of aborting the turn`() = runTest {
+        val executor = NativeExecutor(
+            listOf(
+                listOf(
+                    StreamFrame.TextDelta("你好", 0),
+                    StreamFrame.TextDelta("世界", 0),
+                    StreamFrame.TextComplete("", 0),
+                    StreamFrame.End("stop"),
+                )
+            )
+        )
+        val events = AgentLoop(executor.connection(), Tools(), config).run(history).toList()
+        assertEquals(
+            "你好世界",
+            events.filterIsInstance<AgentEvent.TextDelta>().joinToString("") { it.text })
+        assertTrue(events.none { it is AgentEvent.Failed })
+        val final = events.filterIsInstance<AgentEvent.TurnFinished>().single()
+        assertEquals(
+            MessagePart.Text("你好世界"),
+            KoogTranscriptCodec.toNative(final.fullTranscript)
+                .filterIsInstance<Message.Assistant>().single().parts.single()
+        )
+    }
+
+    @Test
+    fun `tail-only text completion neither duplicates nor aborts the streamed answer`() = runTest {
+        val executor = NativeExecutor(
+            listOf(
+                listOf(
+                    StreamFrame.TextDelta("你好", 0),
+                    StreamFrame.TextDelta("世界", 0),
+                    StreamFrame.TextComplete("世界", 0),
+                    StreamFrame.End("stop"),
+                )
+            )
+        )
+        val events = AgentLoop(executor.connection(), Tools(), config).run(history).toList()
+        assertEquals(
+            "你好世界",
+            events.filterIsInstance<AgentEvent.TextDelta>().joinToString("") { it.text })
+        assertTrue(events.none { it is AgentEvent.Failed })
+        val final = events.filterIsInstance<AgentEvent.TurnFinished>().single()
+        assertEquals(
+            MessagePart.Text("你好世界"),
+            KoogTranscriptCodec.toNative(final.fullTranscript)
+                .filterIsInstance<Message.Assistant>().single().parts.single()
+        )
+    }
+
+    @Test
     fun `text delta without native completion cannot erase durable assistant content`() = runTest {
         val executor = NativeExecutor(
             listOf(

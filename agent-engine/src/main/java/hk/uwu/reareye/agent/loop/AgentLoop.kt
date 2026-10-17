@@ -291,9 +291,12 @@ class AgentLoop(
                         is StreamFrame.TextComplete -> {
                             if (!textCompleted.add(frame.index)) throw AgentError.Protocol("模型返回重复文本完成帧。")
                             val shown = textShown[frame.index]?.toString().orEmpty()
-                            if (frame.text.startsWith(shown)) frame.text.removePrefix(shown)
-                                .takeIf { it.isNotEmpty() }?.let { emit(AgentEvent.TextDelta(it)) }
-                            else throw AgentError.Protocol("模型文本完成帧与增量不一致。")
+                            // 完成帧只是修补通道：增量已经推到 UI 了，覆盖不了就别动它
+                            if (frame.text.startsWith(shown)) {
+                                frame.text.removePrefix(shown)
+                                    .takeIf { it.isNotEmpty() }
+                                    ?.let { emit(AgentEvent.TextDelta(it)) }
+                            }
                         }
 
                         is StreamFrame.ReasoningDelta -> (frame.text ?: frame.summary)?.let {
@@ -389,7 +392,12 @@ class AgentLoop(
                     // reasoning and all completion parts must survive subsequent tool requests.
                     val parts = completions.mapNotNull { frame ->
                         when (frame) {
-                            is StreamFrame.TextComplete -> MessagePart.Text(frame.text)
+                            is StreamFrame.TextComplete -> MessagePart.Text(
+                                reconcileCompletedText(
+                                    frame.text,
+                                    textShown[frame.index]?.toString().orEmpty(),
+                                )
+                            )
                             is StreamFrame.ReasoningComplete -> MessagePart.Reasoning(
                                 content = frame.content, summary = frame.summary,
                                 encrypted = frame.encrypted, id = frame.id,
@@ -755,6 +763,13 @@ class AgentLoop(
         }
     }
 }
+
+/**
+ * 完成帧只有真正覆盖已流出的文本时才采信；否则用已流出的文本。
+ * 否则网关省略/截断收尾 content 时，历史里会留下一条空的 assistant 消息。
+ */
+private fun reconcileCompletedText(complete: String, streamed: String): String =
+    if (complete.isNotEmpty() && complete.startsWith(streamed)) complete else streamed
 
 /** Shared declaration mapping for native executors and their optional UI facade. */
 fun ToolSpec.toKoogDescriptor(): ToolDescriptor {
