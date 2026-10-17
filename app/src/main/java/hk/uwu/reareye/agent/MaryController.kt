@@ -153,6 +153,7 @@ class MaryController(
                 if (owner == generation) showSession(recent)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                logMaryRuntime(MaryRuntimePhase.INITIAL_HISTORY, e)
                 if (owner == generation) {
                     showSession(null)
                     appendNotice(e.message ?: "Could not load conversation.", true)
@@ -251,6 +252,11 @@ class MaryController(
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
+                    logMaryRuntime(
+                        MaryRuntimePhase.CONFIGURATION,
+                        e,
+                        metadataConfig?.provider?.protocol
+                    )
                     if (change.effort == null && change.approval == null) {
                         metadataConfig = null
                         _state.update {
@@ -288,6 +294,12 @@ class MaryController(
                 tools.availableTools(),
                 session?.let { it.contextMessages ?: it.messages }.orEmpty()
             )
+        }.onFailure {
+            logMaryRuntime(
+                MaryRuntimePhase.CONTEXT_ESTIMATE,
+                it,
+                metadataConfig?.provider?.protocol
+            )
         }.getOrNull()
         _state.update { it.copy(estimatedInputTokens = estimate) }
     }
@@ -300,7 +312,9 @@ class MaryController(
             try {
                 awaitPreviousTurns(); withContext(Dispatchers.IO) { store.delete(id) }
             } catch (e: Exception) {
-                if (e is CancellationException) throw e; appendNotice(
+                if (e is CancellationException) throw e
+                logMaryRuntime(MaryRuntimePhase.DELETE_HISTORY, e)
+                appendNotice(
                     e.message ?: "Delete failed.",
                     true
                 )
@@ -327,6 +341,7 @@ class MaryController(
                 if (owner == generation) showSession(loaded)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                logMaryRuntime(MaryRuntimePhase.LOAD_HISTORY, e)
                 if (owner == generation) {
                     _state.update { it.copy(running = false) }; appendNotice(
                         e.message ?: "Load failed.", true
@@ -353,6 +368,7 @@ class MaryController(
                 if (owner == generation) showSession(locked)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                logMaryRuntime(MaryRuntimePhase.LOCK_HISTORY, e)
                 if (owner == generation) {
                     _state.update { it.copy(running = false) }
                     appendNotice(
@@ -418,6 +434,8 @@ class MaryController(
             var inputCorrection = 0
             var lastRequestEstimate = 0
             var activeConnection: KoogConnection? = null
+            var runtimePhase = MaryRuntimePhase.SEND_SETTINGS
+            var runtimeProtocol: Protocol? = null
             try {
                 awaitPreviousTurns()
                 val preferences = try {
@@ -436,6 +454,7 @@ class MaryController(
                 }
                 assertOwner(owner)
                 val original = preferences.configuration
+                runtimeProtocol = original.provider.protocol
                 metadataConfig = original.copy(provider = original.provider.copy(apiKey = ""))
                 _state.update {
                     it.copy(
@@ -452,6 +471,7 @@ class MaryController(
                     )
                     return@launch
                 }
+                runtimePhase = MaryRuntimePhase.SEND_HISTORY
                 val currentId = session?.id
                 val active = withContext(Dispatchers.IO) {
                     if (currentId == null) store.create() else store.load(currentId)
@@ -479,7 +499,9 @@ class MaryController(
                         contextWindowTokens = config.provider.contextWindowTokens
                     )
                 }
+                runtimePhase = MaryRuntimePhase.CONNECTION_INIT
                 val connection = connectionFor(config.provider).also { activeConnection = it }
+                runtimePhase = MaryRuntimePhase.ENGINE_RUN
                 val reviewConfig =
                     if (preferences.inheritApprovalModel) config.provider else preferences.approvalProvider
                 // These are host-observed human answers for this turn, never model/tool claims.
@@ -687,15 +709,22 @@ class MaryController(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (e: Exception) {
+                logMaryRuntime(runtimePhase, e, runtimeProtocol)
                 if (owner == generation) appendNotice(e.message ?: "The request failed.", true)
             } finally {
                 // Context ownership is per turn; closing an executor must not close the shared app OkHttp client.
-                activeConnection?.let { runCatching { it.close() } }
+                activeConnection?.let { connection ->
+                    runCatching { connection.close() }.onFailure {
+                        logMaryRuntime(MaryRuntimePhase.CONNECTION_CLOSE, it, runtimeProtocol)
+                    }
+                }
                 // Keep partial text on cancellation/network failure, never incomplete tool calls.
                 // Transitions join this job before touching the same session.
                 partialSnapshot?.let { snapshot ->
                     withContext(NonCancellable + Dispatchers.IO) {
-                        runCatching { store.save(snapshot) }
+                        runCatching { store.save(snapshot) }.onFailure {
+                            logMaryRuntime(MaryRuntimePhase.PARTIAL_SAVE, it, runtimeProtocol)
+                        }
                     }
                     if (owner == generation) session = snapshot
                 }
@@ -896,7 +925,14 @@ class MaryController(
                 }
             }
 
-            is AgentEvent.Failed -> appendNotice(event.error.message ?: "The request failed.", true)
+            is AgentEvent.Failed -> {
+                logMaryRuntime(
+                    MaryRuntimePhase.ENGINE_FAILED,
+                    event.error,
+                    metadataConfig?.provider?.protocol
+                )
+                appendNotice(event.error.message ?: "The request failed.", true)
+            }
             else -> Unit
         }
     }

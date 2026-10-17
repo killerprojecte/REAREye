@@ -31,6 +31,13 @@
 # Keep the engine's own serialisable model types reachable by name.
 -keep class hk.uwu.reareye.agent.model.** { *; }
 
+# Koog's graph nodes materialise typeOf<Flow<StreamFrame>>() at runtime. In R8 full
+# mode, -keepattributes Signature alone does not retain the generic declaration of
+# an unkept class: Flow becomes non-generic and Kotlin reflection rejects its T.
+# Keep this reflected interface (not the whole coroutine/Koog implementation).
+-keepattributes Signature,InnerClasses,EnclosingMethod
+-keep,allowobfuscation interface kotlinx.coroutines.flow.Flow
+
 # kotlinx.serialization runtime internals reached reflectively.
 -dontwarn kotlinx.serialization.**
 
