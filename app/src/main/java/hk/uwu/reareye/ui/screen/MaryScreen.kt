@@ -99,6 +99,7 @@ import hk.uwu.reareye.ui.components.MaryUsageSummary
 import hk.uwu.reareye.ui.components.ToolCardExpansion
 import hk.uwu.reareye.ui.components.markdown.MarkdownText
 import hk.uwu.reareye.ui.components.maryErrorColors
+import hk.uwu.reareye.ui.components.motion.ArtShimmerSweep
 import hk.uwu.reareye.ui.components.rememberMaryTailFollowState
 import hk.uwu.reareye.ui.components.scrollMaryConversationToBottom
 import kotlinx.coroutines.Dispatchers
@@ -170,6 +171,14 @@ fun MaryScreen(
     // Expansion of the collapsible rows, held here so it survives LazyColumn recycling.
     val blocks = rememberBlockExpansion()
     val toolExpansion = remember(controller.sessionId) { ToolCardExpansion() }
+    // A row plays its entrance only when it is genuinely new. Deciding that from the transcript, not
+    // from the row's own composition, is what stops history from replaying its entrance every time it
+    // is scrolled back into view. Deliberately not snapshot state: rows read it once, and it must not
+    // invalidate them when it changes.
+    val knownEntryIds = remember(controller.sessionId) { TranscriptEntryIds() }
+    LaunchedEffect(controller.sessionId, uiState.entries) {
+        knownEntryIds.remember(uiState.entries.asSequence().map { it.id })
+    }
     val askToolRowId = pendingInteractionToolRowId(uiState.entries, uiState.pendingAsk?.toolCallId)
     val approvalToolRowId =
         pendingInteractionToolRowId(uiState.entries, uiState.pendingApproval?.request?.id)
@@ -237,7 +246,7 @@ fun MaryScreen(
                             start = 16.dp,
                             end = 16.dp,
                         ),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(MaryRowSpacing),
                         overscrollEffect = null,
                     ) {
                         itemsIndexed(
@@ -249,8 +258,8 @@ fun MaryScreen(
                                 val previous = uiState.entries.getOrNull(index - 1)
                                 val startsTurn = previous == null ||
                                         speakerOf(previous) != speakerOf(entry)
-                                Spacer(modifier = Modifier.height(if (startsTurn && index > 0) 16.dp else 0.dp))
-                                EntryAppearance {
+                                Spacer(modifier = Modifier.height(if (startsTurn && index > 0) MaryTurnSpacing else 0.dp))
+                                EntryAppearance(new = knownEntryIds.isNew(entry.id)) {
                                     when (entry) {
                                         is ChatEntry.UserMessage -> UserBubble(entry.text)
                                         is ChatEntry.AssistantMessage -> AssistantBubble(
@@ -300,13 +309,19 @@ fun MaryScreen(
                             }
                         }
 
-                        // In-flight chain of thought, shown while the model is still thinking.
+                        // In-flight chain of thought, shown while the model is still thinking. Also
+                        // shown with no text yet, so a run that has produced nothing still says so.
                         //
                         // Once the first answer token arrives the buffer is handed to the
                         // AssistantMessage above, which renders it in the same place — so this row and
-                        // that card swap without the text jumping. Without this the thinking phase
-                        // renders nothing at all.
-                        if (uiState.reasoning.isNotBlank()) {
+                        // that card swap without the text jumping.
+                        if (uiState.reasoning.isNotBlank() ||
+                            showsPendingThinking(
+                                uiState.running,
+                                uiState.reasoning,
+                                uiState.entries
+                            )
+                        ) {
                             item(key = "reasoning_live") {
                                 ReasoningCard(
                                     text = uiState.reasoning,
@@ -376,6 +391,21 @@ fun MaryScreen(
     )
 }
 
+/** Space between two consecutive rows of one turn. */
+private val MaryRowSpacing = 8.dp
+
+/** Extra space above the first row of a new turn, so a speaker change reads without decoration. */
+private val MaryTurnSpacing = 16.dp
+
+/**
+ * Space between the last row and the composer.
+ *
+ * Deliberately the same as a turn break: a message in the middle of a conversation gets [MaryRowSpacing]
+ * plus [MaryTurnSpacing] on each side of it, so the newest row must get the same room below as above.
+ * A smaller gap made a freshly sent message read as crowding the composer.
+ */
+private val MaryComposerSpacing = MaryRowSpacing + MaryTurnSpacing
+
 /**
  * The transcript never resizes for the composer or IME: they float over its full viewport.
  * Only the transparent footer avoids the larger of the keyboard and the fixed navigation bar.
@@ -394,7 +424,8 @@ internal fun MaryFloatingChatLayout(
     // keyboard. Apply this to the footer alone, never the transcript or app navigation.
     val bottomObstruction = WindowInsets.ime.union(WindowInsets(bottom = bottomInset))
     val footerBottom = with(density) { bottomObstruction.getBottom(this).toDp() } + 8.dp
-    val contentPaddingBottom = with(density) { footerHeightPx.toDp() } + footerBottom + 12.dp
+    val contentPaddingBottom =
+        with(density) { footerHeightPx.toDp() } + footerBottom + MaryComposerSpacing
 
     Box(modifier = modifier) {
         content(contentPaddingBottom)
@@ -667,15 +698,36 @@ private fun ColumnScope.LandingState(
 }
 
 /**
+ * Ids already present in the transcript.
+ *
+ * A row plays its entrance animation only when it is genuinely new. Asking the transcript rather than
+ * the row's own composition is what keeps scrolling back through history from replaying the entrance:
+ * a row revealed by scrolling was already added here, so it starts fully shown.
+ */
+@Stable
+internal class TranscriptEntryIds {
+    private val known = mutableSetOf<String>()
+
+    fun isNew(id: String): Boolean = id !in known
+
+    fun remember(ids: Sequence<String>) {
+        ids.forEach { known.add(it) }
+    }
+}
+
+/**
  * Fades and lifts a row as it first appears.
  *
  * Applied per row rather than via `LazyItemScope.animateItem`, because that animates placement and
- * would also fire for every offset shift while a turn streams in. An already-present row keeps its
- * saveable state across LazyColumn recycling, so only genuinely new rows play this.
+ * would also fire for every offset shift while a turn streams in.
+ *
+ * `new` comes from the transcript, not from this composition, and only decides the first frame: a row
+ * that was already in the transcript starts fully shown, so scrolling back through history does not
+ * replay the entrance. Labels follow the saveable flag afterwards, so recycling a row cannot either.
  */
 @Composable
-internal fun EntryAppearance(content: @Composable () -> Unit) {
-    var shown by rememberSaveable { mutableStateOf(false) }
+internal fun EntryAppearance(new: Boolean, content: @Composable () -> Unit) {
+    var shown by rememberSaveable { mutableStateOf(!new) }
     val progress by animateFloatAsState(
         targetValue = if (shown) 1f else 0f,
         animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing),
@@ -847,6 +899,22 @@ internal class BlockExpansion {
 private fun rememberBlockExpansion(): BlockExpansion = remember { BlockExpansion() }
 
 /**
+ * The reasoning header's label: "Thinking…" while the model is still working, "Thought process" after.
+ *
+ * A single-line, hug-width label so the caller can sweep a highlight across exactly the words.
+ */
+@Composable
+private fun ReasoningHeaderLabel(streaming: Boolean) {
+    Text(
+        text = stringResource(if (streaming) R.string.mary_thinking else R.string.mary_thought),
+        style = MiuixTheme.textStyles.footnote2,
+        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/**
  * The reasoning header icon while the model is still thinking.
  *
  * A separate composable so the infinite transition only exists while it is actually needed.
@@ -932,14 +1000,16 @@ internal fun ReasoningCard(
                     )
                 }
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(
-                        if (streaming) R.string.mary_thinking else R.string.mary_thought,
-                    ),
-                    style = MiuixTheme.textStyles.footnote2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.weight(1f),
-                )
+                // The sweep hugs the label instead of the weighted row, so the shine lands on the words
+                // rather than sweeping across empty width.
+                if (streaming) {
+                    ArtShimmerSweep {
+                        ReasoningHeaderLabel(true)
+                    }
+                } else {
+                    ReasoningHeaderLabel(false)
+                }
+                Spacer(modifier = Modifier.weight(1f))
                 val chevron by animateFloatAsState(
                     targetValue = if (expanded) 180f else 0f,
                     animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing),
@@ -955,7 +1025,7 @@ internal fun ReasoningCard(
                 )
             }
 
-            if (expanded) {
+            if (expanded && text.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 MarkdownText(
                     markdown = text,
@@ -1067,4 +1137,25 @@ private fun speakerOf(entry: ChatEntry): Int = when (entry) {
     is ChatEntry.ToolCall -> 1
     is ChatEntry.Question -> 1
     is ChatEntry.Notice -> 2
+}
+
+/**
+ * Whether a running turn has produced nothing to show yet.
+ *
+ * The transcript must say the agent is working even before the first token, otherwise that window
+ * renders nothing at all. It steps aside as soon as the tail already carries live output of its own —
+ * reasoning text, a streaming answer, or a tool that is still running — because that row is then the
+ * better indicator. A finished row is not live output, so a turn that moves on past one still shows.
+ */
+internal fun showsPendingThinking(
+    running: Boolean,
+    reasoning: String,
+    entries: List<ChatEntry>,
+): Boolean {
+    if (!running || reasoning.isNotBlank()) return false
+    return when (val last = entries.lastOrNull()) {
+        is ChatEntry.AssistantMessage -> !last.streaming
+        is ChatEntry.ToolCall -> !last.running
+        else -> true
+    }
 }

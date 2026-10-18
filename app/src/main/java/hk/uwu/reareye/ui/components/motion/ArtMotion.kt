@@ -3,8 +3,12 @@ package hk.uwu.reareye.ui.components.motion
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
@@ -22,6 +26,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -220,4 +229,54 @@ fun <T> ArtSwapContent(
         label = "ArtSwapContent",
         content = { state -> content(state) },
     )
+}
+
+/**
+ * A highlight that sweeps across the content, the way Codex marks a run that is still working.
+ *
+ * The band is clipped to the pixels the content actually painted rather than to the layout bounds, so
+ * it lights up glyphs and leaves the surrounding row untouched. That also means the content needs no
+ * brush-carrying text API, and the sweep reads the same on text and icons.
+ */
+@Composable
+fun ArtShimmerSweep(
+    modifier: Modifier = Modifier,
+    durationMillis: Int = 1600,
+    bandFraction: Float = 0.6f,
+    highlight: Color = Color.White.copy(alpha = 0.55f),
+    content: @Composable () -> Unit,
+) {
+    val transition = rememberInfiniteTransition(label = "ArtShimmerSweep")
+    val sweep by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "ArtShimmerProgress",
+    )
+    Box(
+        // Offscreen compositing keeps SrcAtop inside this element: without its own layer the band
+        // would also clip against whatever sits behind the content.
+        modifier = modifier
+            .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+            .drawWithContent {
+                drawContent()
+                val band = size.width * bandFraction
+                if (band <= 0f) return@drawWithContent
+                // Travel one full band past each edge, so the sweep rests briefly between passes.
+                val startX = -band + (size.width + band * 2f) * sweep
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color.Transparent, highlight, Color.Transparent),
+                        startX = startX,
+                        endX = startX + band,
+                    ),
+                    blendMode = BlendMode.SrcAtop,
+                )
+            },
+    ) {
+        content()
+    }
 }

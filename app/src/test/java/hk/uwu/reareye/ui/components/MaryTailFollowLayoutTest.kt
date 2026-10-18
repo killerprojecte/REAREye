@@ -108,7 +108,7 @@ class MaryTailFollowLayoutTest {
                 val id = visible.value
                 androidx.compose.runtime.key(id) {
                     holder.SaveableStateProvider(id) {
-                        EntryAppearance {
+                        EntryAppearance(new = true) {
                             val recorded = remember { booleanArrayOf(false) }
                             Box(Modifier
                                 .fillMaxWidth()
@@ -143,6 +143,41 @@ class MaryTailFollowLayoutTest {
                 "The old row must not replay its entrance lift",
                 top,
                 oldPositions.last(),
+                0.5f
+            )
+        }
+    }
+
+    @Test
+    fun aRowAlreadyInTheTranscriptStartsSettledRatherThanLifting() {
+        val firstPositions = mutableMapOf<String, Float>()
+        host {
+            Box(
+                Modifier
+                    .requiredSize(360.dp, 240.dp)
+                    .testTag("known-row")
+            ) {
+                EntryAppearance(new = false) {
+                    val recorded = remember { booleanArrayOf(false) }
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                            .onGloballyPositioned {
+                                if (!recorded[0]) {
+                                    recorded[0] = true
+                                    firstPositions["known"] = it.positionInRoot().y
+                                }
+                            }) { BasicText("Earlier message") }
+                }
+            }
+        }
+        val top = compose.onNodeWithTag("known-row").fetchSemanticsNode().positionInRoot.y
+        compose.runOnIdle {
+            assertEquals(
+                "A row already in the transcript must not start lifted",
+                top,
+                firstPositions.getValue("known"),
                 0.5f
             )
         }

@@ -1570,7 +1570,7 @@ class MaryChatLayoutTest {
                 (viewport.bottom - obstruction.dp - 8.dp).value, composer.bottom.value, 0.5f
             )
             assertEquals(
-                composer.height.value + obstruction + 8f + 12f,
+                composer.height.value + obstruction + 8f + 24f,
                 transcriptBottomPadding.value, 0.5f
             )
             // The full-width region beside the composer is still drawn by the transcript,
@@ -1615,7 +1615,7 @@ class MaryChatLayoutTest {
         fun assertLastMessageReachable() {
             val composer = bounds("mary-composer")
             assertEquals(
-                composer.height.value + 80f + 8f + 12f,
+                composer.height.value + 80f + 8f + 24f,
                 transcriptBottomPadding.value, 0.5f
             )
             compose.runOnIdle { runBlocking { transcriptScroll.scrollTo(transcriptScroll.maxValue) } }
