@@ -527,9 +527,9 @@
     <string name="home_root_warning_desc">Некоторые функции требуют Root-доступа. Выдайте приложению Root-права через менеджер Root.</string>
     <string name="module_version_label">Версия модуля</string>
     <string name="version_codename_label">Кодовое имя версии</string>
-    <string name="quick_stop_subscreencenter">Принудительно остановить центр заднего экрана</string>
-    <string name="quick_stop_thememanager">Принудительно остановить менеджер тем</string>
-    <string name="quick_stop_personalassistant">Принудительно остановить интеллектуального помощника</string>
+    <string name="quick_stop_subscreencenter">Отпиздить Задний экран</string>
+    <string name="quick_stop_thememanager">Отхуячить Менеджер Тем</string>
+    <string name="quick_stop_personalassistant">Перекрыть Smart Ассистента</string>
     <string name="category_personalassistant">Интеллектуальный помощник</string>
     <string name="quick_stop_success">%1$s остановлен</string>
     <string name="quick_stop_failed">Не удалось остановить %1$s</string>
@@ -620,7 +620,7 @@
     <string name="credits_qq_desc">Присоединяйтесь к нашей группе QQ, чтобы быстрее получать ответы и оставлять отзывы</string>
     <string name="credits_coolapk_title">Страница на Coolapk</string>
     <string name="credits_coolapk_desc">Подпишитесь на мой аккаунт, чтобы узнавать больше новостей</string>
-    <string name="quick_stop_systemui">Принудительно остановить системный интерфейс</string>
+    <string name="quick_stop_systemui">Пиздануть по Интерфейсу</string>
     <string name="home_easter_egg_april_fools_working">Критическая ошибка</string>
     <string name="home_easter_egg_april_fools_activated">Модуль аварийно завершил работу</string>
     <string name="cfg_unmute_video_wallpaper">Включить звук видеообоев</string>
