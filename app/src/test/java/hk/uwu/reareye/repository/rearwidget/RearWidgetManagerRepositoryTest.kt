@@ -101,14 +101,14 @@ class RearWidgetManagerRepositoryTest {
     }
 
     @Test
-    fun automaticOrderStartsAt500AtTheBottomAndIncrementsTowardsTheTop() {
+    fun automaticOrderStartsAt600AtTheBottomAndIncrementsTowardsTheTop() {
         val cards = listOf(card("a"), card("b"), card("c"))
         val settings = cards.associate { it.id to RearCardOrderSetting(automatic = true) }
 
         val result = RearCardPriorityManager.assignAutomaticPriorities(cards, settings)
 
         assertEquals(listOf("a", "b", "c"), result.map { it.id })
-        assertEquals(listOf(502, 501, 500), result.map { it.priority })
+        assertEquals(listOf(602, 601, 600), result.map { it.priority })
     }
 
     @Test
@@ -128,7 +128,7 @@ class RearWidgetManagerRepositoryTest {
 
         assertEquals(listOf("manual", "auto-top", "auto-bottom"), result.map { it.id })
         assertEquals(900, result.first { it.id == "manual" }.priority)
-        assertEquals(listOf(501, 500), result.filter { it.id != "manual" }.map { it.priority })
+        assertEquals(listOf(601, 600), result.filter { it.id != "manual" }.map { it.priority })
     }
 
     @Test
@@ -140,7 +140,7 @@ class RearWidgetManagerRepositoryTest {
         val result = RearCardPriorityManager.assignAutomaticPriorities(draggedOrder, settings)
 
         assertEquals(listOf("c", "a", "b"), result.map { it.id })
-        assertEquals(listOf(502, 501, 500), result.map { it.priority })
+        assertEquals(listOf(602, 601, 600), result.map { it.priority })
     }
 
     @Test
@@ -161,7 +161,9 @@ class RearWidgetManagerRepositoryTest {
 
     @Test
     fun automaticPrioritySkipsAReservedManualValue() {
-        val cards = listOf(card("auto", priority = 500), card("manual", priority = 500))
+        // The manual card holds a value inside the automatic range, so the automatic card must step
+        // past it rather than take the same priority.
+        val cards = listOf(card("auto", priority = 600), card("manual", priority = 600))
         val settings = mapOf(
             "auto" to RearCardOrderSetting(automatic = true),
             "manual" to RearCardOrderSetting(automatic = false),
@@ -169,8 +171,8 @@ class RearWidgetManagerRepositoryTest {
 
         val result = RearCardPriorityManager.assignAutomaticPriorities(cards, settings)
 
-        assertEquals(501, result.first { it.id == "auto" }.priority)
-        assertEquals(500, result.first { it.id == "manual" }.priority)
+        assertEquals(601, result.first { it.id == "auto" }.priority)
+        assertEquals(600, result.first { it.id == "manual" }.priority)
     }
 
     @Test

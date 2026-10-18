@@ -836,12 +836,12 @@
     <string name="rear_widget_add_app_card">Add app card</string>
     <string name="rear_widget_edit_app_card">Edit app card</string>
     <string name="rear_widget_app_card_name">App card name</string>
-    <string name="rear_widget_app_card_hint">App cards launch a registered component directly. Only app cards registered by REAREye can be renamed or deleted.</string>
+    <string name="rear_widget_app_card_hint">App cards launch a registered component directly. Every app card can be renamed, deleted and reordered, including external apps.</string>
     <string name="rear_widget_empty_app_card">No app cards found</string>
     <string name="rear_widget_app_bound_component_title">Bound component</string>
     <string name="rear_widget_app_bound_component">Component: %1$s</string>
     <string name="rear_widget_app_bound_component_read_only">Bound component: %1$s (cannot be changed)</string>
-    <string name="rear_widget_app_external_card">External app card (read-only)</string>
+    <string name="rear_widget_app_external_card">External app card</string>
     <string name="rear_widget_app_render_preview">Render preview again</string>
     <string name="rear_widget_app_preview_rendered">App-card preview rendered</string>
     <string name="rear_widget_app_no_component">Add a component before registering an app card.</string>

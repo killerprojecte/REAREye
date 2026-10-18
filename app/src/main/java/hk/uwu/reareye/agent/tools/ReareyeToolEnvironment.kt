@@ -344,16 +344,6 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                 ),
             )
 
-        if (!existing.canRename) {
-            return ToolResult.error(
-                json(
-                    "error" to "not_renameable",
-                    "detail" to "App card '${existing.title}' cannot be renamed (can_rename=false).",
-                    "recovery" to "Tell the user this entry cannot be renamed; do not retry.",
-                ),
-            )
-        }
-
         return mutateWithVerification(
             action = "rename_app_card",
             mutate = { _ ->
@@ -381,16 +371,6 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
                     "recovery" to "Call list_app_cards for a valid app_id.",
                 ),
             )
-
-        if (!existing.canDelete) {
-            return ToolResult.error(
-                json(
-                    "error" to "not_deletable",
-                    "detail" to "App card '${existing.title}' cannot be deleted (can_delete=false).",
-                    "recovery" to "Tell the user this entry cannot be deleted; do not retry.",
-                ),
-            )
-        }
 
         return mutateWithVerification(
             action = "delete_app_card",
@@ -1840,7 +1820,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ToolSpec(
                 name = RENAME_APP_CARD,
                 description = """
-                    Rename app_id from list_app_cards to title. Requires can_rename=true; report not_renameable without retrying. Requires user confirmation.
+                    Rename app_id from list_app_cards to title. Every app card can be renamed, including external apps that were not registered by REAREye. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
                 params = listOf(
@@ -1855,7 +1835,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ToolSpec(
                 name = DELETE_APP_CARD,
                 description = """
-                    Permanently delete app_id from list_app_cards. Confirm intended title first. Requires can_delete=true; do not retry not_deletable. Requires explicit user confirmation.
+                    Permanently delete app_id from list_app_cards. Confirm intended title first. Every app card can be deleted, including external apps that were not registered by REAREye. Requires explicit user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.DESTRUCTIVE,
                 params = listOf(
@@ -1869,7 +1849,7 @@ class ReareyeToolEnvironment(private val context: Context) : ToolEnvironment {
             ToolSpec(
                 name = REORDER_APP_CARDS,
                 description = """
-                    Reorder every current app_id exactly once. Partial orders are rejected to prevent dropped entries. Fetch all list_app_cards pages first. Requires user confirmation.
+                    Reorder every current app_id exactly once, including external apps that were not registered by REAREye. Partial orders are rejected to prevent dropped entries. Fetch all list_app_cards pages first. Requires user confirmation.
                 """.trimIndent(),
                 risk = ToolRisk.MUTATING,
                 params = listOf(
