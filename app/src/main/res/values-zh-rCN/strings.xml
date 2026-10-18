@@ -761,12 +761,12 @@
     <string name="rear_widget_add_app_card">添加应用卡</string>
     <string name="rear_widget_edit_app_card">编辑应用卡</string>
     <string name="rear_widget_app_card_name">应用卡名称</string>
-    <string name="rear_widget_app_card_hint">应用卡可直接启动已注册组件。仅允许重命名或删除由 REAREye 注册的应用卡。</string>
+    <string name="rear_widget_app_card_hint">应用卡可直接启动已注册组件。所有应用卡均可重命名、删除与调整顺序，包括外部应用。</string>
     <string name="rear_widget_empty_app_card">暂无应用卡</string>
     <string name="rear_widget_app_bound_component_title">绑定组件</string>
     <string name="rear_widget_app_bound_component">组件：%1$s</string>
     <string name="rear_widget_app_bound_component_read_only">绑定组件：%1$s（不允许修改）</string>
-    <string name="rear_widget_app_external_card">外部应用卡（只读）</string>
+    <string name="rear_widget_app_external_card">外部应用卡</string>
     <string name="rear_widget_app_render_preview">重新渲染预览图</string>
     <string name="rear_widget_app_preview_rendered">应用卡预览图已生成</string>
     <string name="rear_widget_app_no_component">请先添加组件，再注册应用卡。</string>
