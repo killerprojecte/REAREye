@@ -56,7 +56,7 @@
     <string name="config_dashboard_module_title">Модуль и расширенные настройки</string>
     <string name="config_dashboard_module_desc">Внешний вид, навигация, магазин и отладка</string>
     <string name="config_dashboard_all_categories_title">Все категории функций</string>
-    <string name="config_dashboard_all_categories_desc">Если нужен полный список, можно открыть исходные категории настроек системного приложения</string>
+    <string name="config_dashboard_all_categories_desc">Если нужен полный список, откройте исходные категории настроек системного приложения</string>
     <string name="config_dashboard_stat_mode">организация</string>
     <string name="config_tab_cards">Карточки</string>
     <string name="config_tab_components">Компоненты</string>
@@ -67,15 +67,15 @@
     <string name="config_more_notifications_route_title">Уведомления и маршрутизация</string>
     <string name="config_more_notifications_route_desc">Маршрутизация уведомлений к компонентам заднего экрана и параметры их отображения</string>
     <string name="config_more_music_lyrics_title">Музыка и тексты песен</string>
-    <string name="config_more_music_lyrics_desc">Музыкальные элементы управления, источники текстов песен, способы отображения и параметры совместимости</string>
+    <string name="config_more_music_lyrics_desc">Управление музыкой, источники текстов песен, отображения и совместимость</string>
     <string name="config_more_video_wallpaper_title">Видеообои</string>
     <string name="config_more_video_wallpaper_desc">Зацикливание видеообоев, положение воспроизведения, звук и громкость</string>
-    <string name="config_more_unlock_limits_title">Ограничения и разблокировка</string>
-    <string name="config_more_unlock_limits_desc">Снятие ограничений на количество приложений, видеообои, шаблоны и системные возможности</string>
+    <string name="config_more_unlock_limits_title">Лимиты и разблокировка</string>
+    <string name="config_more_unlock_limits_desc">Снятие лимитов на приложений, видеообои, шаблоны и системные возможности</string>
     <string name="config_more_gallery_weather_title">Галерея и погода</string>
-    <string name="config_more_gallery_weather_desc">Дополнительные функции галереи, резервное копирование, создание контента и отображение погоды</string>
+    <string name="config_more_gallery_weather_desc">Улучшение галереи, бэкап, создание контента и эффекты погоды</string>
     <string name="config_more_reareye_settings_title">Настройки REAREye</string>
-    <string name="config_more_reareye_settings_desc">Интерфейс REAREye, навигация, хранилище компонентов, ярлык на рабочем столе и параметры отладки</string>
+    <string name="config_more_reareye_settings_desc">Интерфейс, навигация, магазин компонентов, ярлык на раб. столе и отладка</string>
     <string name="config_more_search">Поиск</string>
     <string name="config_more_search_hint">Введите название настройки</string>
     <string name="config_more_search_empty_query">Введите название настройки для поиска</string>
@@ -96,7 +96,7 @@
     <string name="config_more_rear_enhancement_title">Расширение возможностей заднего экрана</string>
     <string name="config_more_rear_enhancement_desc">Настройки приоритетных уведомлений и поведения видеообоев</string>
     <string name="config_more_legacy_settings_title">Старые настройки</string>
-    <string name="config_more_legacy_settings_desc">Открыть прежний полный список категорий настроек</string>
+    <string name="config_more_legacy_settings_desc">Открыть прежние категорий настроек</string>
     <string name="credits_github_title">Репозиторий GitHub</string>
     <string name="credits_github_desc">Исходный код, сообщения об ошибках и выпуски</string>
     <string name="credits_afdian_title">Поддержать на Afdian</string>
@@ -134,13 +134,13 @@
     <string name="module_search_bar_style_desc">Выбор оформления строки поиска</string>
     <string name="module_search_bar_style_default">По умолчанию</string>
     <string name="module_search_bar_style_miuix">Miuix</string>
-    <string name="module_store_api">API хранилища</string>
-    <string name="module_store_api_desc">Выбор поставщика API для хранилища компонентов</string>
+    <string name="module_store_api">API магазина</string>
+    <string name="module_store_api_desc">Выбор поставщика API для магазина компонентов</string>
     <string name="module_store_webview_hardware_acceleration">Аппаратное ускорение WebView</string>
     <string name="module_store_webview_hardware_acceleration_desc">Включено по умолчанию. Если устройство аварийно завершает работу при отображении предпросмотра Markdown, отключите эту настройку, чтобы перейти на программную отрисовку</string>
-    <string name="module_store_api_provider_aliyun">Alibaba Cloud</string>
+    <string name="module_store_api_provider_aliyun">Aliyun</string>
     <string name="module_store_api_provider_custom">Свой сервер</string>
-    <string name="module_store_api_custom_domain">Домен собственного API</string>
+    <string name="module_store_api_custom_domain">Кастомный домен API</string>
     <string name="module_store_api_custom_domain_help">Укажите только доменное имя, без https:// и пути</string>
     <string name="module_store_api_custom_domain_invalid">Недопустимый домен. Укажите только имя хоста, без протокола, пути, параметров запроса и фрагмента</string>
     <string name="module_theme_mode_miuix_system">Miuix: как в системе</string>
@@ -152,14 +152,14 @@
     <string name="hide_launcher_entry">Скрыть значок приложения</string>
     <string name="hide_launcher_entry_desc">Необязательно: убрать значок REAREye с рабочего стола</string>
 
-    <string name="category_system">Системная среда</string>
+    <string name="category_system">Системный фреймворк</string>
     <string name="cfg_activities_whitelist">Белый список приложений</string>
     <string name="cfg_activities_whitelist_desc">Позволяет указать, какие приложения можно открывать на заднем экране</string>
     <string name="enable_custom_activities_whitelist">Включить белый список приложений для заднего экрана</string>
     <string name="custom_activities_whitelist_apps">Приложения, разрешённые на заднем экране</string>
     <string name="custom_activities_whitelist_apps_desc">Выберите приложения, которые можно открывать на заднем экране</string>
 
-    <string name="category_subscreencenter">Центр заднего экрана</string>
+    <string name="category_subscreencenter">Задний экран</string>
     <string name="enable_unlimited_subscreen_app_list">Снять ограничение на количество приложений</string>
     <string name="enable_unlimited_subscreen_app_list_desc">Разрешить добавлять в центр заднего экрана больше приложений, чем предусмотренные системой 15</string>
     <string name="cfg_music_control_whitelist">Белый список музыкальных элементов управления</string>
