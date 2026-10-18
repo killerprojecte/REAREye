@@ -962,15 +962,12 @@
     <string name="mary_capability_insight">记忆洞察</string>
     <string name="mary_capability_reminder">提醒速览</string>
     <string name="mary_capability_review">今日回顾</string>
-    <string name="mary_suggestion_0_0">把音乐切到背屏</string>
-    <string name="mary_suggestion_0_1">现在背屏显示的是什么？</string>
-    <string name="mary_suggestion_0_2">帮我换个背屏壁纸</string>
-    <string name="mary_suggestion_1_0">列出背屏里装好的组件</string>
-    <string name="mary_suggestion_1_1">把微信切回主屏</string>
-    <string name="mary_suggestion_1_2">背屏歌词怎么不显示了？</string>
-    <string name="mary_suggestion_2_0">重启背屏中心</string>
-    <string name="mary_suggestion_2_1">今天背屏用过哪些应用？</string>
-    <string name="mary_suggestion_2_2">把通知路由整理一下</string>
+    <string name="mary_suggestion_0_0">帮我换个背屏壁纸</string>
+    <string name="mary_suggestion_0_1">列出背屏里装好的组件</string>
+    <string name="mary_suggestion_0_2">把通知路由整理一下</string>
+    <string name="mary_suggestion_1_0">生成番茄钟的应用卡</string>
+    <string name="mary_suggestion_1_1">列一下现在的通知路由</string>
+    <string name="mary_suggestion_1_2">写一个Lua脚本</string>
 
     <!-- Mary agent settings -->
     <string name="mary_settings_title">Mary 设置</string>

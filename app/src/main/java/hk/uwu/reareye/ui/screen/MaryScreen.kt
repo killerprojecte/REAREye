@@ -1123,12 +1123,7 @@ private fun rememberMarySuggestionPages(): List<List<String>> {
         stringResource(R.string.mary_suggestion_1_1),
         stringResource(R.string.mary_suggestion_1_2),
     )
-    val page2 = listOf(
-        stringResource(R.string.mary_suggestion_2_0),
-        stringResource(R.string.mary_suggestion_2_1),
-        stringResource(R.string.mary_suggestion_2_2),
-    )
-    return remember(page0, page1, page2) { listOf(page0, page1, page2) }
+    return remember(page0, page1) { listOf(page0, page1) }
 }
 
 /**

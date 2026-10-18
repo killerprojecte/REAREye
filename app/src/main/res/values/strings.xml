@@ -962,15 +962,12 @@
     <string name="mary_capability_insight">Insights</string>
     <string name="mary_capability_reminder">Reminders</string>
     <string name="mary_capability_review">Daily recap</string>
-    <string name="mary_suggestion_0_0">Switch the music app to the rear screen</string>
-    <string name="mary_suggestion_0_1">What is the rear screen showing right now?</string>
-    <string name="mary_suggestion_0_2">Change my rear screen wallpaper</string>
-    <string name="mary_suggestion_1_0">List the widgets installed on the rear screen</string>
-    <string name="mary_suggestion_1_1">Move WeChat back to the main screen</string>
-    <string name="mary_suggestion_1_2">Why did the rear screen lyrics stop showing?</string>
-    <string name="mary_suggestion_2_0">Restart the rear screen center</string>
-    <string name="mary_suggestion_2_1">Which apps used the rear screen today?</string>
-    <string name="mary_suggestion_2_2">Tidy up my notification routes</string>
+    <string name="mary_suggestion_0_0">Change my rear screen wallpaper</string>
+    <string name="mary_suggestion_0_1">List the components installed on the rear screen</string>
+    <string name="mary_suggestion_0_2">Tidy up my notification routes</string>
+    <string name="mary_suggestion_1_0">Make a Pomodoro app card</string>
+    <string name="mary_suggestion_1_1">Show my current notification routes</string>
+    <string name="mary_suggestion_1_2">Write a Lua script</string>
 
     <!-- Mary agent settings -->
     <string name="mary_settings_title">Mary settings</string>
