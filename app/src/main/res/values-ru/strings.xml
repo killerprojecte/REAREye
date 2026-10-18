@@ -342,7 +342,7 @@
     <string name="rear_widget_business_hide_time_tip">Скрыть время</string>
     <string name="rear_widget_business_hide_time_tip_desc">Скрыть время в уведомлениях этого компонента</string>
     <string name="rear_widget_card_sticky">Постоянная карточка</string>
-    <string name="rear_widget_card_sticky_desc">Если отключить, конфигурация карточки сохранится, но она не будет постоянно отображаться на заднем экране</string>
+    <string name="rear_widget_card_sticky_desc">Отключите чтобы сохранить карточку без его отображения в уведомлениях заднего экрана</string>
     <string name="rear_widget_add_card">Добавить карточку</string>
     <string name="rear_widget_edit_card">Изменить карточку</string>
     <string name="rear_widget_action_delete">Удалить</string>
@@ -368,12 +368,12 @@
     <string name="rear_widget_badge_template_default">Шаблон по умолчанию</string>
     <string name="rear_widget_badge_template_custom">Пользовательский шаблон</string>
     <string name="rear_widget_business_locked_summary">Этот компонент управляется хранилищем компонентов и не может редактироваться здесь</string>
-    <string name="rear_widget_card_locked_summary">Эта карточка управляется хранилищем компонентов. Можно изменить только приоритет</string>
+    <string name="rear_widget_card_locked_summary">Эта карточка управляется репозиторием компонентов. Можно изменить только приоритет</string>
     <string name="rear_widget_card_template_title">Настройки шаблона карточки</string>
     <string name="rear_widget_card_template_unavailable">У текущего компонента нет параметров шаблона, доступных для отдельной настройки карточки.</string>
     <string name="rear_widget_card_template_loading">Загрузка настроек шаблона…</string>
     <string name="rear_widget_card_template_use_defaults">Использовать значения шаблона по умолчанию</string>
-    <string name="rear_widget_card_template_image_pick_summary">В текущем шаблоне нет готовых вариантов. Здесь можно выбрать собственное изображение, как в ThemeManager.</string>
+    <string name="rear_widget_card_template_image_pick_summary">В текущем шаблоне нет готовых вариантов. Здесь можно выбрать собственное изображение, как в Менеджере Тем.</string>
     <string name="rear_widget_card_template_pick_custom_image">Выбрать собственное изображение</string>
     <string name="rear_widget_card_template_image_pick_imported">Собственное изображение импортировано</string>
     <string name="rear_widget_card_template_image_pick_failed">Не удалось импортировать выбранное изображение</string>
@@ -657,9 +657,9 @@
     <string name="lyric_remove_native_lyrics">Удалять тексты песен, полученные через встроенный API</string>
     <string name="lyric_remove_native_lyrics_desc">Удаляет информацию о текстах песен, полученную из метаданных Xiaomi</string>
     <string name="lyric_skip_unchanged_title_update">Игнорировать обновления метаданных, если изменилось только название песни</string>
-    <string name="lyric_skip_unchanged_title_update_desc">Если Media ID не изменился, а изменилось только название композиции, игнорировать обновление, чтобы Bluetooth-тексты песен не мешали модулю обработки текстов</string>
+    <string name="lyric_skip_unchanged_title_update_desc">Если Media ID не изменился, а изменилось только название трека, игнорировать обновление, чтобы Bluetooth-тексты песен не мешали модулю обработки текстов</string>
     <string name="lyric_take_over_builtin_handling">Перехватить встроенную обработку текстов песен</string>
-    <string name="lyric_take_over_builtin_handling_desc">Если включено, REAREye будет обрабатывать позицию воспроизведения и переносы строк системных текстов песен. Если выключено, используется встроенная системная логика</string>
+    <string name="lyric_take_over_builtin_handling_desc">Если включено, REAREye будет обрабатывать позицию воспроизведения и переносы строк системных текстов песен, обеспечивая работу с полноценными текстами в формате LRC</string>
     <string name="rear_store_detail_header">Информация о компоненте</string>
     <string name="module_store_api_provider_cf">Cloudflare</string>
     <string name="home_easter_egg_huawei_ultimate_design_working">За пределами досягаемости</string>
