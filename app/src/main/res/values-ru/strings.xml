@@ -43,8 +43,8 @@
     <string name="config_dashboard_search_results">Результаты поиска</string>
     <string name="config_dashboard_search_results_count">Найдено: %1$d</string>
     <string name="config_dashboard_search_empty">Подходящие настройки не найдены</string>
-    <string name="config_dashboard_stat_features">Доступные настройки</string>
-    <string name="config_dashboard_stat_mode_value">По задачам</string>
+    <string name="config_dashboard_stat_features">доступные настройки</string>
+    <string name="config_dashboard_stat_mode_value">по задачам</string>
     <string name="config_dashboard_workspace_title">Рабочая область заднего экрана</string>
     <string name="config_dashboard_workspace_desc">Объединяет обои, компоненты, карточки, маршрутизацию уведомлений и дополнительные настройки компонентов в одном разделе</string>
     <string name="config_dashboard_experience_title">Работа заднего экрана</string>
