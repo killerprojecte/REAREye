@@ -191,10 +191,10 @@
     <string name="lyric_show_artist_before_first_line_desc">Работает только со статическими текстами песен в формате LRC</string>
     <string name="lyric_provider">Провайдер текстов песен</string>
     <string name="lyric_provider_desc">Выберите источник текстов песен</string>
-    <string name="lyric_provider_lyricon">Lyricon (词幕)</string>
+    <string name="lyric_provider_lyricon">Lyricon</string>
     <string name="lyric_provider_superlyric">SuperLyric</string>
-    <string name="super_lyric_display_mode">Режим построчного отображения текста</string>
-    <string name="super_lyric_display_mode_desc">Выберите, отображать оригинал или перевод в построчных текстах песен SuperLyric</string>
+    <string name="super_lyric_display_mode">Режим отображения текста в реальном времени</string>
+    <string name="super_lyric_display_mode_desc">Выберите, отображать оригинал или перевод в Live текстах песен SuperLyric</string>
     <string name="rear_widget_manager_category">Персонализация заднего экрана</string>
     <string name="rear_widget_manager_category_desc">Управление функциями персонализации заднего экрана</string>
     <string name="rear_wallpaper_manager">Менеджер обоев</string>
