@@ -198,7 +198,7 @@
     <string name="rear_widget_manager_category">Персонализация заднего экрана</string>
     <string name="rear_widget_manager_category_desc">Управление функциями персонализации заднего экрана</string>
     <string name="rear_wallpaper_manager">Менеджер обоев</string>
-    <string name="rear_wallpaper_manager_desc">Просмотр списка и предварительного просмотра обоев, а также настройка автоматической смены по расписанию с изменяемым перетаскиванием порядком</string>
+    <string name="rear_wallpaper_manager_desc">Просмотр списка и предварительного просмотра обоев, настройка автоматической смены по расписанию с изменяемым перетаскиванием порядком</string>
     <string name="rear_wallpaper_status_title">Состояние обоев</string>
     <string name="rear_wallpaper_current_none">Не выбраны</string>
     <string name="rear_wallpaper_schedule_title">Порядок смены</string>
@@ -294,7 +294,7 @@
     <string name="rear_widget_scene_route_manager">Маршрутизация уведомлений</string>
     <string name="rear_widget_scene_route_manager_desc">Назначение компонентов для уведомлений приложений по заданным правилам</string>
     <string name="rear_widget_business_extra_manager">Дополнительные настройки компонентов</string>
-    <string name="rear_widget_business_extra_manager_desc">Ручное добавление компонентов, которым нужны дополнительные параметры отображения</string>
+    <string name="rear_widget_business_extra_manager_desc">Ручное добавление компонентов, требующие дополнительные параметры отображения</string>
     <string name="rear_widget_card_manager">Управление карточками</string>
     <string name="rear_widget_card_manager_desc">Управление постоянно отображаемыми карточками, их порядком и состоянием</string>
     <string name="allow_rear_focus_notices">Разрешить отображение приоритетных уведомлений на заднем экране</string>
@@ -309,8 +309,8 @@
     <string name="rear_widget_template_file">Путь к файлу шаблона</string>
     <string name="rear_widget_default_priority">Приоритет вручную (чем больше число, тем выше положение)</string>
     <string name="rear_widget_priority_mode_auto">Автоматическое управление приоритетом</string>
-    <string name="rear_widget_priority_auto_desc">От 600 внизу списка, при перемещении вверх значение увеличивается на 1 для каждой карточки</string>
-    <string name="rear_widget_priority_manual_desc">Сохранять указанное значение до следующей сортировки перетаскиванием. Чем больше число, тем выше положение</string>
+    <string name="rear_widget_priority_auto_desc">Приоритеты начинаются с 600 внизу и увеличиваются на 1 вверх.</string>
+    <string name="rear_widget_priority_manual_desc">Сохранять значение до следующей сортировки перетаскиванием. Чем больше число, тем выше положение</string>
     <string name="rear_widget_pick_file">Выбрать файл</string>
     <string name="rear_widget_card_title">Название карточки</string>
     <string name="rear_widget_card_summary">%1$s\nКомпонент: %2$s · Приоритет: %3$d</string>
@@ -335,7 +335,7 @@
     <string name="rear_widget_business_extra_add">Добавить компонент</string>
     <string name="rear_widget_business_extra_empty">Дополнительных настроек компонентов пока нет</string>
     <string name="rear_widget_business_extra_hint_title">Дополнительные параметры компонентов</string>
-    <string name="rear_widget_business_extra_hint">Сначала добавьте компонент, затем откройте его страницу подробностей, чтобы настроить дополнительные параметры</string>
+    <string name="rear_widget_business_extra_hint">Сначала добавьте компонент, затем откройте окно подробностей, чтобы настроить дополнительные параметры</string>
     <string name="rear_widget_business_extra_count">Настроено компонентов: %1$d</string>
     <string name="rear_widget_business_extra_settings">Дополнительные настройки компонентов</string>
     <string name="rear_widget_business_extra_settings_target">Текущий компонент: %1$s</string>
@@ -385,7 +385,7 @@
     <string name="rear_widget_card_template_date_label">Дата (yyyy-MM-dd)</string>
     <string name="rear_widget_card_template_date_summary">Повторяющееся значение: %1$d</string>
     <string name="rear_widget_card_template_date_invalid">Введите дату в корректном формате yyyy-MM-dd.</string>
-    <string name="rear_widget_card_template_pick_preset">Выбрать готовый вариант</string>
+    <string name="rear_widget_card_template_pick_preset">Выбрать пресет</string>
     <string name="rear_widget_card_template_background_binding_summary">Связанные переменные: uri=%1$s · video=%2$s · foreground=%3$s</string>
     <string name="rear_widget_card_template_background_mode_value">Значение режима</string>
     <string name="rear_widget_card_template_background_uri">URI / путь к изображению</string>
@@ -414,7 +414,7 @@
     <string name="align_left_horizontally">Выровнять по левому краю</string>
     <string name="align_center_horizontally">Выровнять по центру</string>
     <string name="align_right_horizontally">Выровнять по правому краю</string>
-    <string name="rear_store_load_failed">Не удалось загрузить данные хранилища</string>
+    <string name="rear_store_load_failed">Не удалось загрузить данные репозитория</string>
     <string name="rear_store_search_empty">Подходящие компоненты не найдены</string>
     <string name="rear_store_detail_failed">Не удалось загрузить сведения о компоненте</string>
     <string name="rear_store_install_success">Установлен %1$s (%2$s)</string>
@@ -444,7 +444,7 @@
     <string name="rear_store_sort_by_installed_at">По дате установки</string>
     <string name="rear_store_sort_by_name">По названию компонента</string>
     <string name="rear_store_sort_by_stars">По звёздам</string>
-    <string name="rear_store_prioritize_updates">Сначала обновления</string>
+    <string name="rear_store_prioritize_updates">Приоритет обновлениям</string>
     <string name="rear_store_tab_readme">Описание</string>
     <string name="rear_store_tab_downloads">Загрузки</string>
     <string name="rear_store_tab_info">Информация</string>
@@ -498,7 +498,7 @@
     <string name="rear_store_widget_info_type_wallpaper">Обои</string>
     <string name="rear_store_metadata_type_card">Карточка</string>
     <string name="rear_store_metadata_type_notification">Уведомление</string>
-    <string name="rear_store_metadata_type_enhanced">Расширенные функции</string>
+    <string name="rear_store_metadata_type_enhanced">Улучшение</string>
     <string name="rear_store_metadata_type_wallpaper">Обои</string>
     <string name="rear_store_repository_card_title">Ссылка на репозиторий</string>
     <string name="rear_store_repository_missing">Информация о репозитории отсутствует</string>
@@ -521,7 +521,7 @@
     <string name="home_update_latest">Последний коммит</string>
     <string name="home_update_checking">Проверка…</string>
     <string name="home_update_unknown">Неизвестно</string>
-    <string name="home_update_warning_title">Обнаружено обновление</string>
+    <string name="home_update_warning_title">Доступно обновление</string>
     <string name="home_update_warning_desc">Текущая версия: %1$s, последняя: %2$s</string>
     <string name="home_root_warning_title">Root недоступен</string>
     <string name="home_root_warning_desc">Некоторые функции требуют Root-доступа. Выдайте приложению Root-права через менеджер Root.</string>
@@ -585,7 +585,7 @@
     <string name="gallery_enable_print">Включить печать</string>
     <string name="gallery_enable_print_desc">Показывать функцию печати фотографий в галерее</string>
     <string name="gallery_enable_un_privacy_watermark">Разблокировать водяные знаки конфиденциальности</string>
-    <string name="gallery_enable_un_privacy_watermark_desc">Показывать соответствующую функцию и снять ограничение на длину текста</string>
+    <string name="gallery_enable_un_privacy_watermark_desc">Отобразить водяной знак и снять ограничение на длину текста</string>
     <string name="gallery_enable_magic_matting">Включить магическое удаление фона</string>
     <string name="gallery_enable_magic_matting_desc">Показывать в галерее магическое удаление фона и связанные функции редактирования изображений</string>
 
@@ -633,7 +633,7 @@
     <string name="cfg_disable_rear_screen_cover_desc">После включения задний экран не будет блокироваться, когда основной экран работает в полноэкранном режиме</string>
     <string name="cfg_disable_subscreen_double_tap_sleep">Приложения, для которых игнорируется двойное нажатие для выключения заднего экрана</string>
     <string name="cfg_disable_subscreen_double_tap_sleep_desc">Выберите приложения, для которых системный фреймворк должен игнорировать жест двойного нажатия на заднем экране для выключения экрана или перехода в AOD</string>
-    <string name="cfg_disable_subscreen_double_tap_wake">Приложения, для которых игнорируется двойное нажатие для его пробуждения</string>
+    <string name="cfg_disable_subscreen_double_tap_wake">Приложения, для которых игнорируется двойное нажатие для пробуждения заднего экрана</string>
     <string name="cfg_disable_subscreen_double_tap_wake_desc">Выберите приложения, при работе которых на переднем плане двойное нажатие на заднем экране должно игнорироваться</string>
     <string name="cfg_disable_subscreen_high_load_mode">Приложения, игнорирующие режим высокой нагрузки заднего экрана</string>
     <string name="cfg_disable_subscreen_high_load_mode_desc">Выберите приложения на переднем плане основного экрана, для которых следует пропускать обработку режима высокой нагрузки заднего экрана</string>
