@@ -762,12 +762,18 @@ class MaryController(
             "question",
             normalized.question + "\n" + normalized.options.joinToString("\n") { "${it.id}: ${it.label}" })
         _state.update { current ->
-            val entries = if (normalized.toolCallId == null) current.entries + ChatEntry.Question(
+            val asked = normalized.toolCallId == null
+            val entries = if (asked) flushReasoning(current.entries, current.reasoning) + ChatEntry.Question(
                 normalized.id,
                 normalized
             )
             else current.entries
-            current.copy(entries = entries, pendingAsk = normalized, status = null)
+            current.copy(
+                entries = entries,
+                reasoning = if (asked) "" else current.reasoning,
+                pendingAsk = normalized,
+                status = null
+            )
         }
         val answer = deferred.await()
         assertOwner(owner)
@@ -864,13 +870,16 @@ class MaryController(
             }
             is AgentEvent.ToolCallStarted -> _state.update { current ->
                 current.copy(
-                    entries = current.entries + ChatEntry.ToolCall(
+                    // A tool call closes the thought that led to it: freeze the buffer into its own
+                    // row before the card, or the approval renders above the reasoning that asked
+                    // for it.
+                    entries = flushReasoning(current.entries, current.reasoning) + ChatEntry.ToolCall(
                         newId(),
                         event.name,
                         "",
                         running = true,
                         callId = event.id
-                    ), status = event.name
+                    ), reasoning = "", status = event.name
                 )
             }
             is AgentEvent.ToolCallArguments -> _state.update { current ->
@@ -885,7 +894,9 @@ class MaryController(
                 _state.update { current ->
                     val index =
                         current.entries.indexOfLast { it is ChatEntry.ToolCall && it.callId == event.request.id && it.running }
-                    val entries = if (index < 0) current.entries + ChatEntry.ToolCall(
+                    val missing = index < 0
+                    val entries = if (missing) flushReasoning(current.entries, current.reasoning) +
+                            ChatEntry.ToolCall(
                         newId(),
                         event.request.name,
                         event.request.argumentsJson,
@@ -898,7 +909,7 @@ class MaryController(
                             argumentsJson = event.request.argumentsJson
                         ) else entry
                     }
-                    current.copy(entries = entries)
+                    current.copy(entries = entries, reasoning = if (missing) "" else current.reasoning)
                 }
             }
             is AgentEvent.ToolResultEvent -> {
@@ -959,6 +970,25 @@ class MaryController(
             )
         }
     }
+
+    /**
+     * A thought that outlives the tool call it justified.
+     *
+     * Reasoning streams into [AgentUiState.reasoning] and only becomes a transcript row when the
+     * first answer token arrives. A turn that goes straight from thinking to a tool call would
+     * therefore paint the approval prompt (which belongs to the tool card) above the chain of
+     * thought that asked for it. Freezing the buffer in front of that card keeps the transcript in
+     * the order it happened: why, then what.
+     */
+    private fun flushReasoning(
+        entries: List<ChatEntry>,
+        reasoning: String,
+    ): List<ChatEntry> = if (reasoning.isBlank()) entries else entries + ChatEntry.AssistantMessage(
+        id = newId(),
+        text = "",
+        streaming = false,
+        reasoning = reasoning,
+    )
 
     private fun appendNotice(text: String, isError: Boolean) {
         _state.update {

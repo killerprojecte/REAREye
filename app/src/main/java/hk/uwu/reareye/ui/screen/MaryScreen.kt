@@ -807,47 +807,51 @@ private fun AssistantBubble(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-            Card(
-                colors = CardDefaults.defaultColors(
-                    color = MiuixTheme.colorScheme.surfaceContainer,
-                    contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
-                ),
-                cornerRadius = 18.dp,
-            ) {
-                if (text.isEmpty() && streaming) {
-                    Text(
-                        text = "…",
-                        style = MiuixTheme.textStyles.body1,
-                        lineHeight = 24.sp,
-                        modifier = Modifier
-                            .clip(
-                                RoundedCornerShape(
-                                    topStart = 6.dp,
-                                    topEnd = 18.dp,
-                                    bottomEnd = 18.dp,
-                                    bottomStart = 18.dp
+        // A row can carry reasoning only: the thought that preceded a tool call keeps its own place
+        // in the transcript, and must not draw an empty speech bubble under itself.
+        if (text.isNotEmpty() || streaming) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                Card(
+                    colors = CardDefaults.defaultColors(
+                        color = MiuixTheme.colorScheme.surfaceContainer,
+                        contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
+                    ),
+                    cornerRadius = 18.dp,
+                ) {
+                    if (text.isEmpty() && streaming) {
+                        Text(
+                            text = "…",
+                            style = MiuixTheme.textStyles.body1,
+                            lineHeight = 24.sp,
+                            modifier = Modifier
+                                .clip(
+                                    RoundedCornerShape(
+                                        topStart = 6.dp,
+                                        topEnd = 18.dp,
+                                        bottomEnd = 18.dp,
+                                        bottomStart = 18.dp
+                                    )
                                 )
-                            )
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                    )
-                } else {
-                    // Only Mary's replies are parsed as Markdown: the user's own text is shown
-                    // exactly as typed, so a stray `*` cannot silently reformat it.
-                    MarkdownText(
-                        markdown = text,
-                        textColor = MiuixTheme.colorScheme.onSurfaceContainer,
-                        modifier = Modifier
-                            .clip(
-                                RoundedCornerShape(
-                                    topStart = 6.dp,
-                                    topEnd = 18.dp,
-                                    bottomEnd = 18.dp,
-                                    bottomStart = 18.dp
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                        )
+                    } else {
+                        // Only Mary's replies are parsed as Markdown: the user's own text is shown
+                        // exactly as typed, so a stray `*` cannot silently reformat it.
+                        MarkdownText(
+                            markdown = text,
+                            textColor = MiuixTheme.colorScheme.onSurfaceContainer,
+                            modifier = Modifier
+                                .clip(
+                                    RoundedCornerShape(
+                                        topStart = 6.dp,
+                                        topEnd = 18.dp,
+                                        bottomEnd = 18.dp,
+                                        bottomStart = 18.dp
+                                    )
                                 )
-                            )
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                    )
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                        )
+                    }
                 }
             }
         }
