@@ -897,6 +897,12 @@
     <string name="oobe_disclaimer_point_one">Root, LSP scope, and hooks can affect system components.</string>
     <string name="oobe_disclaimer_point_two">Back up important data before changing advanced settings.</string>
     <string name="oobe_disclaimer_point_three">You can review the status and configuration again at any time.</string>
+    <string name="target_app_version_dialog_title">Target app is out of date</string>
+    <string name="target_app_version_dialog_summary">REAREye depends on a newer version of this app. Update it before the rear screen features can work reliably.</string>
+    <string name="target_app_version_dialog_current">Installed</string>
+    <string name="target_app_version_dialog_required">Required</string>
+    <string name="target_app_version_dialog_countdown">Closing the app in %1$d s</string>
+    <string name="target_app_version_dialog_close">Close app</string>
     <string name="oobe_permission_title">Check permissions</string>
     <string name="oobe_permission_summary">Let’s make sure the two things REAREye needs are ready.</string>
     <string name="oobe_lsp_title">LSP scope</string>
@@ -915,6 +921,8 @@
     <string name="guide_nav_summary">Use this bar to jump between the main sections and the shortcuts you use most.</string>
     <string name="guide_config_title">Open the configuration workspace</string>
     <string name="guide_config_summary">This is the main place to change how REAREye behaves. Everything is grouped into sections you can search.</string>
+    <string name="guide_store_title">The rear store is here</string>
+    <string name="guide_store_summary">Tap this cloud download button in the top left corner to open the store and install new cards, widgets, and wallpapers.</string>
     <string name="guide_cards_title">Cards and app entries</string>
     <string name="guide_cards_summary">Here you can decide which cards and apps should appear on the rear screen.</string>
     <string name="guide_components_title">Manage components</string>

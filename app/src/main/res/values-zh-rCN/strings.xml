@@ -897,6 +897,12 @@
     <string name="oobe_disclaimer_point_one">Root、LSP 作用域和 Hook 可能影响系统组件。</string>
     <string name="oobe_disclaimer_point_two">修改高级设置前，请先备份重要数据。</string>
     <string name="oobe_disclaimer_point_three">之后仍可随时回到主页查看状态和配置。</string>
+    <string name="target_app_version_dialog_title">目标应用版本过低</string>
+    <string name="target_app_version_dialog_summary">REAREye 依赖的目标应用需要先更新，否则无法保证背屏功能正常。</string>
+    <string name="target_app_version_dialog_current">当前版本</string>
+    <string name="target_app_version_dialog_required">最低版本</string>
+    <string name="target_app_version_dialog_countdown">%1$d 秒后自动关闭应用</string>
+    <string name="target_app_version_dialog_close">关闭应用</string>
     <string name="oobe_permission_title">检查权限</string>
     <string name="oobe_permission_summary">先确认 REAREye 需要的两个条件都已经准备好。</string>
     <string name="oobe_lsp_title">LSP 作用域</string>
@@ -915,6 +921,8 @@
     <string name="guide_nav_summary">从这里可以快速切换主要页面，也能进入你最常用的快捷入口。</string>
     <string name="guide_config_title">打开配置工作台</string>
     <string name="guide_config_summary">这里是调整 REAREye 行为的主要地方，所有设置都按分类整理，也可以直接搜索。</string>
+    <string name="guide_store_title">组件仓库在这里</string>
+    <string name="guide_store_summary">点左上角这个云下载按钮就能打开组件仓库，安装新的卡片、组件和壁纸。</string>
     <string name="guide_cards_title">卡片和应用入口</string>
     <string name="guide_cards_summary">在这里决定哪些卡片和应用要显示在背屏上。</string>
     <string name="guide_components_title">管理组件</string>

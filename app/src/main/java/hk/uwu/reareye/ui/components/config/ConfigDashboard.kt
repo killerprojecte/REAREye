@@ -131,7 +131,10 @@ internal fun ConfigDashboard(
                 }
             ),
             navigationIcon = {
-                IconButton(onClick = onOpenStore) {
+                IconButton(
+                    onClick = onOpenStore,
+                    modifier = Modifier.featureGuideAnchor("config_store_button"),
+                ) {
                     Icon(
                         Icons.Outlined.CloudDownload,
                         contentDescription = stringResource(R.string.store_navigation),

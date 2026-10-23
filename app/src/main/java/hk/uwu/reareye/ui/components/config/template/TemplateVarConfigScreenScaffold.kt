@@ -34,6 +34,7 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -57,7 +58,19 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
     onReset: () -> Unit,
     editorItems: LazyListScope.(TSchema, TConfig) -> Unit,
 ) {
-    val scrollBehavior = MiuixScrollBehavior()
+    // The scrolling list only shares this behavior with a top bar when this scaffold renders one.
+    // The embedded variant has no bar of its own, and a MiuixScrollBehavior without a bar keeps
+    // its default -Float.MAX_VALUE height offset limit, which lets the nested scroll connection
+    // claim every upward drag and makes the list look unscrollable. Pin the limit to zero so a
+    // bar-less behavior is a no-op, and let the real bar write its own limit while it lays out.
+    val scrollBehavior = MiuixScrollBehavior(
+        state = rememberTopAppBarState(initialHeightOffsetLimit = 0f),
+    )
+    val contentScrollModifier = if (embedded) {
+        Modifier
+    } else {
+        Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+    }
     val hazeState = rememberAcrylicHazeState()
     val hazeStyle = rememberAcrylicHazeStyle()
     val contentSourceModifier = if (embedded) {
@@ -110,7 +123,7 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
                         .fillMaxSize()
                         .then(contentSourceModifier)
                         .imePadding()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .then(contentScrollModifier)
                         .scrollEndHaptic()
                         .overScrollVertical()
                         .padding(horizontal = 12.dp),

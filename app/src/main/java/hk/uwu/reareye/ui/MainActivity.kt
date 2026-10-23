@@ -43,6 +43,7 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import hk.uwu.reareye.ui.components.PresetPackDialog
 import hk.uwu.reareye.ui.components.SubscreenNotificationAccessPrompt
+import hk.uwu.reareye.ui.components.TargetAppVersionDialog
 import hk.uwu.reareye.ui.components.motion.ArtVisibilityMotion
 import hk.uwu.reareye.ui.components.navigation.NavigationQuickTarget
 import hk.uwu.reareye.ui.components.navigation.RearNavigationBar
@@ -63,6 +64,7 @@ import hk.uwu.reareye.ui.screen.RearStoreScreen
 import hk.uwu.reareye.ui.screen.preloadHomeFrameNotice
 import hk.uwu.reareye.ui.theme.AppTheme
 import hk.uwu.reareye.ui.theme.AppThemeMode
+import hk.uwu.reareye.version.AppVersionGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -87,6 +89,18 @@ class MainActivity : ComponentActivity() {
         const val OOBE_PREFS = "reareye_oobe"
         const val OOBE_COMPLETED = "completed"
         const val FEATURE_GUIDE_COMPLETED = "feature_guide_completed"
+    }
+
+    private var versionGateClosed = false
+
+    /**
+     * Leaves the app after the target app version reminder. Guarded so the countdown and the
+     * button cannot both finish the activity.
+     */
+    private fun closeAfterVersionGate() {
+        if (versionGateClosed) return
+        versionGateClosed = true
+        finishAndRemoveTask()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -116,7 +130,21 @@ class MainActivity : ComponentActivity() {
 
         preloadHomeFrameNotice(applicationContext)
 
+        // Target app versions are checked before any UI comes up: an outdated rear screen
+        // container silently rejects the hooks and template fields this module writes, so it is
+        // safer to explain the requirement and leave than to half work.
+        val versionViolations = AppVersionGate.evaluate(applicationContext)
+
         setContent {
+            if (versionViolations.isNotEmpty()) {
+                AppTheme {
+                    TargetAppVersionDialog(
+                        violations = versionViolations,
+                        onClose = { closeAfterVersionGate() },
+                    )
+                }
+                return@setContent
+            }
             val onboardingPrefs = remember {
                 applicationContext.getSharedPreferences(OOBE_PREFS, MODE_PRIVATE)
             }
