@@ -1,6 +1,6 @@
 package hk.uwu.reareye.hook.support
 
-import hk.uwu.reareye.generated.AppProperties
+import hk.uwu.reareye.BuildConfig
 
 /**
  * 需要额外放行的调用方。
@@ -12,7 +12,7 @@ import hk.uwu.reareye.generated.AppProperties
 object WhitelistedCallers {
     /** REAREye 自身与 HyperOS 语音识别示例应用。 */
     val PACKAGES: Set<String> = setOf(
-        AppProperties.PROJECT_APP_PACKAGE_NAME,
+        BuildConfig.APPLICATION_ID,
         "com.mispeech.hyperos.asr.example",
     )
 }
