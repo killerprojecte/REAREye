@@ -3,7 +3,9 @@ package hk.uwu.reareye.ui
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
@@ -41,6 +43,7 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import hk.uwu.reareye.ui.components.PresetPackDialog
 import hk.uwu.reareye.ui.components.SubscreenNotificationAccessPrompt
+import hk.uwu.reareye.ui.components.TargetAppVersionDialog
 import hk.uwu.reareye.ui.components.motion.ArtVisibilityMotion
 import hk.uwu.reareye.ui.components.navigation.NavigationQuickTarget
 import hk.uwu.reareye.ui.components.navigation.RearNavigationBar
@@ -55,16 +58,24 @@ import hk.uwu.reareye.ui.config.rememberRemotePrefsStatusRevision
 import hk.uwu.reareye.ui.screen.AboutScreen
 import hk.uwu.reareye.ui.screen.ConfigScreen
 import hk.uwu.reareye.ui.screen.HomeScreen
+import hk.uwu.reareye.ui.screen.MaryScreen
+import hk.uwu.reareye.ui.screen.MarySettingsScreen
 import hk.uwu.reareye.ui.screen.RearStoreScreen
 import hk.uwu.reareye.ui.screen.preloadHomeFrameNotice
 import hk.uwu.reareye.ui.theme.AppTheme
 import hk.uwu.reareye.ui.theme.AppThemeMode
+import hk.uwu.reareye.version.AppVersionGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-private val MainScreenOrder = listOf("home", "store", "config", "about")
+/**
+ * Screen order drives the horizontal transition direction. The Rear Store is reachable from the
+ * configuration header rather than the bottom bar, so it keeps a slot here for its transition
+ * while [RearNavigationBar] renders only the four bottom-bar destinations.
+ */
+private val MainScreenOrder = listOf("home", "store", "mary", "config", "about")
 
 private data class RemoteUiSettings(
     val themeModeValue: Int,
@@ -80,8 +91,22 @@ class MainActivity : ComponentActivity() {
         const val FEATURE_GUIDE_COMPLETED = "feature_guide_completed"
     }
 
+    private var versionGateClosed = false
+
+    /**
+     * Leaves the app after the target app version reminder. Guarded so the countdown and the
+     * button cannot both finish the activity.
+     */
+    private fun closeAfterVersionGate() {
+        if (versionGateClosed) return
+        versionGateClosed = true
+        finishAndRemoveTask()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Keep the window edge-to-edge: Compose, not decor resizing/panning, owns IME avoidance.
+        enableEdgeToEdge()
 
         try {
             val permissionInfo = applicationContext.packageManager
@@ -105,7 +130,21 @@ class MainActivity : ComponentActivity() {
 
         preloadHomeFrameNotice(applicationContext)
 
+        // Target app versions are checked before any UI comes up: an outdated rear screen
+        // container silently rejects the hooks and template fields this module writes, so it is
+        // safer to explain the requirement and leave than to half work.
+        val versionViolations = AppVersionGate.evaluate(applicationContext)
+
         setContent {
+            if (versionViolations.isNotEmpty()) {
+                AppTheme {
+                    TargetAppVersionDialog(
+                        violations = versionViolations,
+                        onClose = { closeAfterVersionGate() },
+                    )
+                }
+                return@setContent
+            }
             val onboardingPrefs = remember {
                 applicationContext.getSharedPreferences(OOBE_PREFS, MODE_PRIVATE)
             }
@@ -202,6 +241,12 @@ class MainActivity : ComponentActivity() {
                 mutableIntStateOf(settings.navigationBarModeValue)
             }
             var currentScreen by remember { mutableStateOf("home") }
+            // The Rear Store is a configuration-level destination, so the system back gesture
+            // returns to Configuration instead of finishing the activity. Deeper store routes
+            // (widget detail) consume back themselves before this handler sees it.
+            BackHandler(enabled = currentScreen == "store") {
+                currentScreen = "config"
+            }
             var showPresetPackDialog by remember { mutableStateOf(false) }
             var presetPackRefreshToken by remember { mutableIntStateOf(0) }
             var navBarVisible by remember { mutableStateOf(false) }
@@ -254,10 +299,13 @@ class MainActivity : ComponentActivity() {
                 var stableBottomInset by remember { mutableStateOf(0.dp) }
 
                 CompositionLocalProvider(LocalFeatureGuideAnchors provides guideAnchors.takeIf { featureGuideVisible }) {
+                    // Keep the popup host full-window: MIUIX dialogs own their IME avoidance.
                     Scaffold { _ ->
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
+                                // Navigation stays at the physical window bottom. Screens own
+                                // IME avoidance; never shrink this shared root or its popup host.
                                 .graphicsLayer { clip = true }
                         ) {
                             Box(
@@ -337,7 +385,31 @@ class MainActivity : ComponentActivity() {
                                             onInitialWidgetHandled = {
                                                 pendingRearStoreWidgetId = null
                                             },
+                                            onBack = {
+                                                configInAppListMode = false
+                                                currentScreen = "config"
+                                            },
                                         )
+
+                                        "mary" -> Box(modifier = Modifier.fillMaxSize()) {
+                                            var marySettingsOpen by remember {
+                                                mutableStateOf(false)
+                                            }
+                                            BackHandler(enabled = marySettingsOpen) {
+                                                marySettingsOpen = false
+                                            }
+                                            if (marySettingsOpen) {
+                                                MarySettingsScreen(
+                                                    bottomInnerPadding = stableBottomInset,
+                                                    onBack = { marySettingsOpen = false },
+                                                )
+                                            } else {
+                                                MaryScreen(
+                                                    bottomInnerPadding = stableBottomInset,
+                                                    onOpenSettings = { marySettingsOpen = true },
+                                                )
+                                            }
+                                        }
 
                                         "config" -> Box(modifier = Modifier.fillMaxSize()) {
                                             if (featureGuideVisible) {
@@ -367,6 +439,10 @@ class MainActivity : ComponentActivity() {
                                                 onThemeModeChange = { themeModeValue = it },
                                                 onNavigationBarModeChange = {
                                                     navigationBarModeValue = it
+                                                },
+                                                onOpenRearStore = {
+                                                    configInAppListMode = false
+                                                    currentScreen = "store"
                                                 },
                                                 onOpenRearStoreDetail = { widgetId ->
                                                     pendingRearStoreWidgetId = widgetId
@@ -399,64 +475,73 @@ class MainActivity : ComponentActivity() {
                                 label = "NavigationShadowProgress",
                             )
                             if (showNavigation || navShadowProgress > 0.001f) {
-                                ArtVisibilityMotion(
-                                    visible = showNavigation,
+                                // This bar does not avoid the IME: it stays put behind the keyboard.
+                                // Measure only the bar; Mary combines this gap with (not adds it to) IME.
+                                Box(
                                     modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .featureGuideAnchor("bottom_navigation")
-                                        .onGloballyPositioned { coordinates ->
-                                            val totalHeight = with(density) {
-                                                coordinates.size.height.toDp()
-                                            }
-                                            if (totalHeight != stableBottomInset) {
-                                                stableBottomInset = totalHeight
-                                            }
-                                        },
-                                    enterAlphaDurationMillis = 260,
-                                    enterTransformDurationMillis = 380,
-                                    exitAlphaDurationMillis = 180,
-                                    exitTransformDurationMillis = 240,
-                                    hiddenEnterScale = 1f,
-                                    hiddenExitScale = 1f,
-                                    slideDivisor = 3,
-                                    hiddenOffsetFallback = 28.dp,
+                                        .align(Alignment.BottomCenter),
                                 ) {
-                                    RearNavigationBar(
-                                        currentScreen = currentScreen,
-                                        navigationBarMode = navigationBarMode,
-                                        backdrop = backdrop,
-                                        shadowVisibilityProgress = navShadowProgress,
-                                        quickActionIds = navigationQuickActionIds,
-                                        onQuickActionIdsChanged = { nextIds ->
-                                            val normalizedIds = parseNavigationQuickActionIds(
-                                                encodeNavigationQuickActionIds(nextIds)
-                                            )
-                                            navigationQuickActionIds = normalizedIds
-                                            remotePrefsManager.putString(
-                                                ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS,
-                                                encodeNavigationQuickActionIds(normalizedIds),
-                                            )
-                                        },
-                                        onScreenSelected = { currentScreen = it },
-                                        onQuickActionSelected = { target ->
-                                            when (target) {
-                                                is NavigationQuickTarget.ConfigManager -> {
-                                                    pendingConfigQuickManagerTarget =
-                                                        target.managerType
-                                                    pendingQuickActionTransition = true
-                                                    // Dashboard managers stay inside the new configuration
-                                                    // workbench and keep the navigation bar visible. Only
-                                                    // dedicated More pages use the full-screen overlay mode.
-                                                    configInAppListMode =
-                                                        target.managerType in setOf(
-                                                            ConfigType.ManagerType.SCENE_ROUTE,
-                                                            ConfigType.ManagerType.BOUNDS,
-                                                        )
-                                                    currentScreen = "config"
+                                    ArtVisibilityMotion(
+                                        visible = showNavigation,
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .featureGuideAnchor("bottom_navigation")
+                                            .onGloballyPositioned { coordinates ->
+                                                val totalHeight = with(density) {
+                                                    coordinates.size.height.toDp()
                                                 }
-                                            }
-                                        },
-                                    )
+                                                if (totalHeight != stableBottomInset) {
+                                                    stableBottomInset = totalHeight
+                                                }
+                                            },
+                                        enterAlphaDurationMillis = 260,
+                                        enterTransformDurationMillis = 380,
+                                        exitAlphaDurationMillis = 180,
+                                        exitTransformDurationMillis = 240,
+                                        hiddenEnterScale = 1f,
+                                        hiddenExitScale = 1f,
+                                        slideDivisor = 3,
+                                        hiddenOffsetFallback = 28.dp,
+                                    ) {
+                                        RearNavigationBar(
+                                            // The Rear Store is a configuration-level destination,
+                                            // so the Configuration tab stays highlighted while it is open.
+                                            currentScreen = if (currentScreen == "store") "config" else currentScreen,
+                                            navigationBarMode = navigationBarMode,
+                                            backdrop = backdrop,
+                                            shadowVisibilityProgress = navShadowProgress,
+                                            quickActionIds = navigationQuickActionIds,
+                                            onQuickActionIdsChanged = { nextIds ->
+                                                val normalizedIds = parseNavigationQuickActionIds(
+                                                    encodeNavigationQuickActionIds(nextIds)
+                                                )
+                                                navigationQuickActionIds = normalizedIds
+                                                remotePrefsManager.putString(
+                                                    ConfigKeys.MODULE_NAVIGATION_QUICK_ACTIONS,
+                                                    encodeNavigationQuickActionIds(normalizedIds),
+                                                )
+                                            },
+                                            onScreenSelected = { currentScreen = it },
+                                            onQuickActionSelected = { target ->
+                                                when (target) {
+                                                    is NavigationQuickTarget.ConfigManager -> {
+                                                        pendingConfigQuickManagerTarget =
+                                                            target.managerType
+                                                        pendingQuickActionTransition = true
+                                                        // Dashboard managers stay inside the new configuration
+                                                        // workbench and keep the navigation bar visible. Only
+                                                        // dedicated More pages use the full-screen overlay mode.
+                                                        configInAppListMode =
+                                                            target.managerType in setOf(
+                                                                ConfigType.ManagerType.SCENE_ROUTE,
+                                                                ConfigType.ManagerType.BOUNDS,
+                                                            )
+                                                        currentScreen = "config"
+                                                    }
+                                                }
+                                            },
+                                        )
+                                    }
                                 }
                             }
 

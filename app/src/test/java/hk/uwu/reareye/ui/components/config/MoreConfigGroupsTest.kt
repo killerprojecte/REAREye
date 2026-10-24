@@ -23,7 +23,7 @@ class MoreConfigGroupsTest {
         assertEquals(expectedKeys, assignedKeys.toSet())
         assertEquals(assignedKeys.size, assignedKeys.distinct().size)
         assertTrue((assignedKeys.toSet() - originalKeys.toSet()).isEmpty())
-        assertEquals(listOf(14, 2, 10, 4, 4, 16, 7), MoreConfigGroups.map { it.itemKeys.size })
+        assertEquals(listOf(14, 2, 10, 4, 5, 16, 7), MoreConfigGroups.map { it.itemKeys.size })
         assertEquals(7, MoreConfigGroups.map { it.icon }.distinct().size)
 
         val categories = buildMoreCategories(REAREyeConfig)
@@ -45,6 +45,7 @@ class MoreConfigGroupsTest {
             ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS,
             ConfigKeys.HOOK_UNLOCK_TEMPLATE_MAXIMUM_LIMIT,
             ConfigKeys.MISC_HOOK_GMS_UNLOCK,
+            ConfigKeys.MISC_HOOK_SIGNATURE_PERMISSION_GRANT,
         ).forEach { key -> assertEquals("unlock_limits", groupByKey[key]) }
     }
 

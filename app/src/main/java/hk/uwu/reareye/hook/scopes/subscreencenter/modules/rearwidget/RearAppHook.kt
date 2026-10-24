@@ -697,9 +697,11 @@ class RearAppHook : RoxyHooker() {
                 templatePath = card.templatePath,
                 bindPackage = card.bindPackage,
                 ownedByRearEye = owned,
-                canRename = owned || card.appCardType == 2,
-                canDelete = owned,
-                canRenderPreview = owned,
+                // Ownership now only reports where a card came from. External app cards are managed
+                // like REAREye ones, so none of these capabilities is gated on it any more.
+                canRename = true,
+                canDelete = true,
+                canRenderPreview = true,
                 appCardType = card.appCardType,
             ).toBundle()
         }
@@ -773,9 +775,6 @@ class RearAppHook : RoxyHooker() {
         val index = cards.indexOfFirst { it.appId == appId }
         if (index < 0) return failure("App card not found")
         val current = cards[index]
-        if (!isOwned(current) && current.appCardType != 2) {
-            return failure("Only REAREye app cards or appCardType=2 cards can be renamed")
-        }
         val replacement = createHostModel(
             appId = current.appId,
             appNameJson = encodeTitle(title),
@@ -807,9 +806,6 @@ class RearAppHook : RoxyHooker() {
         val index = cards.indexOfFirst { it.appId == appId }
         if (index < 0) return failure("App card not found")
         val current = cards[index]
-        if (!isOwned(current)) {
-            return failure("Only app cards registered by REAREye can render previews")
-        }
         val descriptor = hostAccess?.modelToWidgetMethod?.invoke(null, current.model)
             ?: return failure("Failed to create the app-card preview descriptor")
         val previewPath = runCatching { renderPreview(appId, descriptor) }
@@ -855,7 +851,6 @@ class RearAppHook : RoxyHooker() {
         val index = cards.indexOfFirst { it.appId == appId }
         if (index < 0) return failure("App card not found")
         val current = cards[index]
-        if (!isOwned(current)) return failure("Only app cards registered by REAREye can be deleted")
         if (cards.size <= 1) return failure("At least one app card must be kept")
         cards.removeAt(index)
         saveHostModels(ArrayList(cards.map { it.model }), "reareye_delete", null)
@@ -871,29 +866,14 @@ class RearAppHook : RoxyHooker() {
         orderedAppIds: List<String>,
     ): RearAppOperationResult {
         val cards = loadHostCards(forceReload = true)
-        if (orderedAppIds.size != cards.size || orderedAppIds.distinct().size != cards.size) {
-            return failure("The requested order does not match the host app-card list")
-        }
-        val currentById = cards.associateBy { it.appId }
-        if (currentById.size != cards.size || orderedAppIds.any { it !in currentById }) {
-            return failure("The requested order contains an invalid app card")
-        }
-        val currentExternalOrder = cards.filterNot(::isOwned).map { it.appId }
-        val requestedExternalOrder = orderedAppIds.filter { appId ->
-            currentById[appId]?.let(::isOwned) == false
-        }
-        if (requestedExternalOrder != currentExternalOrder) {
-            return failure("Only app cards registered by REAREye can be repositioned")
-        }
-        val currentOrder = cards.map { it.appId }
-        if (orderedAppIds == currentOrder) {
+        val plan = appCardReorderPlan(cards.map { it.appId }, orderedAppIds)
+            ?: return failure("The requested order does not match the host app-card list")
+        if (plan.unchanged) {
             return RearAppOperationResult(success = true)
         }
-        val movedOwnedCard = orderedAppIds
-            .firstNotNullOfOrNull { appId -> currentById[appId]?.takeIf(::isOwned) }
-            ?: return failure("No REAREye app card is available to reposition")
-        val next = ArrayList(orderedAppIds.map { appId -> currentById.getValue(appId).model })
-        saveHostModels(next, "reareye_reorder", movedOwnedCard.model)
+        val currentById = cards.associateBy { it.appId }
+        val next = ArrayList(plan.order.map { appId -> currentById.getValue(appId).model })
+        saveHostModels(next, "reareye_reorder", currentById.getValue(plan.movedId).model)
         if (!awaitCardState { items -> items.map { it.appId } == orderedAppIds }) {
             return failure("Timed out while saving the app-card order")
         }
@@ -1157,4 +1137,41 @@ class RearAppHook : RoxyHooker() {
         success = false,
         error = message,
     )
+}
+
+/** A validated app-card reorder: the order to save, plus a card to report as changed. */
+internal data class AppCardReorderPlan(
+    val order: List<String>,
+    val movedId: String,
+    val unchanged: Boolean,
+)
+
+/**
+ * Validates a requested app-card order against the host list and works out what to save.
+ *
+ * Every app id must be present exactly once — the host rewrites the whole list, so a partial order
+ * would silently drop entries. Ownership deliberately does not matter: an external app card can be
+ * repositioned just like one registered by REAREye, so any card that changed position is a valid
+ * "changed" reference for the host save.
+ *
+ * Returns null when the request does not describe a permutation of [current].
+ */
+internal fun appCardReorderPlan(
+    current: List<String>,
+    requested: List<String>,
+): AppCardReorderPlan? {
+    // A host list with duplicate ids cannot be addressed by id, so refuse rather than guess.
+    if (current.distinct().size != current.size) return null
+    if (requested.size != current.size || requested.distinct().size != current.size) return null
+    if (requested.any { it !in current }) return null
+    if (requested == current) {
+        return AppCardReorderPlan(
+            current,
+            movedId = current.firstOrNull().orEmpty(),
+            unchanged = true
+        )
+    }
+    // Ordered equality above guarantees a position where the two lists disagree.
+    val movedIndex = requested.indices.first { requested[it] != current[it] }
+    return AppCardReorderPlan(requested, movedId = requested[movedIndex], unchanged = false)
 }

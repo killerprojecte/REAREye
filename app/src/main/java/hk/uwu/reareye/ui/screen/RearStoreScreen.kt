@@ -780,6 +780,7 @@ fun RearStoreScreen(
     bottomInnerPadding: Dp = 0.dp,
     initialWidgetId: String? = null,
     onInitialWidgetHandled: () -> Unit = {},
+    onBack: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val prefsManager = remember { context.getPrefsManager() }
@@ -862,6 +863,7 @@ fun RearStoreScreen(
                 prefsManager = prefsManager,
                 installedWidgets = installedWidgets,
                 onOpenDetail = { selectedWidgetIdState.value = it },
+                onBack = onBack,
             )
         } else {
             RearStoreDetailContent(
@@ -881,6 +883,7 @@ private fun RearStoreRootContent(
     prefsManager: hk.uwu.reareye.ui.config.PrefsManager,
     installedWidgets: Map<String, RearStoreInstalledWidget>,
     onOpenDetail: (String) -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -955,6 +958,16 @@ private fun RearStoreRootContent(
                     color = Color.Transparent,
                     title = stringResource(R.string.store_navigation),
                     navigationIconPadding = 12.dp,
+                    navigationIcon = {
+                        if (onBack != null) {
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = null,
+                                )
+                            }
+                        }
+                    },
                     actionIconPadding = 12.dp,
                     actions = {
                         Box {

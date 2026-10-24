@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Refresh
@@ -71,6 +72,7 @@ internal fun ConfigDashboard(
     onOpenCategory: (ConfigCategory) -> Unit,
     onOpenScriptManagement: () -> Unit,
     onMoreSearchRequested: () -> Unit,
+    onOpenStore: () -> Unit,
     onOpenFavoriteCategory: () -> Unit,
     favoriteNodeCount: Int,
     selectedTabIndex: Int = 0,
@@ -128,6 +130,18 @@ internal fun ConfigDashboard(
                     DashboardTab.MORE -> R.string.configuration_title
                 }
             ),
+            navigationIcon = {
+                IconButton(
+                    onClick = onOpenStore,
+                    modifier = Modifier.featureGuideAnchor("config_store_button"),
+                ) {
+                    Icon(
+                        Icons.Outlined.CloudDownload,
+                        contentDescription = stringResource(R.string.store_navigation),
+                    )
+                }
+            },
+            navigationIconPadding = 12.dp,
             actions = {
                 when (selectedTab) {
                     DashboardTab.CARDS -> IconButton(onClick = {

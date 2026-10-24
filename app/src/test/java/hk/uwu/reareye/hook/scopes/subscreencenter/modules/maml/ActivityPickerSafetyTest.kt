@@ -1,6 +1,9 @@
 package hk.uwu.reareye.hook.scopes.subscreencenter.modules.maml
 
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -68,7 +71,7 @@ class ActivityPickerSafetyTest {
             backend.onResume(); backend.onAttachmentChanged(true); backend.onVisibilityChanged(true)
             backend.onInputsChanged(
                 MamlBackendInputs(
-                    "test", "activity", activityHost =
+                    "test", "activity", visible = true, activityHost =
                         ActivityHostInputs(
                             component,
                             320,
@@ -91,7 +94,7 @@ class ActivityPickerSafetyTest {
         val permit = ActivityHostLaunchPermit(owner, component, 320, request())
         backend.onInputsChanged(
             MamlBackendInputs(
-                "test", "activity", activityHost =
+                "test", "activity", visible = true, activityHost =
                     ActivityHostInputs(
                         component,
                         320,

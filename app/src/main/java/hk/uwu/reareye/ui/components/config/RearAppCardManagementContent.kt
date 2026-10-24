@@ -125,8 +125,7 @@ internal fun RearAppCardManagementContent(
             if (
                 fromIndex >= 0 &&
                 toIndex >= 0 &&
-                fromIndex != toIndex &&
-                cards[fromIndex].ownedByRearEye
+                fromIndex != toIndex
             ) {
                 val moved = cards.removeAt(fromIndex)
                 cards.add(toIndex, moved)
@@ -211,7 +210,7 @@ internal fun RearAppCardManagementContent(
                 ModuleStyleManagerCard(
                     modifier = Modifier
                         .then(
-                            if (card.ownedByRearEye && !orderSaving) {
+                            if (!orderSaving) {
                                 Modifier.longPressDraggable(draggableState, itemKey)
                             } else {
                                 Modifier

@@ -107,6 +107,7 @@ internal val MoreConfigGroups = listOf(
             ConfigKeys.HOOK_UNLOCK_VIDEO_RESTRICTIONS,
             ConfigKeys.HOOK_UNLOCK_TEMPLATE_MAXIMUM_LIMIT,
             ConfigKeys.MISC_HOOK_GMS_UNLOCK,
+            ConfigKeys.MISC_HOOK_SIGNATURE_PERMISSION_GRANT,
         ),
     ),
     MoreConfigGroup(

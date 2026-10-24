@@ -13,6 +13,7 @@ import hk.uwu.reareye.hook.scopes.system.modules.ExternalDisplayLaunchUnlockModu
 import hk.uwu.reareye.hook.scopes.system.modules.NativeEnvWriterHook
 import hk.uwu.reareye.hook.scopes.system.modules.RearScreenActivityWhitelistModule
 import hk.uwu.reareye.hook.scopes.system.modules.misc.GMSUnlockModule
+import hk.uwu.reareye.hook.scopes.system.modules.misc.SignaturePermissionWhitelistModule
 import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.roxyhook.PackageScope
 import hk.uwu.roxyhook.RoxyHooker
@@ -20,6 +21,7 @@ import hk.uwu.roxyhook.RoxyHooker
 class SystemScope : RoxyHooker(), Scope {
     override fun PackageScope.onHook() = buildList<RoxyHooker> {
         add(GMSUnlockModule())
+        add(SignaturePermissionWhitelistModule())
         add(ExternalDisplayLaunchUnlockModule())
         if (AppProperties.IS_PUBLIC_BETA) {
             YLog.debug("Public beta build, skip native cpp hooks")

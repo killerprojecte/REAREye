@@ -4,6 +4,7 @@ import hk.uwu.reareye.hook.core.DexKitBootstrap
 import hk.uwu.reareye.hook.scopes.subscreencenter.SubscreenCenterScope
 import hk.uwu.reareye.hook.scopes.system.SystemScope
 import hk.uwu.reareye.hook.scopes.thememanager.ThemeManagerScope
+import hk.uwu.reareye.hook.scopes.voiceassist.VoiceAssistScope
 import hk.uwu.roxyhook.PackageScope
 import hk.uwu.roxyhook.ProcessContext
 import hk.uwu.roxyhook.RoxyModule
@@ -43,5 +44,6 @@ class HookEntry : RoxyModule(), LibXposedHotReload {
         loadSystem(SystemScope())
         loadAll(SubscreenCenterScope())
         loadAll(ThemeManagerScope())
+        loadAll(VoiceAssistScope())
     }
 }

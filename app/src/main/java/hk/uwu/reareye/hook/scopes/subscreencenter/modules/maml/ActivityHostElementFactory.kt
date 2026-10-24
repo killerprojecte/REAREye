@@ -40,7 +40,10 @@ class ActivityHostElementFactory : MamlExpressionBackendFactory {
         return MamlBackendBinding(
             createBackend = { ActivityHostBackend() },
             evaluateInputs = {
-                val payload = parse(component(), dpi(), bounds(), gutter(), width(), conflicts)
+                val payload = parse(
+                    component(), dpi(), bounds(), gutter(), width(), conflicts,
+                    element.getAttribute("showControls").trim().ifEmpty { "true" }
+                )
                 val owner = instance()
                 val action = request()
                 MamlBackendInputs(
@@ -65,7 +68,8 @@ class ActivityHostElementFactory : MamlExpressionBackendFactory {
             element.getAttribute("bounds"),
             element.getAttribute("navigationGutterDp").ifBlank { "24" },
             element.getAttribute("w"),
-            conflictErrors(element)
+            conflictErrors(element),
+            element.getAttribute("showControls").trim().ifEmpty { "true" }
         ),
     )
 
@@ -77,7 +81,9 @@ class ActivityHostElementFactory : MamlExpressionBackendFactory {
                     element.getAttribute(it).isNotBlank() && element.getAttribute("${it}Exp")
                         .isNotBlank()
                 }
-                .map { "$it and ${it}Exp are mutually exclusive" }
+                .map { "$it and ${it}Exp are mutually exclusive" } +
+                    if (element.getAttribute("showControlsExp").isNotBlank())
+                        listOf("showControls only supports a fixed true or false attribute") else emptyList()
 
         internal fun parse(
             component: String,
@@ -85,9 +91,12 @@ class ActivityHostElementFactory : MamlExpressionBackendFactory {
             bounds: String,
             gutter: String,
             width: String = "",
-            conflicts: List<String> = emptyList()
+            conflicts: List<String> = emptyList(),
+            showControls: String = "true"
         ): ActivityHostInputs {
             val errors = conflicts.toMutableList()
+            val controls = showControls.toBooleanStrictOrNull()
+            if (controls == null) errors += "showControls must be true or false"
             val number = dpi.toDoubleOrNull()
             val density =
                 if (number != null && number.isFinite() && number >= Int.MIN_VALUE && number <= Int.MAX_VALUE && number % 1.0 == 0.0)
@@ -111,7 +120,8 @@ class ActivityHostElementFactory : MamlExpressionBackendFactory {
                 parsed,
                 gutterDp = navigation,
                 carrierWidth = width.toFloatOrNull()?.takeIf { it.isFinite() && it > 0f },
-                validationErrors = errors
+                validationErrors = errors,
+                showControls = controls ?: true
             )
         }
     }

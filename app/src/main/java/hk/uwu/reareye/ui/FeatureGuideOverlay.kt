@@ -96,6 +96,12 @@ internal val featureGuideSteps = listOf(
     FeatureGuideStep(R.string.guide_nav_title, R.string.guide_nav_summary, "bottom_navigation"),
     FeatureGuideStep(R.string.guide_config_title, R.string.guide_config_summary, "config_tabs", 0),
     FeatureGuideStep(
+        R.string.guide_store_title,
+        R.string.guide_store_summary,
+        "config_store_button",
+        0
+    ),
+    FeatureGuideStep(
         R.string.guide_cards_title,
         R.string.guide_demo_open_card,
         "demo_card",

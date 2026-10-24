@@ -33,11 +33,11 @@ object ActivityHostGeometry {
         if (!validRect(outer) || !validRect(clip)) return null
         if (!mamlScale.isFinite() || mamlScale <= 0f ||
             !hostDensity.isFinite() || hostDensity <= 0f ||
-            !gutterDp.isFinite() || gutterDp <= 0f
+            !gutterDp.isFinite() || gutterDp < 0f
         ) return null
-        // Reserve whole pixels outward so neither navigation strip can disappear.
+        // Positive gutters reserve whole pixels; zero explicitly disables navigation strips.
         val gutter = ceil(gutterDp.toDouble() * hostDensity.toDouble())
-        if (!gutter.isFinite() || gutter < 1.0 || gutter * 2.0 >= outer.width.toDouble()) return null
+        if (!gutter.isFinite() || gutter < 0.0 || gutter * 2.0 >= outer.width.toDouble()) return null
         val contentLeft = outer.left.toLong() + gutter.toLong()
         val contentRight = outer.right.toLong() - gutter.toLong()
         val contentWidth = contentRight - contentLeft
@@ -72,10 +72,8 @@ object ActivityHostGeometry {
         ) ?: return null
         return ActivityHostLayout(
             task, visible, surface,
-            rect(outer.left.toLong(), outer.top.toLong(), contentLeft, outer.bottom.toLong())
-                ?: return null,
-            rect(contentRight, outer.top.toLong(), outer.right.toLong(), outer.bottom.toLong())
-                ?: return null
+            ActivityHostRect(outer.left, outer.top, contentLeft.toInt(), outer.bottom),
+            ActivityHostRect(contentRight.toInt(), outer.top, outer.right, outer.bottom)
         )
     }
 

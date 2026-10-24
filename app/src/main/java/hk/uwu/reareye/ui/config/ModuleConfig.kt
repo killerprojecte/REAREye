@@ -59,6 +59,30 @@ object ConfigKeys {
     const val BACKGROUND_LOCK_APPS = "background_lock_apps"
 
     const val MISC_HOOK_GMS_UNLOCK = "enable_misc_gms_unlock"
+    const val MISC_HOOK_SIGNATURE_PERMISSION_GRANT = "enable_misc_signature_permission_grant"
+
+    // Mary agent. The API key is deliberately NOT here: RemotePreferences is shared with the hook
+    // processes and is not a secret store. Only non-sensitive settings live in this group.
+    const val AGENT_BASE_URL = "agent_base_url"
+    const val AGENT_MODEL = "agent_model"
+    const val AGENT_PROTOCOL = "agent_protocol"
+    const val AGENT_CONTEXT_WINDOW = "agent_context_window"
+    const val AGENT_APPROVAL_MODE = "agent_approval_mode"
+    const val AGENT_APPROVAL_INHERIT = "agent_approval_inherit"
+    const val AGENT_APPROVAL_BASE_URL = "agent_approval_base_url"
+    const val AGENT_APPROVAL_MODEL = "agent_approval_model"
+    const val AGENT_APPROVAL_PROTOCOL = "agent_approval_protocol"
+    const val AGENT_APPROVAL_CONTEXT_WINDOW = "agent_approval_context_window"
+    const val AGENT_APPROVAL_TEMPERATURE = "agent_approval_temperature"
+    const val AGENT_APPROVAL_MAX_OUTPUT_TOKENS = "agent_approval_max_output_tokens"
+    const val AGENT_TEMPERATURE = "agent_temperature"
+    const val AGENT_MAX_OUTPUT_TOKENS = "agent_max_output_tokens"
+    const val AGENT_MAX_ITERATIONS = "agent_max_iterations"
+    const val AGENT_MAX_CONSECUTIVE_TOOL_FAILURES = "agent_max_consecutive_tool_failures"
+    const val AGENT_TURN_BUDGET_SECONDS = "agent_turn_budget_seconds"
+    const val AGENT_MAX_TOOL_RESULT_CHARS = "agent_max_tool_result_chars"
+    const val AGENT_AUTO_APPROVE_READ_ONLY = "agent_auto_approve_read_only"
+    const val AGENT_SYSTEM_PROMPT = "agent_system_prompt"
 
     const val HOOK_UNLOCK_VIDEO_RESTRICTIONS = "enable_unlock_video_restrictions"
     const val HOOK_UNLOCK_TEMPLATE_MAXIMUM_LIMIT = "enable_unlock_template_maximum_limit"
@@ -773,6 +797,12 @@ val REAREyeConfig = listOf(
                 titleRes = R.string.enable_misc_unlock_gms,
                 descriptionRes = R.string.category_misc_desc,
                 type = ConfigType.BooleanVal(defaultValue = false)
+            ),
+            ConfigItem(
+                key = ConfigKeys.MISC_HOOK_SIGNATURE_PERMISSION_GRANT,
+                titleRes = R.string.enable_misc_signature_permission_grant,
+                descriptionRes = R.string.enable_misc_signature_permission_grant_desc,
+                type = ConfigType.BooleanVal(defaultValue = true)
             )
         )
     )
