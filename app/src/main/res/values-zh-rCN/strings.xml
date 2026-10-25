@@ -609,6 +609,8 @@
     <string name="enable_misc_unlock_gms">移除国行GMS服务的限制</string>
     <string name="enable_misc_signature_permission_grant">向白名单应用授予签名级权限</string>
     <string name="enable_misc_signature_permission_grant_desc">让白名单应用强制获取受 signature 保护级别保护的权限</string>
+    <string name="enable_misc_top_resumed_fix">修复 Chrome 地址栏建议（实验性）</string>
+    <string name="enable_misc_top_resumed_fix_desc">为 HyperOS top-resumed 异常等待补回系统超时恢复，可能影响异常交接时序。启停后请重启设备。</string>
     <string name="category_misc">杂项</string>
     <string name="category_misc_desc">与背屏无关的选项</string>
     <string name="category_weather">天气</string>

@@ -58,6 +58,7 @@ object ConfigKeys {
     const val BACKGROUND_WHITELIST_APPS = "background_whitelist_apps"
     const val BACKGROUND_LOCK_APPS = "background_lock_apps"
 
+    const val MISC_HOOK_TOP_RESUMED_FIX = "enable_misc_top_resumed_fix"
     const val MISC_HOOK_GMS_UNLOCK = "enable_misc_gms_unlock"
     const val MISC_HOOK_SIGNATURE_PERMISSION_GRANT = "enable_misc_signature_permission_grant"
 
@@ -803,6 +804,12 @@ val REAREyeConfig = listOf(
                 titleRes = R.string.enable_misc_signature_permission_grant,
                 descriptionRes = R.string.enable_misc_signature_permission_grant_desc,
                 type = ConfigType.BooleanVal(defaultValue = true)
+            ),
+            ConfigItem(
+                key = ConfigKeys.MISC_HOOK_TOP_RESUMED_FIX,
+                titleRes = R.string.enable_misc_top_resumed_fix,
+                descriptionRes = R.string.enable_misc_top_resumed_fix_desc,
+                type = ConfigType.BooleanVal(defaultValue = false)
             )
         )
     )

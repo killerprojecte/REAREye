@@ -12,6 +12,7 @@ import hk.uwu.reareye.hook.scopes.system.modules.DisableSubScreenHighLoadModeHoo
 import hk.uwu.reareye.hook.scopes.system.modules.ExternalDisplayLaunchUnlockModule
 import hk.uwu.reareye.hook.scopes.system.modules.NativeEnvWriterHook
 import hk.uwu.reareye.hook.scopes.system.modules.RearScreenActivityWhitelistModule
+import hk.uwu.reareye.hook.scopes.system.modules.TopResumedActivityFixHook
 import hk.uwu.reareye.hook.scopes.system.modules.misc.GMSUnlockModule
 import hk.uwu.reareye.hook.scopes.system.modules.misc.SignaturePermissionWhitelistModule
 import hk.uwu.reareye.hook.support.YLog
@@ -23,6 +24,7 @@ class SystemScope : RoxyHooker(), Scope {
         add(GMSUnlockModule())
         add(SignaturePermissionWhitelistModule())
         add(ExternalDisplayLaunchUnlockModule())
+        add(TopResumedActivityFixHook())
         if (AppProperties.IS_PUBLIC_BETA) {
             YLog.debug("Public beta build, skip native cpp hooks")
         } else {

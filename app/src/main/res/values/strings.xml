@@ -609,6 +609,8 @@
     <string name="enable_misc_unlock_gms">Remove CN Google Play Services restrictions</string>
     <string name="enable_misc_signature_permission_grant">Grant signature permissions to whitelisted apps</string>
     <string name="enable_misc_signature_permission_grant_desc">Lets the whitelisted apps obtain permissions protected by the signature level</string>
+    <string name="enable_misc_top_resumed_fix">Fix Chrome address bar suggestions (experimental)</string>
+    <string name="enable_misc_top_resumed_fix_desc">Restores missing native timeouts for HyperOS top-resumed waits. May affect abnormal activity handoff timing. Restart after changing this setting.</string>
     <string name="category_misc">Misc</string>
     <string name="category_misc_desc">Options unrelated to the rear screen</string>
     <string name="category_weather">Weather</string>

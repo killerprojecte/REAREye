@@ -135,6 +135,13 @@ internal val MoreConfigGroups = listOf(
         ),
     ),
     MoreConfigGroup(
+        id = "misc",
+        titleRes = R.string.category_misc,
+        descriptionRes = R.string.category_misc_desc,
+        icon = Icons.Rounded.Tune,
+        itemKeys = listOf(ConfigKeys.MISC_HOOK_TOP_RESUMED_FIX),
+    ),
+    MoreConfigGroup(
         id = "reareye_settings",
         titleRes = R.string.config_more_reareye_settings_title,
         descriptionRes = R.string.config_more_reareye_settings_desc,
