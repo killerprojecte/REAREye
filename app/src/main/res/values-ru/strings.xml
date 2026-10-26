@@ -1,4 +1,9 @@
 <resources>
+    <string name="mary_markdown_copy_code">Копировать код</string>
+    <string name="mary_markdown_code">Код</string>
+    <string name="mary_markdown_image_loading">Загрузка изображения...</string>
+    <string name="mary_markdown_image_error">Не удалось загрузить изображение</string>
+    <string name="mary_confirmation_permissions">Разрешения</string>
     <string name="app_name">REAREye</string>
     <string name="xposed_desc">За тобой всегда кто-то наблюдает с обратной стороны</string>
     <string name="status_card">Cтатус</string>
