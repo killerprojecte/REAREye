@@ -28,18 +28,21 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 
-/** Shared gesture bookkeeping; only a close drag moves the already-mounted modal. */
+/** Shared drag progress; opening is rendered in the Activity until its pointer stream ends. */
 @Stable
 internal class MarySidebarGestureState {
     var progress: Float? by mutableStateOf(null)
         private set
     var isOpening by mutableStateOf(false)
         private set
+    var openingSettle: Boolean? by mutableStateOf(null)
+        private set
     private var generation = 0
 
     fun begin(value: Float, opening: Boolean): Int {
         generation++
         isOpening = opening
+        openingSettle = null
         progress = value.coerceIn(0f, 1f)
         return generation
     }
@@ -50,10 +53,22 @@ internal class MarySidebarGestureState {
 
     fun active(token: Int) = token == generation && progress != null
 
+    fun finishOpening(token: Int, open: Boolean) {
+        if (active(token) && isOpening) openingSettle = open
+    }
+
+    fun rejectOpening() {
+        if (isOpening && progress != null) {
+            generation++
+            openingSettle = false
+        }
+    }
+
     fun cancel() {
         generation++
         progress = null
         isOpening = false
+        openingSettle = null
     }
 }
 
@@ -75,7 +90,7 @@ internal fun Modifier.marySidebarOpenGesture(
     val tracker = remember(state, rtl) { MaryOpenTracker(state) }
     val interactions = remember(tracker) { MaryOpenInteractions(tracker) }
     DisposableEffect(tracker) {
-        onDispose { tracker.cancelActive() }
+        onDispose { tracker.cancelActive(disposed = true) }
     }
     val drag = rememberDraggableState {
         tracker.active?.let { observation ->
@@ -116,7 +131,7 @@ internal fun Modifier.marySidebarOpenGesture(
                 } finally {
                     if (!observation.released) {
                         observation.cancelled = true
-                        observation.token?.let { if (state.active(it)) state.cancel() }
+                        observation.token?.let { if (state.active(it)) state.finishOpening(it, false) }
                     }
                 }
             }
@@ -145,7 +160,7 @@ internal fun Modifier.marySidebarOpenGesture(
                         velocity >= minimumFling -> observation.dx >= flingDistance
                         else -> observation.dx >= distance
                     }
-                token?.let { if (state.active(it)) state.cancel() }
+                token?.let { if (state.active(it)) state.finishOpening(it, accepted) }
                 tracker.active = null
                 if (accepted) {
                     before()
@@ -169,11 +184,17 @@ private class MaryOpenTracker(private val state: MarySidebarGestureState) {
     var interaction: DragInteraction.Start? = null
     var stoppedNormally = false
 
-    fun cancelActive() {
+    fun cancelActive(disposed: Boolean = false) {
         stoppedNormally = false
         active?.let { observation ->
             observation.cancelled = true
-            observation.token?.let { if (state.active(it)) state.cancel() }
+            observation.token?.let {
+                if (state.active(it)) {
+                    // A normal release may remove the opener while its visual completion runs.
+                    if (disposed && state.openingSettle == null) state.cancel()
+                    else if (!disposed) state.finishOpening(it, false)
+                }
+            }
         }
     }
 

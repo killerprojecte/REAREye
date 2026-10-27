@@ -27,6 +27,8 @@ import hk.uwu.reareye.ui.screen.MarySidebarGestureState
 import hk.uwu.reareye.ui.screen.MaryLandingTranscript
 import hk.uwu.reareye.ui.screen.MaryConversationList
 import androidx.compose.foundation.lazy.rememberLazyListState
+import hk.uwu.reareye.ui.screen.LocalMarySidebarPageGestureHost
+import hk.uwu.reareye.ui.screen.MarySidebarPagePreview
 import hk.uwu.reareye.ui.screen.MarySidebarPageGestureHost
 import hk.uwu.reareye.ui.screen.RegisterMarySidebarPageGestures
 import hk.uwu.reareye.ui.screen.marySidebarPageGesture
@@ -244,11 +246,17 @@ class MarySidebarLayoutTest {
             down(Offset(80f, 280f))
             moveTo(Offset(240f, 280f), delayMillis = 300)
         }
+        node("mary-sidebar-preview").assertExists()
         compose.runOnIdle { maryActive.value = false }
         node("sidebar-fixture").performTouchInput { up() }
+        node("mary-sidebar-preview").assertDoesNotExist()
         compose.waitForIdle()
         node("mary-sidebar-modal").assertDoesNotExist()
-        compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress) }
+        compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress); maryActive.value = true }
+        compose.waitForIdle()
+        node("mary-sidebar-preview").assertDoesNotExist()
+        node("fixture-navigation").performTouchInput { click(Offset(50f, center.y)) }
+        compose.runOnIdle { assertEquals(1, navigationClicks) }
     }
 
     @Test fun productionConsumedUpCancelsNativeDragAfterInitialReleaseObservation() {
@@ -278,7 +286,7 @@ class MarySidebarLayoutTest {
         node("mary-sidebar-panel").assertIsDisplayed()
     }
 
-    @Test fun edgeDragDoesNotMountAnotherWindowUntilRelease() {
+    @Test fun openingPreviewDoesNotMountAnotherWindowUntilRelease() {
         host()
         val transcript = node("sidebar-transcript")
         transcript.performTouchInput {
@@ -290,6 +298,7 @@ class MarySidebarLayoutTest {
             assertEquals(144f / 328f, requireNotNull(gestures.progress), 0.03f)
         }
         node("mary-sidebar-modal").assertDoesNotExist()
+        node("mary-sidebar-preview").assertExists()
         transcript.performTouchInput {
             moveTo(Offset(300f, 300f), delayMillis = 500)
             advanceEventTime(200)
@@ -298,6 +307,212 @@ class MarySidebarLayoutTest {
         compose.waitForIdle()
         compose.runOnIdle { assertTrue(showing.value); assertNull(gestures.progress) }
         node("mary-sidebar-panel").assertIsDisplayed()
+    }
+
+    @Test fun productionOpeningTracksTwoMovesAndSettlesQuicklyInSameWindow() {
+        host(transcriptMode = "landing")
+        val root = node("sidebar-fixture")
+        screenshot("opening-00-down-background", "sidebar-fixture")
+        val background = root.captureToImage().asAndroidBitmap()
+        compose.mainClock.autoAdvance = false
+        root.performTouchInput { down(Offset(80f, 280f)); moveTo(Offset(176f, 280f), delayMillis = 160) }
+        compose.mainClock.advanceTimeBy(64)
+        compose.waitForIdle()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        node("mary-sidebar-preview").assertExists()
+        screenshot("opening-01-move-96px", "sidebar-fixture")
+        val first = root.captureToImage().asAndroidBitmap()
+        assertEquals(96f, node("mary-sidebar-preview-panel").getUnclippedBoundsInRoot().right.value, 2f)
+        val firstProgress = requireNotNull(gestures.progress)
+        assertEquals(96f / 328f, firstProgress, 0.03f)
+        root.performTouchInput { moveTo(Offset(240f, 280f), delayMillis = 160) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        screenshot("opening-02-move-160px", "sidebar-fixture")
+        val second = root.captureToImage().asAndroidBitmap()
+        assertEquals(160f, node("mary-sidebar-preview-panel").getUnclippedBoundsInRoot().right.value, 2f)
+        val secondProgress = requireNotNull(gestures.progress)
+        assertEquals(160f / 328f, secondProgress, 0.03f)
+        assertTrue(secondProgress > firstProgress)
+        // Right-side blank background must progressively darken under the production scrim.
+        fun luminance(image: Bitmap) = android.graphics.Color.red(image.getPixel(390, 450))
+        assertTrue(luminance(first) < luminance(background))
+        assertTrue(luminance(second) < luminance(first))
+        node("mary-sidebar-modal").assertDoesNotExist()
+        root.performTouchInput { advanceEventTime(200); up() }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        assertTrue("UP must not reset the visual position", node("mary-sidebar-preview-panel").getUnclippedBoundsInRoot().right.value >= 159f)
+        screenshot("opening-03-up-start", "sidebar-fixture")
+        node("mary-sidebar-modal").assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(32)
+        screenshot("opening-04-up-plus32ms", "sidebar-fixture")
+        assertTrue(node("mary-sidebar-preview-panel").getUnclippedBoundsInRoot().right.value > 160f)
+        compose.mainClock.advanceTimeBy(48)
+        screenshot("opening-05-up-plus80ms", "sidebar-fixture")
+        compose.mainClock.advanceTimeBy(80)
+        screenshot("opening-06-up-plus160ms-activity", "sidebar-fixture")
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        node("mary-sidebar-panel").assertIsDisplayed()
+        node("mary-sidebar-preview").assertDoesNotExist()
+        screenshot("opening-06-up-full", "mary-sidebar-modal")
+        compose.runOnIdle { assertTrue(showing.value); assertNull(gestures.progress) }
+    }
+
+    @Test fun shortOpeningPreviewRollsBackWithoutEverMountingDialog() {
+        host(transcriptMode = "conversation")
+        compose.mainClock.autoAdvance = false
+        val root = node("sidebar-fixture")
+        root.performTouchInput {
+            down(Offset(80f, 280f)); moveTo(Offset(124f, 280f), delayMillis = 300)
+        }
+        compose.mainClock.advanceTimeBy(64)
+        node("mary-sidebar-preview").assertExists()
+        val before = node("mary-sidebar-preview-panel").getUnclippedBoundsInRoot().right.value
+        root.performTouchInput { advanceEventTime(200); up() }
+        compose.mainClock.advanceTimeBy(48)
+        node("mary-sidebar-modal").assertDoesNotExist()
+        assertTrue(node("mary-sidebar-preview-panel").getUnclippedBoundsInRoot().right.value < before)
+        compose.mainClock.advanceTimeBy(160)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        node("mary-sidebar-preview").assertDoesNotExist()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress) }
+    }
+
+    @Test fun openingSettleBlocksFreshTouchesFromUnderlyingNavigation() {
+        host(transcriptMode = "landing")
+        compose.mainClock.autoAdvance = false
+        val root = node("sidebar-fixture")
+        root.performTouchInput {
+            down(Offset(80f, 280f)); moveTo(Offset(240f, 280f), delayMillis = 300)
+        }
+        compose.mainClock.advanceTimeBy(64)
+        root.performTouchInput { advanceEventTime(200); up() }
+        compose.mainClock.advanceTimeBy(64)
+        node("mary-sidebar-preview").assertExists()
+        // A NEW hit path while the original pointer has ended must hit the noninteractive preview.
+        root.performTouchInput { click(Offset(350f, 760f)) }
+        compose.mainClock.advanceTimeBy(200)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        node("mary-sidebar-panel").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(0, navigationClicks); assertEquals(0, sentMessages)
+            assertNull(selected); assertTrue(maryActive.value)
+        }
+    }
+
+    @Test fun backDuringOpeningCompletionReversesFromCurrentPosition() {
+        host(transcriptMode = "landing")
+        compose.mainClock.autoAdvance = false
+        val root = node("sidebar-fixture")
+        root.performTouchInput { down(Offset(80f, 280f)); moveTo(Offset(240f, 280f), delayMillis = 300) }
+        compose.mainClock.advanceTimeBy(64)
+        root.performTouchInput { advanceEventTime(200); up() }
+        compose.mainClock.advanceTimeBy(80)
+        val beforeBack = node("mary-sidebar-preview-panel").getUnclippedBoundsInRoot().right.value
+        assertTrue(beforeBack > 160f)
+        compose.runOnUiThread { requireNotNull(activity).get().onBackPressedDispatcher.onBackPressed() }
+        compose.mainClock.advanceTimeByFrame()
+        val afterBack = node("mary-sidebar-preview-panel").getUnclippedBoundsInRoot().right.value
+        assertTrue("Back must reverse from current animation, not snap to old drag fraction", afterBack >= beforeBack - 20f)
+        compose.mainClock.advanceTimeBy(200)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        node("mary-sidebar-preview").assertDoesNotExist()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress) }
+    }
+
+    @Test fun dialogHandoffCancellationDoesNotLeavePreviewOrReopen() {
+        host(transcriptMode = "landing")
+        compose.mainClock.autoAdvance = false
+        val root = node("sidebar-fixture")
+        root.performTouchInput { down(Offset(80f, 280f)); moveTo(Offset(240f, 280f), delayMillis = 300) }
+        compose.mainClock.advanceTimeBy(64)
+        root.performTouchInput { advanceEventTime(200); up() }
+        var found = false
+        for (frame in 0 until 16) {
+            compose.mainClock.advanceTimeByFrame()
+            if (compose.onAllNodesWithTag("mary-sidebar-modal", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+                found = true; break
+            }
+        }
+        assertTrue("Dialog must mount after bounded completion", found)
+        node("mary-sidebar-preview").assertExists()
+        compose.runOnUiThread {
+            val dialog = requireNotNull(org.robolectric.shadows.ShadowDialog.getLatestDialog())
+            dialog.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BACK))
+            dialog.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_BACK))
+        }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        node("mary-sidebar-preview").assertDoesNotExist()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress) }
+    }
+
+    @Test fun openingWithInjectedImeInsetsKeepsDraftAndPanelGeometry() {
+        host(transcriptMode = "landing")
+        compose.runOnIdle { draft.value = "尚未送出的鍵盤草稿" }
+        node("mary-composer-input").performClick()
+        compose.runOnUiThread {
+            val insets = androidx.core.view.WindowInsetsCompat.Builder()
+                .setInsets(androidx.core.view.WindowInsetsCompat.Type.ime(), androidx.core.graphics.Insets.of(0, 0, 0, 280))
+                .setVisible(androidx.core.view.WindowInsetsCompat.Type.ime(), true).build()
+            androidx.core.view.ViewCompat.dispatchApplyWindowInsets(requireNotNull(activity).get().window.decorView, insets)
+        }
+        val root = node("sidebar-fixture")
+        root.performTouchInput { down(Offset(80f, 280f)); moveTo(Offset(240f, 280f), delayMillis = 300) }
+        node("mary-sidebar-preview").assertExists()
+        node("mary-composer-input").assertIsFocused()
+        assertEquals(328f, node("mary-sidebar-preview-panel").getUnclippedBoundsInRoot().width.value, 1f)
+        assertEquals(800f, node("mary-sidebar-preview-panel").getUnclippedBoundsInRoot().bottom.value, 1f)
+        screenshot("opening-ime-insets-held", "sidebar-fixture")
+        root.performTouchInput { advanceEventTime(200); up() }
+        compose.waitForIdle()
+        node("mary-sidebar-panel").assertIsDisplayed()
+        compose.runOnIdle { assertEquals("尚未送出的鍵盤草稿", draft.value); assertEquals(0, sentMessages) }
+    }
+
+    @Test fun leavingMaryDuringAcceptedOpeningSettleCancelsPendingDialog() {
+        host(transcriptMode = "landing")
+        compose.mainClock.autoAdvance = false
+        val root = node("sidebar-fixture")
+        root.performTouchInput { down(Offset(80f, 280f)); moveTo(Offset(240f, 280f), delayMillis = 300) }
+        compose.mainClock.advanceTimeBy(64)
+        root.performTouchInput { advanceEventTime(200); up() }
+        compose.mainClock.advanceTimeBy(48)
+        node("mary-sidebar-preview").assertExists()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        compose.runOnUiThread { maryActive.value = false }
+        compose.mainClock.advanceTimeBy(320)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        node("mary-sidebar-preview").assertDoesNotExist()
+        compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress); maryActive.value = true }
+        compose.waitForIdle()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        node("mary-sidebar-preview").assertDoesNotExist()
+        assertProductionSwipeOpens(startX = 80f, verticalDelta = 0f)
+    }
+
+    @Test fun leavingMaryWithFullyOpenDrawerClosesAndDoesNotAutoReopen() {
+        host(transcriptMode = "landing")
+        open()
+        compose.runOnIdle { maryActive.value = false }
+        compose.waitForIdle()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        node("mary-sidebar-preview").assertDoesNotExist()
+        compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress); maryActive.value = true }
+        compose.waitForIdle()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        node("mary-sidebar-preview").assertDoesNotExist()
+        assertProductionSwipeOpens(startX = 80f, verticalDelta = 0f)
     }
 
     @Test fun smallSlowOpeningDragRollsBack() {
@@ -365,9 +580,11 @@ class MarySidebarLayoutTest {
         node("sidebar-transcript").performTouchInput {
             down(Offset(16f, 300f))
             moveTo(Offset(160f, 300f), delayMillis = 400)
-            cancel()
         }
+        node("mary-sidebar-preview").assertExists()
+        node("sidebar-transcript").performTouchInput { cancel() }
         compose.waitForIdle()
+        node("mary-sidebar-preview").assertDoesNotExist()
         node("mary-sidebar-modal").assertDoesNotExist()
         compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress) }
     }
@@ -425,6 +642,9 @@ class MarySidebarLayoutTest {
         node("sidebar-transcript").performTouchInput {
             down(pointerId = 0, position = Offset(16f, 300f))
             moveTo(pointerId = 0, position = Offset(150f, 300f), delayMillis = 400)
+        }
+        node("mary-sidebar-preview").assertExists()
+        node("sidebar-transcript").performTouchInput {
             down(pointerId = 1, position = Offset(280f, 400f))
             up(pointerId = 1)
             up(pointerId = 0)
@@ -465,8 +685,13 @@ class MarySidebarLayoutTest {
     fun rtlUsesRightEdgeOpeningAndRightwardClosing() {
         host(direction = LayoutDirection.Rtl)
         node("sidebar-transcript").performTouchInput {
-            swipe(Offset(384f, 300f), Offset(100f, 300f), durationMillis = 600)
+            down(Offset(384f, 300f))
+            moveTo(Offset(224f, 300f), delayMillis = 300)
         }
+        node("mary-sidebar-preview").assertExists()
+        assertEquals(240f, node("mary-sidebar-preview-panel").getUnclippedBoundsInRoot().left.value, 2f)
+        screenshot("opening-rtl-held", "sidebar-fixture")
+        node("sidebar-transcript").performTouchInput { advanceEventTime(200); up() }
         compose.waitForIdle()
         node("mary-sidebar-panel").assertIsDisplayed()
         node("mary-sidebar-modal").performTouchInput {
@@ -675,6 +900,7 @@ class MarySidebarLayoutTest {
                                 keyboard?.hide()
                                 menuFocus.requestFocus()
                             }, onOpen = { showing.value = true })
+                        CompositionLocalProvider(LocalMarySidebarPageGestureHost provides pageHost) {
                         Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.background)
                             .marySidebarPageGesture(pageHost, enabled = maryActive.value).testTag("sidebar-fixture")) {
                             MaryFloatingChatLayout(bottomInset = 80.dp, modifier = Modifier.fillMaxSize(),
@@ -737,6 +963,8 @@ class MarySidebarLayoutTest {
                                     val restored = menuFocus.requestFocus()
                                     println("MARY_FOCUS restored=$restored windowFocus=${controller.get().window.decorView.hasWindowFocus()} inputMode=${inputModeManager.inputMode}")
                                 })
+                            MarySidebarPagePreview(pageHost, enabled = maryActive.value)
+                        }
                         }
                     }
                     }

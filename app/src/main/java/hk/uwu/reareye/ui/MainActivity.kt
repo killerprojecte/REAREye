@@ -60,6 +60,7 @@ import hk.uwu.reareye.ui.screen.ConfigScreen
 import hk.uwu.reareye.ui.screen.HomeScreen
 import hk.uwu.reareye.ui.screen.LocalMarySidebarPageGestureHost
 import hk.uwu.reareye.ui.screen.MarySidebarPageGestureHost
+import hk.uwu.reareye.ui.screen.MarySidebarPagePreview
 import hk.uwu.reareye.ui.screen.marySidebarPageGesture
 import hk.uwu.reareye.ui.screen.MaryScreen
 import hk.uwu.reareye.ui.screen.MarySettingsScreen
@@ -553,6 +554,9 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
+
+                            MarySidebarPagePreview(marySidebarGestureHost,
+                                enabled = currentScreen == "mary" && !showPresetPackDialog && !featureGuideVisible)
 
                             SubscreenNotificationAccessPrompt(
                                 enabled = !featureGuideVisible && !showPresetPackDialog,
