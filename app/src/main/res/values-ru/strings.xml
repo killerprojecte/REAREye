@@ -866,4 +866,10 @@
     <string name="guide_demo_wallpaper_result">В настоящем списке обоев пример отмечен как текущий. При обычном использовании здесь можно применять обои или добавлять их в список автоматической смены. После выхода из руководства демонстрационные данные не сохранятся.</string>
     <string name="guide_demo_try_action">Выполните действие в подсвеченной области</string>
 
-    </resources>
+    <string name="mary_sidebar_title">Меню бесед Mary</string>
+    <string name="mary_sidebar_open">Открыть меню бесед</string>
+    <string name="mary_sidebar_close">Закрыть меню бесед</string>
+    <string name="mary_sidebar_locked">Беседа заблокирована</string>
+    <string name="mary_history_loading">Загрузка бесед…</string>
+    <string name="mary_history_load_failed">Не удалось загрузить беседы. Повторите попытку.</string>
+</resources>

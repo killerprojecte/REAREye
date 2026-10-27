@@ -306,9 +306,9 @@ class MaryController(
 
     fun sessions(): List<AgentSessionSummary> = store.list()
 
-    fun deleteSession(id: String) {
+    fun deleteSession(id: String): Job {
         if (session?.id == id) newSession()
-        scope.launch {
+        return scope.launch {
             try {
                 awaitPreviousTurns(); withContext(Dispatchers.IO) { store.delete(id) }
             } catch (e: Exception) {

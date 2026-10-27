@@ -73,6 +73,7 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -111,7 +112,7 @@ import hk.uwu.reareye.agent.provider.ProviderRequestDiagnostics
 import hk.uwu.reareye.agent.voice.MaryVoicePhase
 import hk.uwu.reareye.ui.screen.BlockExpansion
 import hk.uwu.reareye.ui.screen.MaryFloatingChatLayout
-import hk.uwu.reareye.ui.screen.MarySessionLockButton
+import hk.uwu.reareye.ui.screen.MaryTopBar
 import hk.uwu.reareye.ui.screen.MarySettingsScreen
 import hk.uwu.reareye.ui.screen.NoticeCard
 import hk.uwu.reareye.ui.screen.ReasoningCard
@@ -921,19 +922,23 @@ class MaryChatLayoutTest {
     }
 
     @Test
-    fun sessionLockUsesTheLeadingTopBarSlotAndBecomesReadOnlyWhenLocked() {
-        val locked = mutableStateOf(false)
+    fun topBarUsesLeadingMenuAndOnlyContextAction() {
+        var opens = 0
         host {
             Scaffold(topBar = {
-                top.yukonga.miuix.kmp.basic.TopAppBar(title = "Mary", navigationIcon = {
-                    MarySessionLockButton(true, locked.value) { locked.value = true }
-                })
+                MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { opens++ })
             }) { }
         }
-        node("mary-session-lock").assertIsEnabled()
-        assertTrue(bounds("mary-session-lock").center.x < 72.dp)
-        node("mary-session-lock").performClick()
-        node("mary-session-lock").assertIsNotEnabled()
+        node("mary-open-sidebar").assertIsEnabled()
+        assertTrue(bounds("mary-open-sidebar").center.x < 72.dp)
+        node("mary-context-usage").assertIsDisplayed()
+        node("mary-open-sidebar").performClick()
+        compose.runOnIdle { assertEquals(1, opens) }
+        val context = requireNotNull(activity).get()
+        listOf(R.string.mary_session_lock, R.string.mary_history_title,
+            R.string.mary_action_new_chat, R.string.mary_settings_title).forEach { label ->
+            compose.onNodeWithContentDescription(context.getString(label)).assertDoesNotExist()
+        }
     }
 
     @Test

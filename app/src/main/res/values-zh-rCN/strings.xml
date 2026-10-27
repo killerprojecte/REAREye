@@ -1080,4 +1080,11 @@
     <string name="mary_protocol_chat_completions">Chat Completions</string>
     <string name="mary_protocol_responses">Responses</string>
     <string name="mary_protocol_anthropic">Anthropic Messages</string>
+
+    <string name="mary_sidebar_title">Mary 会话菜单</string>
+    <string name="mary_sidebar_open">打开会话菜单</string>
+    <string name="mary_sidebar_close">关闭会话菜单</string>
+    <string name="mary_sidebar_locked">会话已锁定</string>
+    <string name="mary_history_loading">正在加载会话…</string>
+    <string name="mary_history_load_failed">无法加载会话，请重试。</string>
 </resources>

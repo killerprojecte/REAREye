@@ -1080,4 +1080,11 @@
     <string name="mary_protocol_chat_completions">Chat Completions</string>
     <string name="mary_protocol_responses">Responses</string>
     <string name="mary_protocol_anthropic">Anthropic Messages</string>
+
+    <string name="mary_sidebar_title">Mary conversation menu</string>
+    <string name="mary_sidebar_open">Open conversation menu</string>
+    <string name="mary_sidebar_close">Close conversation menu</string>
+    <string name="mary_sidebar_locked">Session locked</string>
+    <string name="mary_history_loading">Loading conversations…</string>
+    <string name="mary_history_load_failed">Could not load conversations. Please try again.</string>
 </resources>

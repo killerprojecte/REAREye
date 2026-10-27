@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,16 +38,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -74,7 +71,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -86,7 +82,6 @@ import androidx.lifecycle.ViewModelProvider
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.ChatEntry
 import hk.uwu.reareye.agent.MaryViewModel
-import hk.uwu.reareye.agent.data.AgentSessionSummary
 import hk.uwu.reareye.agent.pendingInteractionToolRowId
 import hk.uwu.reareye.agent.voice.rememberMaryVoiceInput
 import hk.uwu.reareye.ui.components.ContextUsageButton
@@ -102,9 +97,7 @@ import hk.uwu.reareye.ui.components.maryErrorColors
 import hk.uwu.reareye.ui.components.motion.ArtShimmerSweep
 import hk.uwu.reareye.ui.components.rememberMaryTailFollowState
 import hk.uwu.reareye.ui.components.scrollMaryConversationToBottom
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
@@ -113,19 +106,12 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Add
-import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Refresh
-import top.yukonga.miuix.kmp.icon.extended.Settings
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Mary — the in-app agent.
@@ -165,8 +151,21 @@ fun MaryScreen(
         ).show()
         voice.clearError()
     }
-    var showHistory by remember { mutableStateOf(false) }
-    // Bumped after any session mutation so the sheet re-reads the store.
+    var showSidebar by rememberSaveable { mutableStateOf(false) }
+    val menuFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val sidebarGestures = remember { MarySidebarGestureState() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val edgeGesture = Modifier.marySidebarEdgeGesture(
+        sidebarGestures,
+        beforeOpen = {
+            focusManager.clearFocus(force = true)
+            keyboard?.hide()
+            menuFocus.requestFocus()
+        },
+        onOpen = { showSidebar = true },
+    )
+    // Bumped after a completed deletion so the drawer re-reads the durable store.
     var historyRevision by remember { mutableIntStateOf(0) }
     // Expansion of the collapsible rows, held here so it survives LazyColumn recycling.
     val blocks = rememberBlockExpansion()
@@ -191,26 +190,13 @@ fun MaryScreen(
 
     Scaffold(
         topBar = {
-            SmallTopAppBar(
-                title = stringResource(R.string.mary_title),
-                navigationIcon = {
-                    MarySessionLockButton(
-                        hasSession = controller.sessionId != null,
-                        locked = uiState.locked,
-                        onLock = { controller.lockSession() },
-                    )
-                },
-                actions = {
-                    TopBarActions(
-                        summary = MaryUsageSummary(
-                            uiState.estimatedInputTokens.takeIf { uiState.entries.any { it is ChatEntry.UserMessage } },
-                            uiState.contextWindowTokens, uiState.usage
-                        ),
-                        onOpenHistory = { showHistory = true },
-                        onOpenSettings = onOpenSettings,
-                        onNewChat = if (uiState.entries.isNotEmpty()) ({ controller.newSession() }) else null,
-                    )
-                },
+            MaryTopBar(
+                summary = MaryUsageSummary(
+                    uiState.estimatedInputTokens.takeIf { uiState.entries.any { it is ChatEntry.UserMessage } },
+                    uiState.contextWindowTokens, uiState.usage,
+                ),
+                onOpenMenu = { showSidebar = true },
+                menuFocusRequester = menuFocus,
             )
         },
         contentWindowInsets = WindowInsets.systemBars,
@@ -225,6 +211,7 @@ fun MaryScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
+                            .then(edgeGesture)
                             .padding(horizontal = 16.dp)
                             .padding(bottom = contentPaddingBottom),
                     ) {
@@ -238,6 +225,7 @@ fun MaryScreen(
                         state = listState,
                         modifier = Modifier
                             .fillMaxSize()
+                            .then(edgeGesture)
                             .scrollEndHaptic()
                             .overScrollVertical(),
                         contentPadding = PaddingValues(
@@ -374,20 +362,57 @@ fun MaryScreen(
         }
     }
 
-    ConversationHistorySheet(
-        show = showHistory,
+    MaryConversationSidebar(
+        show = showSidebar,
+        gestureState = sidebarGestures,
+        hasSession = controller.sessionId != null,
+        locked = uiState.locked,
+        onNewChat = { controller.newSession(); showSidebar = false },
+        onLock = { controller.lockSession(); showSidebar = false },
+        onOpenSettings = { showSidebar = false; onOpenSettings() },
         revision = historyRevision,
         currentSessionId = controller.sessionId,
         load = { controller.sessions() },
-        onDismiss = { showHistory = false },
+        onDismiss = { showSidebar = false },
+        onClosed = { menuFocus.requestFocus() },
         onSelect = { id ->
             controller.loadSession(id)
-            showHistory = false
+            showSidebar = false
         },
         onDelete = { id ->
-            controller.deleteSession(id)
-            historyRevision++
+            scope.launch {
+                controller.deleteSession(id).join()
+                historyRevision++
+            }
         },
+    )
+}
+
+/** Only navigation and context belong in the top bar; session actions live in the drawer. */
+@Composable
+internal fun MaryTopBar(
+    summary: MaryUsageSummary,
+    onOpenMenu: () -> Unit,
+    menuModifier: Modifier = Modifier,
+    menuFocusRequester: androidx.compose.ui.focus.FocusRequester? = null,
+) {
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val menuFocus = menuFocusRequester ?: remember { androidx.compose.ui.focus.FocusRequester() }
+    SmallTopAppBar(
+        title = stringResource(R.string.mary_title),
+        navigationIcon = {
+            IconButton(onClick = {
+                focusManager.clearFocus(force = true)
+                keyboard?.hide()
+                // Restore keyboard navigation here, not to the composer, after the dialog closes.
+                menuFocus.requestFocus()
+                onOpenMenu()
+            }, modifier = menuModifier.focusRequester(menuFocus).size(48.dp).testTag("mary-open-sidebar")) {
+                Icon(Icons.Outlined.Menu, stringResource(R.string.mary_sidebar_open))
+            }
+        },
+        actions = { ContextUsageButton(summary) },
     )
 }
 
@@ -445,168 +470,6 @@ internal fun MaryFloatingChatLayout(
                     .onSizeChanged { footerHeightPx = it.height },
                 content = footer,
             )
-        }
-    }
-}
-
-@Composable
-internal fun MarySessionLockButton(hasSession: Boolean, locked: Boolean, onLock: () -> Unit) {
-    IconButton(
-        onClick = onLock,
-        enabled = hasSession && !locked,
-        modifier = Modifier
-            .size(44.dp)
-            .testTag("mary-session-lock")
-            .semantics {
-                if (!hasSession || locked) disabled()
-            },
-    ) {
-        Icon(
-            imageVector = if (locked) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
-            contentDescription = stringResource(if (locked) R.string.mary_session_locked else R.string.mary_session_lock),
-            tint = if (hasSession) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            modifier = Modifier
-                .size(24.dp)
-                .testTag("mary-session-lock-icon"),
-        )
-    }
-}
-/**
- * Shared top-bar actions for both title styles.
- *
- * "New chat" only makes sense once a conversation exists, so the landing page omits it.
- */
-@Composable
-private fun RowScope.TopBarActions(
-    summary: MaryUsageSummary,
-    onOpenHistory: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onNewChat: (() -> Unit)? = null,
-) {
-    ContextUsageButton(summary)
-    IconButton(onClick = onOpenHistory) {
-        Icon(
-            imageVector = Icons.Outlined.History,
-            contentDescription = stringResource(R.string.mary_history_title),
-        )
-    }
-    IconButton(onClick = onOpenSettings) {
-        Icon(
-            imageVector = MiuixIcons.Settings,
-            contentDescription = stringResource(R.string.mary_settings_title),
-        )
-    }
-    onNewChat?.let { action ->
-        IconButton(onClick = action) {
-            Icon(
-                imageVector = MiuixIcons.Add,
-                contentDescription = stringResource(R.string.mary_action_new_chat),
-            )
-        }
-    }
-}
-
-/**
- * Lists stored conversations so they can be reopened.
- *
- * The store keeps one JSON file per conversation; this sheet is the only way to reach anything
- * other than the most recent one.
- */
-@Composable
-private fun ConversationHistorySheet(
-    show: Boolean,
-    revision: Int,
-    currentSessionId: String?,
-    load: () -> List<AgentSessionSummary>,
-    onDismiss: () -> Unit,
-    onSelect: (String) -> Unit,
-    onDelete: (String) -> Unit,
-) {
-    // Re-read whenever the sheet opens or a session is deleted.
-    var sessions by remember { mutableStateOf(emptyList<AgentSessionSummary>()) }
-    LaunchedEffect(show, revision) {
-        sessions = if (show) withContext(Dispatchers.IO) { load() } else emptyList()
-    }
-    val formatter = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
-
-    OverlayBottomSheet(
-        show = show,
-        title = stringResource(R.string.mary_history_title),
-        onDismissRequest = onDismiss,
-    ) {
-        if (sessions.isEmpty()) {
-            Text(
-                text = stringResource(R.string.mary_history_empty),
-                style = MiuixTheme.textStyles.footnote1,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 24.dp),
-            )
-            return@OverlayBottomSheet
-        }
-
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(sessions, key = { it.id }) { item ->
-                val isCurrent = item.id == currentSessionId
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 16.dp,
-                    colors = CardDefaults.defaultColors(
-                        color = if (isCurrent) {
-                            MiuixTheme.colorScheme.primaryContainer
-                        } else {
-                            MiuixTheme.colorScheme.surfaceContainer
-                        },
-                        contentColor = if (isCurrent) {
-                            MiuixTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MiuixTheme.colorScheme.onSurfaceContainer
-                        },
-                    ),
-                    onClick = { onSelect(item.id) },
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = item.title,
-                                style = MiuixTheme.textStyles.body1,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = stringResource(
-                                    R.string.mary_history_meta,
-                                    formatter.format(Date(item.updatedAt)),
-                                    item.messageCount,
-                                ),
-                                style = MiuixTheme.textStyles.footnote2,
-                                color = if (isCurrent) {
-                                    MiuixTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                },
-                            )
-                        }
-                        IconButton(onClick = { onDelete(item.id) }) {
-                            Icon(
-                                imageVector = MiuixIcons.Delete,
-                                contentDescription = stringResource(R.string.mary_history_delete),
-                                tint = MiuixTheme.colorScheme.error,
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 }
