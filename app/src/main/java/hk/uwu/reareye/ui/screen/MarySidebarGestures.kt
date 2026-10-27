@@ -1,13 +1,21 @@
 package hk.uwu.reareye.ui.screen
 
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.Interaction
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -49,20 +57,154 @@ internal class MarySidebarGestureState {
     }
 }
 
-/**
- * Only attach to the transcript, never an invisible edge overlay over the composer/navigation.
- * Keep Android's system-back strip untouched; our 32dp activation strip starts inside it.
- */
+/** Full-page horizontal opening; Foundation arbitrates with descendant scroll/drag nodes. */
 @Composable
-internal fun Modifier.marySidebarEdgeGesture(
+internal fun Modifier.marySidebarOpenGesture(
     state: MarySidebarGestureState,
     beforeOpen: () -> Unit,
     onOpen: () -> Unit,
-): Modifier = marySidebarSwipe(
-    state = state, opening = true, enabled = true, initialProgress = { 0f },
-    // Do not create a new Android window while this Activity still owns the DOWN stream.
-    onSettle = { open -> if (open) { beforeOpen(); onOpen() } },
-)
+): Modifier {
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val density = LocalDensity.current
+    val distance = with(density) { 64.dp.toPx() }
+    val flingDistance = with(density) { 32.dp.toPx() }
+    val minimumFling = with(density) { 900.dp.toPx() }
+    val maxPanelWidth = with(density) { 360.dp.toPx() }
+    val before by rememberUpdatedState(beforeOpen)
+    val open by rememberUpdatedState(onOpen)
+    val tracker = remember(state, rtl) { MaryOpenTracker(state) }
+    val interactions = remember(tracker) { MaryOpenInteractions(tracker) }
+    DisposableEffect(tracker) {
+        onDispose { tracker.cancelActive() }
+    }
+    val drag = rememberDraggableState {
+        tracker.active?.let { observation ->
+            observation.token?.let { token ->
+                if (!observation.cancelled && state.active(token)) {
+                    state.update(token, observation.dx / observation.panelWidth)
+                }
+            }
+        }
+    }
+    return this
+        // Observe only: do not steal Initial-pass events from text selection or child scrolling.
+        .pointerInput(tracker, state, rtl, maxPanelWidth) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                val observation = MaryOpenObservation(minOf(size.width * 0.82f, maxPanelWidth).coerceAtLeast(1f))
+                tracker.current = observation
+                try {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (event.changes.count { it.pressed } > 1) observation.cancelled = true
+                        observation.dx = (change.position.x - down.position.x) * if (rtl) -1f else 1f
+                        val dy = change.position.y - down.position.y
+                        if (observation.intent == 0 &&
+                            change.uptimeMillis - down.uptimeMillis >= viewConfiguration.longPressTimeoutMillis
+                        ) observation.cancelled = true
+                        if (observation.intent == 0 &&
+                            (abs(observation.dx) > viewConfiguration.touchSlop || abs(dy) > viewConfiguration.touchSlop)
+                        ) {
+                            observation.intent = if (observation.dx > abs(dy)) 1 else -1
+                        }
+                        if (!change.pressed) {
+                            observation.released = true
+                            break
+                        }
+                    }
+                } finally {
+                    if (!observation.released) {
+                        observation.cancelled = true
+                        observation.token?.let { if (state.active(it)) state.cancel() }
+                    }
+                }
+            }
+        }
+        .draggable(
+            state = drag,
+            orientation = Orientation.Horizontal,
+            interactionSource = interactions,
+            reverseDirection = rtl,
+            onDragStarted = {
+                tracker.active?.let { observation ->
+                    if (!observation.cancelled && observation.intent == 1) {
+                        observation.token = state.begin(0f, opening = true)
+                    }
+                }
+            },
+            onDragStopped = { velocity ->
+                val observation = tracker.active
+                val token = observation?.token
+                // Draggable also calls this callback on CANCEL. Only its matching Stop interaction
+                // plus a real UP may open; never confuse cancellation with a slow zero-velocity drag.
+                val accepted = observation != null && token != null && state.active(token) &&
+                    tracker.stoppedNormally && observation.released && !observation.cancelled &&
+                    observation.intent == 1 && when {
+                        velocity <= -minimumFling -> false
+                        velocity >= minimumFling -> observation.dx >= flingDistance
+                        else -> observation.dx >= distance
+                    }
+                token?.let { if (state.active(it)) state.cancel() }
+                tracker.active = null
+                if (accepted) {
+                    before()
+                    open()
+                }
+            },
+        )
+}
+
+private class MaryOpenObservation(val panelWidth: Float) {
+    var dx = 0f
+    var intent = 0
+    var released = false
+    var cancelled = false
+    var token: Int? = null
+}
+
+private class MaryOpenTracker(private val state: MarySidebarGestureState) {
+    var current: MaryOpenObservation? = null
+    var active: MaryOpenObservation? = null
+    var interaction: DragInteraction.Start? = null
+    var stoppedNormally = false
+
+    fun cancelActive() {
+        stoppedNormally = false
+        active?.let { observation ->
+            observation.cancelled = true
+            observation.token?.let { if (state.active(it)) state.cancel() }
+        }
+    }
+
+    fun record(event: Interaction) {
+        when (event) {
+            is DragInteraction.Start -> {
+                active = current
+                interaction = event
+                stoppedNormally = false
+            }
+            is DragInteraction.Stop -> if (event.start === interaction) stoppedNormally = true
+            is DragInteraction.Cancel -> if (event.start === interaction) cancelActive()
+        }
+    }
+}
+
+/** Synchronous record: an asynchronous interactions collector could race onDragStopped. */
+private class MaryOpenInteractions(
+    private val tracker: MaryOpenTracker,
+    private val delegate: MutableInteractionSource = MutableInteractionSource(),
+) : MutableInteractionSource by delegate {
+    override suspend fun emit(interaction: Interaction) {
+        tracker.record(interaction)
+        delegate.emit(interaction)
+    }
+
+    override fun tryEmit(interaction: Interaction): Boolean {
+        tracker.record(interaction)
+        return delegate.tryEmit(interaction)
+    }
+}
 
 @Composable
 internal fun Modifier.marySidebarCloseGesture(

@@ -7,6 +7,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,7 +24,14 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.geometry.Offset
 import hk.uwu.reareye.ui.screen.MarySidebarGestureState
-import hk.uwu.reareye.ui.screen.marySidebarEdgeGesture
+import hk.uwu.reareye.ui.screen.MaryLandingTranscript
+import hk.uwu.reareye.ui.screen.MaryConversationList
+import androidx.compose.foundation.lazy.rememberLazyListState
+import hk.uwu.reareye.ui.screen.MarySidebarPageGestureHost
+import hk.uwu.reareye.ui.screen.RegisterMarySidebarPageGestures
+import hk.uwu.reareye.ui.screen.marySidebarPageGesture
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.platform.testTag
@@ -59,11 +70,15 @@ class MarySidebarLayoutTest {
     @get:Rule val compose = createEmptyComposeRule()
     private var activity: ActivityController<ComponentActivity>? = null
     private val showing = mutableStateOf(false)
+    private val maryActive = mutableStateOf(true)
     private val gestures = MarySidebarGestureState()
     private var newChats = 0
     private var locks = 0
     private var selected: String? = null
     private var navigationClicks = 0
+    private val draft = mutableStateOf("")
+    private var sentMessages = 0
+    private var horizontalChild: ScrollState? = null
     private lateinit var inputModes: InputModeManager
     private val revision = mutableStateOf(0)
     private val sessions = (0 until 30).map {
@@ -76,6 +91,192 @@ class MarySidebarLayoutTest {
         Assume.assumeTrue("Run with -PmaryUiResources=true", java.lang.Boolean.getBoolean("mary.ui.resources"))
     }
     @After fun cleanup() { compose.runOnUiThread { activity?.close() } }
+
+    @Test fun productionLandingDiagonalRightSwipeOpensSidebar() {
+        host(transcriptMode = "landing")
+        assertProductionSwipeOpens(startX = 32f)
+    }
+
+    @Test fun productionConversationDiagonalRightSwipeOpensSidebar() {
+        host(transcriptMode = "conversation")
+        assertProductionSwipeOpens(startX = 32f)
+    }
+
+    @Test fun productionLandingRightSwipeAwayFromEdgeOpensSidebar() {
+        host(transcriptMode = "landing")
+        screenshot("production-landing-closed", "sidebar-fixture")
+        assertProductionSwipeOpens(startX = 80f, verticalDelta = 0f)
+        screenshot("production-landing-open", "mary-sidebar-modal")
+    }
+
+    @Test fun productionConversationRightSwipeAwayFromEdgeOpensSidebar() {
+        host(transcriptMode = "conversation")
+        assertProductionSwipeOpens(startX = 80f, verticalDelta = 0f)
+        screenshot("production-conversation-open", "mary-sidebar-modal")
+    }
+
+    @Test fun productionTopBarRightSwipeOpensSidebar() {
+        host(transcriptMode = "landing")
+        node("sidebar-fixture").performTouchInput {
+            swipe(Offset(80f, 25f), Offset(320f, 25f), durationMillis = 600)
+        }
+        compose.waitForIdle()
+        node("mary-sidebar-panel").assertIsDisplayed()
+    }
+
+    @Test fun productionComposerRightSwipePreservesDraftWithoutSending() {
+        draft.value = "保留這段尚未送出的草稿"
+        host(transcriptMode = "conversation")
+        node("mary-composer-input").performTouchInput {
+            swipe(Offset(12f, center.y), Offset(width - 12f, center.y), durationMillis = 600)
+        }
+        compose.waitForIdle()
+        node("mary-sidebar-panel").assertIsDisplayed()
+        node("mary-sidebar-close").performClick()
+        compose.waitForIdle()
+        node("mary-composer-input").assertTextContains("保留這段尚未送出的草稿")
+        compose.runOnIdle { assertEquals(0, sentMessages) }
+    }
+
+    @Test fun productionNavigationRightSwipeOpensWithoutSwitchingTab() {
+        host(transcriptMode = "conversation")
+        node("fixture-navigation").performTouchInput {
+            swipe(Offset(80f, center.y), Offset(320f, center.y), durationMillis = 600)
+        }
+        compose.waitForIdle()
+        node("mary-sidebar-panel").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, navigationClicks) }
+    }
+
+    @Test fun productionConversationVerticalDragStillScrollsWithoutOpening() {
+        host(transcriptMode = "conversation")
+        node("production-row-0").assertIsDisplayed()
+        node("sidebar-transcript").performTouchInput {
+            swipe(Offset(120f, 580f), Offset(140f, 180f), durationMillis = 600)
+        }
+        compose.waitForIdle()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        node("production-row-0").assertIsNotDisplayed()
+        compose.runOnIdle { assertNull(selected) }
+    }
+
+    @Test fun productionLandingSuggestionTapStillSelectsWithoutOpening() {
+        host(transcriptMode = "landing")
+        val suggestion = requireNotNull(activity).get().getString(hk.uwu.reareye.R.string.mary_suggestion_0_0)
+        compose.onNodeWithText(suggestion).performClick()
+        compose.runOnIdle { assertEquals(suggestion, selected) }
+        node("mary-sidebar-modal").assertDoesNotExist()
+    }
+
+    @Test fun productionConfigTabSlowSwipeOpensWithoutQuickMenu() {
+        host(transcriptMode = "conversation")
+        node("fixture-navigation").performTouchInput {
+            swipe(Offset(250f, center.y), Offset(380f, center.y), durationMillis = 600)
+        }
+        compose.waitForIdle()
+        node("mary-sidebar-panel").assertIsDisplayed()
+        compose.onAllNodes(isPopup()).assertCountEquals(0)
+        compose.runOnIdle { assertEquals(0, navigationClicks) }
+    }
+
+    @Test fun productionConfigTabStationaryLongPressKeepsQuickMenu() {
+        host(transcriptMode = "conversation")
+        node("fixture-navigation").performTouchInput {
+            down(Offset(250f, center.y))
+            moveTo(Offset(250f, center.y), delayMillis = 700)
+        }
+        compose.waitForIdle()
+        // This hold-to-select menu intentionally dismisses on UP; inspect it while still held.
+        compose.onNode(isPopup()).assertIsDisplayed()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        node("fixture-navigation").performTouchInput { up() }
+        compose.waitForIdle()
+        node("mary-sidebar-modal").assertDoesNotExist()
+    }
+
+    @Test fun productionHorizontalChildKeepsItsScrollGesture() {
+        host(transcriptMode = "horizontal")
+        compose.runOnIdle { assertEquals(120, requireNotNull(horizontalChild).value) }
+        node("production-horizontal-child").performTouchInput {
+            swipe(Offset(80f, center.y), Offset(320f, center.y), durationMillis = 600)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { assertTrue(requireNotNull(horizontalChild).value < 120) }
+        node("mary-sidebar-modal").assertDoesNotExist()
+    }
+
+    @Test @Config(shadows = [MaryChatLayoutTest.NoSurfaceMagnifierShadow::class])
+    fun productionComposerLongPressSelectionDoesNotOpenSidebar() {
+        draft.value = "保留這段尚未送出的草稿"
+        host(transcriptMode = "conversation")
+        node("mary-composer-input").performClick()
+        node("mary-composer-input").performTouchInput {
+            down(Offset(24f, center.y))
+            advanceEventTime(700)
+            moveTo(Offset(width - 24f, center.y), delayMillis = 400)
+            up()
+        }
+        compose.waitForIdle()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        node("mary-composer-input").assertTextContains("保留這段尚未送出的草稿")
+        val selection = node("mary-composer-input").fetchSemanticsNode().config[SemanticsProperties.TextSelectionRange]
+        assertFalse("The real text field must retain a selected range", selection.collapsed)
+        compose.runOnIdle { assertEquals(0, sentMessages) }
+    }
+
+    @Test fun productionRegistrationRemovalDisablesPageSwipeAndReentryRestoresIt() {
+        host(transcriptMode = "landing")
+        node("fixture-navigation").performTouchInput { click(Offset(50f, center.y)) }
+        compose.runOnIdle { assertFalse(maryActive.value); assertEquals(1, navigationClicks) }
+        node("sidebar-fixture").performTouchInput {
+            swipe(Offset(80f, 280f), Offset(320f, 280f), durationMillis = 600)
+        }
+        compose.waitForIdle()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        compose.runOnIdle { maryActive.value = true }
+        compose.waitForIdle()
+        assertProductionSwipeOpens(startX = 80f, verticalDelta = 0f)
+    }
+
+    @Test fun productionRegistrationRemovalDuringDragCannotOpenLater() {
+        host(transcriptMode = "conversation")
+        node("sidebar-fixture").performTouchInput {
+            down(Offset(80f, 280f))
+            moveTo(Offset(240f, 280f), delayMillis = 300)
+        }
+        compose.runOnIdle { maryActive.value = false }
+        node("sidebar-fixture").performTouchInput { up() }
+        compose.waitForIdle()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress) }
+    }
+
+    @Test fun productionConsumedUpCancelsNativeDragAfterInitialReleaseObservation() {
+        // A controlled descendant consumes UP after the root's Initial-pass observer saw it.
+        // Foundation must report DragInteraction.Cancel, never turn that zero velocity into open.
+        host(transcriptMode = "consume-up")
+        node("sidebar-transcript").performTouchInput {
+            down(Offset(80f, 280f))
+            moveTo(Offset(320f, 280f), delayMillis = 400)
+            advanceEventTime(200)
+            up()
+        }
+        compose.waitForIdle()
+        node("mary-sidebar-modal").assertDoesNotExist()
+        compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress) }
+    }
+
+    private fun assertProductionSwipeOpens(startX: Float, verticalDelta: Float = 80f) {
+        node("sidebar-transcript").performTouchInput {
+            down(Offset(startX, 280f))
+            // One real MOVE crosses BOTH slops; x wins by 3:1, independent of frame rate.
+            moveTo(Offset(startX + 240f, 280f + verticalDelta), delayMillis = 400)
+            advanceEventTime(200)
+            up()
+        }
+        compose.waitForIdle()
+        node("mary-sidebar-panel").assertIsDisplayed()
+    }
 
     @Test fun edgeDragDoesNotMountAnotherWindowUntilRelease() {
         host()
@@ -103,7 +304,7 @@ class MarySidebarLayoutTest {
         host()
         node("sidebar-transcript").performTouchInput {
             down(Offset(16f, 300f))
-            moveTo(Offset(80f, 300f), delayMillis = 400)
+            moveTo(Offset(60f, 300f), delayMillis = 400)
             advanceEventTime(200)
             up()
         }
@@ -125,19 +326,18 @@ class MarySidebarLayoutTest {
         node("mary-sidebar-panel").assertIsDisplayed()
     }
 
-    @Test fun verticalWrongDirectionAndNonEdgeGesturesDoNotOpen() {
+    @Test fun verticalAndWrongDirectionGesturesDoNotOpen() {
         host()
         node("sidebar-transcript").performTouchInput {
             swipe(Offset(16f, 180f), Offset(16f, 420f), durationMillis = 600)
             swipe(Offset(26f, 300f), Offset(0f, 300f), durationMillis = 400)
-            swipe(Offset(180f, 300f), Offset(370f, 300f), durationMillis = 600)
         }
         compose.waitForIdle()
         node("mary-sidebar-modal").assertDoesNotExist()
         compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress) }
     }
 
-    @Test fun activationStripStartsInsideSystemBackGestureInset() {
+    @Test fun frameworkDeliveredSwipeHasNoAppDeadZoneAtSystemInset() {
         host()
         compose.runOnUiThread {
             val insets = androidx.core.view.WindowInsetsCompat.Builder()
@@ -150,7 +350,9 @@ class MarySidebarLayoutTest {
             swipe(Offset(16f, 300f), Offset(300f, 300f), durationMillis = 600)
         }
         compose.waitForIdle()
-        node("mary-sidebar-modal").assertDoesNotExist()
+        node("mary-sidebar-panel").assertIsDisplayed()
+        node("mary-sidebar-close").performClick()
+        compose.waitForIdle()
         node("sidebar-transcript").performTouchInput {
             swipe(Offset(40f, 300f), Offset(300f, 300f), durationMillis = 600)
         }
@@ -453,7 +655,7 @@ class MarySidebarLayoutTest {
         compose.waitForIdle()
     }
 
-    private fun host(mode: ColorSchemeMode = ColorSchemeMode.Light, locked: Boolean = false, hasSession: Boolean = true, loader: () -> List<AgentSessionSummary> = { sessions }, delete: (String) -> Unit = {}, direction: LayoutDirection = LayoutDirection.Ltr) {
+    private fun host(mode: ColorSchemeMode = ColorSchemeMode.Light, locked: Boolean = false, hasSession: Boolean = true, loader: () -> List<AgentSessionSummary> = { sessions }, delete: (String) -> Unit = {}, direction: LayoutDirection = LayoutDirection.Ltr, transcriptMode: String = "fixture") {
         compose.runOnUiThread {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().also { controller ->
                 controller.get().enableEdgeToEdge()
@@ -465,29 +667,65 @@ class MarySidebarLayoutTest {
                         val keyboard = LocalSoftwareKeyboardController.current
                         val inputModeManager = LocalInputModeManager.current
                         SideEffect { inputModes = inputModeManager }
-                        Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.background).testTag("sidebar-fixture")) {
+                        val pageHost = remember { MarySidebarPageGestureHost() }
+                        if (maryActive.value) RegisterMarySidebarPageGestures(
+                            pageHost, gestures, enabled = !showing.value,
+                            beforeOpen = {
+                                focusManager.clearFocus(force = true)
+                                keyboard?.hide()
+                                menuFocus.requestFocus()
+                            }, onOpen = { showing.value = true })
+                        Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.background)
+                            .marySidebarPageGesture(pageHost, enabled = maryActive.value).testTag("sidebar-fixture")) {
                             MaryFloatingChatLayout(bottomInset = 80.dp, modifier = Modifier.fillMaxSize(),
                                 content = { padding ->
-                                    Column(Modifier.fillMaxSize().testTag("sidebar-transcript")
-                                        .marySidebarEdgeGesture(gestures, beforeOpen = {
-                                            focusManager.clearFocus(force = true)
-                                            keyboard?.hide()
-                                            menuFocus.requestFocus()
-                                        }, onOpen = { showing.value = true })
-                                        .padding(horizontal = 24.dp).padding(top = 80.dp, bottom = padding)) {
-                                        Text("今天想從哪裡開始？")
-                                        Spacer(Modifier.height(20.dp))
-                                        Text("我們可以把想法慢慢整理成清楚的計畫。")
+                                    val edge = Modifier.testTag("sidebar-transcript")
+                                        .then(if (transcriptMode == "fixture") Modifier else Modifier.pointerInput(transcriptMode) {
+                                            awaitPointerEventScope {
+                                                while (true) {
+                                                    val event = awaitPointerEvent(PointerEventPass.Main)
+                                                    if (transcriptMode == "consume-up") event.changes
+                                                        .filter { it.previousPressed && !it.pressed }.forEach { it.consume() }
+                                                    println("MARY_PRODUCTION_POINTER $transcriptMode ${event.type} " + event.changes.joinToString { "pressed=${it.pressed}, consumed=${it.isConsumed}, position=${it.position}" })
+                                                }
+                                            }
+                                        })
+                                    when (transcriptMode) {
+                                        "landing" -> MaryLandingTranscript(
+                                            contentPaddingBottom = padding, appBarInset = 56.dp,
+                                            gestureModifier = edge, onPick = { selected = it })
+                                        "conversation", "horizontal", "consume-up" -> MaryConversationList(
+                                            state = rememberLazyListState(),
+                                            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 64.dp, bottom = padding),
+                                            gestureModifier = edge,
+                                        ) {
+                                            items(40) { index ->
+                                                if (transcriptMode == "horizontal" && index == 0) {
+                                                    val scroll = rememberScrollState(initial = 120)
+                                                    SideEffect { horizontalChild = scroll }
+                                                    Row(Modifier.fillMaxWidth().height(72.dp)
+                                                        .horizontalScroll(scroll).testTag("production-horizontal-child")) {
+                                                        Text("可水平捲動的程式碼內容", modifier = Modifier.width(1200.dp))
+                                                    }
+                                                } else Text("對話內容 $index", modifier = Modifier.fillMaxWidth().height(72.dp).testTag("production-row-$index"))
+                                            }
+                                        }
+                                        else -> Column(Modifier.fillMaxSize().then(edge)
+                                            .padding(horizontal = 24.dp).padding(top = 80.dp, bottom = padding)) {
+                                            Text("今天想從哪裡開始？")
+                                            Spacer(Modifier.height(20.dp))
+                                            Text("我們可以把想法慢慢整理成清楚的計畫。")
+                                        }
                                     }
                                 }, footer = {
-                                    MaryComposer(value = "", onValueChange = {}, running = false,
+                                    MaryComposer(value = draft.value, onValueChange = { draft.value = it }, running = false,
                                         locked = false, configuring = false, provider = ProviderConfig(model = "preview"),
-                                        onReasoningSelected = {}, onSend = {}, onStop = {})
+                                        onReasoningSelected = {}, onSend = { sentMessages++ }, onStop = {})
                                 })
                             MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { showing.value = true }, menuFocusRequester = menuFocus)
-                            RearNavigationBar(modifier = Modifier.align(Alignment.BottomCenter),
+                            RearNavigationBar(modifier = Modifier.align(Alignment.BottomCenter).testTag("fixture-navigation"),
                                 currentScreen = "mary", navigationBarMode = ModuleNavigationBarMode.NORMAL,
-                                backdrop = rememberLayerBackdrop(), onScreenSelected = { navigationClicks++ })
+                                backdrop = rememberLayerBackdrop(), onScreenSelected = { navigationClicks++; maryActive.value = it == "mary" })
                             MaryConversationSidebar(show = showing.value, revision = revision.value, gestureState = gestures,
                                 currentSessionId = "session-0", hasSession = hasSession, locked = locked,
                                 load = loader, onDismiss = { showing.value = false },

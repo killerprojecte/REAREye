@@ -38,6 +38,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -156,15 +158,14 @@ fun MaryScreen(
     val sidebarGestures = remember { MarySidebarGestureState() }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-    val edgeGesture = Modifier.marySidebarEdgeGesture(
-        sidebarGestures,
-        beforeOpen = {
-            focusManager.clearFocus(force = true)
-            keyboard?.hide()
-            menuFocus.requestFocus()
-        },
-        onOpen = { showSidebar = true },
-    )
+    val pageGestureHost = LocalMarySidebarPageGestureHost.current
+    val beforeSidebarOpen: () -> Unit = {
+        focusManager.clearFocus(force = true)
+        keyboard?.hide()
+        menuFocus.requestFocus()
+    }
+    RegisterMarySidebarPageGestures(pageGestureHost, sidebarGestures, !showSidebar,
+        beforeOpen = beforeSidebarOpen, onOpen = { showSidebar = true })
     // Bumped after a completed deletion so the drawer re-reads the durable store.
     var historyRevision by remember { mutableIntStateOf(0) }
     // Expansion of the collapsible rows, held here so it survives LazyColumn recycling.
@@ -189,6 +190,9 @@ fun MaryScreen(
     )
 
     Scaffold(
+        modifier = if (pageGestureHost == null && !showSidebar) Modifier.marySidebarOpenGesture(
+            sidebarGestures, beforeSidebarOpen, onOpen = { showSidebar = true },
+        ) else Modifier,
         topBar = {
             MaryTopBar(
                 summary = MaryUsageSummary(
@@ -208,34 +212,20 @@ fun MaryScreen(
                 .nestedScroll(tailFollow.connection),
             content = { contentPaddingBottom ->
                 if (uiState.entries.isEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .then(edgeGesture)
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = contentPaddingBottom),
-                    ) {
-                        LandingState(
-                            appBarInset = paddingValues.calculateTopPadding(),
-                            onPick = { controller.send(it) },
-                        )
-                    }
+                    MaryLandingTranscript(
+                        contentPaddingBottom = contentPaddingBottom,
+                        appBarInset = paddingValues.calculateTopPadding(),
+                        onPick = { controller.send(it) },
+                    )
                 } else {
-                    LazyColumn(
+                    MaryConversationList(
                         state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .then(edgeGesture)
-                            .scrollEndHaptic()
-                            .overScrollVertical(),
                         contentPadding = PaddingValues(
                             top = paddingValues.calculateTopPadding() + 8.dp,
                             bottom = contentPaddingBottom,
                             start = 16.dp,
                             end = 16.dp,
                         ),
-                        verticalArrangement = Arrangement.spacedBy(MaryRowSpacing),
-                        overscrollEffect = null,
                     ) {
                         itemsIndexed(
                             uiState.entries,
@@ -413,6 +403,40 @@ internal fun MaryTopBar(
             }
         },
         actions = { ContextUsageButton(summary) },
+    )
+}
+
+/** Production empty transcript, including its real nested vertical-scroll landing content. */
+@Composable
+internal fun MaryLandingTranscript(
+    contentPaddingBottom: Dp,
+    appBarInset: Dp,
+    gestureModifier: Modifier = Modifier,
+    onPick: (String) -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().then(gestureModifier)
+            .padding(horizontal = 16.dp).padding(bottom = contentPaddingBottom),
+    ) {
+        LandingState(appBarInset = appBarInset, onPick = onPick)
+    }
+}
+
+/** Shared production list host: integration tests exercise the same scroll/overscroll hierarchy. */
+@Composable
+internal fun MaryConversationList(
+    state: LazyListState,
+    contentPadding: PaddingValues,
+    gestureModifier: Modifier = Modifier,
+    content: LazyListScope.() -> Unit,
+) {
+    LazyColumn(
+        state = state,
+        modifier = Modifier.fillMaxSize().then(gestureModifier).scrollEndHaptic().overScrollVertical(),
+        contentPadding = contentPadding,
+        verticalArrangement = Arrangement.spacedBy(MaryRowSpacing),
+        overscrollEffect = null,
+        content = content,
     )
 }
 

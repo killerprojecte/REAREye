@@ -1057,7 +1057,10 @@ private fun Modifier.navigationQuickActionDragGesture(
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         val change = event.changes.firstOrNull { it.id == down.id }
                             ?: return@withTimeoutOrNull false
-                        if (!change.pressed) {
+                        if (!change.pressed || change.isConsumed ||
+                            (change.position - down.position).getDistance() > viewConfiguration.touchSlop ||
+                            event.changes.count { it.pressed } > 1
+                        ) {
                             return@withTimeoutOrNull false
                         }
                     }

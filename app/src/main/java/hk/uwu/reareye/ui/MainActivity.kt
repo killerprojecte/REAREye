@@ -58,6 +58,9 @@ import hk.uwu.reareye.ui.config.rememberRemotePrefsStatusRevision
 import hk.uwu.reareye.ui.screen.AboutScreen
 import hk.uwu.reareye.ui.screen.ConfigScreen
 import hk.uwu.reareye.ui.screen.HomeScreen
+import hk.uwu.reareye.ui.screen.LocalMarySidebarPageGestureHost
+import hk.uwu.reareye.ui.screen.MarySidebarPageGestureHost
+import hk.uwu.reareye.ui.screen.marySidebarPageGesture
 import hk.uwu.reareye.ui.screen.MaryScreen
 import hk.uwu.reareye.ui.screen.MarySettingsScreen
 import hk.uwu.reareye.ui.screen.RearStoreScreen
@@ -297,13 +300,19 @@ class MainActivity : ComponentActivity() {
                     drawContent()
                 }
                 var stableBottomInset by remember { mutableStateOf(0.dp) }
+                val marySidebarGestureHost = remember { MarySidebarPageGestureHost() }
 
-                CompositionLocalProvider(LocalFeatureGuideAnchors provides guideAnchors.takeIf { featureGuideVisible }) {
+                CompositionLocalProvider(
+                    LocalFeatureGuideAnchors provides guideAnchors.takeIf { featureGuideVisible },
+                    LocalMarySidebarPageGestureHost provides marySidebarGestureHost,
+                ) {
                     // Keep the popup host full-window: MIUIX dialogs own their IME avoidance.
                     Scaffold { _ ->
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .marySidebarPageGesture(marySidebarGestureHost,
+                                    enabled = currentScreen == "mary" && !showPresetPackDialog && !featureGuideVisible)
                                 // Navigation stays at the physical window bottom. Screens own
                                 // IME avoidance; never shrink this shared root or its popup host.
                                 .graphicsLayer { clip = true }
