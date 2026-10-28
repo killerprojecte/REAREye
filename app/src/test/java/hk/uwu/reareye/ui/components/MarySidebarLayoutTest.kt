@@ -31,6 +31,7 @@ import hk.uwu.reareye.ui.screen.LocalMarySidebarPageGestureHost
 import hk.uwu.reareye.ui.screen.MarySidebarPagePreview
 import hk.uwu.reareye.ui.screen.MarySidebarPageGestureHost
 import hk.uwu.reareye.ui.screen.RegisterMarySidebarPageGestures
+import hk.uwu.reareye.ui.screen.marySidebarBackground
 import hk.uwu.reareye.ui.screen.marySidebarPageGesture
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -63,7 +64,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 import java.io.File
 
-/** Native production Dialog, header, composer and navigation with local sessions; not a live controller. */
+/** Native production sidebar, header, composer and navigation with local sessions; not a live controller. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], manifest = Config.NONE, application = Application::class,
     qualifiers = "zh-rCN-w400dp-h800dp-mdpi")
@@ -93,6 +94,123 @@ class MarySidebarLayoutTest {
         Assume.assumeTrue("Run with -PmaryUiResources=true", java.lang.Boolean.getBoolean("mary.ui.resources"))
     }
     @After fun cleanup() { compose.runOnUiThread { activity?.close() } }
+
+    @Test fun openingKeepsOneActivityAndOnePanelThroughEveryCompletionFrame() {
+        host(transcriptMode = "landing")
+        assertNull(org.robolectric.shadows.ShadowDialog.getLatestDialog())
+        compose.mainClock.autoAdvance = false
+        val root = node("sidebar-fixture")
+        val baselineRed = android.graphics.Color.red(root.captureToImage().asAndroidBitmap().getPixel(390, 450))
+        root.performTouchInput { down(Offset(80f, 280f)); moveTo(Offset(240f, 280f), delayMillis = 300) }
+        compose.mainClock.advanceTimeBy(64)
+        fun panel() = node("mary-sidebar-stable-panel")
+        val identity = panel().fetchSemanticsNode().id
+        assertEquals(160f, panel().getUnclippedBoundsInRoot().right.value, 2f)
+        screenshot("continuous-00-held", "sidebar-fixture")
+        root.performTouchInput { advanceEventTime(200); up() }
+        var previousRight = 159f
+        var full = false
+        for (frame in 0..40) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+            assertNull("No Android Window may be introduced at frame $frame", org.robolectric.shadows.ShadowDialog.getLatestDialog())
+            assertEquals("Panel composition identity must survive preview-to-interactive transition at frame $frame", identity, panel().fetchSemanticsNode().id)
+            val right = panel().getUnclippedBoundsInRoot().right.value
+            assertTrue("Panel must never vanish or reverse during opening frame $frame: $previousRight -> $right", right >= previousRight - 1f)
+            if (right >= 327f) full = true
+            if (full) assertEquals("Fully-open panel must not flash away", 328f, right, 1f)
+            previousRight = right
+            val bitmap = root.captureToImage().asAndroidBitmap()
+            val scrimRed = android.graphics.Color.red(bitmap.getPixel(390, 450))
+            if (full) assertEquals("Scrim must have one owner, not double or disappear", baselineRed * 0.68, scrimRed.toDouble(), 2.0)
+            println("MARY_CONTINUOUS_FRAME index=$frame panelId=$identity right=$right scrimRed=$scrimRed dialog=false")
+            if (frame in listOf(0, 1, 2, 4, 8, 9, 10, 12, 16, 24, 40)) screenshot("continuous-%02d".format(frame + 1), "sidebar-fixture")
+        }
+        assertTrue("Bounded opening animation reaches full width", full)
+        compose.mainClock.autoAdvance = true
+        node("mary-sidebar-close").assertIsDisplayed()
+    }
+
+    @Test fun keyboardTabTraversalStaysInsideSidebarAndBackgroundIsHidden() {
+        host(transcriptMode = "landing")
+        compose.runOnIdle { assertTrue(inputModes.requestInputMode(InputMode.Keyboard)) }
+        open()
+        node("sidebar-underlay").assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
+        node("sidebar-nav-underlay").assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
+        repeat(40) { index ->
+            compose.runOnUiThread {
+                val shift = if (index >= 20) android.view.KeyEvent.META_SHIFT_ON else 0
+                val decor = requireNotNull(activity).get().window.decorView
+                decor.dispatchKeyEvent(android.view.KeyEvent(0, 0, android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_TAB, 0, shift))
+                decor.dispatchKeyEvent(android.view.KeyEvent(0, 0, android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_TAB, 0, shift))
+            }
+            compose.waitForIdle()
+            compose.onNode(isFocused(), useUnmergedTree = true).assert(hasAnyAncestor(hasTestTag("mary-sidebar-overlay")))
+            node("mary-composer-input").assertIsNotFocused()
+        }
+        node("mary-sidebar-close").performClick()
+        compose.waitForIdle()
+        node("sidebar-underlay").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+        node("sidebar-nav-underlay").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+        node("mary-open-sidebar").assertIsFocused()
+    }
+
+    @Test fun closingAnimationStillBlocksUnderlyingNavigationUntilCompletelyGone() {
+        host(transcriptMode = "landing")
+        open()
+        compose.mainClock.autoAdvance = false
+        node("mary-sidebar-close").performClick()
+        compose.mainClock.advanceTimeBy(64)
+        node("mary-sidebar-overlay").assertExists()
+        node("sidebar-fixture").performTouchInput { click(Offset(350f, 760f)) }
+        compose.runOnIdle { assertEquals(0, navigationClicks); assertTrue(maryActive.value) }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        node("mary-sidebar-overlay").assertDoesNotExist()
+        node("fixture-navigation").performTouchInput { click(Offset(50f, center.y)) }
+        compose.runOnIdle { assertEquals(1, navigationClicks) }
+    }
+
+    @Test fun escapeDuringHeldOpeningWithoutFocusedComposerCancelsWithoutStealingFocus() {
+        host(transcriptMode = "landing")
+        val initialListeners = unhandledKeyListenerCount()
+        node("mary-composer-input").assertIsNotFocused()
+        val root = node("sidebar-fixture")
+        root.performTouchInput { down(Offset(80f, 280f)); moveTo(Offset(240f, 280f), delayMillis = 300) }
+        node("mary-sidebar-preview").assertExists()
+        assertEquals(initialListeners + 1, unhandledKeyListenerCount())
+        node("mary-composer-input").assertIsNotFocused()
+        compose.runOnUiThread {
+            dispatchActivityAndUnhandledKey(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_ESCAPE))
+            dispatchActivityAndUnhandledKey(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_ESCAPE))
+        }
+        root.performTouchInput { advanceEventTime(200); up() }
+        compose.waitForIdle()
+        node("mary-sidebar-overlay").assertDoesNotExist()
+        assertEquals("Native listener must be removed when the overlay is gone", initialListeners, unhandledKeyListenerCount())
+        compose.runOnIdle { assertFalse(showing.value); assertFalse(requireNotNull(activity).get().isFinishing) }
+    }
+
+    @Test fun rightDragDuringClosingCannotRestartOpeningFromPanelOrScrim() {
+        host(transcriptMode = "landing")
+        for (startX in listOf(80f, 290f)) {
+            open()
+            compose.mainClock.autoAdvance = false
+            node("mary-sidebar-close").performClick()
+            compose.mainClock.advanceTimeBy(64)
+            node("mary-sidebar-overlay").assertExists()
+            node("sidebar-fixture").performTouchInput {
+                down(Offset(startX, 450f))
+                moveTo(Offset(startX + 100f, 450f), delayMillis = 300)
+                advanceEventTime(200)
+                up()
+            }
+            compose.mainClock.autoAdvance = true
+            compose.waitForIdle()
+            node("mary-sidebar-overlay").assertDoesNotExist()
+            compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress) }
+        }
+    }
 
     @Test fun productionLandingDiagonalRightSwipeOpensSidebar() {
         host(transcriptMode = "landing")
@@ -286,7 +404,7 @@ class MarySidebarLayoutTest {
         node("mary-sidebar-panel").assertIsDisplayed()
     }
 
-    @Test fun openingPreviewDoesNotMountAnotherWindowUntilRelease() {
+    @Test fun openingPreviewBecomesInteractiveOnlyAfterRelease() {
         host()
         val transcript = node("sidebar-transcript")
         transcript.performTouchInput {
@@ -427,7 +545,7 @@ class MarySidebarLayoutTest {
         compose.runOnIdle { assertFalse(showing.value); assertNull(gestures.progress) }
     }
 
-    @Test fun dialogHandoffCancellationDoesNotLeavePreviewOrReopen() {
+    @Test fun completionBoundaryBackCancellationDoesNotLeaveOverlayOrReopen() {
         host(transcriptMode = "landing")
         compose.mainClock.autoAdvance = false
         val root = node("sidebar-fixture")
@@ -441,13 +559,8 @@ class MarySidebarLayoutTest {
                 found = true; break
             }
         }
-        assertTrue("Dialog must mount after bounded completion", found)
-        node("mary-sidebar-preview").assertExists()
-        compose.runOnUiThread {
-            val dialog = requireNotNull(org.robolectric.shadows.ShadowDialog.getLatestDialog())
-            dialog.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BACK))
-            dialog.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_BACK))
-        }
+        assertTrue("Sidebar must become interactive after bounded completion", found)
+        compose.runOnUiThread { requireNotNull(activity).get().onBackPressedDispatcher.onBackPressed() }
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()
         node("mary-sidebar-preview").assertDoesNotExist()
@@ -805,22 +918,20 @@ class MarySidebarLayoutTest {
         host()
         open()
         compose.runOnUiThread {
-            val dialog = requireNotNull(org.robolectric.shadows.ShadowDialog.getLatestDialog())
-            dialog.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BACK))
-            dialog.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_BACK))
+            requireNotNull(activity).get().onBackPressedDispatcher.onBackPressed()
         }
         compose.waitForIdle()
         node("mary-sidebar-modal").assertDoesNotExist()
-        compose.runOnIdle { assertEquals(0, navigationClicks) }
+        compose.runOnIdle { assertEquals(0, navigationClicks); assertFalse(requireNotNull(activity).get().isFinishing) }
     }
 
     @Test fun escapeClosesTheModalAndAllowsReopening() {
         host()
         open()
         compose.runOnUiThread {
-            val dialog = requireNotNull(org.robolectric.shadows.ShadowDialog.getLatestDialog())
-            dialog.window!!.decorView.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_ESCAPE))
-            dialog.window!!.decorView.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_ESCAPE))
+            val decor = requireNotNull(activity).get().window.decorView
+            decor.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_ESCAPE))
+            decor.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_ESCAPE))
         }
         compose.waitForIdle()
         node("mary-sidebar-modal").assertDoesNotExist()
@@ -903,6 +1014,7 @@ class MarySidebarLayoutTest {
                         CompositionLocalProvider(LocalMarySidebarPageGestureHost provides pageHost) {
                         Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.background)
                             .marySidebarPageGesture(pageHost, enabled = maryActive.value).testTag("sidebar-fixture")) {
+                            Box(Modifier.fillMaxSize().marySidebarBackground(pageHost).testTag("sidebar-underlay")) {
                             MaryFloatingChatLayout(bottomInset = 80.dp, modifier = Modifier.fillMaxSize(),
                                 content = { padding ->
                                     val edge = Modifier.testTag("sidebar-transcript")
@@ -949,9 +1061,12 @@ class MarySidebarLayoutTest {
                                         onReasoningSelected = {}, onSend = { sentMessages++ }, onStop = {})
                                 })
                             MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { showing.value = true }, menuFocusRequester = menuFocus)
+                            }
+                            Box(Modifier.fillMaxWidth().align(Alignment.BottomCenter).marySidebarBackground(pageHost).testTag("sidebar-nav-underlay")) {
                             RearNavigationBar(modifier = Modifier.align(Alignment.BottomCenter).testTag("fixture-navigation"),
                                 currentScreen = "mary", navigationBarMode = ModuleNavigationBarMode.NORMAL,
                                 backdrop = rememberLayerBackdrop(), onScreenSelected = { navigationClicks++; maryActive.value = it == "mary" })
+                            }
                             MaryConversationSidebar(show = showing.value, revision = revision.value, gestureState = gestures,
                                 currentSessionId = "session-0", hasSession = hasSession, locked = locked,
                                 load = loader, onDismiss = { showing.value = false },
@@ -974,39 +1089,36 @@ class MarySidebarLayoutTest {
         compose.waitForIdle()
     }
 
+    private fun unhandledKeyListenerCount(): Int {
+        val infoField = android.view.View::class.java.getDeclaredField("mListenerInfo").apply { isAccessible = true }
+        val info = infoField.get(requireNotNull(activity).get().window.decorView.rootView) ?: return 0
+        val listeners = info.javaClass.getDeclaredField("mUnhandledKeyListeners").apply { isAccessible = true }
+        return (listeners.get(info) as? Collection<*>)?.size ?: 0
+    }
+
+    /** Robolectric direct Activity injection does not include ViewRootImpl's final unhandled
+     * phase. Run the actual framework View traversal reflectively only when normal dispatch
+     * returns false; never invoke the app listener directly or steal focus to make a test pass. */
+    private fun dispatchActivityAndUnhandledKey(event: android.view.KeyEvent): Boolean {
+        val current = requireNotNull(activity).get()
+        if (current.dispatchKeyEvent(event)) return true
+        val method = android.view.View::class.java.getDeclaredMethod("dispatchUnhandledKeyEvent", android.view.KeyEvent::class.java)
+        method.isAccessible = true
+        return method.invoke(current.window.decorView.rootView, event) != null
+    }
+
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
     private fun screenshot(name: String, tag: String) {
         val dir = File(requireNotNull(System.getProperty("mary.ui.screenshotDir")), "sidebar")
         check(dir.mkdirs() || dir.isDirectory)
-        val image = node(tag).captureToImage().asAndroidBitmap()
-        fun save(bitmap: Bitmap, suffix: String) {
-            File(dir, "$name$suffix.png").outputStream().use {
-                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-            }
+        val image = node("sidebar-fixture").captureToImage().asAndroidBitmap()
+        File(dir, "$name.png").outputStream().use {
+            check(image.compress(Bitmap.CompressFormat.PNG, 100, it))
         }
-        save(image, "")
-        if (tag == "mary-sidebar-modal") {
-            // Compose captures each actual Android window separately. Preserve both raw native
-            // renders, then alpha-compose the unscaled native windows; this is NOT a device framebuffer.
-            val activityImage = node("sidebar-fixture").captureToImage().asAndroidBitmap()
-            println("MARY_CAPTURE $name activity=${activityImage.width}x${activityImage.height} modal=${image.width}x${image.height} activityBounds=${node("sidebar-fixture").getUnclippedBoundsInRoot()} modalBounds=${node(tag).getUnclippedBoundsInRoot()}")
-            // Native windows can report a one-pixel height difference in Robolectric. Preserve
-            // both measured bounds without stretching, clipping or inventing replacement pixels.
-            check(kotlin.math.abs(activityImage.width - image.width) <= 1 && kotlin.math.abs(activityImage.height - image.height) <= 1)
-            save(activityImage, "-activity")
-            val composite = Bitmap.createBitmap(maxOf(activityImage.width, image.width), maxOf(activityImage.height, image.height), Bitmap.Config.ARGB_8888)
-            android.graphics.Canvas(composite).apply {
-                drawBitmap(activityImage, 0f, 0f, null)
-                drawBitmap(image, 0f, 0f, null)
-            }
-            save(composite, "-native-composite")
-            File(dir, "README.txt").writeText(
-                "Native Robolectric/Compose rendering of production Mary sidebar, topbar, composer and navigation. " +
-                    "Session data and transcript are deterministic local fixtures, not a live controller. " +
-                    "Raw dialog PNGs contain transparent scrims; *-activity.png is the underlying Android window. " +
-                    "*-native-composite.png alpha-composites these two actual native window renders unscaled via Android Canvas; observed one-pixel native window height differences are retained, not resized. " +
-                    "This is a native two-window composite preview, NOT a device framebuffer capture."
-            )
-        }
+        File(dir, "README.txt").writeText(
+            "Native single-Activity Robolectric/Compose render of production Mary sidebar, header, composer and navigation. " +
+                "Controlled local sessions, not the live controller; not an OS/device screen recording. " +
+                "The entire frame is captured from the real Activity root; no separate Window composite, image generation, scaling or reconstruction."
+        )
     }
 }

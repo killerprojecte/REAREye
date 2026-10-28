@@ -62,6 +62,7 @@ import hk.uwu.reareye.ui.screen.LocalMarySidebarPageGestureHost
 import hk.uwu.reareye.ui.screen.MarySidebarPageGestureHost
 import hk.uwu.reareye.ui.screen.MarySidebarPagePreview
 import hk.uwu.reareye.ui.screen.marySidebarPageGesture
+import hk.uwu.reareye.ui.screen.marySidebarBackground
 import hk.uwu.reareye.ui.screen.MaryScreen
 import hk.uwu.reareye.ui.screen.MarySettingsScreen
 import hk.uwu.reareye.ui.screen.RearStoreScreen
@@ -321,6 +322,7 @@ class MainActivity : ComponentActivity() {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
+                                    .marySidebarBackground(marySidebarGestureHost)
                                     .then(
                                         if (enableFloatingGlass) {
                                             Modifier.layerBackdrop(backdrop)
@@ -489,7 +491,8 @@ class MainActivity : ComponentActivity() {
                                 // Measure only the bar; Mary combines this gap with (not adds it to) IME.
                                 Box(
                                     modifier = Modifier
-                                        .align(Alignment.BottomCenter),
+                                        .align(Alignment.BottomCenter)
+                                        .marySidebarBackground(marySidebarGestureHost),
                                 ) {
                                     ArtVisibilityMotion(
                                         visible = showNavigation,

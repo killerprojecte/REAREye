@@ -1,12 +1,16 @@
 package hk.uwu.reareye.ui.screen
 
-import android.view.WindowManager
+import android.view.KeyEvent as AndroidKeyEvent
+import android.view.View
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -33,6 +38,8 @@ import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -43,9 +50,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogWindowProvider
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.data.AgentSessionSummary
 import kotlinx.coroutines.CancellationException
@@ -64,7 +68,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** A separate modal window is intentional: the app navigation is a sibling ABOVE MaryScreen. */
+/** One Activity-root surface owns drag, settle, interaction and close: no Window handoff. */
 @Composable
 internal fun MaryConversationSidebar(
     show: Boolean,
@@ -89,7 +93,6 @@ internal fun MaryConversationSidebar(
     val pageHost = LocalMarySidebarPageGestureHost.current
     val pageActive = pageHost?.pageEnabled?.value != false
     var previewActive by remember { mutableStateOf(false) }
-    var modalReady by remember { mutableStateOf(false) }
     var settlingOpening by remember { mutableStateOf(false) }
 
     var mounted by remember { mutableStateOf(false) }
@@ -104,16 +107,23 @@ internal fun MaryConversationSidebar(
         }
     }
     val latestOnClosed by rememberUpdatedState(onClosed)
-    val latestShow by rememberUpdatedState(show)
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(show) {
+        // Only after release/menu activation. Never disrupt the still-down opening pointer.
+        if (show) {
+            focusManager.clearFocus(force = true)
+            keyboard?.hide()
+        }
+    }
     LaunchedEffect(show, dragProgress, openingProgress, openingSettle, pageActive) {
         if (!pageActive) {
             // AnimatedContent may retain the departing Mary screen. Never let its delayed
-            // release animation create a Window over the destination page or another modal.
+            // release animation leave an overlay over the destination page or another modal.
             gestures.cancel()
             animation.snapTo(0f)
             previewActive = false
             mounted = false
-            modalReady = false
             settlingOpening = false
             pendingAction = null
             onDismiss()
@@ -121,7 +131,6 @@ internal fun MaryConversationSidebar(
         }
         if (openingProgress != null) {
             previewActive = true
-            modalReady = false
             if (openingSettle == null) {
                 settlingOpening = false
                 animation.snapTo(openingProgress)
@@ -131,15 +140,18 @@ internal fun MaryConversationSidebar(
             // not the stale fraction at which the finger was lifted.
             if (!settlingOpening) animation.snapTo(openingProgress)
             settlingOpening = true
-            // Finish in the original Activity window, never move an active pointer to Dialog.
+            // The same root surface remains in place after settling; only interaction is enabled.
             val accepted = openingSettle && show
             animation.animateTo(if (accepted) 1f else 0f, tween(140, easing = FastOutSlowInEasing))
-            if (accepted && pageHost?.pageEnabled?.value != false) mounted = true
-            else {
+            if (accepted && pageHost?.pageEnabled?.value != false) {
+                mounted = true
+                previewActive = false
+                settlingOpening = false
+                gestures.cancel()
+            } else {
                 previewActive = false
                 val wasMounted = mounted
                 mounted = false
-                modalReady = false
                 settlingOpening = false
                 gestures.cancel()
                 if (wasMounted) {
@@ -158,14 +170,14 @@ internal fun MaryConversationSidebar(
             mounted = true
             pendingAction = null
         }
-        animation.animateTo(if (show) 1f else 0f, tween(260, easing = FastOutSlowInEasing))
+        val target = if (show) 1f else 0f
+        if (animation.value != target) animation.animateTo(target, tween(260, easing = FastOutSlowInEasing))
         if (!show) {
             previewActive = false
-            modalReady = false
             settlingOpening = false
             val wasMounted = mounted
             mounted = false
-            // Let Dialog leave composition/window focus before restoring the originating menu.
+            // Remove the modal focus group before restoring the originating menu.
             if (wasMounted) {
                 withFrameNanos { }
                 latestOnClosed()
@@ -196,102 +208,113 @@ internal fun MaryConversationSidebar(
         }
     }
     val dismiss = {
-        if (previewActive && !modalReady) gestures.rejectOpening() else gestures.cancel()
+        if (previewActive || openingProgress != null) gestures.rejectOpening() else gestures.cancel()
         onDismiss()
     }
-    BackHandler(enabled = previewActive && !modalReady) { dismiss() }
+    val rendered = pageActive && (mounted || previewActive || openingProgress != null)
+    BackHandler(enabled = rendered) { dismiss() }
+    val latestDismiss by rememberUpdatedState(dismiss)
+    val rootView = LocalView.current.rootView
+    DisposableEffect(rootView, rendered) {
+        // A held preview must not steal focus from the composer. If the Activity has no
+        // focused Compose target, handle Escape only after normal key dispatch declined it.
+        val listener = View.OnUnhandledKeyEventListener { _, event ->
+            if (event.keyCode == AndroidKeyEvent.KEYCODE_ESCAPE) {
+                if (event.action == AndroidKeyEvent.ACTION_UP) latestDismiss()
+                true
+            } else false
+        }
+        if (rendered) rootView.addOnUnhandledKeyEventListener(listener)
+        onDispose { if (rendered) rootView.removeOnUnhandledKeyEventListener(listener) }
+    }
 
-    @Composable fun surface(preview: Boolean, scrimVisible: Boolean) {
+    @Composable fun surface(preview: Boolean) {
         val pane = stringResource(R.string.mary_sidebar_title)
         val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-        BoxWithConstraints(
-            Modifier.fillMaxSize()
-                .then(if (preview) Modifier.semantics { hideFromAccessibility() }.testTag("mary-sidebar-preview")
-                    .pointerInput(Unit) {
-                        // New hit paths are blocked. The already-down opening pointer retains its
-                        // original path through the root draggable; this layer never steals it.
-                        awaitPointerEventScope {
-                            while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
-                        }
-                    }
-                else Modifier.testTag("mary-sidebar-modal")
-                    .marySidebarCloseGesture(gestures, enabled = show,
-                        initialProgress = { animation.value }, onClose = dismiss))
-                .onPreviewKeyEvent {
-                    if (it.key == Key.Escape && it.type == KeyEventType.KeyUp) {
-                        dismiss(); true
-                    } else false
-                },
-        ) {
-            Box(
+        val modalFocus = remember { FocusRequester() }
+        LaunchedEffect(preview) {
+            // In touch mode Miuix buttons may not take focus. The modal itself must still own
+            // hardware Escape/Tab rather than leaving the Activity without a focused target.
+            if (!preview) modalFocus.requestFocus()
+        }
+        Box(Modifier.fillMaxSize().testTag("mary-sidebar-overlay")) {
+            BoxWithConstraints(
                 Modifier.fillMaxSize()
-                    .background(Color.Black.copy(alpha = if (scrimVisible) 0.32f * progress else 0f))
-                    .then(if (preview) Modifier else Modifier.clickable(
-                        interactionSource = null, indication = null,
-                        onClickLabel = stringResource(R.string.mary_sidebar_close), onClick = dismiss,
-                    )).testTag("mary-sidebar-scrim"),
-            )
-            MarySidebarContent(
-                sessions = sessions,
-                currentSessionId = currentSessionId,
-                hasSession = hasSession,
-                locked = locked,
-                loading = loading,
-                loadFailed = failed,
-                deleting = deleting.isNotEmpty(),
-                visualOnly = preview,
-                onRetry = { if (!preview) retry++ },
-                onDismiss = { if (!preview) dismiss() },
-                onNewChat = { if (!preview) closeThen(onNewChat) },
-                onLock = { if (!preview) closeThen(onLock) },
-                onOpenSettings = { if (!preview) closeThen(onOpenSettings) },
-                onSelect = { id -> if (!preview) closeThen { onSelect(id) } },
-                onDelete = { id ->
-                    if (!preview && show && gestures.progress == null && pendingAction == null && deleting.isEmpty()) {
-                        deleting = deleting + id
-                        onDelete(id)
-                    }
-                },
-                modifier = Modifier.align(Alignment.CenterStart)
-                    .width(minOf(maxWidth * 0.82f, 360.dp)).fillMaxHeight()
-                    .graphicsLayer {
-                        translationX = (if (rtl) 1 else -1) * size.width * (1f - progress)
-                    }.then(if (preview) Modifier.clearAndSetSemantics { testTag = "mary-sidebar-preview-panel" }
-                        else Modifier.semantics { paneTitle = pane }),
-            )
-        }
-    }
-
-    RegisterMarySidebarPreview(pageHost, dismiss) { if (pageActive && (previewActive || openingProgress != null)) surface(preview = true, scrimVisible = true) }
-    // Standalone Mary has no sibling navigation; production uses the root portal above navigation.
-    if (pageHost == null && (previewActive || openingProgress != null)) surface(preview = true, scrimVisible = true)
-    // Do not expose app navigation while the panel is still sliding away.
-    if (!mounted || !pageActive) return
-    Dialog(
-        onDismissRequest = dismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
-        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
-        SideEffect {
-            // We animate our own scrim; Android's default dim would double it and snap on close.
-            window?.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-        }
-        LaunchedEffect(Unit) {
-            // Keep the opaque, identical Activity preview until the Dialog has laid out a frame.
-            // During overlap only the Activity draws the scrim, preventing a double-dark flash.
-            withFrameNanos { }
-            withFrameNanos { }
-            if (!previewActive) modalReady = true
-            else if (latestShow && gestures.isOpening && gestures.openingSettle == true) {
-                modalReady = true
-                previewActive = false
-                settlingOpening = false
-                gestures.cancel()
+                    .then(if (preview) Modifier.semantics { hideFromAccessibility() }.testTag("mary-sidebar-preview")
+                        .pointerInput(Unit) {
+                            // New hit paths are blocked. The already-down opening pointer retains its
+                            // original path through the root draggable; this layer never steals it.
+                            awaitPointerEventScope {
+                                while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                            }
+                        }
+                    else Modifier.testTag("mary-sidebar-modal")
+                        .focusProperties { onExit = { cancelFocusChange() } }
+                        .focusGroup()
+                        .focusRequester(modalFocus)
+                        .focusable()
+                        .marySidebarCloseGesture(gestures, enabled = show,
+                            initialProgress = { animation.value }, onClose = dismiss))
+                    .onPreviewKeyEvent {
+                        if (it.key == Key.Escape && it.type == KeyEventType.KeyUp) {
+                            dismiss(); true
+                        } else false
+                    },
+            ) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.32f * progress))
+                        .then(if (preview) Modifier else Modifier.clickable(
+                            interactionSource = null, indication = null,
+                            onClickLabel = stringResource(R.string.mary_sidebar_close), onClick = dismiss,
+                        )).testTag("mary-sidebar-scrim"),
+                )
+                Box(
+                    Modifier.align(Alignment.CenterStart)
+                        .width(minOf(maxWidth * 0.82f, 360.dp)).fillMaxHeight()
+                        .graphicsLayer {
+                            translationX = (if (rtl) 1 else -1) * size.width * (1f - progress)
+                        }.testTag("mary-sidebar-stable-panel"),
+                ) {
+                    MarySidebarContent(
+                        sessions = sessions,
+                        currentSessionId = currentSessionId,
+                        hasSession = hasSession,
+                        locked = locked,
+                        loading = loading,
+                        loadFailed = failed,
+                        deleting = deleting.isNotEmpty(),
+                        visualOnly = preview,
+                        onRetry = { if (!preview) retry++ },
+                        onDismiss = { if (!preview) dismiss() },
+                        onNewChat = { if (!preview) closeThen(onNewChat) },
+                        onLock = { if (!preview) closeThen(onLock) },
+                        onOpenSettings = { if (!preview) closeThen(onOpenSettings) },
+                        onSelect = { id -> if (!preview) closeThen { onSelect(id) } },
+                        onDelete = { id ->
+                            if (!preview && show && gestures.progress == null && pendingAction == null && deleting.isEmpty()) {
+                                deleting = deleting + id
+                                onDelete(id)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                            .then(if (preview) Modifier.clearAndSetSemantics { testTag = "mary-sidebar-preview-panel" }
+                                else Modifier.semantics { paneTitle = pane }),
+                    )
+                }
             }
         }
-        surface(preview = false, scrimVisible = !previewActive)
-
     }
+
+    // A stable portal/callsite is used throughout the gesture. There is no second surface,
+    // default Window entrance animation, guessed "ready after N frames", or scrim transfer.
+    val visualOnly = previewActive || openingProgress != null
+    RegisterMarySidebarPreview(pageHost, dismiss, modal = rendered) {
+        if (rendered) surface(preview = visualOnly)
+    }
+    // Standalone Mary has no sibling navigation; production places this above app navigation.
+    if (pageHost == null && rendered) surface(preview = visualOnly)
+
 }
 
 /** Real drawer UI shared with native rendering tests; no model/network access required. */
@@ -322,8 +345,7 @@ internal fun MarySidebarContent(
         modifier.background(colors.surface).testTag(if (visualOnly) "mary-sidebar-preview-panel" else "mary-sidebar-panel")
             // Consume panel whitespace; it must never dismiss through the scrim beneath it.
             .pointerInput(Unit) { detectTapGestures { } }
-            // This surface spans the physical window. Keep its geometry independent of IME
-            // animation so the Activity preview and Dialog agree when the keyboard hides on UP.
+            // Keep the physical-window geometry stable when the keyboard hides after UP.
             .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)),
     ) {
         Row(
