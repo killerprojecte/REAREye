@@ -3,10 +3,13 @@ package hk.uwu.reareye.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
@@ -126,6 +129,20 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
     val selected = if (remaining) null else if (sequence) displayed.getOrNull(effectiveIndex) else {
         categories.firstOrNull { it.category == selectedCategory } ?: categories.maxByOrNull { it.tokens }
     }
+    val legendState = rememberLazyListState()
+    val activeLegendIndex = if (sequence) effectiveIndex else categories.indexOfFirst { it.category == selected?.category }
+    LaunchedEffect(sequence, activeLegendIndex, selected?.category, displayed.size) {
+        if (activeLegendIndex in displayed.indices) {
+            val layout = legendState.layoutInfo
+            val item = layout.visibleItemsInfo.firstOrNull { it.index == activeLegendIndex }
+            // A selection change may reveal an off-screen chip; manual scrolling alone never
+            // re-runs this effect, and a fully visible selection never jumps to the leading edge.
+            if (item == null || item.offset < layout.viewportStartOffset ||
+                item.offset + item.size > layout.viewportEndOffset) {
+                legendState.scrollToItem(activeLegendIndex)
+            }
+        }
+    }
     val screen = LocalConfiguration.current
     val popupWidth = (screen.screenWidthDp - 24).coerceIn(160, 320).dp
     val popupHeight = (screen.screenHeightDp - 88).coerceIn(144, 360).dp
@@ -160,13 +177,19 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.mary_context_short_title), style = MiuixTheme.textStyles.body2,
-                        fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
-                    ModeButton(stringResource(R.string.mary_context_category_mode), !sequence, "mary-context-mode-category") {
-                        sequence = false; remaining = false
-                    }
-                    ModeButton(stringResource(R.string.mary_context_sequence_mode), sequence, "mary-context-mode-sequence") {
-                        sequence = true; remaining = false; selectedIndex = 0
-                    }
+                        fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).testTag("mary-context-title"),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    RearCompactTabs(
+                        tabs = listOf(stringResource(R.string.mary_context_category_mode), stringResource(R.string.mary_context_sequence_mode)),
+                        selectedTabIndex = if (sequence) 1 else 0,
+                        onTabSelected = { index ->
+                            if (sequence != (index == 1)) {
+                                sequence = index == 1; remaining = false
+                                if (sequence) selectedIndex = 0
+                            }
+                        },
+                        modifier = Modifier.widthIn(max = (popupWidth - 120.dp).coerceAtLeast(56.dp)).testTag("mary-context-modes"),
+                    )
                     IconButton(onClick = { expanded = false }, modifier = Modifier.size(48.dp).testTag("mary-context-close")) {
                         Icon(Icons.Outlined.Close, stringResource(R.string.mary_sidebar_close), modifier = Modifier.size(18.dp))
                     }
@@ -182,7 +205,9 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
                     }
                     Text(if (ratio == null) "—" else approximation + percent(ratio), style = MiuixTheme.textStyles.body1)
                 }
-                Box(Modifier.fillMaxWidth().height(48.dp).testTag("mary-context-breakdown-bar")
+                // The strip is an optional direct pointer shortcut. Named legend targets below
+                // remain 48dp; numeric detail text is deliberately not part of the strip hit area.
+                Box(Modifier.fillMaxWidth().height(32.dp).testTag("mary-context-breakdown-bar")
                     .pointerInput(displayed, rtl) {
                         detectTapGestures { point ->
                             var fraction = point.x / size.width.coerceAtLeast(1)
@@ -191,11 +216,38 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
                         }
                     }, contentAlignment = Alignment.Center) {
                     ContextStrip(displayed, if (displayed.isEmpty()) 0f else 1f,
-                        if (sequence) effectiveIndex else categories.indexOfFirst { it.category == selected?.category },
                         Modifier.fillMaxWidth().height(10.dp))
                 }
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                    .background(colors.primary.copy(alpha = 0.065f)).padding(horizontal = 10.dp, vertical = 8.dp)
+                Box(Modifier.width(popupWidth - 24.dp).height(48.dp)) {
+                    LazyRow(Modifier.fillMaxSize().testTag("mary-context-legend-list"), state = legendState, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        itemsIndexed(displayed) { index, segment ->
+                            val active = !remaining && (if (sequence) effectiveIndex == index else selected?.category == segment.category)
+                            val interaction = remember { MutableInteractionSource() }
+                            val pressed by interaction.collectIsPressedAsState()
+                            val tag = if (sequence) "mary-context-sequence-$index" else "mary-context-legend-${segment.category.name}"
+                            Box(Modifier.height(48.dp).widthIn(min = 48.dp)
+                                .clickable(interactionSource = interaction, indication = null, role = Role.Button) { choose(index) }
+                                .semantics { this.selected = active }.testTag(tag), contentAlignment = Alignment.Center) {
+                                Row(Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(8.dp))
+                                    .background(when {
+                                        pressed -> colors.onSurface.copy(alpha = 0.09f)
+                                        active -> colors.onSurface.copy(alpha = 0.055f)
+                                        else -> Color.Transparent
+                                    }).testTag("$tag-visual")
+                                    .padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.size(7.dp).background(categoryColor(segment.category), RoundedCornerShape(2.dp)))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(if (sequence) "${index + 1} · " + stringResource(contextCategoryLabel(segment.category))
+                                        else stringResource(contextCategoryLabel(segment.category)),
+                                        style = MiuixTheme.textStyles.footnote1,
+                                        color = colors.onSurface)
+                                }
+                            }
+                        }
+                    }
+                }
+                Column(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp)
                     .testTag("mary-context-detail")) {
                     val free = if (used != null && summary.windowTokens > 0) (summary.windowTokens.toLong() - used).coerceAtLeast(0L) else null
                     val name = when {
@@ -225,27 +277,6 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
                             style = MiuixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
                     }
                 }
-                Box(Modifier.width(popupWidth - 24.dp).height(48.dp)) {
-                    LazyRow(Modifier.fillMaxSize().testTag("mary-context-legend-list"), horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        itemsIndexed(displayed) { index, segment ->
-                            val active = !remaining && (if (sequence) effectiveIndex == index else selected?.category == segment.category)
-                            Row(Modifier.height(48.dp).widthIn(min = 72.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable(role = Role.Button) { choose(index) }
-                                .semantics { this.selected = active }
-                                .testTag(if (sequence) "mary-context-sequence-$index" else "mary-context-legend-${segment.category.name}")
-                                .padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.size(7.dp).background(categoryColor(segment.category), RoundedCornerShape(2.dp)))
-                                Spacer(Modifier.width(5.dp))
-                                Text(if (sequence) "${index + 1} · " + stringResource(contextCategoryLabel(segment.category))
-                                    else stringResource(contextCategoryLabel(segment.category)),
-                                    style = MiuixTheme.textStyles.footnote2,
-                                    color = if (active) colors.primary else colors.onSurface)
-                            }
-                        }
-                    }
-                }
                 Column(Modifier.fillMaxWidth().testTag("mary-context-provider")) {
                     Text(stringResource(R.string.mary_context_provider_input, compactTokens(summary.usage?.inputTokens.takeUnless { summary.loading }), percent(summary.cacheRatio.takeUnless { summary.loading })),
                         style = MiuixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
@@ -262,30 +293,18 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
 }
 
 @Composable
-private fun ModeButton(label: String, active: Boolean, tag: String, onClick: () -> Unit) {
-    Box(Modifier.size(width = 48.dp, height = 48.dp).clickable(role = Role.Button, onClick = onClick)
-        .semantics { selected = active }.testTag(tag), contentAlignment = Alignment.Center) {
-        Text(label, style = MiuixTheme.textStyles.footnote2,
-            color = if (active) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
-    }
-}
-
-@Composable
-private fun ContextStrip(segments: List<ContextSegment>, occupied: Float, selected: Int?, modifier: Modifier) {
+private fun ContextStrip(segments: List<ContextSegment>, occupied: Float, modifier: Modifier) {
     val track = MiuixTheme.colorScheme.outline.copy(alpha = 0.35f)
-    val outline = MiuixTheme.colorScheme.onSurface
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     Canvas(modifier.clip(RoundedCornerShape(4.dp))) {
         drawRect(track)
         val total = segments.sumOf { it.tokens.toLong() }.coerceAtLeast(0L)
         if (total == 0L) return@Canvas
         var start = 0f
-        segments.forEachIndexed { index, segment ->
+        segments.forEach { segment ->
             val width = size.width * occupied.coerceIn(0f, 1f) * (segment.tokens.toDouble() / total).toFloat()
             val left = if (rtl) size.width - start - width else start
             drawRect(categoryColor(segment.category), Offset(left, 0f), Size(width, size.height))
-            if (selected == index && width > 1f) drawRect(outline, Offset(left, 0f), Size(width, size.height), style = Stroke(1.dp.toPx()))
             start += width
         }
     }

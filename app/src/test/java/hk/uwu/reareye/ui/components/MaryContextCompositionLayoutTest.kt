@@ -56,6 +56,7 @@ class MaryContextCompositionLayoutTest {
     private val summary = mutableStateOf(MaryUsageSummary(1000, 4000, null))
     private val sidebar = mutableStateOf(false)
     private val draft = mutableStateOf("")
+    private lateinit var inputModes: androidx.compose.ui.input.InputModeManager
     private var sent = 0
     private var navigated = 0
     private val composition = ContextComposition.fromSegments(listOf(
@@ -109,11 +110,15 @@ class MaryContextCompositionLayoutTest {
         host()
         openPopup()
         val bar = node("mary-context-breakdown-bar")
-        assertTrue(bar.getUnclippedBoundsInRoot().height.value >= 48f)
+        assertEquals("Supplemental chart hit region; named legends retain full targets", 32f, bar.getUnclippedBoundsInRoot().height.value, 1f)
         bar.performTouchInput { click(Offset(width * 0.8f, center.y)) }
         assertTrue(hasPercent(semanticText("mary-context-detail"), 35))
         selectItem("mary-context-legend-USER")
         assertTrue(hasPercent(semanticText("mary-context-detail"), 15))
+        val detailBefore = semanticText("mary-context-detail")
+        node("mary-context-detail").performTouchInput { click(center) }
+        assertEquals("Summary text is not an interactive selector", detailBefore, semanticText("mary-context-detail"))
+        node("mary-context-legend-USER").assertIsSelected()
     }
 
     @Test fun unknownCapacityNeverInventsZeroOrFullPercent() {
@@ -161,13 +166,14 @@ class MaryContextCompositionLayoutTest {
         useComposition()
         host()
         openPopup()
-        ContextCategory.entries.forEach { node("mary-context-legend-list").performScrollToNode(hasTestTag("mary-context-legend-${it.name}")); node("mary-context-legend-${it.name}").assertIsDisplayed() }
-        node("mary-context-mode-sequence").performClick()
+        ContextCategory.entries.forEach { node("mary-context-legend-list").performScrollToNode(hasTestTag("mary-context-legend-${it.name}")); node("mary-context-legend-${it.name}").assertIsDisplayed(); assertTrue(node("mary-context-legend-${it.name}").getUnclippedBoundsInRoot().height.value >= 48f) }
+        modeTab(true).performClick()
+        node("mary-context-sequence-0").assertIsDisplayed().assertIsSelected()
         selectItem("mary-context-sequence-0")
         assertTrue(hasPercent(semanticText("mary-context-detail"), 10))
         assertPopupWithinViewport()
         screenshot("expanded-order", "mary-context-popup")
-        node("mary-context-mode-category").performClick()
+        modeTab(false).performClick()
         selectItem("mary-context-legend-TOOL_RESULTS")
         node("mary-context-legend-TOOL_RESULTS").assertIsDisplayed()
         assertTrue(hasPercent(semanticText("mary-context-detail"), 35))
@@ -266,7 +272,7 @@ class MaryContextCompositionLayoutTest {
         useComposition()
         host()
         openPopup()
-        node("mary-context-mode-sequence").performClick()
+        modeTab(true).performClick()
         selectItem("mary-context-sequence-7")
         compose.runOnIdle { summary.value = MaryUsageSummary(100, 4000, null,
             composition = ContextComposition.fromSegments(listOf(ContextSegment(ContextCategory.USER, 100))), sourceKey = "model-a") }
@@ -305,6 +311,188 @@ class MaryContextCompositionLayoutTest {
         node("mary-context-close").performScrollTo().performClick()
         node("mary-context-popup").assertDoesNotExist()
     }
+
+    @Test fun compactLegendPressedLightKeepsFullTouchArea() { capturePressedLegend(ColorSchemeMode.Light, "refined-pressed-light") }
+
+    @Test @Config(qualifiers = "zh-rCN-w320dp-h568dp-mdpi")
+    fun compactLegendPressedDarkKeepsFullTouchArea() { capturePressedLegend(ColorSchemeMode.Dark, "refined-pressed-dark") }
+
+    private fun capturePressedLegend(mode: ColorSchemeMode, name: String) {
+        useComposition(); host(mode); openPopup()
+        val tag = "mary-context-legend-USER"
+        node("mary-context-legend-list").performScrollToNode(hasTestTag(tag))
+        val hit = node(tag).getUnclippedBoundsInRoot()
+        val visual = node("$tag-visual").getUnclippedBoundsInRoot()
+        assertTrue("Legend touch height must remain 48dp", hit.height.value >= 48f)
+        assertTrue("Visible pill must be smaller than touch area", visual.height.value < hit.height.value)
+        node(tag).performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(200)
+        compose.waitForIdle()
+        screenshot(name, "mary-context-popup")
+        node(tag).performTouchInput { up() }
+        assertTrue(hasPercent(semanticText("mary-context-detail"), 15))
+        node(tag).assertIsSelected()
+    }
+
+    @Test fun compactTabsExposeSelectionAndFullHeightTouchTargets() {
+        useComposition(); host(); openPopup()
+        modeTab(false).assertIsSelected()
+        modeTab(true).assertIsNotSelected()
+        val bounds = modeTab(true).fetchSemanticsNode().touchBoundsInRoot
+        assertTrue("Tab touch target height=$bounds", bounds.height >= 48f)
+        assertTrue("Tab touch target width=$bounds", bounds.width >= 48f)
+        modeTab(true).performTouchInput { click(Offset(center.x, 1f)) }
+        modeTab(true).assertIsSelected()
+        modeTab(false).performClick()
+        modeTab(false).assertIsSelected()
+    }
+
+    @Test @Config(qualifiers = "en-rUS-w320dp-h640dp-mdpi")
+    fun englishNarrowLargeTextKeepsTabsAndCloseReachable() {
+        useComposition(); host(fontScale = 1.5f); openPopup()
+        assertEquals(1.5f, node("mary-context-detail").fetchSemanticsNode().layoutInfo.density.fontScale, 0.01f)
+        val close = node("mary-context-close").getUnclippedBoundsInRoot()
+        assertEquals(48f, close.width.value, 1f)
+        assertTrue(node("mary-context-title").getUnclippedBoundsInRoot().width.value >= 48f)
+        node("mary-context-close").assertIsDisplayed()
+        assertPopupWithinViewport()
+        modeTab(true).performScrollTo().performClick()
+        modeTab(true).assertIsSelected()
+        screenshot("refined-english-large-text", "mary-context-popup")
+        node("mary-context-close").performClick()
+        node("mary-context-popup").assertDoesNotExist()
+    }
+
+    @Test fun compactTabsCanBeFocusedAndActivatedByKeyboard() {
+        useComposition(); host(); openPopup()
+        compose.runOnIdle { assertTrue(inputModes.requestInputMode(androidx.compose.ui.input.InputMode.Keyboard)) }
+        // Robolectric key injection does not run ViewRootImpl's global leave-touch-mode stage.
+        // Dispatch the framework touch-mode notification to the real Popup owner before keys.
+        compose.runOnUiThread {
+            android.view.ViewTreeObserver::class.java.getDeclaredMethod("dispatchOnTouchModeChanged", Boolean::class.javaPrimitiveType)
+                .apply { isAccessible = true }.invoke(popupView().viewTreeObserver, false)
+        }
+        dismissPopupWithKey(android.view.KeyEvent.KEYCODE_TAB)
+        modeTab(true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { assertTrue(it()) }
+        modeTab(true).assertIsFocused()
+        dismissPopupWithKey(android.view.KeyEvent.KEYCODE_ENTER)
+        modeTab(true).assertIsSelected()
+        modeTab(false).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { assertTrue(it()) }
+        dismissPopupWithKey(android.view.KeyEvent.KEYCODE_ENTER)
+        modeTab(false).assertIsSelected()
+        dismissPopupWithKey(android.view.KeyEvent.KEYCODE_ESCAPE)
+        node("mary-context-popup").assertDoesNotExist()
+    }
+
+    @Test fun scrollingCompactLegendDoesNotSelectOrNavigate() {
+        useComposition(); host(); openPopup()
+        val before = semanticText("mary-context-detail")
+        node("mary-context-legend-list").performTouchInput { swipeLeft() }
+        assertEquals(before, semanticText("mary-context-detail"))
+        compose.runOnIdle { assertEquals(0, sent); assertEquals(0, navigated) }
+        selectItem("mary-context-legend-USER")
+        assertTrue(hasPercent(semanticText("mary-context-detail"), 15))
+    }
+
+    @Test fun reusableCompactTabsHandleEmptyAndClampSelection() {
+        val labels = mutableStateOf(emptyList<String>())
+        val index = mutableStateOf(-5)
+        compose.runOnUiThread {
+            activity = Robolectric.buildActivity(ContextPreviewActivity::class.java).setup().also {
+                it.get().setContent {
+                    MiuixTheme(ThemeController(ColorSchemeMode.Light)) {
+                        RearCompactTabs(labels.value, index.value, { chosen -> index.value = chosen }, Modifier.testTag("direct-tabs"))
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, androidx.compose.ui.semantics.Role.Tab)).assertCountEquals(0)
+        compose.runOnIdle { labels.value = listOf("First", "Second") }
+        val tabs = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, androidx.compose.ui.semantics.Role.Tab))
+        tabs[0].assertIsSelected(); tabs[1].assertIsNotSelected()
+        compose.runOnIdle { index.value = Int.MAX_VALUE }
+        tabs[0].assertIsNotSelected(); tabs[1].assertIsSelected()
+        tabs[0].performClick()
+        compose.runOnIdle { assertEquals(0, index.value) }
+        compose.runOnIdle { labels.value = emptyList() }
+        tabs.assertCountEquals(0)
+    }
+
+    @Test fun headerTabsStayLeftOfCloseAndAnimateNativeIndicatorContinuously() {
+        useComposition(); host(); openPopup()
+        val first = modeTab(false).getUnclippedBoundsInRoot()
+        val second = modeTab(true).getUnclippedBoundsInRoot()
+        assertEquals("Equal-width mode cells", first.width.value, second.width.value, 1f)
+        val modes = node("mary-context-modes").getUnclippedBoundsInRoot()
+        val popup = node("mary-context-popup").getUnclippedBoundsInRoot()
+        assertTrue("Header tabs remain readable, not tiny: $modes", modes.width.value in 124f..140f)
+        val close = node("mary-context-close").getUnclippedBoundsInRoot()
+        val title = node("mary-context-title").getUnclippedBoundsInRoot()
+        assertEquals("Mode tabs share header center with close", close.top.value + close.height.value / 2f, modes.top.value + modes.height.value / 2f, 1f)
+        assertTrue("Mode tabs stay left of close", modes.right <= close.left)
+        assertTrue("Title stays left of tabs", title.right <= modes.left)
+        assertTrue("Header retains at least48dp for title", title.width.value >= 48f)
+        assertTrue("Removing dedicated mode row keeps popup compact", popup.height.value <= 304f)
+        val popupId = node("mary-context-popup").fetchSemanticsNode().id
+        val track = node("rear-compact-tabs-track")
+        val stableTrackBounds = track.getUnclippedBoundsInRoot()
+        assertEquals("Each tab fills half the shared track", (stableTrackBounds.width.value - 12f) / 2f, first.width.value, 1f)
+        assertEquals("Second cell reaches contour trailing inset", stableTrackBounds.right.value - 5f, second.right.value, 1f)
+        val directory = File(requireNotNull(System.getProperty("mary.ui.screenshotDir")), "context")
+        val initial = track.captureToImage().asAndroidBitmap()
+        val y = initial.height - 8
+        fun light(bitmap: Bitmap, x: Int): Int = android.graphics.Color.red(bitmap.getPixel(x, y))
+        val selectedColor = light(initial, initial.width / 4)
+        val backgroundColor = light(initial, initial.width * 3 / 4)
+        assertTrue("Native indicator has measurable contrast", selectedColor > backgroundColor + 2)
+        val threshold = (selectedColor + backgroundColor) / 2
+        fun center(bitmap: Bitmap): Double {
+            val xs = (6 until bitmap.width - 6).filter { light(bitmap, it) > threshold }
+            assertTrue("A native indicator must remain visible", xs.size > bitmap.width / 4)
+            return xs.average()
+        }
+        val startCenter = center(initial)
+        val centers = mutableListOf<Double>()
+        val lines = mutableListOf("before center=$startCenter selected=$selectedColor background=$backgroundColor")
+        screenshot("row-tabs-before", "mary-context-popup")
+        compose.mainClock.autoAdvance = false
+        try {
+            val clickClock = compose.mainClock.currentTime
+            modeTab(true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { assertTrue(it()) }
+            // Drain Android's UI dispatcher between frames so Popup recomposition registers with the clock.
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+            modeTab(true).assertIsSelected()
+            lines += "clickClock=$clickClock selectionAppliedClock=${compose.mainClock.currentTime}"
+            val startClock = compose.mainClock.currentTime
+            for (time in listOf(0L, 50L, 100L, 150L, 200L, 240L)) {
+                val remaining = startClock + time - compose.mainClock.currentTime
+                if (remaining > 0) compose.mainClock.advanceTimeBy(remaining, ignoreFrameDuration = true)
+                compose.waitForIdle()
+                assertEquals(popupId, node("mary-context-popup").fetchSemanticsNode().id)
+                assertEquals(stableTrackBounds, track.getUnclippedBoundsInRoot())
+                val frame = track.captureToImage().asAndroidBitmap()
+                val center = center(frame)
+                centers += center
+                lines += "afterClickMs=$time composeClock=${compose.mainClock.currentTime} indicatorCenter=$center"
+                File(directory, "row-tabs-${time}ms-track.png").outputStream().use { frame.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                screenshot("row-tabs-${time}ms", "mary-context-popup")
+            }
+        } finally { compose.mainClock.autoAdvance = true }
+        File(directory, "row-tabs-animation-times.txt").writeText(lines.joinToString("\n"))
+        assertTrue("Indicator reaches second cell: $centers", centers.last() > startCenter + initial.width * 0.35)
+        assertTrue("100ms must show a genuine intermediate position: $centers", centers[2] > startCenter + 10 && centers[2] < centers.last() - 10)
+        centers.zipWithNext().forEach { (a, b) -> assertTrue("Indicator moves continuously forward: $centers", b >= a - 1) }
+    }
+
+    private fun modeTab(sequence: Boolean) = compose.onNode(
+        hasAnyAncestor(hasTestTag("mary-context-modes")) and
+            SemanticsMatcher.expectValue(SemanticsProperties.Role, androidx.compose.ui.semantics.Role.Tab) and
+            hasAnyDescendant(hasText(activity!!.get().getString(if (sequence) hk.uwu.reareye.R.string.mary_context_sequence_mode else hk.uwu.reareye.R.string.mary_context_category_mode))), useUnmergedTree = true)
 
     private fun popupView(): android.view.View = (node("mary-context-popup").fetchSemanticsNode().root as ViewRootForTest).view.rootView
     private fun dismissPopupWithKey(code: Int) {
@@ -345,6 +533,7 @@ class MaryContextCompositionLayoutTest {
                 controller.get().enableEdgeToEdge()
                 controller.get().setContent {
                     MiuixTheme(ThemeController(mode)) {
+                        inputModes = androidx.compose.ui.platform.LocalInputModeManager.current
                         val pageHost = remember { MarySidebarPageGestureHost() }
                         val gestures = remember { MarySidebarGestureState() }
                         val menuFocus = remember { FocusRequester() }
