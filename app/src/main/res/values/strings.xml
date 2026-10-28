@@ -1087,4 +1087,28 @@
     <string name="mary_sidebar_locked">Session locked</string>
     <string name="mary_history_loading">Loading conversations…</string>
     <string name="mary_history_load_failed">Could not load conversations. Please try again.</string>
+
+    <string name="mary_context_short_title">Context</string>
+    <string name="mary_context_category_mode">Type</string>
+    <string name="mary_context_sequence_mode">Order</string>
+    <string name="mary_context_system">System rules</string>
+    <string name="mary_context_definitions">Tool definitions</string>
+    <string name="mary_context_user">User messages</string>
+    <string name="mary_context_assistant">Assistant messages</string>
+    <string name="mary_context_calls">Tool calls</string>
+    <string name="mary_context_results">Tool results</string>
+    <string name="mary_context_native">Native / protocol</string>
+    <string name="mary_context_formatting">Format overhead</string>
+    <string name="mary_context_loading">Preparing context…</string>
+    <string name="mary_context_capacity_label">Estimated input / configured window</string>
+    <string name="mary_context_remaining">Remaining window</string>
+    <string name="mary_context_no_breakdown">Composition not available</string>
+    <string name="mary_context_shares">%1$s of estimated input · %2$s of window</string>
+    <string name="mary_context_free_share">%1$s of configured window remaining</string>
+    <string name="mary_context_provider_input">Latest API input: %1$s · cache %2$s</string>
+    <string name="mary_context_correction">Additional safety allowance: %1$s tokens</string>
+    <string name="mary_context_estimate_note">Colors divide estimated input, not billing tokens. Window is configured; unsent draft excluded.</string>
+    <string name="mary_context_sequence_note">Order follows budget estimation, not exact provider serialization. Unsent draft excluded.</string>
+    <string name="mary_context_saturated">Estimate limit reached; composition proportions unavailable</string>
+    <string name="mary_context_empty">No context content</string>
 </resources>

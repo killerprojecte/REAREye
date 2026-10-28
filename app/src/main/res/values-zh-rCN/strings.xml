@@ -1087,4 +1087,28 @@
     <string name="mary_sidebar_locked">会话已锁定</string>
     <string name="mary_history_loading">正在加载会话…</string>
     <string name="mary_history_load_failed">无法加载会话，请重试。</string>
+
+    <string name="mary_context_short_title">上下文</string>
+    <string name="mary_context_category_mode">分类</string>
+    <string name="mary_context_sequence_mode">顺序</string>
+    <string name="mary_context_system">系统规则</string>
+    <string name="mary_context_definitions">工具定义</string>
+    <string name="mary_context_user">用户消息</string>
+    <string name="mary_context_assistant">助手消息</string>
+    <string name="mary_context_calls">工具调用</string>
+    <string name="mary_context_results">工具结果</string>
+    <string name="mary_context_native">原生／协议内容</string>
+    <string name="mary_context_formatting">格式开销</string>
+    <string name="mary_context_loading">正在准备上下文…</string>
+    <string name="mary_context_capacity_label">估算输入／设置窗口</string>
+    <string name="mary_context_remaining">剩余空间</string>
+    <string name="mary_context_no_breakdown">分类尚未就绪</string>
+    <string name="mary_context_shares">占估算输入 %1$s · 占窗口 %2$s</string>
+    <string name="mary_context_free_share">剩余占设置窗口 %1$s</string>
+    <string name="mary_context_provider_input">最近 API 输入：%1$s · 缓存 %2$s</string>
+    <string name="mary_context_correction">另计安全校准：%1$s tokens</string>
+    <string name="mary_context_estimate_note">色块按输入估算分摊，并非计费 token；窗口取设置值，不含未发送草稿。</string>
+    <string name="mary_context_sequence_note">顺序为预算估算计入顺序，并非服务端序列化顺序；不含未发送草稿。</string>
+    <string name="mary_context_saturated">估算已达上限，分类比例不可用</string>
+    <string name="mary_context_empty">尚无上下文内容</string>
 </resources>

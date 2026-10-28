@@ -7,6 +7,7 @@ import android.content.res.Resources
 import android.os.Build
 import hk.uwu.reareye.agent.context.ContextBudget
 import hk.uwu.reareye.agent.context.ContextBudgetDecision
+import hk.uwu.reareye.agent.context.ContextComposition
 import hk.uwu.reareye.agent.data.AgentAuditLog
 import hk.uwu.reareye.agent.data.AgentSession
 import hk.uwu.reareye.agent.data.AgentSessionStore
@@ -96,6 +97,10 @@ data class AgentUiState(
     val usage: ChatEvent.Usage? = null,
     val contextWindowTokens: Int = 128_000,
     val estimatedInputTokens: Int? = null,
+    /** Assembled-payload estimate only; provider billing usage stays separate. */
+    val contextComposition: ContextComposition? = null,
+    /** Positive safety calibration used by budgeting, never distributed into category slices. */
+    val contextBudgetCorrectionTokens: Int = 0,
     /** Public capability metadata only; credentials are never exposed to the UI. */
     val provider: ProviderConfig = ProviderConfig(),
     /** Configuration IO is in progress; sending is blocked, selections may still be queued. */
@@ -194,7 +199,7 @@ class MaryController(
         synchronized(configurationLock) {
             configurationChanges.addLast(change)
             // Synchronous gate: send cannot capture a snapshot before this write starts.
-            _state.update { it.copy(configuring = true) }
+            _state.update { it.copy(configuring = true, estimatedInputTokens = null, contextComposition = null, contextBudgetCorrectionTokens = 0) }
             if (configurationJob?.isActive == true) return
             configurationJob =
                 scope.launch(start = CoroutineStart.LAZY) { drainConfigurationChanges() }
@@ -245,7 +250,11 @@ class MaryController(
                             it.copy(
                                 provider = metadataConfig!!.provider,
                                 approvalMode = preferences.approvalMode,
-                                contextWindowTokens = config.provider.contextWindowTokens
+                                contextWindowTokens = config.provider.contextWindowTokens,
+                                estimatedInputTokens = null,
+                                usage = it.usage.takeIf { _ -> it.provider == metadataConfig!!.provider },
+                                contextComposition = null,
+                                contextBudgetCorrectionTokens = 0,
                             )
                         }
                         if (!_state.value.running) refreshContextEstimate()
@@ -262,7 +271,10 @@ class MaryController(
                         _state.update {
                             it.copy(
                                 provider = ProviderConfig(),
-                                estimatedInputTokens = null
+                                estimatedInputTokens = null,
+                                contextComposition = null,
+                                contextBudgetCorrectionTokens = 0,
+                                usage = null,
                             )
                         }
                     }
@@ -271,6 +283,7 @@ class MaryController(
                                 " exceptionType=${e.javaClass.simpleName}"
                     )
                     // Retain the last durable selection on failed saves; allow retry or queued recovery.
+                    if (!_state.value.running) refreshContextEstimate()
                     appendNotice(e.message ?: "Cannot save Mary settings", true)
                 }
             }
@@ -287,9 +300,9 @@ class MaryController(
     }
 
     private fun refreshContextEstimate() {
-        val estimate = runCatching {
+        val composition = runCatching {
             val config = metadataConfig?.takeIf { it.provider.isUsable } ?: return@runCatching null
-            ContextBudget.estimateInput(
+            ContextBudget.estimateComposition(
                 config.systemPrompt + languageInstruction(),
                 tools.availableTools(),
                 session?.let { it.contextMessages ?: it.messages }.orEmpty()
@@ -301,7 +314,10 @@ class MaryController(
                 metadataConfig?.provider?.protocol
             )
         }.getOrNull()
-        _state.update { it.copy(estimatedInputTokens = estimate) }
+        _state.update {
+            it.copy(estimatedInputTokens = composition?.totalTokens, contextComposition = composition,
+                contextBudgetCorrectionTokens = 0)
+        }
     }
 
     fun sessions(): List<AgentSessionSummary> = store.list()
@@ -332,7 +348,8 @@ class MaryController(
         cancel()
         refreshConfiguration()
         val owner = generation
-        _state.update { it.copy(running = true) }
+        _state.update { it.copy(running = true, estimatedInputTokens = null, contextComposition = null,
+            contextBudgetCorrectionTokens = 0, usage = null) }
         turnJob = scope.launch {
             try {
                 awaitPreviousTurns()
@@ -390,6 +407,7 @@ class MaryController(
         _state.update { current ->
             current.copy(
                 running = false, pendingApproval = null, pendingAsk = null, status = null,
+                contextComposition = null, contextBudgetCorrectionTokens = 0,
                 entries = stopStreaming(
                     recoverToolResults(
                         current.entries,
@@ -398,6 +416,7 @@ class MaryController(
                 )
             )
         }
+        refreshContextEstimate()
     }
 
     fun answerApproval(approved: Boolean, interactionId: String? = null): Boolean {
@@ -426,7 +445,8 @@ class MaryController(
         val prompt = text.trim()
         if (prompt.isEmpty() || _state.value.running || _state.value.configuring || session?.locked == true) return
         val owner = ++generation
-        _state.update { it.copy(running = true, status = null, usage = null) }
+        _state.update { it.copy(running = true, status = null, usage = null, estimatedInputTokens = null,
+            contextComposition = null, contextBudgetCorrectionTokens = 0) }
         turnJob = scope.launch {
             var completed = false
             var partialSnapshot: AgentSession? = null
@@ -447,7 +467,8 @@ class MaryController(
                     _state.update {
                         it.copy(
                             provider = ProviderConfig(),
-                            estimatedInputTokens = null
+                            estimatedInputTokens = null, contextComposition = null,
+                            contextBudgetCorrectionTokens = 0, usage = null,
                         )
                     }
                     throw e
@@ -455,7 +476,7 @@ class MaryController(
                 assertOwner(owner)
                 val original = preferences.configuration
                 runtimeProtocol = original.provider.protocol
-                metadataConfig = original.copy(provider = original.provider.copy(apiKey = ""))
+                metadataConfig = original.copy(provider = CapabilityScope.publicView(original.provider))
                 _state.update {
                     it.copy(
                         provider = metadataConfig!!.provider,
@@ -495,7 +516,7 @@ class MaryController(
                 _state.update {
                     it.copy(
                         entries = it.entries + ChatEntry.UserMessage(newId(), prompt),
-                        provider = config.provider.copy(apiKey = ""),
+                        provider = CapabilityScope.publicView(config.provider),
                         contextWindowTokens = config.provider.contextWindowTokens
                     )
                 }
@@ -577,11 +598,20 @@ class MaryController(
                     ask = ::askUser,
                     checkBudget = { budget ->
                         assertOwner(owner)
-                        lastRequestEstimate = budget.estimatedInputTokens
+                        val composition = ContextBudget.estimateComposition(budget.systemPrompt, budget.tools, budget.messages)
+                        lastRequestEstimate = composition.totalTokens
                         val calibratedEstimate =
                             (lastRequestEstimate.toLong() + inputCorrection).coerceAtMost(Int.MAX_VALUE.toLong())
                                 .toInt()
-                        _state.update { it.copy(estimatedInputTokens = calibratedEstimate) }
+                        _state.update {
+                            // An externally refreshed configuration can change while this run is
+                            // finishing. Never pair its old request estimate with the new model.
+                            if (it.provider == CapabilityScope.publicView(config.provider)) {
+                                it.copy(estimatedInputTokens = calibratedEstimate, contextComposition = composition,
+                                    contextBudgetCorrectionTokens = inputCorrection)
+                            } else it.copy(estimatedInputTokens = null, contextComposition = null,
+                                contextBudgetCorrectionTokens = 0)
+                        }
                         val overBudget =
                             calibratedEstimate.toLong() + budget.outputReserveTokens + budget.contextWindowTokens / 10 >= budget.contextWindowTokens
                         if (!overBudget) ContextBudgetDecision.Continue(budget.messages)
@@ -683,7 +713,11 @@ class MaryController(
                         is AgentEvent.ContextCompressed -> {
                             inputCorrection = 0
                             lastRequestEstimate = event.estimatedInputTokens
-                            _state.update { it.copy(estimatedInputTokens = lastRequestEstimate) }
+                            _state.update {
+                                it.copy(estimatedInputTokens = lastRequestEstimate.takeIf { _ ->
+                                    it.provider == CapabilityScope.publicView(config.provider)
+                                }, contextComposition = null, contextBudgetCorrectionTokens = 0)
+                            }
                             appendNotice(
                                 "Context compressed; the original conversation remains in history.",
                                 false
@@ -694,7 +728,11 @@ class MaryController(
                             event.usage.inputTokens?.let { actual ->
                                 inputCorrection = (actual - lastRequestEstimate).coerceAtLeast(0)
                             }
-                            _state.update { it.copy(usage = mergeUsage(it.usage, event.usage)) }
+                            _state.update {
+                                if (it.provider == CapabilityScope.publicView(config.provider))
+                                    it.copy(usage = mergeUsage(it.usage, event.usage))
+                                else it.copy(usage = null)
+                            }
                         }
 
                         else -> handleEvent(

@@ -125,10 +125,15 @@ import kotlin.math.sin
 internal data class MaryUsageSummary(
     val usedTokens: Int?,
     val windowTokens: Int,
-    val usage: ChatEvent.Usage?
+    val usage: ChatEvent.Usage?,
+    val composition: hk.uwu.reareye.agent.context.ContextComposition? = null,
+    val budgetCorrectionTokens: Int = 0,
+    val sourceKey: String = "",
+    val loading: Boolean = false,
 ) {
+    val estimatedTokens: Int? get() = if (loading) null else composition?.totalTokens ?: usedTokens
     val contextRatio: Double?
-        get() = usedTokens?.takeIf { it >= 0 && windowTokens > 0 }
+        get() = estimatedTokens?.takeIf { it >= 0 && windowTokens > 0 }
             ?.let { it.toDouble() / windowTokens }
     val cacheRatio: Double?
         get() {
@@ -137,98 +142,6 @@ internal data class MaryUsageSummary(
             return cached.toDouble() / input
         }
 }
-
-@Composable
-internal fun ContextUsageButton(summary: MaryUsageSummary) {
-    val scope = rememberCoroutineScope()
-    val tooltip = rememberTooltipState(isPersistent = true)
-    val unknown = stringResource(R.string.mary_usage_unknown)
-    val percent = summary.contextRatio?.let { "${(it * 100).roundToInt()}%" } ?: "—"
-    val action = stringResource(R.string.mary_chat_context_action, percent)
-    val primary = MiuixTheme.colorScheme.primary
-    val track = MiuixTheme.colorScheme.outline
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
-        state = tooltip,
-        focusable = true,
-        tooltip = {
-            RichTooltip(title = {
-                Text(
-                    stringResource(R.string.mary_chat_context_title),
-                    style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold
-                )
-            }) {
-                Column(
-                    Modifier.widthIn(max = 280.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        stringResource(
-                        R.string.mary_chat_context_tokens,
-                        summary.usedTokens?.toString() ?: unknown,
-                        summary.windowTokens.takeIf { it > 0 }?.toString() ?: unknown
-                    ), style = MiuixTheme.textStyles.body2
-                    )
-                    Text(
-                        stringResource(
-                            R.string.mary_chat_context_percent,
-                            summary.contextRatio?.let { "${(it * 100).roundToInt()}%" } ?: unknown),
-                        style = MiuixTheme.textStyles.body2)
-                    Text(
-                        stringResource(
-                            R.string.mary_chat_cache_rate,
-                        summary.cacheRatio?.let {
-                            String.format(
-                                Locale.getDefault(),
-                                "%.1f%%",
-                                it * 100
-                            )
-                        } ?: unknown),
-                        style = MiuixTheme.textStyles.body2)
-                    Text(
-                        stringResource(R.string.mary_chat_context_note),
-                        style = MiuixTheme.textStyles.footnote1,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    )
-                }
-            }
-        },
-    ) {
-        IconButton(
-            onClick = { if (tooltip.isVisible) tooltip.dismiss() else scope.launch { tooltip.show() } },
-            modifier = Modifier
-                .testTag("mary-context-usage")
-                .semantics(mergeDescendants = true) {
-                    contentDescription = action
-                    summary.contextRatio?.let {
-                        progressBarRangeInfo =
-                            ProgressBarRangeInfo(it.toFloat().coerceIn(0f, 1f), 0f..1f)
-                    }
-                },
-        ) {
-            Canvas(Modifier
-                .size(20.dp)
-                .testTag("mary-context-ring")) {
-                val stroke = 2.dp.toPx()
-                drawCircle(track, radius = (size.minDimension - stroke) / 2, style = Stroke(stroke))
-                val sweep = contextProgressSweep(summary.contextRatio)
-                if (sweep != 0f) drawArc(
-                    primary, startAngle = -90f, sweepAngle = sweep, useCenter = false,
-                    topLeft = Offset(stroke / 2, stroke / 2),
-                    size = Size(
-                        size.width - stroke,
-                        size.height - stroke
-                    ),
-                    style = Stroke(stroke, cap = StrokeCap.Butt)
-                )
-            }
-        }
-    }
-}
-
-/** A positive sweep fills clockwise from the Canvas arc's twelve-o'clock start (-90 degrees). */
-internal fun contextProgressSweep(ratio: Double?): Float =
-    if (ratio == null || !ratio.isFinite()) 0f else (ratio.coerceIn(0.0, 1.0) * 360).toFloat()
 
 /** A round 270-degree dial with medium pointing straight up. */
 internal fun reasoningNeedleAngle(effort: ReasoningEffort): Float = when (effort) {

@@ -198,6 +198,10 @@ fun MaryScreen(
                 summary = MaryUsageSummary(
                     uiState.estimatedInputTokens.takeIf { uiState.entries.any { it is ChatEntry.UserMessage } },
                     uiState.contextWindowTokens, uiState.usage,
+                    composition = uiState.contextComposition,
+                    budgetCorrectionTokens = uiState.contextBudgetCorrectionTokens,
+                    sourceKey = "${uiState.provider.protocol}:${uiState.provider.baseUrl}:${uiState.provider.model}:${uiState.contextWindowTokens}:${controller.sessionId}",
+                    loading = uiState.configuring,
                 ),
                 onOpenMenu = { showSidebar = true },
                 menuFocusRequester = menuFocus,

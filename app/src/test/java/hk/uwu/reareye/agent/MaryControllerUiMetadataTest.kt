@@ -128,6 +128,13 @@ class MaryControllerUiMetadataTest {
                 "If the user explicitly requests another output language, follow that request."
     }
 
+    private fun assertComposition(state: AgentUiState) {
+        val composition = requireNotNull(state.contextComposition)
+        assertEquals(composition.totalTokens.toLong(), composition.segments.sumOf { it.tokens.toLong() })
+        assertEquals(composition.totalTokens.toLong(), composition.categories.sumOf { it.tokens.toLong() })
+        assertEquals(composition.totalTokens + state.contextBudgetCorrectionTokens, state.estimatedInputTokens)
+    }
+
     @Test
     fun restoresConfiguredWindowAndEstimatesCompressedContextWithoutUiNotices() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
@@ -144,6 +151,7 @@ class MaryControllerUiMetadataTest {
             ready(controller)
             assertEquals(restored.id, controller.sessionId)
             assertEquals(64000, controller.state.value.contextWindowTokens)
+            assertComposition(controller.state.value)
             assertEquals("", controller.state.value.provider.apiKey)
             assertEquals("gpt-5.2", controller.state.value.provider.model)
             assertTrue(controller.state.value.entries.any { it is ChatEntry.Notice })
@@ -190,12 +198,15 @@ class MaryControllerUiMetadataTest {
             ready(controller)
             assertNull(controller.state.value.usage)
             assertEquals(64000, controller.state.value.contextWindowTokens)
+            assertComposition(controller.state.value)
             assertEquals("gpt-5.2", controller.state.value.provider.model)
             controller.newSession()
             ready(controller)
             assertNull(controller.state.value.usage)
             assertNotNull(controller.state.value.estimatedInputTokens)
+            assertComposition(controller.state.value)
             assertEquals(64000, controller.state.value.contextWindowTokens)
+            assertComposition(controller.state.value)
         } finally {
             scope.cancel()
         }
@@ -255,6 +266,10 @@ class MaryControllerUiMetadataTest {
             controller.setReasoningEffort(ReasoningEffort.HIGH)
             assertTrue(entered.await(10, TimeUnit.SECONDS))
             assertTrue(controller.state.value.configuring)
+            assertNull(controller.state.value.contextComposition)
+            assertNull(controller.state.value.estimatedInputTokens)
+            assertNull(controller.state.value.contextComposition)
+            assertEquals(0, controller.state.value.contextBudgetCorrectionTokens)
             controller.setReasoningEffort(ReasoningEffort.LOW)
             controller.send("Too early")
             assertEquals(0, requests)
@@ -446,6 +461,8 @@ class MaryControllerUiMetadataTest {
             val controller = controller(scope, settings, AgentSessionStore(temporary.root))
             ready(controller)
             assertNull(controller.state.value.estimatedInputTokens)
+            assertNull(controller.state.value.contextComposition)
+            assertEquals(0, controller.state.value.contextBudgetCorrectionTokens)
             assertEquals("", controller.state.value.provider.apiKey)
             controller.setReasoningEffort(ReasoningEffort.HIGH)
             assertEquals(0, settings.writes)
@@ -453,13 +470,172 @@ class MaryControllerUiMetadataTest {
             controller.refreshConfiguration()
             ready(controller)
             assertNotNull(controller.state.value.estimatedInputTokens)
+            assertComposition(controller.state.value)
             settings.failure = true
             controller.refreshConfiguration()
             ready(controller)
             assertNull(controller.state.value.estimatedInputTokens)
+            assertNull(controller.state.value.contextComposition)
+            assertEquals(0, controller.state.value.contextBudgetCorrectionTokens)
             assertFalse(controller.state.value.configuring)
         } finally {
             scope.cancel()
         }
     }
+    @Test
+    fun modelRefreshDuringTurnNeverPublishesOldRequestUnderNewCapacity() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        try {
+            val settings = Settings()
+            val finish = kotlinx.coroutines.CompletableDeferred<Unit>()
+            val controller = controller(scope, settings, AgentSessionStore(temporary.root)) { config ->
+                maryTestConnection(config) { _, _ ->
+                    emit(StreamFrame.TextDelta("Waiting"))
+                    finish.await()
+                    emit(StreamFrame.TextComplete("Waiting"))
+                    emit(StreamFrame.End("stop", ResponseMetaInfo.Empty.copy(inputTokensCount = 999)))
+                }
+            }
+            ready(controller)
+            controller.send("Original model")
+            eventually { controller.state.value.entries.any { it is ChatEntry.AssistantMessage } }
+            assertComposition(controller.state.value)
+            settings.value = settings.value.copy(configuration = settings.load().copy(
+                provider = settings.load().provider.copy(model = "changed-model", contextWindowTokens = 128000)))
+            controller.refreshConfiguration()
+            eventually { !controller.state.value.configuring }
+            assertEquals("changed-model", controller.state.value.provider.model)
+            assertEquals(128000, controller.state.value.contextWindowTokens)
+            assertNull(controller.state.value.contextComposition)
+            assertNull(controller.state.value.usage)
+            finish.complete(Unit)
+            ready(controller)
+            assertNull(controller.state.value.usage)
+            assertComposition(controller.state.value)
+            assertEquals(0, controller.state.value.contextBudgetCorrectionTokens)
+        } finally { scope.cancel() }
+    }
+
+    @Test
+    fun cancelRebuildsCommittedCompositionWithoutOldRunCalibration() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        try {
+            val settings = Settings()
+            val controller = controller(scope, settings, AgentSessionStore(temporary.root)) { config ->
+                maryTestConnection(config) { _, _ ->
+                    emit(StreamFrame.TextDelta("Unfinished"))
+                    awaitCancellation()
+                }
+            }
+            ready(controller)
+            controller.send("Cancel this request")
+            eventually { controller.state.value.entries.any { it is ChatEntry.AssistantMessage } }
+            assertComposition(controller.state.value)
+            controller.cancel()
+            ready(controller)
+            assertComposition(controller.state.value)
+            assertEquals(0, controller.state.value.contextBudgetCorrectionTokens)
+            controller.newSession()
+            ready(controller)
+            assertComposition(controller.state.value)
+            assertNull(controller.state.value.usage)
+        } finally { scope.cancel() }
+    }
+
+    @Test
+    fun apiCalibrationRemainsSeparateFromPayloadSlicesOnNextRequest() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        try {
+            val settings = Settings().also { it.value = it.value.copy(approvalMode = ApprovalMode.ALLOW_ALL) }
+            lateinit var controller: MaryController
+            var firstProviderInput: Int? = null
+            val tools = object : ToolEnvironment {
+                override fun availableTools() = listOf(ToolSpec("read", "Read a fixture", risk = ToolRisk.READ_ONLY))
+                override suspend fun execute(toolName: String, args: JsonObject): ToolResult {
+                    // Hold the tool loop until the UI collector has published the first usage.
+                    eventually { controller.state.value.usage?.inputTokens == 12000 }
+                    firstProviderInput = controller.state.value.usage?.inputTokens
+                    return ToolResult.ok("Fixture")
+                }
+            }
+            var calls = 0
+            controller = MaryController(RuntimeEnvironment.getApplication(), scope,
+                tools = tools, settings = settings, store = AgentSessionStore(temporary.root),
+                connectionOverride = { config -> maryTestConnection(config) { _, _ ->
+                    if (calls++ == 0) {
+                        emit(StreamFrame.ToolCallComplete("read_call", "read", "{}", 0))
+                        emit(StreamFrame.End("tool_calls", ResponseMetaInfo.Empty.copy(inputTokensCount = 12000)))
+                    } else {
+                        emit(StreamFrame.TextDelta("Waiting"))
+                        awaitCancellation()
+                    }
+                } }, resolveText = { "Context decision" })
+            ready(controller)
+            controller.send("Read fixture")
+            eventually { calls >= 2 && controller.state.value.entries.any { it is ChatEntry.AssistantMessage } }
+            val state = controller.state.value
+            assertComposition(state)
+            assertTrue(state.contextBudgetCorrectionTokens > 0)
+            assertEquals(12000, firstProviderInput)
+            // Existing per-request TurnStarted clears API counters, not the safety correction.
+            assertNull(state.usage)
+            assertTrue(requireNotNull(state.contextComposition).totalTokens < requireNotNull(state.estimatedInputTokens))
+            controller.cancel()
+            ready(controller)
+            assertComposition(controller.state.value)
+            assertEquals(0, controller.state.value.contextBudgetCorrectionTokens)
+        } finally { scope.cancel() }
+    }
+
+    @Test
+    fun modelPublishClearsBudgetRewrittenWhileSettingsLoadWasPending() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val entered = CountDownLatch(1)
+        val releaseSettings = CountDownLatch(1)
+        try {
+            val settings = Settings().also { it.value = it.value.copy(approvalMode = ApprovalMode.ALLOW_ALL) }
+            val releaseFirstResponse = kotlinx.coroutines.CompletableDeferred<Unit>()
+            val tools = object : ToolEnvironment {
+                override fun availableTools() = listOf(ToolSpec("read", "Fixture", risk = ToolRisk.READ_ONLY))
+                override suspend fun execute(toolName: String, args: JsonObject) = ToolResult.ok("Result")
+            }
+            var calls = 0
+            val controller = MaryController(RuntimeEnvironment.getApplication(), scope,
+                tools = tools, settings = settings, store = AgentSessionStore(temporary.root),
+                connectionOverride = { config -> maryTestConnection(config) { _, _ ->
+                    if (calls++ == 0) {
+                        releaseFirstResponse.await()
+                        emit(StreamFrame.ToolCallComplete("read_call", "read", "{}", 0))
+                        emit(StreamFrame.End("tool_calls"))
+                    } else {
+                        emit(StreamFrame.TextDelta("Waiting"))
+                        awaitCancellation()
+                    }
+                } }, resolveText = { "Context decision" })
+            ready(controller)
+            controller.send("Original request")
+            eventually { calls == 1 }
+            settings.value = settings.value.copy(configuration = settings.load().copy(
+                provider = settings.load().provider.copy(model = "new-model", contextWindowTokens = 128000)))
+            settings.beforeLoad = { entered.countDown(); check(releaseSettings.await(10, TimeUnit.SECONDS)) }
+            controller.refreshConfiguration()
+            assertTrue(entered.await(10, TimeUnit.SECONDS))
+            assertNull(controller.state.value.estimatedInputTokens)
+            releaseFirstResponse.complete(Unit)
+            eventually { calls >= 2 }
+            // The old request can check its next tool-loop budget while configuration IO waits.
+            assertTrue(controller.state.value.configuring)
+            assertNotNull(controller.state.value.estimatedInputTokens)
+            releaseSettings.countDown()
+            eventually { !controller.state.value.configuring }
+            assertEquals("new-model", controller.state.value.provider.model)
+            assertNull(controller.state.value.estimatedInputTokens)
+            assertNull(controller.state.value.contextComposition)
+            assertEquals(0, controller.state.value.contextBudgetCorrectionTokens)
+            controller.cancel()
+            ready(controller)
+            assertComposition(controller.state.value)
+        } finally { releaseSettings.countDown(); scope.cancel() }
+    }
+
 }

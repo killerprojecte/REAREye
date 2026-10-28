@@ -3,6 +3,7 @@ package hk.uwu.reareye.agent.context
 import hk.uwu.reareye.agent.interaction.AskCallback
 import hk.uwu.reareye.agent.koog.KoogTranscriptCodec
 import hk.uwu.reareye.agent.model.ChatMessage
+import hk.uwu.reareye.agent.model.MessageRole
 import hk.uwu.reareye.agent.model.ToolSpec
 
 /** The system prompt and tool definitions stay separate so compression never rewrites the prefix. */
@@ -36,29 +37,53 @@ object ContextBudget {
         systemPrompt: String,
         tools: List<ToolSpec>,
         messages: List<ChatMessage>
-    ): Int {
-        var total = TokenBudgetEstimator.estimateTokens(systemPrompt).toLong() + 16
+    ): Int = estimateComposition(systemPrompt, tools, messages).totalTokens
+
+    /** Same arithmetic as budgeting, with explicit estimate-only provenance and no raw payload. */
+    fun estimateComposition(
+        systemPrompt: String,
+        tools: List<ToolSpec>,
+        messages: List<ChatMessage>
+    ): ContextComposition {
+        val segments = ArrayList<ContextSegment>()
+        fun add(category: ContextCategory, tokens: Int, messageIndex: Int? = null) {
+            if (tokens > 0) segments += ContextSegment(category, tokens, messageIndex)
+        }
+        fun text(category: ContextCategory, value: String, messageIndex: Int? = null) =
+            add(category, TokenBudgetEstimator.estimateTokens(value), messageIndex)
+        text(ContextCategory.SYSTEM, systemPrompt)
+        add(ContextCategory.FORMATTING, 16)
         tools.forEach {
-            total += TokenBudgetEstimator.estimateTokens(it.name + it.description + it.parametersSchema())
-                .toLong() + 16
+            text(ContextCategory.TOOL_DEFINITIONS, it.name + it.description + it.parametersSchema())
+            add(ContextCategory.FORMATTING, 16)
         }
         KoogTranscriptCodec.validate(messages)
-        messages.forEach { message ->
+        messages.forEachIndexed { index, message ->
             message.nativeEncoding?.let {
-                // Include attachments, signed/encrypted reasoning, metadata and tool parts, not only display text.
-                total += TokenBudgetEstimator.estimateTokens(it.message.toString()).toLong() + 12
-                return@forEach
+                // Include attachments, signed/encrypted reasoning and metadata once. Their raw
+                // native encoding cannot be reliably split using the display-only projection.
+                text(ContextCategory.NATIVE_PROTOCOL, it.message.toString(), index)
+                add(ContextCategory.FORMATTING, 12, index)
+                return@forEachIndexed
             }
-            total += 12 + TokenBudgetEstimator.estimateTokens(message.content.orEmpty()).toLong()
-            total += TokenBudgetEstimator.estimateTokens(message.name.orEmpty() + message.toolCallId.orEmpty())
+            add(ContextCategory.FORMATTING, 12, index)
+            val category = when (message.role) {
+                MessageRole.SYSTEM -> ContextCategory.SYSTEM
+                MessageRole.USER -> ContextCategory.USER
+                MessageRole.ASSISTANT -> ContextCategory.ASSISTANT
+                MessageRole.TOOL -> ContextCategory.TOOL_RESULTS
+            }
+            text(category, message.content.orEmpty(), index)
+            text(ContextCategory.FORMATTING, message.name.orEmpty() + message.toolCallId.orEmpty(), index)
             message.toolCalls.forEach {
-                total += TokenBudgetEstimator.estimateTokens(it.id + it.name + it.argumentsJson)
-                    .toLong() + 12
+                text(ContextCategory.TOOL_CALLS, it.id + it.name + it.argumentsJson, index)
+                add(ContextCategory.FORMATTING, 12, index)
             }
             message.protocolItems.forEach {
-                total += TokenBudgetEstimator.estimateTokens(it.toString()).toLong() + 8
+                text(ContextCategory.NATIVE_PROTOCOL, it.toString(), index)
+                add(ContextCategory.FORMATTING, 8, index)
             }
         }
-        return total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        return ContextComposition.fromSegments(segments)
     }
 }

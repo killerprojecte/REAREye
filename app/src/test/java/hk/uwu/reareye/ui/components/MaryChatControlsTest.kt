@@ -253,6 +253,25 @@ class MaryChatControlsTest {
     }
 
     @Test
+    fun contextSegmentHitMappingPreservesProportionsAndHandlesUnknownInput() {
+        val segments = listOf(
+            hk.uwu.reareye.agent.context.ContextSegment(hk.uwu.reareye.agent.context.ContextCategory.SYSTEM, 0),
+            hk.uwu.reareye.agent.context.ContextSegment(hk.uwu.reareye.agent.context.ContextCategory.USER, 25),
+            hk.uwu.reareye.agent.context.ContextSegment(hk.uwu.reareye.agent.context.ContextCategory.ASSISTANT, 75),
+        )
+        assertNull(contextSegmentIndexAt(emptyList(), 0.5f))
+        assertNull(contextSegmentIndexAt(segments.take(1), 0.5f))
+        assertNull(contextSegmentIndexAt(segments, Float.NaN))
+        assertNull(contextSegmentIndexAt(segments, Float.POSITIVE_INFINITY))
+        assertEquals(1, contextSegmentIndexAt(segments, -1f))
+        assertEquals(1, contextSegmentIndexAt(segments, 0f))
+        assertEquals(1, contextSegmentIndexAt(segments, 0.249f))
+        assertEquals(2, contextSegmentIndexAt(segments, 0.25f))
+        assertEquals(2, contextSegmentIndexAt(segments, 1f))
+        assertEquals(2, contextSegmentIndexAt(segments, 2f))
+    }
+
+    @Test
     fun contextEstimateIsDistinctFromLatestBilledInputAndCache() {
         val summary =
             MaryUsageSummary(250, 1000, ChatEvent.Usage(inputTokens = 200, cachedInputTokens = 100))
