@@ -582,6 +582,8 @@ internal class PatchedOpenAIClient(
     ): Flow<StreamFrame> {
         val state = ProtocolState()
         return channelFlow {
+            val responses =
+                model.supports(ai.koog.prompt.llm.LLMCapability.OpenAIEndpoint.Responses)
             val completions =
                 java.util.concurrent.ConcurrentLinkedQueue<StreamFrame.CompleteFrame>()
             state.emitReady =
@@ -603,8 +605,6 @@ internal class PatchedOpenAIClient(
                     } ?: frame)
 
                     is StreamFrame.End -> {
-                        val responses =
-                            model.supports(ai.koog.prompt.llm.LLMCapability.OpenAIEndpoint.Responses)
                         require(if (responses) state.stopped else state.stopped || state.finishReason != null) {
                             "OpenAI stream ended without a protocol completion marker"
                         }
@@ -620,7 +620,21 @@ internal class PatchedOpenAIClient(
                 }
             }
             require(state.ended) { "OpenAI stream ended before final metadata" }
-            completions.toList().sortedBy { it.index ?: Int.MAX_VALUE }.forEach { send(it) }
+            val completed = completions.toList()
+            // Chat indices identify choices, not content blocks. Koog flushes a text segment
+            // when reasoning/tools begin, so one choice can have several TextComplete frames.
+            // Match the already-streamed choice text; keep the first text's position and never
+            // deduplicate equal segments. Responses retains its distinct output-item identities.
+            val chatText = mutableMapOf<Int?, StringBuilder>()
+            if (!responses) completed.filterIsInstance<StreamFrame.TextComplete>().forEach {
+                chatText.getOrPut(it.index) { StringBuilder() }.append(it.text)
+            }
+            val normalized = completed.mapNotNull { frame ->
+                if (!responses && frame is StreamFrame.TextComplete) {
+                    chatText.remove(frame.index)?.let { frame.copy(text = it.toString()) }
+                } else frame
+            }
+            normalized.sortedBy { it.index ?: Int.MAX_VALUE }.forEach { send(it) }
             send(requireNotNull(end))
         }.flowOn(state)
     }
