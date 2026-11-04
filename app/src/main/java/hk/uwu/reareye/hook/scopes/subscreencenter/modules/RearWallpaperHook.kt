@@ -58,6 +58,9 @@ import org.luckypray.dexkit.annotations.DexKitExperimentalApi
 import org.luckypray.dexkit.query.enums.MatchType
 import org.luckypray.dexkit.query.matchers.base.AccessFlagsMatcher
 import org.luckypray.dexkit.result.FieldData
+import hk.uwu.reareye.utils.AndroidSharedRuntimeFileOperations
+import hk.uwu.reareye.utils.RuntimeJsonFormat
+import hk.uwu.reareye.utils.SharedRuntimeFileStore
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.lang.reflect.Modifier
@@ -221,6 +224,14 @@ class RearWallpaperHook : RoxyHooker() {
     private val pendingHandlerRunnables = IdentityHashMap<Handler, MutableSet<Runnable>>()
     private val pendingViewRunnables = ArrayList<Pair<View, Runnable>>()
     private val runtimeLock = Any()
+    private val runtimeStore = SharedRuntimeFileStore(
+        AndroidSharedRuntimeFileOperations(), RuntimeJsonFormat::validate,
+    )
+
+    private data class RuntimeUpdate(
+        val snapshot: SharedRuntimeFileStore.Snapshot,
+        val array: JSONArray,
+    )
 
     @Volatile
     private var cachedSelectedWallpaperId: Int? = null
@@ -2209,6 +2220,8 @@ class RearWallpaperHook : RoxyHooker() {
 
         return runCatching {
             synchronized(runtimeLock) {
+                val runtimeUpdate = readRuntimeForUpdate()
+                val runtimeArray = runtimeUpdate.array
                 val now = System.currentTimeMillis()
                 val resId = "$IMPORT_RES_PREFIX${now}_${UUID.randomUUID().shortId()}"
                 val applyId = UUID.randomUUID().shortId()
@@ -2250,7 +2263,6 @@ class RearWallpaperHook : RoxyHooker() {
                 )
                 writeTextAtomically(metadataFile, metadataJson.toString(2))
 
-                val runtimeArray = readRuntimeArray()
                 val position = maxRuntimePosition(runtimeArray) + 1
                 val item = buildRuntimeItem(
                     resId = resId,
@@ -2263,7 +2275,7 @@ class RearWallpaperHook : RoxyHooker() {
                     values = metadataValues,
                 )
                 runtimeArray.put(item)
-                writeRuntimeArray(runtimeArray)
+                writeRuntimeArray(runtimeUpdate, runtimeArray)
                 ensureReadableRecursive(targetDir)
                 refreshRuntimePanels()
                 debugLog(
@@ -2292,7 +2304,8 @@ class RearWallpaperHook : RoxyHooker() {
                     false,
                     error = "host context is not ready",
                 )
-                val runtimeArray = readRuntimeArray()
+                val runtimeUpdate = readRuntimeForUpdate()
+                val runtimeArray = runtimeUpdate.array
                 val index = findRuntimeItemIndex(runtimeArray, wallpaperId)
                 if (index < 0) {
                     return@synchronized operationResult(
@@ -2354,7 +2367,7 @@ class RearWallpaperHook : RoxyHooker() {
                     previewPath = previewPath,
                     values = values,
                 )
-                writeRuntimeArray(runtimeArray)
+                writeRuntimeArray(runtimeUpdate, runtimeArray)
                 ensureReadableRecursive(metadataFile.parentFile ?: metadataFile)
                 refreshRuntimePanels()
                 operationResult(true, wallpaperId = wallpaperId)
@@ -2384,7 +2397,8 @@ class RearWallpaperHook : RoxyHooker() {
 
         return runCatching {
             synchronized(runtimeLock) {
-                val runtimeArray = readRuntimeArray()
+                val runtimeUpdate = readRuntimeForUpdate()
+                val runtimeArray = runtimeUpdate.array
                 val index = findRuntimeItemIndex(runtimeArray, wallpaperId)
                 if (index < 0) {
                     return@synchronized operationResult(
@@ -2470,7 +2484,7 @@ class RearWallpaperHook : RoxyHooker() {
                     )
                     item.put("resLocalPath", packageFile.absolutePath)
                     item.put("resSnapshotPath", packageFile.absolutePath)
-                    writeRuntimeArray(runtimeArray)
+                    writeRuntimeArray(runtimeUpdate, runtimeArray)
                     ensureReadableRecursive(targetDir)
                     refreshRuntimePanels()
                     operationResult(true, wallpaperId = wallpaperId)
@@ -2487,7 +2501,8 @@ class RearWallpaperHook : RoxyHooker() {
     private fun PackageScope.generateWallpaperPreviewInternal(wallpaperId: Int): Bundle {
         return runCatching {
             synchronized(runtimeLock) {
-                val runtimeArray = readRuntimeArray()
+                val runtimeUpdate = readRuntimeForUpdate()
+                val runtimeArray = runtimeUpdate.array
                 val index = findRuntimeItemIndex(runtimeArray, wallpaperId)
                 if (index < 0) {
                     return@synchronized operationResult(
@@ -2540,7 +2555,7 @@ class RearWallpaperHook : RoxyHooker() {
                     previewPath = previewPath,
                     values = values,
                 )
-                writeRuntimeArray(runtimeArray)
+                writeRuntimeArray(runtimeUpdate, runtimeArray)
                 ensureReadableRecursive(metadataFile.parentFile ?: metadataFile)
                 refreshRuntimePanels()
                 debugLog(
@@ -2557,7 +2572,8 @@ class RearWallpaperHook : RoxyHooker() {
     private fun PackageScope.deleteWallpaperInternal(wallpaperId: Int): Bundle {
         return runCatching {
             synchronized(runtimeLock) {
-                val runtimeArray = readRuntimeArray()
+                val runtimeUpdate = readRuntimeForUpdate()
+                val runtimeArray = runtimeUpdate.array
                 val index = findRuntimeItemIndex(runtimeArray, wallpaperId)
                 if (index < 0) {
                     return@synchronized operationResult(
@@ -2581,7 +2597,7 @@ class RearWallpaperHook : RoxyHooker() {
                 for (i in 0 until runtimeArray.length()) {
                     if (i != index) nextArray.put(runtimeArray.getJSONObject(i))
                 }
-                writeRuntimeArray(nextArray)
+                writeRuntimeArray(runtimeUpdate, nextArray)
                 deleteImportedFiles(record)
                 refreshRuntimePanels()
                 operationResult(true, wallpaperId = wallpaperId)
@@ -2627,12 +2643,14 @@ class RearWallpaperHook : RoxyHooker() {
     ): Bundle {
         return runCatching {
             synchronized(runtimeLock) {
-                val runtimeArray = readRuntimeArray()
+                val runtimeUpdate = readRuntimeForUpdate(checkWritable = false)
+                val runtimeArray = runtimeUpdate.array
                 val index = findRuntimeItemIndex(runtimeArray, wallpaperId)
                 val entry = loadWallpaperEntries().firstOrNull { it.wallpaperId == wallpaperId }
                 if (index < 0) {
                     return@synchronized saveExistingWallpaperTemplateConfig(entry, oneConfigJson)
                 }
+                runtimeStore.checkWritable(runtimeUpdate.snapshot)
 
                 val item = runtimeArray.getJSONObject(index)
                 val record = item.toRuntimeRecord() ?: return@synchronized operationResult(
@@ -2642,7 +2660,7 @@ class RearWallpaperHook : RoxyHooker() {
                 val normalizedJson = oneConfigJson?.trim().orEmpty()
                 if (normalizedJson.isBlank()) {
                     item.remove("mamlEditConfigPath")
-                    writeRuntimeArray(runtimeArray)
+                    writeRuntimeArray(runtimeUpdate, runtimeArray)
                     refreshRuntimePanels()
                     debugLog("saveWallpaperTemplateConfig reset wallpaperId=$wallpaperId")
                     return@synchronized operationResult(true, wallpaperId = wallpaperId)
@@ -2669,7 +2687,7 @@ class RearWallpaperHook : RoxyHooker() {
                 val configFile = resolveTemplateConfigFile(record)
                 writeTextAtomically(configFile, normalizedConfig)
                 item.put("mamlEditConfigPath", configFile.absolutePath)
-                writeRuntimeArray(runtimeArray)
+                writeRuntimeArray(runtimeUpdate, runtimeArray)
                 ensureReadableRecursive(configFile.parentFile ?: configFile)
                 refreshRuntimePanels()
                 debugLog(
@@ -3621,6 +3639,7 @@ class RearWallpaperHook : RoxyHooker() {
         }
     }
 
+    // Display-only best effort; NEVER use this result as a mutation baseline.
     private fun PackageScope.readRuntimeArray(): JSONArray {
         val file = resolveRuntimeFile()
         if (!file.isFile) return JSONArray()
@@ -3632,10 +3651,16 @@ class RearWallpaperHook : RoxyHooker() {
         }
     }
 
-    private fun PackageScope.writeRuntimeArray(array: JSONArray) {
-        val file = resolveRuntimeFile()
-        writeTextAtomically(file, array.toString(2))
-        ensureReadable(file)
+    // Mutations never use readRuntimeArray's display-only empty fallback.
+    private fun PackageScope.readRuntimeForUpdate(checkWritable: Boolean = true): RuntimeUpdate {
+        val snapshot = runtimeStore.read(resolveRuntimeFile())
+        if (checkWritable) runtimeStore.checkWritable(snapshot)
+        return RuntimeUpdate(snapshot, JSONArray(snapshot.state.text))
+    }
+
+    private fun PackageScope.writeRuntimeArray(update: RuntimeUpdate, array: JSONArray) {
+        runtimeStore.write(update.snapshot, array.toString(2))
+        // Do not chmod the shared system file after committing preserved metadata.
     }
 
     private fun PackageScope.maxRuntimePosition(array: JSONArray): Int {
