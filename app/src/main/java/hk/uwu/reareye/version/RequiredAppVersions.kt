@@ -15,11 +15,13 @@ import hk.uwu.reareye.version.RequiredAppVersions.requirements
  * @param requiredVersionCode the lowest acceptable `versionCode`, see [inclusive].
  * @param inclusive `true` when [requiredVersionCode] itself is acceptable, `false` when the
  * installed code must be strictly greater.
+ * @param prerequisitePackageName package that must be installed for this requirement to apply.
  */
 data class RequiredAppVersion(
     val packageName: String,
     val requiredVersionCode: Long,
     val inclusive: Boolean = false,
+    val prerequisitePackageName: String? = null,
 ) {
     fun isSatisfiedBy(versionCode: Long): Boolean =
         if (inclusive) versionCode >= requiredVersionCode else versionCode > requiredVersionCode
@@ -34,27 +36,28 @@ data class RequiredAppVersion(
  * @see AppVersionGate
  */
 object RequiredAppVersions {
+    private const val SUBSCREEN_CENTER_PACKAGE = "com.xiaomi.subscreencenter"
+
     val requirements: List<RequiredAppVersion> = listOf(
         // The rear screen container. Older builds lack the hooks and template fields this module
         // writes, so running against them silently corrupts cards / wallpapers.
         RequiredAppVersion(
-            packageName = "com.xiaomi.subscreencenter",
+            packageName = SUBSCREEN_CENTER_PACKAGE,
             requiredVersionCode = 426_091_816L,
             inclusive = true
         ),
         RequiredAppVersion(
             packageName = "com.android.thememanager",
             requiredVersionCode = 11_531L,
-            inclusive = true
+            inclusive = true,
+            prerequisitePackageName = SUBSCREEN_CENTER_PACKAGE
         ),
         RequiredAppVersion(
             packageName = "com.miui.personalassistant",
             requiredVersionCode = 2_541_820L,
-            inclusive = true
+            inclusive = true,
+            prerequisitePackageName = SUBSCREEN_CENTER_PACKAGE
         ),
-        // Theme manager. Kept commented until a minimum code is decided; the dialog already
-        // handles any number of entries.
-        // RequiredAppVersion("com.android.thememanager", 426_000_000L),
     )
 }
 
@@ -100,6 +103,8 @@ data class AppVersionViolation(
  *
  * Uninstalled target apps are skipped: there is nothing to gate, and reporting a missing package
  * here would block the module on devices that simply do not ship that component.
+ * Rear-screen companion app requirements also need their prerequisite package to be installed;
+ * its version does not affect whether those requirements apply.
  */
 object AppVersionGate {
     fun evaluate(
@@ -107,8 +112,26 @@ object AppVersionGate {
         requirements: List<RequiredAppVersion> = RequiredAppVersions.requirements,
     ): List<AppVersionViolation> {
         val packageManager = context.packageManager
+        return evaluate(requirements) { readInstalledAppVersion(packageManager, it) }
+    }
+
+    internal fun evaluate(
+        requirements: List<RequiredAppVersion>,
+        readInstalled: (String) -> InstalledAppVersion?,
+    ): List<AppVersionViolation> {
+        val installedApps = mutableMapOf<String, InstalledAppVersion?>()
+        fun installedApp(packageName: String): InstalledAppVersion? {
+            if (!installedApps.containsKey(packageName)) {
+                installedApps[packageName] = readInstalled(packageName)
+            }
+            return installedApps[packageName]
+        }
+
         return requirements.mapNotNull { requirement ->
-            val installed = readInstalledAppVersion(packageManager, requirement.packageName)
+            requirement.prerequisitePackageName?.let { prerequisite ->
+                if (installedApp(prerequisite) == null) return@mapNotNull null
+            }
+            val installed = installedApp(requirement.packageName)
                 ?: return@mapNotNull null
             if (requirement.isSatisfiedBy(installed.versionCode)) return@mapNotNull null
             AppVersionViolation(
