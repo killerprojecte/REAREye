@@ -147,6 +147,43 @@ class WidgetSessionTest {
     }
 
     @Test
+    fun unreadableBindingNeverAllocatesOnRepeatedClicksAndCanRecoverAfterRepair() {
+        val fake = Fake().apply { saved(7); failures["read"] = failure() }
+        val session = WidgetSessions(fake).session()
+        repeat(3) { session.click() }
+        assertEquals(WidgetState.ERROR, session.state)
+        assertNull(session.id)
+        assertEquals(8, fake.nextId)
+        assertEquals(0, fake.binds)
+        assertEquals(0, fake.requests)
+        assertTrue(fake.deleted.isEmpty())
+        fake.failures.clear()
+        session.click()
+        assertEquals(WidgetState.READY, session.state)
+        assertEquals(7, session.id)
+        assertEquals(8, fake.nextId)
+    }
+
+    @Test
+    fun unreadableBindingRefusesExplicitRemovalAndPreservesEveryOwnedId() {
+        val failure = failure()
+        val fake = Fake().apply { saved(7); failures["read"] = failure; owned.add(8) }
+        val sessions = WidgetSessions(fake)
+        val session = sessions.session()
+        fake.reportedFailures.clear()
+        assertFalse(sessions.deleteCardBinding("key"))
+        assertEquals(WidgetState.FINISHED, session.state)
+        assertReported(fake, "delete-binding", failure)
+        assertEquals(setOf(7, 8), fake.owned)
+        assertTrue(fake.records.containsKey("key"))
+        assertTrue(fake.deleted.isEmpty())
+        fake.failures.clear()
+        assertTrue(sessions.deleteCardBinding("key"))
+        assertEquals(listOf(7), fake.deleted)
+        assertEquals(setOf(8), fake.owned)
+    }
+
+    @Test
     fun clickFailureReportsStageWithoutDeletingOrRebindingAllocatedId() {
         val failure = failure("bind failed")
         val fake = Fake().apply { failures["bind"] = failure }

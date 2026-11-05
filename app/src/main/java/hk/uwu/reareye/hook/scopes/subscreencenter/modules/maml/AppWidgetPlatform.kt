@@ -18,13 +18,15 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import hk.uwu.reareye.hook.support.YLog
-import org.json.JSONObject
 
 /** Uses the hooked application's Context, package and UID, never the module application's identity. */
 internal class AppWidgetPlatform(context: Context) : WidgetPlatform {
     private val context = context.applicationContext ?: context
     private val preferences =
         this.context.getSharedPreferences("reareye.maml.appwidget.v1", Context.MODE_PRIVATE)
+    private val bindings = WidgetBindingStore(preferences) { failure ->
+        YLog.warn("AppWidget typed preference read failed; restored binding from validated snapshot", failure)
+    }
     private val manager = AppWidgetManager.getInstance(this.context)
     private val hostId: Int = preferences.getInt("host_id", 0x52455747).also {
         check(preferences.edit().putInt("host_id", it).commit()) { "Cannot persist widget host ID" }
@@ -56,30 +58,9 @@ internal class AppWidgetPlatform(context: Context) : WidgetPlatform {
         runCatching { YLog.warn("AppWidget platform failed: operation=$operation", throwable) }
     }
 
-    override fun read(key: String): WidgetBinding? {
-        val value = preferences.getString("binding:$key", null) ?: return null
-        val json = JSONObject(value)
-        val phase = json.optString("phase").takeIf { it.isNotEmpty() }?.let { value ->
-            WidgetPhase.entries.firstOrNull { it.name == value }
-        }
-        return WidgetBinding(
-            json.getInt("id"),
-            json.getString("provider"),
-            json.getBoolean("complete"),
-            phase
-        )
-    }
+    override fun read(key: String): WidgetBinding? = bindings.read(key)
 
-    override fun write(key: String, binding: WidgetBinding?) {
-        val editor = preferences.edit()
-        if (binding == null) editor.remove("binding:$key")
-        else editor.putString(
-            "binding:$key", JSONObject().put("id", binding.id)
-                .put("provider", binding.provider).put("complete", binding.complete)
-                .put("phase", binding.phase?.name).toString()
-        )
-        check(editor.commit()) { "Cannot persist widget binding" }
-    }
+    override fun write(key: String, binding: WidgetBinding?) = bindings.write(key, binding)
 
     /** Disabled by default; preference switch is shared with the hooked host, not module prefs. */
     override fun diagnose(

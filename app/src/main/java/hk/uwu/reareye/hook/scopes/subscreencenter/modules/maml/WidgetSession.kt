@@ -81,10 +81,17 @@ internal class WidgetSessions(private val platform: WidgetPlatform) {
     /** Explicit user deletion. A live session owns its key even while paused. */
     fun deleteBinding(key: String): Boolean {
         if (claimed.containsKey(key)) return false
-        val binding = platform.read(key) ?: return true
-        if (binding.id in platform.ownedIds()) platform.delete(binding.id)
-        platform.write(key, null)
-        return true
+        return try {
+            val binding = platform.read(key) ?: return true
+            if (binding.id in platform.ownedIds()) platform.delete(binding.id)
+            platform.write(key, null)
+            true
+        } catch (exception: Exception) {
+            // A caller must retain the card/key when its binding could not be released. In
+            // particular, malformed storage does not authorize deleting an arbitrary host ID.
+            runCatching { platform.reportFailure("delete-binding", exception) }
+            false
+        }
     }
 }
 

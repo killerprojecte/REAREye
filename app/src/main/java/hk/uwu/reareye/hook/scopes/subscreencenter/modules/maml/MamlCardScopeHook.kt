@@ -454,8 +454,10 @@ class MamlCardScopeHook : RoxyHooker() {
                                 ?: hookAppContext?.applicationContext ?: return@delete
                             val file = files(context).config(identity)
                             val keys = targets.mapNotNull { it.second.key }.toMutableSet()
-                            runCatching { bridge.savedKey(file) }.onSuccess { it?.let(keys::add) }
+                            val bindingKeysKnown = runCatching { bridge.savedKey(file) }
+                                .onSuccess { it?.let(keys::add) }
                                 .onFailure { YLog.warn("Could not read removed card binding", it) }
+                                .isSuccess
                             val clean = {
                                 runCatching { bridge.deleteActivity(file) }
                                     .onFailure {
@@ -464,11 +466,11 @@ class MamlCardScopeHook : RoxyHooker() {
                                             it
                                         )
                                     }
-                                keys.filterNot { key ->
+                                val widgetsReleased = keys.filterNot { key ->
                                     targets.any { (root, scope) ->
                                         scope.key == key && bridge.activityPicker(root)
                                     }
-                                }.forEach { key ->
+                                }.map { key ->
                                     runCatching {
                                         check(
                                             AppWidgetPlatform.shared(context).sessions.deleteCardBinding(
@@ -481,9 +483,18 @@ class MamlCardScopeHook : RoxyHooker() {
                                                 "Could not release removed card widget",
                                                 it
                                             )
-                                        }
+                                        }.isSuccess
                                 }
-                                runCatching { check(!file.exists() || file.delete()) { "Cannot delete per-card MAML config" } }
+                                runCatching {
+                                    val deleted = MamlCardCleanup.deleteConfigIfReleased(
+                                        bindingKeysKnown, widgetsReleased
+                                    ) {
+                                        check(!file.exists() || file.delete()) { "Cannot delete per-card MAML config" }
+                                    }
+                                    if (!deleted) {
+                                        YLog.warn("Removed MAML card config retained: widget cleanup incomplete")
+                                    }
+                                }
                                     .onFailure {
                                         YLog.warn(
                                             "Could not delete removed MAML card config",
