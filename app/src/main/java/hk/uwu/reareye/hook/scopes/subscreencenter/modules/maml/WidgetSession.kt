@@ -29,6 +29,9 @@ internal interface WidgetPlatform {
         result: (WidgetResult) -> Unit
     ): (() -> Unit)?
 
+    /** Diagnostic only; implementations must not change widget state. */
+    fun reportFailure(operation: String, throwable: Throwable) {}
+
     fun startListening()
     fun stopListening()
     fun diagnose(
@@ -115,7 +118,7 @@ internal class WidgetSession(
 
     fun initialize() {
         if (restorationDone || state == WidgetState.CONFLICT || state == WidgetState.FINISHED) return
-        guarded {
+        guarded("initialize") {
             val saved = platform.read(key)
             if (saved != null) {
                 id = saved.id
@@ -145,7 +148,7 @@ internal class WidgetSession(
                 WidgetState.READY
             )
         ) return
-        guarded {
+        guarded("click") {
             if (id != null) {
                 recoverSaved()
                 if (state == WidgetState.READY) return@guarded
@@ -247,7 +250,7 @@ internal class WidgetSession(
             if (token != generation || state == WidgetState.FINISHED || id != current) return@request
             cancelRequest = null
             ++generation
-            guarded {
+            guarded("activity-result") {
                 if (!result.accepted || (kind == WidgetRequest.BIND && result.id != current) || (result.id != null && result.id != current)) {
                     recyclePending(explicit = true)
                     state = WidgetState.NEED_BIND
@@ -279,7 +282,7 @@ internal class WidgetSession(
         resumed?.let { this.resumed = it }
         visible?.let { this.visible = it }
         attached?.let { this.attached = it }
-        guarded(clearError = resumeEdge) {
+        guarded("lifecycle", clearError = resumeEdge) {
             owner.active(this, this.resumed && this.visible && this.attached)
             if (resumeEdge && state != WidgetState.WAIT_BIND && state != WidgetState.WAIT_CONFIGURE) {
                 if (!restorationDone) initialize()
@@ -304,12 +307,14 @@ internal class WidgetSession(
             cancel?.invoke()
             if (state != WidgetState.CONFLICT) recyclePending()
         } catch (exception: Exception) {
+            reportFailure("finish", exception)
             error = exception.message
         } finally {
             state = WidgetState.FINISHED
             try {
                 owner.close(this)
             } catch (exception: Exception) {
+                reportFailure("close", exception)
                 error = exception.message
             }
             notifyChanged()
@@ -347,11 +352,17 @@ internal class WidgetSession(
         changed()
     }
 
-    private inline fun guarded(clearError: Boolean = true, block: () -> Unit) {
+    private fun reportFailure(operation: String, throwable: Throwable) {
+        // Logging must never replace the original failure or interrupt recovery.
+        runCatching { platform.reportFailure(operation, throwable) }
+    }
+
+    private inline fun guarded(operation: String, clearError: Boolean = true, block: () -> Unit) {
         try {
             if (clearError) error = null
             block()
         } catch (exception: Exception) {
+            reportFailure(operation, exception)
             error = exception.message ?: exception.javaClass.simpleName
             state = WidgetState.ERROR
         }

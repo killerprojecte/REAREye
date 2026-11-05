@@ -10,6 +10,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
+import hk.uwu.reareye.hook.support.YLog
 import org.w3c.dom.Element
 
 /** XML: <RearAppWidget key="stable-key" provider="package/.Provider" /> */
@@ -185,7 +186,7 @@ internal class AppWidgetElementBackend(
                     ensureSession(context)
                     if (visible && !selectionRejected) session?.click()
                 } catch (exception: Exception) {
-                    showError(exception)
+                    showError(exception, "placeholder-click")
                 }
             }
         }
@@ -198,7 +199,7 @@ internal class AppWidgetElementBackend(
         try {
             ensureSession(context)
         } catch (exception: Exception) {
-            showError(exception)
+            showError(exception, "create-view")
         }
         return root
     }
@@ -265,7 +266,7 @@ internal class AppWidgetElementBackend(
             // mounting explicitly; render's gates and frame/size caches keep this cheap.
             render()
         } catch (exception: Exception) {
-            showError(exception)
+            showError(exception, "inputs")
         }
         diagnostic("inputs")
     }
@@ -279,7 +280,7 @@ internal class AppWidgetElementBackend(
             consumeUserRequest()
             render()
         } catch (exception: Exception) {
-            showError(exception)
+            showError(exception, "initialize-view")
         }
     }
 
@@ -315,7 +316,7 @@ internal class AppWidgetElementBackend(
         try {
             container?.let { ensureSession(it.context) }
         } catch (exception: Exception) {
-            showError(exception)
+            showError(exception, "lifecycle")
         }
     }
 
@@ -411,7 +412,7 @@ internal class AppWidgetElementBackend(
                                         diagnostic("host-created")
                                     } catch (exception: Exception) {
                                         current.fail(exception.message ?: "Widget unavailable")
-                                        showError(exception)
+                                        showError(exception, "create-host-view")
                                     }
                                 }
                             }
@@ -447,7 +448,7 @@ internal class AppWidgetElementBackend(
             }
         } catch (exception: Exception) {
             current.fail(exception.message ?: "Widget unavailable")
-            showError(exception)
+            showError(exception, "render")
         } finally {
             rendering = false
         }
@@ -473,7 +474,7 @@ internal class AppWidgetElementBackend(
         } catch (exception: Exception) {
             sizedView = null
             session?.fail(exception.message ?: "Widget size update failed")
-            showError(exception)
+            showError(exception, "update-size")
         }
     }
 
@@ -489,7 +490,9 @@ internal class AppWidgetElementBackend(
         else oldId?.let { platform?.invalidateSize(it) }
     }
 
-    private fun showError(exception: Exception) {
+    private fun showError(exception: Exception, operation: String = "selection") {
+        // Keep diagnostics independent of UI recovery; never append preference contents.
+        runCatching { YLog.warn("AppWidget backend failed: operation=$operation", exception) }
         // Does not change session state: fail() owns notification, avoiding render/fail recursion.
         clearWidget()
         status?.visibility = View.VISIBLE

@@ -17,6 +17,7 @@ import android.widget.AdapterView
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import hk.uwu.reareye.hook.support.YLog
 import org.json.JSONObject
 
 /** Uses the hooked application's Context, package and UID, never the module application's identity. */
@@ -50,6 +51,10 @@ internal class AppWidgetPlatform(context: Context) : WidgetPlatform {
         AppWidgetHost::class.java.getMethod("removeListener", Int::class.javaPrimitiveType)
     }.getOrNull()
     val sessions = WidgetSessions(this)
+
+    override fun reportFailure(operation: String, throwable: Throwable) {
+        runCatching { YLog.warn("AppWidget platform failed: operation=$operation", throwable) }
+    }
 
     override fun read(key: String): WidgetBinding? {
         val value = preferences.getString("binding:$key", null) ?: return null
@@ -171,10 +176,11 @@ internal class AppWidgetPlatform(context: Context) : WidgetPlatform {
         val released = runCatching {
             viewRegistry.release(id, view, removeSingle = {
                 val method = removeListener
-                method != null && runCatching { method.invoke(host, id) }.isSuccess
+                method != null && runCatching { method.invoke(host, id) }
+                    .onFailure { reportFailure("remove-listener", it) }.isSuccess
             }, clearAll = host::releaseAllViews)
         }.getOrElse {
-            Log.w("REAREye.AppWidget", "Vendor host view cleanup failed for $id", it)
+            reportFailure("release-host-view", it)
             false
         }
         if (!released) Log.w(
@@ -279,7 +285,9 @@ internal class AppWidgetFitHostView(context: Context, private val providerDensit
         if (callback != null && size != lastNotified) {
             runCatching { callback(size) }
                 .onSuccess { lastNotified = size }
-                .onFailure { Log.w("REAREye.AppWidget", "Natural widget size update failed", it) }
+                .onFailure { error ->
+                    runCatching { YLog.warn("AppWidget natural size update failed", error) }
+                }
         }
     }
 

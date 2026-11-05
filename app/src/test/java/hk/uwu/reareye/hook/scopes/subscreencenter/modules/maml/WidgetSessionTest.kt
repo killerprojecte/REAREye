@@ -3,6 +3,7 @@ package hk.uwu.reareye.hook.scopes.subscreencenter.modules.maml
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -25,9 +26,13 @@ class WidgetSessionTest {
         var binds = 0
         var observations = 0
         val diagnostics = mutableListOf<WidgetState>()
+        val failures = mutableMapOf<String, Exception>()
+        val reportedFailures = mutableListOf<Pair<String, Throwable>>()
+        var loggerFailure: Throwable? = null
         var callback: ((WidgetResult) -> Unit)? = null
         var readFailure = false
         override fun read(key: String): WidgetBinding? {
+            failures["read"]?.let { throw it }
             check(!readFailure) { "Temporary service failure" }
             return records[key]
         }
@@ -44,9 +49,15 @@ class WidgetSessionTest {
             diagnostics.add(state)
         }
 
+        override fun reportFailure(operation: String, throwable: Throwable) {
+            reportedFailures.add(operation to throwable)
+            loggerFailure?.let { throw it }
+        }
+
         override fun providerOf(id: Int) = providers[id]
         override fun providerExists(provider: String) = installed
         override fun needsConfiguration(provider: String): Boolean {
+            failures["configuration"]?.let { throw it }
             check(!configurationQueryFailure) { "Widget provider metadata unavailable" }
             return configure
         }
@@ -57,6 +68,7 @@ class WidgetSessionTest {
         }
 
         override fun bind(id: Int, provider: String): Boolean {
+            failures["bind"]?.let { throw it }
             binds++; if (allowed) providers[id] = provider; return allowed
         }
 
@@ -69,14 +81,19 @@ class WidgetSessionTest {
             if (!launcher) return null
             requests++
             callback = result
-            return { /* retain callback deliberately, to simulate a late OS result */ }
+            return {
+                failures["cancel"]?.let { throw it }
+                /* retain callback deliberately, to simulate a late OS result */
+            }
         }
 
         override fun startListening() {
+            failures["start"]?.let { throw it }
             starts++
         }
 
         override fun stopListening() {
+            failures["stop"]?.let { throw it }
             stops++
         }
 
@@ -95,6 +112,154 @@ class WidgetSessionTest {
 
     private fun WidgetSessions.session(key: String = "key", provider: String = "pkg/Provider") =
         open(key, provider) {}.also { it.initialize() }
+
+    private fun failure(message: String = "Value hijacked_bound of type java.lang.String cannot be converted to JSONObject") =
+        IllegalStateException(message, IllegalArgumentException("original platform cause")).apply {
+            addSuppressed(IllegalStateException("original suppressed failure"))
+        }
+
+    private fun assertReported(fake: Fake, operation: String, failure: Throwable) {
+        val report = fake.reportedFailures.single()
+        assertEquals(operation, report.first)
+        assertSame(failure, report.second)
+        assertSame(failure.cause, report.second.cause)
+        assertEquals(failure.message, report.second.message)
+        assertSame(failure.suppressed.single(), report.second.suppressed.single())
+    }
+
+    @Test
+    fun restorationReportsOriginalThrowableAndKeepsSavedBindingAndErrorUiState() {
+        val failure = failure()
+        val fake = Fake().apply { saved(7); failures["read"] = failure }
+        val saved = fake.records.getValue("key")
+        var notifications = 0
+        val session = WidgetSessions(fake).open("key", "pkg/Provider") { notifications++ }
+        session.initialize()
+        assertReported(fake, "initialize", failure)
+        assertEquals(WidgetState.ERROR, session.state)
+        assertEquals(failure.message, session.error)
+        assertNull(session.id)
+        assertSame(saved, fake.records.getValue("key"))
+        assertEquals(1, notifications)
+        assertEquals(8, fake.nextId)
+        assertEquals(0, fake.binds)
+        assertTrue(fake.deleted.isEmpty())
+    }
+
+    @Test
+    fun clickFailureReportsStageWithoutDeletingOrRebindingAllocatedId() {
+        val failure = failure("bind failed")
+        val fake = Fake().apply { failures["bind"] = failure }
+        val session = WidgetSessions(fake).session()
+        session.click()
+        assertReported(fake, "click", failure)
+        assertEquals(WidgetState.ERROR, session.state)
+        assertEquals(failure.message, session.error)
+        assertEquals(1, session.id)
+        assertEquals(WidgetBinding(1, "pkg/Provider", false, WidgetPhase.ALLOCATED), fake.records["key"])
+        assertEquals(2, fake.nextId)
+        assertTrue(fake.deleted.isEmpty())
+    }
+
+    @Test
+    fun activityResultFailureReportsStageAndRetainsBoundIdForRetry() {
+        val failure = failure("configuration metadata failed")
+        val fake = Fake().apply { allowed = false }
+        val session = WidgetSessions(fake).session()
+        session.click()
+        fake.providers[1] = "pkg/Provider"
+        fake.failures["configuration"] = failure
+        fake.callback!!(WidgetResult(true, 1))
+        assertReported(fake, "activity-result", failure)
+        assertEquals(WidgetState.ERROR, session.state)
+        assertEquals(failure.message, session.error)
+        assertEquals(1, session.id)
+        assertEquals(WidgetPhase.BOUND, fake.records.getValue("key").phase)
+        assertEquals(1, fake.requests)
+        assertTrue(fake.deleted.isEmpty())
+    }
+
+    @Test
+    fun lifecycleFailureReportsStageAndKeepsCompletedBinding() {
+        val failure = failure("host listening failed")
+        val fake = Fake().apply { saved(7) }
+        val session = WidgetSessions(fake).session()
+        val saved = fake.records.getValue("key")
+        fake.failures["start"] = failure
+        session.lifecycle(resumed = true, attached = true)
+        assertReported(fake, "lifecycle", failure)
+        assertEquals(WidgetState.ERROR, session.state)
+        assertEquals(failure.message, session.error)
+        assertEquals(7, session.id)
+        assertSame(saved, fake.records.getValue("key"))
+        assertTrue(fake.deleted.isEmpty())
+    }
+
+    @Test
+    fun loggerFailureCannotReplaceOriginalErrorOrPreventRetryAndUiNotification() {
+        val failure = failure()
+        val fake = Fake().apply {
+            saved(7)
+            failures["read"] = failure
+            loggerFailure = AssertionError("logger unavailable")
+        }
+        val saved = fake.records.getValue("key")
+        var notifications = 0
+        val session = WidgetSessions(fake).open("key", "pkg/Provider") { notifications++ }
+        session.initialize()
+        assertReported(fake, "initialize", failure)
+        assertEquals(WidgetState.ERROR, session.state)
+        assertEquals(failure.message, session.error)
+        assertEquals(1, notifications)
+        assertSame(saved, fake.records.getValue("key"))
+
+        fake.failures.clear()
+        session.click()
+        assertEquals(WidgetState.READY, session.state)
+        assertNull(session.error)
+        assertEquals(7, session.id)
+        assertEquals(2, notifications)
+        assertEquals(1, fake.reportedFailures.size)
+        assertEquals(0, fake.binds)
+        assertEquals(8, fake.nextId)
+        assertTrue(fake.deleted.isEmpty())
+    }
+
+    @Test
+    fun finishAndCloseFailuresKeepOriginalThrowablesEvenWhenLoggerFails() {
+        val finishFailure = failure("cancel failed")
+        val closeFailure = failure("stop listening failed")
+        val fake = Fake().apply { allowed = false }
+        val sessions = WidgetSessions(fake)
+        var notifications = 0
+        val session = sessions.open("key", "pkg/Provider") { notifications++ }
+        session.initialize()
+        session.click()
+        session.lifecycle(resumed = true, attached = true)
+        val saved = fake.records.getValue("key")
+        val beforeFinish = notifications
+        fake.failures["cancel"] = finishFailure
+        fake.failures["stop"] = closeFailure
+        fake.loggerFailure = AssertionError("logger unavailable")
+        session.finish()
+
+        assertEquals(listOf("finish", "close"), fake.reportedFailures.map { it.first })
+        assertSame(finishFailure, fake.reportedFailures[0].second)
+        assertSame(finishFailure.cause, fake.reportedFailures[0].second.cause)
+        assertSame(closeFailure, fake.reportedFailures[1].second)
+        assertSame(closeFailure.cause, fake.reportedFailures[1].second.cause)
+        assertEquals(WidgetState.FINISHED, session.state)
+        assertEquals(closeFailure.message, session.error)
+        assertEquals(beforeFinish + 1, notifications)
+        assertSame(saved, fake.records.getValue("key"))
+        assertTrue(fake.deleted.isEmpty())
+        session.finish()
+        assertEquals(2, fake.reportedFailures.size)
+        // Closing still releases the key claim even when both cleanup and diagnostic logging fail.
+        val replacement = sessions.session()
+        assertEquals(WidgetState.NEED_BIND, replacement.state)
+        assertEquals(1, replacement.id)
+    }
 
     @Test
     fun explicitCardRemovalFinishesOnlyItsSessionAndDeletesItsCompletedBinding() {
