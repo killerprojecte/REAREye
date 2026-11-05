@@ -114,6 +114,13 @@ internal class KoogProviderAdapter(
                                     }
                                 } else {
                                     put("type", "reasoning"); frame.id?.let { put("id", it) }
+                                    if (selected.protocol == Protocol.RESPONSES && frame.content.isNotEmpty()) putJsonArray("content") {
+                                        frame.content.forEach { text ->
+                                            add(buildJsonObject {
+                                                put("type", "reasoning_text"); put("text", text)
+                                            })
+                                        }
+                                    }
                                     putJsonArray("summary") {
                                         frame.summary.orEmpty().forEach { text ->
                                             add(buildJsonObject {

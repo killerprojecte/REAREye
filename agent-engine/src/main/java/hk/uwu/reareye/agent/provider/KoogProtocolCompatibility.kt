@@ -107,6 +107,7 @@ private class ProtocolState : AbstractCoroutineContextElement(Key) {
     val ready = ArrayDeque<StreamFrame>()
     var emitReady: (suspend (StreamFrame) -> Unit)? = null
     val responseTextDeltas = mutableMapOf<Int, StringBuilder>()
+    val responseReasoning = ResponsesReasoningParts()
     val responseCalls = java.util.concurrent.ConcurrentHashMap<Int, Pair<String, String>>()
     val encryptedOnly = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
     val usage = linkedMapOf<String, JsonElement>()
@@ -152,10 +153,10 @@ private class ProtocolState : AbstractCoroutineContextElement(Key) {
         val compatibleResponse =
             if (parsed["type"]?.jsonPrimitive?.contentOrNull == "response.metadata") response
             else response?.let(::responsesMetadataDefaults)
-        val item = if (compatibleResponse !== response) JsonObject(
+        var item = if (compatibleResponse !== response) JsonObject(
             parsed + ("response" to requireNotNull(compatibleResponse))
         ) else parsed
-        val normalized = if (item === parsed) raw else item.toString()
+        var normalized = if (item === parsed) raw else item.toString()
         val type = item["type"]?.jsonPrimitive?.contentOrNull
         fun rememberUsage(value: JsonElement?) {
             (value as? JsonObject)?.forEach { (k, v) -> usage[k] = v }
@@ -246,6 +247,8 @@ private class ProtocolState : AbstractCoroutineContextElement(Key) {
                 "message_stop" -> stopped = true
             }
         } else if (protocol == Protocol.RESPONSES) {
+            item = responseReasoning.observe(item, ready)
+            normalized = if (item === parsed) raw else item.toString()
             val response = item["response"] as? JsonObject
             rememberUsage(response?.get("usage"))
             if (type == "response.metadata") {
@@ -338,6 +341,7 @@ private class ProtocolState : AbstractCoroutineContextElement(Key) {
                 }
             }
             if (type in listOf("response.completed", "response.incomplete")) {
+                responseReasoning.requireComplete()
                 finishReason = if (type == "response.incomplete")
                     response?.get("incomplete_details")?.jsonObject?.get("reason")?.jsonPrimitive?.contentOrNull
                         ?: "incomplete"
