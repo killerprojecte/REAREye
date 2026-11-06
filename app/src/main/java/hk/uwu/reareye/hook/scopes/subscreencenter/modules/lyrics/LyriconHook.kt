@@ -3,9 +3,7 @@ package hk.uwu.reareye.hook.scopes.subscreencenter.modules.lyrics
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.MediaMetadata
-import com.hchen.superlyricapi.ISuperLyricReceiver
-import com.hchen.superlyricapi.SuperLyricData
-import com.hchen.superlyricapi.SuperLyricHelper
+import com.hchen.superlyricapi.Receiver
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
 import hk.uwu.reareye.hook.support.YLog
@@ -18,6 +16,9 @@ import hk.uwu.reareye.hook.utils.createDexKitCacheBridge
 import hk.uwu.reareye.hook.utils.resolveDexKitClassValue
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
 import hk.uwu.reareye.lyrics.LyricParser
+import hk.uwu.reareye.lyrics.SuperLyricConnection
+import hk.uwu.reareye.lyrics.SuperLyricSession
+import hk.uwu.reareye.lyrics.SuperLyricSnapshot
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.LyricProvider
 import hk.uwu.roxyhook.PackageScope
@@ -78,7 +79,10 @@ class LyriconHook : RoxyHooker() {
     var monitor: LyriconSubscriber? = null
 
     @Volatile
-    var superLyricStub: ISuperLyricReceiver.Stub? = null
+    private var superLyricConnection: SuperLyricConnection? = null
+
+    @Volatile
+    private var latestSuperLyric: SuperLyricSnapshot? = null
 
     override fun onHotReloadQuiesce() {
         check(releaseForReload()) {
@@ -113,19 +117,8 @@ class LyriconHook : RoxyHooker() {
             }
         }
 
-        superLyricStub?.let { receiver ->
-            val receiverSuccess = runCatching {
-                SuperLyricHelper.unregisterReceiver(receiver)
-                true
-            }.onFailure {
-                YLog.error("Failed to unregister SuperLyric receiver during reload", it)
-            }.getOrDefault(false)
-            if (receiverSuccess) {
-                superLyricStub = null
-            } else {
-                success = false
-            }
-        }
+        if (!unregisterSuperLyric()) success = false
+        latestSuperLyric = null
 
         val jobsToCancel = ArrayList<Job>()
         scope.coroutineContext[Job]?.let { jobsToCancel += it }
@@ -244,84 +237,7 @@ class LyriconHook : RoxyHooker() {
                             YLog.info("Registered lyricon player monitor")
                         }
 
-                        LyricProvider.SUPER_LYRIC -> {
-                            if (!SuperLyricHelper.isAvailable()) {
-                                YLog.warn("SuperLyric is not available, it must be exists or higher than version 3.1")
-                                return@withAppContext
-                            }
-                            superLyricStub = object : ISuperLyricReceiver.Stub() {
-                                override fun onStop(publisher: String, data: SuperLyricData) {
-                                    mainScope.launch {
-                                        elements.forEach { element ->
-                                            if (stateOf(element).singleLinePublisher == publisher) {
-                                                releaseSingleLineLyric(element)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                override fun onLyric(publisher: String, data: SuperLyricData) {
-                                    mainScope.launch {
-                                        runCatching {
-                                            if (hookPrefs.getBoolean(
-                                                    ConfigKeys.MORE_DEBUG,
-                                                    false
-                                                )
-                                            ) {
-                                                YLog.debug("onSuperLyric ${data.lyric} ${data.translation}")
-                                            }
-                                            if (data.hasLyric()) {
-                                                val mode = hookPrefs.getInt(
-                                                    ConfigKeys.SUPER_LYRIC_DISPLAY_MODE,
-                                                    ConfigKeys.SUPER_LYRIC_DISPLAY_MODE_DEFAULT
-                                                )
-                                                val rawLyric = data.lyric!!
-                                                val originalLines = rawLyric.text.split("\n")
-                                                val lyric = when {
-                                                    LyricParser.DisplayMode.shouldShowTranslation(
-                                                        mode
-                                                    ) -> {
-                                                        if (data.hasTranslation()) {
-                                                            val translation = data.translation!!
-                                                            translation.text
-                                                        } else if (originalLines.size > 1) {
-                                                            originalLines[1]
-                                                        } else {
-                                                            rawLyric.text
-                                                        }
-                                                    }
-
-                                                    else -> {
-                                                        originalLines[0]
-                                                    }
-                                                }
-
-                                                if (lyric.isNotEmpty()) {
-                                                    elements.forEach { element ->
-                                                        val state = stateOf(element)
-                                                        state.singleLinePublisher = publisher
-                                                        state.singleLineMetadata =
-                                                            element.asResolver()
-                                                                .firstField { name = "mMetadata" }
-                                                                .get<MediaMetadata>()
-                                                        state.tempLrc = null
-                                                        element.asResolver().firstField {
-                                                            name = "mLyric"
-                                                        }.set(null)
-                                                        state.tempLyricLine = lyric
-                                                        updateFallbackLine(element, lyric)
-                                                    }
-                                                }
-                                            }
-                                        }.onFailure {
-                                            YLog.error(it)
-                                        }
-                                    }
-                                }
-                            }
-                            SuperLyricHelper.registerReceiver(superLyricStub!!)
-                            YLog.info("Registered super-lyric listener")
-                        }
+                        LyricProvider.SUPER_LYRIC -> registerSuperLyric()
                     }
                 }
             )
@@ -332,9 +248,8 @@ class LyriconHook : RoxyHooker() {
                         it.unregister()
                         it.destroy()
                     }
-                    superLyricStub?.also {
-                        SuperLyricHelper.unregisterReceiver(it)
-                    }
+                    unregisterSuperLyric()
+                    latestSuperLyric = null
                     YLog.debug("Terminated music lyric services")
                 }
             })
@@ -359,7 +274,9 @@ class LyriconHook : RoxyHooker() {
             val ref = clz.resolve()
             ref.constructor().build().hook {
                 after {
-                    elements.addIfAbsent(instance)
+                    val element = instance ?: return@after
+                    elements.addIfAbsent(element)
+                    replaySuperLyric(element)
                     if (latestLyricLrc.isNotEmpty()) {
                         elements.forEach {
                             updateLyric(it, latestLyricLrc)
@@ -372,7 +289,7 @@ class LyriconHook : RoxyHooker() {
                 name = "resetLyric"
             }.hook {
                 replaceUnit {
-                    if (stateOf(instance!!).singleLinePublisher != null) return@replaceUnit
+                    if (stateOf(instance!!).singleLineSession != null) return@replaceUnit
                     val iRef = instance!!.asResolver()
                     val mMetadata = iRef.firstField { name = "mMetadata" }.get<MediaMetadata>()
                     if (mMetadata != null && stateOf(instance!!).oldMediaId == mMetadata.description.mediaId) {
@@ -390,7 +307,7 @@ class LyriconHook : RoxyHooker() {
                 parameters(MediaMetadata::class.java, Boolean::class.java)
             }.hook {
                 replaceUnit {
-                    if (stateOf(instance!!).singleLinePublisher == null) callOriginal(*args)
+                    if (stateOf(instance!!).singleLineSession == null) callOriginal(*args)
                 }
             }
 
@@ -443,11 +360,17 @@ class LyriconHook : RoxyHooker() {
                 parameters(Boolean::class.java)
             }.hook {
                 after {
-                    if (instanceClass == clz && !args(0).boolean()) {
-                        YLog.debug("Release music control instance: $instance")
-                        clearManagedLyricState(instance!!)
-                        elements.remove(instance!!)
-                        removeStateOf(instance!!)
+                    if (instanceClass == clz) {
+                        val element = instance!!
+                        if (args(0).boolean()) {
+                            elements.addIfAbsent(element)
+                            replaySuperLyric(element)
+                        } else {
+                            YLog.debug("Release music control instance: $element")
+                            clearManagedLyricState(element)
+                            elements.remove(element)
+                            removeStateOf(element)
+                        }
                     }
                 }
             }
@@ -497,7 +420,7 @@ class LyriconHook : RoxyHooker() {
                     }
                     elements.addIfAbsent(i)
                     val state = stateOf(i)
-                    if (state.singleLinePublisher != null) {
+                    if (state.singleLineSession != null) {
                         val previous = state.singleLineMetadata
                         if (metadata == null || (previous != null && !isSameSingleLineTrack(
                                 previous,
@@ -574,13 +497,93 @@ class LyriconHook : RoxyHooker() {
                         name = "this$0"
                     }.get() ?: return@after
                     mainScope.launch {
-                        if (stateOf(i).singleLinePublisher == null) {
+                        if (stateOf(i).singleLineSession == null) {
                             checkLyricState(metadata, i)
                         }
                     }
                 }
             }
         }
+    }
+
+    private fun unregisterSuperLyric(): Boolean {
+        val connection = superLyricConnection ?: return true
+        return runCatching { connection.unregister() }
+            .onFailure { YLog.error("Failed to unregister SuperLyric receiver", it) }
+            .getOrDefault(false)
+            .also { if (it) superLyricConnection = null }
+    }
+
+    private fun PackageScope.registerSuperLyric() {
+        if (superLyricConnection != null) return
+        lateinit var connection: SuperLyricConnection
+        connection = SuperLyricConnection(
+            onLyric = { snapshot ->
+                mainScope.launch {
+                    // register() can call back synchronously; queued callbacks must not survive cleanup.
+                    if (superLyricConnection !== connection || !connection.isActive) return@launch
+                    latestSuperLyric = snapshot
+                    elements.forEach { element -> applySuperLyric(element, snapshot) }
+                }
+            },
+            onStop = { stopped ->
+                mainScope.launch {
+                    if (superLyricConnection !== connection || !connection.isActive) return@launch
+                    if (latestSuperLyric?.session?.acceptsStop(stopped) == true) {
+                        latestSuperLyric = null
+                    }
+                    elements.forEach { element ->
+                        if (stateOf(element).singleLineSession?.acceptsStop(stopped) == true) {
+                            releaseSingleLineLyric(element)
+                        }
+                    }
+                }
+            },
+        )
+        // Assign before register(), because an initial FULL callback can be delivered before it returns.
+        superLyricConnection = connection
+        val result = runCatching { connection.register() }
+            .onFailure { YLog.error("Failed to register SuperLyric receiver", it) }
+            .getOrDefault(Receiver.RegisterResult.SERVICE_UNAVAILABLE)
+        if (result == Receiver.RegisterResult.OK) {
+            YLog.info("Registered SuperLyric listener")
+        } else {
+            unregisterSuperLyric()
+            latestSuperLyric = null
+            YLog.warn("SuperLyric registration failed: $result")
+        }
+    }
+
+    private fun PackageScope.replaySuperLyric(element: Any) {
+        mainScope.launch {
+            // show(false) can detach the element before this queued replay runs.
+            if (superLyricConnection?.isActive == true && elements.contains(element)) {
+                latestSuperLyric?.let { snapshot -> applySuperLyric(element, snapshot) }
+            }
+        }
+    }
+
+    private fun PackageScope.applySuperLyric(element: Any, snapshot: SuperLyricSnapshot) {
+        if (!elements.contains(element)) return
+        runCatching {
+            val mode = hookPrefs.getInt(
+                ConfigKeys.SUPER_LYRIC_DISPLAY_MODE,
+                ConfigKeys.SUPER_LYRIC_DISPLAY_MODE_DEFAULT,
+            )
+            val text = snapshot.displayText(LyricParser.DisplayMode.shouldShowTranslation(mode))
+            val state = stateOf(element)
+            val ref = element.asResolver()
+            state.singleLineSession = snapshot.session
+            state.singleLineMetadata = ref.firstField { name = "mMetadata" }.get<MediaMetadata>()
+            state.tempLrc = null
+            ref.firstField { name = "mLyric" }.set(null)
+            // Empty/pre-roll lines clear old text but still belong to this session.
+            state.tempLyricLine = text
+            updateFallbackLine(element, text)
+            if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+                YLog.debug("onSuperLyric ${snapshot.session}: $text")
+            }
+        }.onFailure { YLog.error(it) }
     }
 
     private fun PackageScope.checkLyricState(metadata: MediaMetadata?, instance: Any) {
@@ -778,8 +781,10 @@ class LyriconHook : RoxyHooker() {
 
     private fun PackageScope.releaseSingleLineLyric(element: Any) {
         val state = stateOf(element)
-        if (state.singleLinePublisher == null) return
-        state.singleLinePublisher = null
+        if (state.singleLineSession == null) return
+        // This element's media lifecycle must not invalidate replay for other music elements.
+        // Only a matching provider STOP or connection cleanup clears the global snapshot.
+        state.singleLineSession = null
         state.singleLineMetadata = null
         state.tempLyricLine = null
         state.oldMediaId = null
@@ -1267,7 +1272,7 @@ class LyriconHook : RoxyHooker() {
         var pendingSnapshot: PendingLyricSnapshot? = null,
         var preTicker: Any? = null,
     ) {
-        var singleLinePublisher: String? = null
+        var singleLineSession: SuperLyricSession? = null
         var singleLineMetadata: MediaMetadata? = null
 
         override fun equals(other: Any?): Boolean {
