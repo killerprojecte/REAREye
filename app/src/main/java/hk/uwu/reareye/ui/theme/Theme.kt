@@ -9,6 +9,8 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowInsetsControllerCompat
 import hk.uwu.reareye.R
+import hk.uwu.mixui.MixUiHost
+import hk.uwu.mixui.MixUiBackend
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
@@ -86,6 +88,7 @@ fun isAppInDarkTheme(themeMode: AppThemeMode): Boolean {
 @Composable
 fun AppTheme(
     themeMode: AppThemeMode = AppThemeMode.default,
+    backend: MixUiBackend = MixUiBackend.Miuix,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -100,6 +103,6 @@ fun AppTheme(
                 isAppearanceLightNavigationBars = !darkTheme
             }
         }
-        content()
+        MixUiHost(backend = backend, dark = darkTheme, content = content)
     }
 }

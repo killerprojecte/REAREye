@@ -74,7 +74,7 @@ import hk.uwu.reareye.ui.components.config.draggable.library.draggable.rememberD
 import hk.uwu.reareye.ui.components.config.draggable.longPressDraggable
 import hk.uwu.reareye.ui.components.config.template.TemplateConfigRouteTransition
 import hk.uwu.reareye.ui.components.config.template.WidgetTemplateConfigScreen
-import hk.uwu.reareye.ui.components.motion.ArtRevealItem
+import hk.uwu.mixui.motion.ArtRevealItem
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.rememberRemotePrefsStatusRevision
@@ -95,7 +95,7 @@ import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Switch
+import hk.uwu.mixui.components.Switch
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField

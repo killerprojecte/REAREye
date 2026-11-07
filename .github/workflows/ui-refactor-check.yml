@@ -1,0 +1,46 @@
+name: UI refactor checks
+
+on:
+  push:
+    branches: ["feat/ui-base-refactor"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: baseline
+            ref: e554a382dabdb79994fa11a4482c072c9f968c82
+          - name: candidate
+            ref: feat/ui-base-refactor
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.ref }}
+          fetch-depth: 0
+      - uses: amyu/setup-android@v5
+        with:
+          distribution: zulu
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Compile application and run existing unit tests
+        run: bash ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest
+      - name: Check mixui module
+        if: matrix.name == 'candidate'
+        run: bash ./gradlew --no-daemon :mixui:assembleDebug :mixui:testDebugUnitTest
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ui-${{ matrix.name }}-build-evidence
+          path: |
+            app/build/outputs/**/*.apk
+            app/build/test-results/**
+            mixui/build/test-results/**
+            app/build/reports/tests/**
+          if-no-files-found: warn

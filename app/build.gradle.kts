@@ -325,6 +325,7 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
+    implementation(project(":mixui"))
     implementation(project(":rear-widget-api"))
     implementation(project(":agent-engine"))
     implementation(libs.androidx.compose.foundation.layout)

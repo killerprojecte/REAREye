@@ -63,7 +63,7 @@ import hk.uwu.reareye.hook.support.XposedModuleStatus
 import hk.uwu.reareye.ui.components.PresetPackLocalStatus
 import hk.uwu.reareye.ui.components.PresetPackStatusCard
 import hk.uwu.reareye.ui.components.isNewerThan
-import hk.uwu.reareye.ui.components.motion.ArtVisibilityMotion
+import hk.uwu.mixui.motion.ArtVisibilityMotion
 import hk.uwu.reareye.ui.components.rememberPresetPackHomeSnapshot
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager

@@ -21,6 +21,7 @@ compose-foundation-style = "1.12.1"
 androidx-activity-compose = "1.13.0"
 androidx-lifecycle-runtime-compose = "2.11.0"
 miuix = "0.9.4"
+mochi = "0.2.0"
 markdown-renderer = "0.46.0"
 coil = "3.6.3"
 haze = "2.0.1"
@@ -48,6 +49,7 @@ android-library = { id = "com.android.library", version.ref = "agp" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
 [libraries]
+mochi-compose = { module = "io.github.feice11:mochi-compose", version.ref = "mochi" }
 koog-agents-core = { module = "ai.koog:agents-core", version.ref = "koog" }
 koog-prompt-executor-model = { module = "ai.koog:prompt-executor-model", version.ref = "koog" }
 koog-prompt-executor-openai = { module = "ai.koog:prompt-executor-openai-client", version.ref = "koog" }

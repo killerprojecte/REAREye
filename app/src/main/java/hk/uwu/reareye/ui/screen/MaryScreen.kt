@@ -96,7 +96,7 @@ import hk.uwu.reareye.ui.components.MaryUsageSummary
 import hk.uwu.reareye.ui.components.ToolCardExpansion
 import hk.uwu.reareye.ui.components.markdown.MarkdownText
 import hk.uwu.reareye.ui.components.maryErrorColors
-import hk.uwu.reareye.ui.components.motion.ArtShimmerSweep
+import hk.uwu.mixui.motion.ArtShimmerSweep
 import hk.uwu.reareye.ui.components.rememberMaryTailFollowState
 import hk.uwu.reareye.ui.components.scrollMaryConversationToBottom
 import kotlinx.coroutines.launch

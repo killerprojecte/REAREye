@@ -86,8 +86,8 @@ import hk.uwu.reareye.repository.contributor.ContributorLoadState
 import hk.uwu.reareye.repository.contributor.ContributorProfile
 import hk.uwu.reareye.repository.contributor.ContributorRepository
 import hk.uwu.reareye.ui.components.card.SuperCard
-import hk.uwu.reareye.ui.components.motion.ArtRevealItem
-import hk.uwu.reareye.ui.components.motion.ArtStaggeredReveal
+import hk.uwu.mixui.motion.ArtRevealItem
+import hk.uwu.mixui.motion.ArtStaggeredReveal
 import hk.uwu.reareye.ui.theme.rearAcrylicEffect
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState

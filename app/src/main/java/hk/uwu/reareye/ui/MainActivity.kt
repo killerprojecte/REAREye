@@ -44,7 +44,7 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import hk.uwu.reareye.ui.components.PresetPackDialog
 import hk.uwu.reareye.ui.components.SubscreenNotificationAccessPrompt
 import hk.uwu.reareye.ui.components.TargetAppVersionDialog
-import hk.uwu.reareye.ui.components.motion.ArtVisibilityMotion
+import hk.uwu.mixui.motion.ArtVisibilityMotion
 import hk.uwu.reareye.ui.components.navigation.NavigationQuickTarget
 import hk.uwu.reareye.ui.components.navigation.RearNavigationBar
 import hk.uwu.reareye.ui.components.navigation.encodeNavigationQuickActionIds

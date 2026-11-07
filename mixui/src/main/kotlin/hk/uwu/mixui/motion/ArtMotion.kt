@@ -1,4 +1,4 @@
-package hk.uwu.reareye.ui.components.motion
+package hk.uwu.mixui.motion
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutLinearInEasing
