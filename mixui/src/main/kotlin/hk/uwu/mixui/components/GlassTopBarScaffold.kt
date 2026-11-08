@@ -1,5 +1,6 @@
 package hk.uwu.mixui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,8 @@ import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import ui.feice.mochi.effect.glass.LocalMochiBackdrop
+import ui.feice.mochi.effect.glass.LocalMochiGlassShadow
 import ui.feice.mochi.effect.glass.mochiBackdropSource
 import ui.feice.mochi.effect.glass.rememberMochiBarBackdrop
 import ui.feice.mochi.effect.glass.rememberMochiBackdrop
@@ -65,6 +68,11 @@ fun GlassTopBarScaffold(
             val supported = isRuntimeShaderSupported()
             val backdrop = if (supported) rememberLayerBackdrop() else null
             val formBackdrop = if (supported) rememberLayerBackdrop() else null
+            val tabSurfaceAlpha = animateFloatAsState(
+                targetValue = if (isContentScrolled) 1f else 0f,
+                animationSpec = top.yukonga.miuix.kmp.glass.GlassMotion.topBarButtonFloat(),
+                label = "headerTabMaterial",
+            )
             GlassFormOverlayHost(
                 modifier = modifier,
                 background = background,
@@ -92,6 +100,13 @@ fun GlassTopBarScaffold(
                                     scrollBehavior = scrollBehavior,
                                     navigationIcon = navigationIcon,
                                     actions = actions,
+                                    // Native bottomContent inherits the bar's material/underlay.
+                                    // It is outside the body-only backdrop recording.
+                                    bottomContent = {
+                                        CompositionLocalProvider(
+                                            LocalGlassTabsSurfaceAlpha provides tabSurfaceAlpha.value,
+                                        ) { pinnedHeader() }
+                                    },
                                 )
                             } else {
                                 top.yukonga.miuix.kmp.basic.TopAppBar(
@@ -102,8 +117,8 @@ fun GlassTopBarScaffold(
                                     navigationIcon = navigationIcon,
                                     actions = actions,
                                 )
+                                pinnedHeader()
                             }
-                            pinnedHeader()
                         }
                     },
                 ) { padding ->
@@ -141,7 +156,11 @@ fun GlassTopBarScaffold(
                                 navigationIcon = navigationIcon,
                                 actions = actions,
                             )
-                            pinnedHeader()
+                            CompositionLocalProvider(
+                                LocalGlassTabsSurfaceAlpha provides 1f,
+                                LocalMochiBackdrop provides backdrop,
+                                LocalMochiGlassShadow provides { if (isContentScrolled) 1f else 0f },
+                            ) { pinnedHeader() }
                         }
                     },
                 ) { padding ->

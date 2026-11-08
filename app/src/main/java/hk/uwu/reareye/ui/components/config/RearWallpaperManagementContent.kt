@@ -18,7 +18,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
+import hk.uwu.mixui.components.pageScrollFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,7 +56,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.rounded.Storefront
-import dev.chrisbanes.haze.HazeState
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearstore.RearStoreInstalledWallpaper
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperInfo
@@ -72,7 +74,6 @@ import hk.uwu.reareye.ui.components.config.draggable.library.draggable.rememberD
 import hk.uwu.reareye.ui.components.config.draggable.longPressDraggable
 import hk.uwu.reareye.ui.components.rememberRearWallpaperPreviewBitmap
 import hk.uwu.reareye.ui.featureGuideAnchor
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.widgetapi.RearWallpaperScheduleEntry
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.BasicComponent
@@ -82,12 +83,9 @@ import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import hk.uwu.mixui.components.Switch
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.TextField
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import kotlin.math.roundToInt
 
 private const val MANAGE_PREVIEW_RATIO = 1.6f
@@ -95,8 +93,7 @@ private const val MANAGE_PREVIEW_RATIO = 1.6f
 @Composable
 fun RearWallpaperManagementContent(
     paddingValues: PaddingValues,
-    scrollBehavior: ScrollBehavior,
-    hazeState: HazeState?,
+    listState: LazyListState = rememberLazyListState(),
     wallpapers: List<RearWallpaperInfo>,
     storeWallpaperSources: Map<Int, RearStoreInstalledWallpaper>,
     currentWallpaperId: Int?,
@@ -231,8 +228,7 @@ fun RearWallpaperManagementContent(
 
     RearWallpaperManagementList(
         paddingValues = paddingValues,
-        scrollBehavior = scrollBehavior,
-        hazeState = hazeState,
+        listState = listState,
         wallpapers = wallpapers,
         storeWallpaperSources = storeWallpaperSources,
         currentWallpaperId = currentWallpaperId,
@@ -484,8 +480,7 @@ fun RearWallpaperManagementContent(
 @Composable
 private fun RearWallpaperManagementList(
     paddingValues: PaddingValues,
-    scrollBehavior: ScrollBehavior,
-    hazeState: HazeState?,
+    listState: LazyListState,
     wallpapers: List<RearWallpaperInfo>,
     storeWallpaperSources: Map<Int, RearStoreInstalledWallpaper>,
     currentWallpaperId: Int?,
@@ -507,7 +502,6 @@ private fun RearWallpaperManagementList(
 ) {
     val currentWallpaperName = wallpapers.firstOrNull { it.wallpaperId == currentWallpaperId }?.name
         ?: stringResource(R.string.rear_wallpaper_current_none)
-    val listState = rememberLazyListState()
     val guideDemo = LocalFeatureGuideDemo.current
     LaunchedEffect(guideDemo != null, wallpapers.size) {
         if (guideDemo != null && wallpapers.isNotEmpty()) listState.scrollToItem(2)
@@ -572,15 +566,8 @@ private fun RearWallpaperManagementList(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .scrollEndHaptic()
-            .overScrollVertical()
-            .then(
-                if (hazeState != null) {
-                    Modifier.rearAcrylicSource(hazeState)
-                } else {
-                    Modifier
-                }
-            )
+            .testTag("RearWallpaperManagerScreen-list")
+            .pageScrollFeedback()
             .padding(horizontal = 12.dp),
         state = listState,
         contentPadding = PaddingValues(

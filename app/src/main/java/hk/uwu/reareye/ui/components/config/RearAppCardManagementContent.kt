@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -65,6 +66,7 @@ import hk.uwu.mixui.theme.MixTheme
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
 internal fun RearAppCardManagementContent(
+    listState: LazyListState = rememberLazyListState(),
     prefsManager: PrefsManager,
     onOpenStoreDetail: (String) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -73,7 +75,6 @@ internal fun RearAppCardManagementContent(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
     val cards = remember { mutableStateListOf<RearAppCardInfo>() }
     val businesses = remember { mutableStateListOf<RearBusinessConfig>() }
     var loading by remember { mutableStateOf(true) }

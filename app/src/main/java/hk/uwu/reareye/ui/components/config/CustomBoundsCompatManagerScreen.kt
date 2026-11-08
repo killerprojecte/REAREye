@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,13 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toColorInt
 import com.composables.icons.materialsymbols.MaterialSymbols
@@ -69,10 +67,6 @@ import hk.uwu.reareye.ui.config.ConfigItem
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.ConfigType
 import hk.uwu.reareye.ui.config.PrefsManager
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -82,18 +76,15 @@ import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
 import top.yukonga.miuix.kmp.basic.ColorPalette
 import hk.uwu.mixui.components.Icon
-import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.TopBarIconButton
+import hk.uwu.mixui.components.pageScrollFeedback
 import hk.uwu.mixui.components.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.TextField
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.components.SpinnerPreference
 import hk.uwu.mixui.theme.MixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import java.util.Locale
 
 private data class CustomBoundsOption(
@@ -133,10 +124,7 @@ fun CustomBoundsCompatManagerScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val layoutDirection = LocalLayoutDirection.current
-    val scrollBehavior = MiuixScrollBehavior()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
+    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val configs = remember { mutableStateListOf<CustomBoundsCompatAppConfig>() }
     var loaded by remember { mutableStateOf(false) }
@@ -416,55 +404,33 @@ fun CustomBoundsCompatManagerScreen(
         return
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                color = Color.Transparent,
-                title = stringResource(R.string.custom_bounds_compat_manager),
-                navigationIconPadding = 12.dp,
-                actionIconPadding = 12.dp,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            modifier = Modifier.graphicsLayer {
-                                if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                            },
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        if (loaded) importLauncher.launch(
-                            arrayOf(
-                                "application/octet-stream",
-                                "text/plain",
-                                "*/*"
-                            )
-                        )
-                    }) {
-                        Icon(
-                            imageVector = MaterialSymbols.Rounded.Deployed_code_update,
-                            contentDescription = null
-                        )
-                    }
-                    IconButton(onClick = { if (loaded) showAppSelector = true }) {
-                        Icon(imageVector = Icons.Filled.Add, contentDescription = null)
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-            )
+    GlassTopBarScaffold(
+        title = stringResource(R.string.custom_bounds_compat_manager),
+        isContentScrolled = listState.canScrollBackward,
+        navigationIcon = {
+            TopBarIconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.scene_route_navigate_back))
+            }
+        },
+        actions = {
+            TopBarIconButton(enabled = loaded, onClick = {
+                importLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*"))
+            }) {
+                Icon(MaterialSymbols.Rounded.Deployed_code_update,
+                    contentDescription = stringResource(R.string.script_import))
+            }
+            TopBarIconButton(enabled = loaded, onClick = { showAppSelector = true }) {
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.custom_bounds_pick_apps))
+            }
         },
     ) { paddingValues ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .rearAcrylicSource(hazeState)
+                .testTag("bounds-manager-list")
+                .pageScrollFeedback()
                 .padding(horizontal = 12.dp),
             contentPadding = PaddingValues(
                 top = paddingValues.calculateTopPadding() + 12.dp,

@@ -4,7 +4,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -48,7 +47,7 @@ import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.GlassTopBarScaffold
 import hk.uwu.mixui.components.pageScrollFeedback
-import hk.uwu.mixui.components.Tabs
+import hk.uwu.mixui.components.GlassTabs
 import top.yukonga.miuix.kmp.preference.ArrowPreference as MiuixArrowPreference
 import hk.uwu.mixui.components.ArrowPreference
 import hk.uwu.mixui.theme.MixTheme
@@ -187,12 +186,11 @@ internal fun ConfigDashboard(
             }
         },
         pinnedHeader = {
-            Tabs(
+            GlassTabs(
                 tabs = tabs,
                 selectedTabIndex = selectedTab.ordinal,
                 onTabSelected = ::selectTab,
                 modifier = Modifier
-                    .background(MixTheme.colorScheme.surface)
                     .featureGuideAnchor("config_tabs")
                     .fillMaxWidth()
                     .padding(

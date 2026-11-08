@@ -5,6 +5,7 @@ import hk.uwu.mixui.icons.Icons as UiIcons
 import android.annotation.SuppressLint
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -81,10 +82,6 @@ import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.rememberRemotePrefsStatusRevision
 import hk.uwu.reareye.ui.featureGuideAnchor
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -93,19 +90,18 @@ import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
-import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.TopBarIconButton
+import hk.uwu.mixui.components.pageScrollFeedback
+import androidx.compose.ui.platform.testTag
 import hk.uwu.mixui.components.Switch
-import hk.uwu.mixui.components.Tabs
+import hk.uwu.mixui.components.GlassTabs
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.TextField
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 private const val REAR_WIDGET_DEBUG_TAG = "RearWidgetDebug"
 
@@ -136,10 +132,8 @@ fun CardManagerScreen(
     val context = LocalContext.current
     val layoutDirection = LocalLayoutDirection.current
     val scope = rememberCoroutineScope()
-    val scrollBehavior = MiuixScrollBehavior()
     val listState = rememberLazyListState()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
+    val appListState = rememberLazyListState()
     val cards = remember { mutableStateListOf<RearCardConfig>() }
     val businesses = remember { mutableStateListOf<RearBusinessConfig>() }
     val templateAvailability = remember { mutableStateMapOf<String, Boolean>() }
@@ -556,56 +550,23 @@ fun CardManagerScreen(
             )
         },
     ) {
-        Scaffold(
-            topBar = {
-                if (!embedded) TopAppBar(
-                    modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                    color = Color.Transparent,
-                    title = stringResource(R.string.rear_widget_card_manager),
-                    navigationIconPadding = 12.dp,
-                    actionIconPadding = 12.dp,
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                modifier = Modifier.graphicsLayer {
-                                    if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                                },
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = null,
-                            )
-                        }
-                    },
-                    actions = {
-                        key(selectedCardTab) {
-                            if (selectedCardTab == 0) {
-                                IconButton(
-                                    onClick = {
-                                        if (cardsLoaded) openCreateDialog(0)
-                                    },
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Add,
-                                        contentDescription = stringResource(R.string.rear_widget_add_card),
-                                    )
-                                }
-                            } else {
-                                IconButton(
-                                    onClick = {
-                                        if (cardsLoaded) openCreateDialog(1)
-                                    },
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Add,
-                                        contentDescription = stringResource(R.string.rear_widget_add_app_card),
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    scrollBehavior = scrollBehavior,
-                )
-            },
-        ) { paddingValues ->
+        val pageTabs: @Composable () -> Unit = {
+            GlassTabs(
+                tabs = listOf(
+                    stringResource(R.string.rear_widget_card_tab_normal),
+                    stringResource(R.string.rear_widget_card_tab_app),
+                ),
+                selectedTabIndex = selectedCardTab,
+                onTabSelected = { page ->
+                    scope.launch { cardPagerState.animateScrollToPage(page) }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (embedded) Modifier.background(MixTheme.colorScheme.surface) else Modifier)
+                    .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+            )
+        }
+        val pageContent: @Composable (PaddingValues) -> Unit = { paddingValues ->
             val pageTopPadding = if (embedded) {
                 contentPadding.calculateTopPadding()
             } else {
@@ -619,22 +580,9 @@ fun CardManagerScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .rearAcrylicSource(hazeState)
-                    .padding(top = pageTopPadding),
+                    .padding(top = if (embedded) pageTopPadding else 0.dp),
             ) {
-                Tabs(
-                    tabs = listOf(
-                        stringResource(R.string.rear_widget_card_tab_normal),
-                        stringResource(R.string.rear_widget_card_tab_app),
-                    ),
-                    selectedTabIndex = selectedCardTab,
-                    onTabSelected = { page ->
-                        scope.launch { cardPagerState.animateScrollToPage(page) }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
-                )
+                if (embedded) pageTabs()
                 HorizontalPager(
                     state = cardPagerState,
                     beyondViewportPageCount = 1,
@@ -648,11 +596,11 @@ fun CardManagerScreen(
                             state = listState,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .scrollEndHaptic()
-                                .overScrollVertical()
-                                .rearAcrylicSource(hazeState)
+                                .testTag("CardManagerScreen-list")
+                                .pageScrollFeedback()
                                 .padding(horizontal = 12.dp),
                             contentPadding = PaddingValues(
+                                top = if (embedded) 0.dp else pageTopPadding,
                                 bottom = pageBottomPadding,
                                 start = pageStartPadding,
                                 end = pageEndPadding,
@@ -930,14 +878,15 @@ fun CardManagerScreen(
                         }
                     } else {
                         RearAppCardManagementContent(
+                            listState = appListState,
                             prefsManager = prefsManager,
                             onOpenStoreDetail = onOpenStoreDetail,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .scrollEndHaptic()
-                                .overScrollVertical()
+                                .pageScrollFeedback()
                                 .padding(horizontal = 12.dp),
                             contentPadding = PaddingValues(
+                                top = if (embedded) 0.dp else pageTopPadding,
                                 bottom = pageBottomPadding,
                                 start = pageStartPadding,
                                 end = pageEndPadding,
@@ -947,6 +896,54 @@ fun CardManagerScreen(
                     }
                 }
             }
+        }
+
+        if (embedded) {
+            Scaffold { pageContent(it) }
+        } else {
+            GlassTopBarScaffold(
+                title = stringResource(R.string.rear_widget_card_manager),
+                isContentScrolled = (if (selectedCardTab == 0) listState else appListState).let {
+                    it.firstVisibleItemIndex > 0 || it.firstVisibleItemScrollOffset > 0
+                },
+                pinnedHeader = pageTabs,
+                navigationIcon = {
+                    TopBarIconButton(onClick = onBack) {
+                        Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.scene_route_navigate_back),
+                        )
+                    }
+                },
+                actions = {
+                    key(selectedCardTab) {
+                        if (selectedCardTab == 0) {
+                            TopBarIconButton(
+                                onClick = {
+                                    if (cardsLoaded) openCreateDialog(0)
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = stringResource(R.string.rear_widget_add_card),
+                                )
+                            }
+                        } else {
+                            TopBarIconButton(
+                                onClick = {
+                                    if (cardsLoaded) openCreateDialog(1)
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = stringResource(R.string.rear_widget_add_app_card),
+                                )
+                            }
+                        }
+                    }
+                },
+                content = pageContent,
+            )
         }
 
         key(dialogSessionId) {

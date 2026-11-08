@@ -18,8 +18,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -34,18 +32,14 @@ import hk.uwu.reareye.ui.LocalFeatureGuideDemo
 import hk.uwu.reareye.ui.components.config.template.RearWallpaperTemplateConfigScreen
 import hk.uwu.reareye.ui.components.config.template.TemplateConfigRouteTransition
 import hk.uwu.reareye.ui.config.PrefsManager
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import hk.uwu.reareye.widgetapi.RearWallpaperScheduleEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.TopBarIconButton
+import androidx.compose.foundation.lazy.rememberLazyListState
 import hk.uwu.mixui.components.Icon
-import hk.uwu.mixui.components.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import hk.uwu.mixui.components.Scaffold
-import top.yukonga.miuix.kmp.basic.TopAppBar
 
 @Stable
 class RearWallpaperManagerState internal constructor() {
@@ -79,9 +73,7 @@ fun RearWallpaperManagerScreen(
     val demo = LocalFeatureGuideDemo.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val scrollBehavior = MiuixScrollBehavior()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
+    val listState = rememberLazyListState()
     val retainedState = state ?: rememberRearWallpaperManagerState()
     val wallpapers = retainedState.wallpapers
     val schedule = retainedState.schedule
@@ -368,8 +360,7 @@ fun RearWallpaperManagerScreen(
                     top = padding.calculateTopPadding() + contentPadding.calculateTopPadding(),
                     bottom = padding.calculateBottomPadding() + contentPadding.calculateBottomPadding(),
                 ),
-                scrollBehavior = scrollBehavior,
-                hazeState = if (embedded) null else hazeState,
+                listState = listState,
                 wallpapers = wallpapers,
                 storeWallpaperSources = storeWallpaperSources,
                 currentWallpaperId = currentWallpaperId,
@@ -417,36 +408,29 @@ fun RearWallpaperManagerScreen(
         if (embedded) {
             content(PaddingValues(0.dp))
         } else {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                        color = Color.Transparent,
-                        title = stringResource(R.string.rear_wallpaper_manager),
-                        navigationIconPadding = 12.dp,
-                        navigationIcon = {
-                            IconButton(onClick = onBack) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = { localImportRequest = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Add,
-                                    contentDescription = stringResource(R.string.rear_wallpaper_import),
-                                )
-                            }
-                            IconButton(
-                                onClick = { if (!refreshing) refreshCatalog(showSuccessToast = true) },
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Refresh,
-                                    contentDescription = stringResource(R.string.rear_wallpaper_refresh),
-                                )
-                            }
-                        },
-                        scrollBehavior = scrollBehavior,
-                    )
+            GlassTopBarScaffold(
+                isContentScrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0,
+                title = stringResource(R.string.rear_wallpaper_manager),
+                navigationIcon = {
+                    TopBarIconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.scene_route_navigate_back))
+                    }
+                },
+                actions = {
+                    TopBarIconButton(onClick = { localImportRequest = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = stringResource(R.string.rear_wallpaper_import),
+                        )
+                    }
+                    TopBarIconButton(
+                        onClick = { if (!refreshing) refreshCatalog(showSuccessToast = true) },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Refresh,
+                            contentDescription = stringResource(R.string.rear_wallpaper_refresh),
+                        )
+                    }
                 },
                 content = content,
             )
