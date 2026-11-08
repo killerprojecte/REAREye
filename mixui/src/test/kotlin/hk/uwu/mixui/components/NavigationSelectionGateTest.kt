@@ -38,6 +38,16 @@ class NavigationSelectionGateTest {
         assertEquals(NavigationSelectionGate.Result(null, true), gate.finish())
     }
 
+    @Test fun horizontalDragSuppressesHoldAndCommitsReleaseTarget() {
+        val gate = NavigationSelectionGate()
+        gate.begin(); gate.select(0)
+        gate.move(beyondSlop = true, outside = false, multiplePointers = false, horizontalDrag = true)
+        assertEquals(NavigationSelectionGate.Intent.Drag, gate.intent)
+        assertFalse(gate.openSecondary())
+        gate.select(2)
+        assertEquals(NavigationSelectionGate.Result(2, false), gate.finish())
+    }
+
     @Test fun leavingBarEvenWithinSlopCancels() {
         val gate = NavigationSelectionGate()
         gate.begin()

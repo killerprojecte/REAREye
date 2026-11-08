@@ -55,6 +55,7 @@ class NativeNavigationInteractionTest {
     private var fontScale by mutableStateOf(1f)
     private var showNavigation by mutableStateOf(true)
     private var selected by mutableStateOf("home")
+    private var currentNavigationStyle by mutableStateOf(NavigationBarStyle.HyperOS)
     private var currentMode by mutableStateOf(NavigationBarMode.Normal)
     private val selections = mutableListOf<String>()
     private val secondary = mutableListOf<String>()
@@ -73,7 +74,7 @@ class NativeNavigationInteractionTest {
     private fun settle() {
         repeat(24) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
     }
-    private fun host(backend: MixUiBackend, mode: NavigationBarMode, rtl: Boolean, app: Boolean = false, quickActions: List<String> = emptyList(), style: MixMochiStyle = MixMochiStyle.Default, dark: Boolean = false) {
+    private fun host(backend: MixUiBackend, mode: NavigationBarMode, rtl: Boolean, app: Boolean = false, quickActions: List<String> = emptyList(), style: MixMochiStyle = MixMochiStyle.Default, dark: Boolean = false, navigationStyle: NavigationBarStyle = NavigationBarStyle.HyperOS) {
         compose.runOnUiThread {
             activity?.close()
             currentRtl = rtl
@@ -81,6 +82,7 @@ class NativeNavigationInteractionTest {
             fontScale = 1f
             showNavigation = true
             currentMode = mode
+            currentNavigationStyle = navigationStyle
             selected = "home"; selections.clear(); secondary.clear(); ends.clear(); edits.clear()
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().setContent {
@@ -118,7 +120,7 @@ class NativeNavigationInteractionTest {
                                         NavigationItem("about", "About", Icons.Rounded.Info),
                                     ),
                                     selectedKey = selected, onSelect = { selections += it; selected = it },
-                                    backdrop = backdrop, mode = currentMode,
+                                    backdrop = backdrop, mode = currentMode, style = currentNavigationStyle,
                                     onSecondaryAction = { key, _ -> secondary += key },
                                     onSecondaryEnd = { ends += it },
                                     onEditAction = { edits += it },
@@ -155,6 +157,57 @@ class NativeNavigationInteractionTest {
         }
         assertTrue("Native indicator/press state did not visually restore: $changed/${a.size} pixels",
             changed.toDouble() / a.size < 0.015)
+    }
+
+    @Test fun horizontalPointerDragCommitsBothDirectionsAndCancelsSafely() {
+        for (backend in MixUiBackend.entries) for (rtl in listOf(false, true)) {
+            val styles = if (backend == MixUiBackend.Miuix) NavigationBarStyle.entries else listOf(NavigationBarStyle.IOS)
+            for (style in styles) {
+                host(backend, NavigationBarMode.FloatingGlass, rtl, navigationStyle = style)
+                val name = "drag-${backend.name}-${style.name}-$rtl"
+                val home = point("Home"); val about = point("About")
+                fun drag(from: Offset, to: Offset) {
+                    scene().performTouchInput { down(from) }
+                    for (step in 1..8) {
+                        scene().performTouchInput { moveTo(from + (to - from) * (step / 8f), delayMillis = 16) }
+                        compose.mainClock.advanceTimeBy(16); compose.waitForIdle()
+                        picture("$name-frame-${selections.size}-$step")
+                    }
+                    scene().performTouchInput { up() }; settle()
+                }
+                drag(home, about)
+                picture("$name-settled-about")
+                compose.runOnIdle { assertEquals(listOf("about"), selections); assertEquals("about", selected); assertTrue(secondary.isEmpty()) }
+                drag(about, home)
+                picture("$name-settled-home")
+                compose.runOnIdle { assertEquals(listOf("about", "home"), selections); assertEquals("home", selected) }
+                val before = picture("$name-before-cancel")
+                scene().performTouchInput { down(home); moveTo(about, delayMillis = 64); cancel() }; settle()
+                compose.runOnIdle { assertEquals(2, selections.size); assertEquals("home", selected) }
+                assertRestored(before, picture("$name-after-cancel"))
+                scene().performTouchInput { down(home); moveTo(about, delayMillis = 64) }
+                compose.runOnIdle { currentMode = NavigationBarMode.Floating }
+                settle(); scene().performTouchInput { up() }; settle()
+                compose.runOnIdle { assertEquals(2, selections.size); assertEquals("home", selected) }
+                picture("$name-after-mode-change")
+                if (backend == MixUiBackend.Miuix) {
+                    val start = point("Home"); val finish = point("About")
+                    scene().performTouchInput { down(start); moveTo(finish, delayMillis = 64) }
+                    compose.runOnIdle { currentNavigationStyle = if (style == NavigationBarStyle.IOS) NavigationBarStyle.HyperOS else NavigationBarStyle.IOS }
+                    settle(); scene().performTouchInput { up() }; settle()
+                    compose.runOnIdle { assertEquals(2, selections.size); assertEquals("home", selected) }
+                    picture("$name-after-style-change")
+                }
+                val tap = point("About")
+                scene().performTouchInput { down(tap); up() }; settle()
+                compose.runOnIdle { assertEquals(3, selections.size); assertEquals("about", selected) }
+                val hold = point("Config")
+                scene().performTouchInput { down(hold) }
+                compose.mainClock.advanceTimeBy(800); compose.waitForIdle()
+                scene().performTouchInput { up() }; settle()
+                compose.runOnIdle { assertEquals(3, selections.size); assertEquals(listOf("config"), secondary) }
+            }
+        }
     }
 
     @Test fun shortTapLongPressCancelAndIndicatorRestoreAcrossNativeModes() {

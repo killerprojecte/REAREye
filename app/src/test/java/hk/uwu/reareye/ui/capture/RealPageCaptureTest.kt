@@ -479,6 +479,84 @@ class RealPageCaptureTest {
         }
     }
 
+    /** Real CardManagerScreen editor, including its separate Android Dialog window. */
+    @Test fun mochiCardEditorKeepsPageVisibleAcrossThemesAndReopen() {
+        compose.mainClock.autoAdvance = false
+        compose.runOnUiThread {
+            activity = Robolectric.buildActivity(UiCaptureActivity::class.java,
+                Intent().putExtra("page", "cards").putExtra("backend", "mochi")).setup()
+        }
+        fun settle() { repeat(12) { compose.mainClock.advanceTimeBy(150); compose.waitForIdle() } }
+        settle()
+        val context = activity!!.get()
+        val folder = File(System.getProperty("ui.capture.output"), "mochi-card-dialog").apply { mkdirs() }
+        val editorTitle = context.getString(hk.uwu.reareye.R.string.rear_widget_edit_card)
+        val cancel = context.getString(hk.uwu.reareye.R.string.rear_widget_cancel)
+        fun openEditor() {
+            compose.onNodeWithText("Fixture clock").performClick()
+            settle()
+            compose.onNodeWithText(editorTitle, useUnmergedTree = true).assertIsDisplayed()
+        }
+        fun capture(name: String, expectedAlpha: Float) {
+            val dialog = requireNotNull(org.robolectric.shadows.ShadowDialog.getLatestDialog())
+            check(dialog.isShowing)
+            check(dialog.window!!.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND == 0) {
+                "Platform dim must not duplicate the animated Compose scrim"
+            }
+            val overlay = compose.runOnUiThread { captureDialogWindowBitmap(dialog) }
+            // Above/outside the bottom form, this is the actual native-window scrim.
+            val pixel = overlay.getPixel(4, 64)
+            org.junit.Assert.assertEquals("Native dialog scrim opacity", expectedAlpha,
+                android.graphics.Color.alpha(pixel) / 255f, 0.025f)
+            File(folder, "$name-window.png").outputStream().use {
+                check(overlay.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+            // Compose's generic root screenshot resolves the Activity, not Dialog.
+            // Composite the two real native-window captures for review of the visible page.
+            val page = compose.onNode(isRoot() and hasAnyDescendant(androidx.compose.ui.test.hasTestTag("fixture-root")),
+                useUnmergedTree = true).captureToImage().asAndroidBitmap()
+            val combined = page.copy(Bitmap.Config.ARGB_8888, true)
+            android.graphics.Canvas(combined).drawBitmap(overlay, 0f, 0f, null)
+            File(folder, "$name.png").outputStream().use {
+                check(combined.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        }
+        openEditor()
+        compose.onNode(hasSetTextAction() and hasText("Fixture clock")).performTextReplacement("Unsaved card title")
+        for ((value, label, alpha) in listOf(Triple(7, "light", 0.3f), Triple(8, "dark", 0.5f), Triple(7, "light-again", 0.3f))) {
+            compose.runOnUiThread { context.themeModeOverride = hk.uwu.reareye.ui.theme.AppThemeMode.fromValue(value) }
+            settle()
+            compose.onNode(hasSetTextAction() and hasText("Unsaved card title")).assertIsDisplayed()
+            capture(label, alpha)
+        }
+        compose.onNodeWithText(cancel).performClick()
+        settle()
+        check(!org.robolectric.shadows.ShadowDialog.getLatestDialog().isShowing)
+        compose.onNodeWithText("Fixture clock").assertIsDisplayed()
+        openEditor()
+        compose.onNode(hasSetTextAction() and hasText("Fixture clock")).assertIsDisplayed()
+        capture("reopened", 0.3f)
+        compose.runOnUiThread { context.themeModeOverride = hk.uwu.reareye.ui.theme.AppThemeMode.MOCHI_DARK }
+        settle()
+        capture("reopened-dark", 0.5f)
+        // Exercise Back dismissal separately from the explicit cancel action.
+        compose.runOnUiThread {
+            org.robolectric.shadows.ShadowDialog.getLatestDialog().onBackPressed()
+        }
+        settle()
+        check(!org.robolectric.shadows.ShadowDialog.getLatestDialog().isShowing)
+        openEditor()
+        capture("reopened-after-back", 0.5f)
+        compose.onNodeWithText(cancel).performClick()
+        settle()
+        check(!org.robolectric.shadows.ShadowDialog.getLatestDialog().isShowing)
+        File(folder, "evidence.txt").writeText(
+            "Production CardManagerScreen and OverlayDialog using in-memory guide data.\n" +
+                "Maven Mochi 0.2.0; Robolectric native graphics, not physical-device GPU evidence.\n" +
+                "Separate Activity and Dialog window images composited for review.\n" +
+                "Checks light/dark/light while editing, retained draft, cancel/reopen and Back/reopen.\n")
+    }
+
     private fun assertVisibleText(text: String) {
         val nodes = compose.onAllNodesWithText(text, useUnmergedTree = true)
         check(nodes.fetchSemanticsNodes().indices.any { nodes[it].isDisplayed() }) {

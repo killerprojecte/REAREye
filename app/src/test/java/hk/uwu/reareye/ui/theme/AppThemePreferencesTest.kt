@@ -121,7 +121,8 @@ class AppThemePreferencesTest {
         assertEquals(1, prefs.commitCalls)
         assertEquals(0, prefs.applyCalls)
         assertEquals(listOf("putInt:$modeKey=0",
-            "putInt:${ConfigKeys.MODULE_MOCHI_THEME_STYLE}=2", "remove:$backendKey"), prefs.lastOperations)
+            "putInt:${ConfigKeys.MODULE_MOCHI_THEME_STYLE}=2",
+            "putInt:${ConfigKeys.MODULE_NAVIGATION_BAR_STYLE}=0", "remove:$backendKey"), prefs.lastOperations)
         assertEquals("unchanged", prefs.getString("business", ""))
         assertEquals(AppThemeMode.MIUIX_LIGHT, AppThemePreferences.loadAndMigrate(prefs).mode)
     }
@@ -143,6 +144,39 @@ class AppThemePreferencesTest {
             assertEquals(1, prefs.getInt(ConfigKeys.MODULE_MOCHI_THEME_STYLE, -1))
             assertFalse(prefs.contains(backendKey))
         }
+    }
+
+    @Test fun absentAndInvalidNavigationStylesKeepOriginalIosWithoutWriting() {
+        for (value in listOf(null, -1, 200)) {
+            val prefs = MemoryPrefs(if (value == null) emptyMap() else mapOf(ConfigKeys.MODULE_NAVIGATION_BAR_STYLE to value))
+            assertEquals(AppNavigationBarStyle.IOS, AppThemePreferences.readNavigationStyle(prefs))
+            assertEquals(0, prefs.editCalls)
+        }
+    }
+
+    @Test fun migrationAndOlderThemeSavesPreserveNavigationAndOtherPreferences() {
+        val prefs = MemoryPrefs(mapOf(modeKey to 4, backendKey to 1,
+            ConfigKeys.MODULE_NAVIGATION_BAR_STYLE to 1,
+            ConfigKeys.MODULE_NAVIGATION_BAR_MODE to 2, "business" to true))
+        AppThemePreferences.loadAndMigrate(prefs)
+        assertEquals(AppNavigationBarStyle.HyperOS, AppThemePreferences.readNavigationStyle(prefs))
+        assertTrue(AppThemePreferences.saveTheme(prefs, AppThemeMode.MIUIX_LIGHT, AppMochiThemeStyle.Ios))
+        assertEquals(AppNavigationBarStyle.HyperOS, AppThemePreferences.readNavigationStyle(prefs))
+        assertEquals(2, prefs.getInt(ConfigKeys.MODULE_NAVIGATION_BAR_MODE, -1))
+        assertTrue(prefs.getBoolean("business", false))
+    }
+
+    @Test fun navigationDraftIsAtomicAndFailedSaveCanRetry() {
+        val prefs = MemoryPrefs(mapOf(modeKey to 0, ConfigKeys.MODULE_NAVIGATION_BAR_STYLE to 0))
+        val before = prefs.all()
+        prefs.failCommit = true
+        assertFalse(AppThemePreferences.saveTheme(prefs, AppThemeMode.MONET_DARK, AppMochiThemeStyle.Nothing, AppNavigationBarStyle.HyperOS))
+        assertEquals(before, prefs.all())
+        prefs.failCommit = false
+        assertTrue(AppThemePreferences.saveTheme(prefs, AppThemeMode.MONET_DARK, AppMochiThemeStyle.Nothing, AppNavigationBarStyle.HyperOS))
+        assertEquals(5, prefs.getInt(modeKey, -1))
+        assertEquals(AppNavigationBarStyle.HyperOS, AppThemePreferences.readNavigationStyle(prefs))
+        assertEquals(2, prefs.commitCalls)
     }
 
     private class MemoryPrefs(initial: Map<String, Any?> = emptyMap()) : HookPrefs {

@@ -38,6 +38,8 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation("androidx.compose.animation:animation")
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.backdrop)
+    implementation(libs.capsule)
     implementation(libs.miuix.ui)
     implementation(libs.miuix.icons)
     implementation(libs.miuix.glass)

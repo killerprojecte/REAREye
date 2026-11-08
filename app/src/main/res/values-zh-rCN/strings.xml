@@ -1134,4 +1134,5 @@
     <string name="theme_editor_system">系统</string>
     <string name="theme_editor_light">浅色</string>
     <string name="theme_editor_dark">深色</string>
+    <string name="theme_editor_navigation_style">导航栏风格</string>
 </resources>

@@ -24,6 +24,7 @@ internal data class ThemeStyleDraft(
     val monet: Boolean,
     val mochiStyle: AppMochiThemeStyle,
     val brightness: Int,
+    val navigationStyle: AppNavigationBarStyle = AppNavigationBarStyle.default,
 ) {
     val mode: AppThemeMode get() = AppThemeMode.fromValue(
         when {
@@ -33,25 +34,31 @@ internal data class ThemeStyleDraft(
         }
     )
     companion object {
-        fun from(mode: AppThemeMode, style: AppMochiThemeStyle) = ThemeStyleDraft(
+        fun from(
+            mode: AppThemeMode,
+            style: AppMochiThemeStyle,
+            navigationStyle: AppNavigationBarStyle = AppNavigationBarStyle.default,
+        ) = ThemeStyleDraft(
             mode.backend, mode.value in listOf(2, 4, 5, 9, 10, 11), style,
             when (mode.value) { 0, 4, 7, 10 -> 1; 1, 5, 8, 11 -> 2; else -> 0 },
+            navigationStyle,
         )
     }
 }
 
-/** The caller commits both values together before dismissing. Draft changes stay in this host. */
+/** The caller commits all values together before dismissing. Draft changes stay in this host. */
 @Composable
 internal fun ThemeStyleSheet(
     show: Boolean,
     appliedMode: AppThemeMode,
     appliedStyle: AppMochiThemeStyle,
+    appliedNavigationStyle: AppNavigationBarStyle = AppNavigationBarStyle.default,
     saving: Boolean = false,
     saveFailed: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (ThemeStyleDraft) -> Unit,
 ) {
-    var draft by remember(show) { mutableStateOf(ThemeStyleDraft.from(appliedMode, appliedStyle)) }
+    var draft by remember(show) { mutableStateOf(ThemeStyleDraft.from(appliedMode, appliedStyle, appliedNavigationStyle)) }
     MixUiHost(backend = draft.backend, colorMode = draft.mode.colorSchemeMode, mochiStyle = draft.mochiStyle.style) {
     BottomSheet(
         show = show, onDismissRequest = { if (!saving) onDismiss() }, title = stringResource(R.string.theme_editor_title),
@@ -94,6 +101,14 @@ internal fun ThemeStyleSheet(
                 Text(stringResource(R.string.theme_editor_brightness), style = MixTheme.textStyles.subtitle, fontWeight = FontWeight.SemiBold)
                 Tabs(listOf(stringResource(R.string.theme_editor_system), stringResource(R.string.theme_editor_light), stringResource(R.string.theme_editor_dark)), draft.brightness,
                     { if (!saving) draft = draft.copy(brightness = it) }, Modifier.fillMaxWidth())
+            }
+            if (draft.backend == MixUiBackend.Miuix) {
+                Column(Modifier.testTag("theme-navigation-tabs"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.theme_editor_navigation_style), style = MixTheme.textStyles.subtitle, fontWeight = FontWeight.SemiBold)
+                    Tabs(listOf("iOS", "HyperOS"), draft.navigationStyle.value,
+                        { if (!saving) draft = draft.copy(navigationStyle = AppNavigationBarStyle.fromValue(it)) },
+                        Modifier.fillMaxWidth())
+                }
             }
             if (saveFailed) {
                 Text(stringResource(R.string.module_theme_mode_save_failed),

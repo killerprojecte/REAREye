@@ -34,6 +34,11 @@ internal object AppThemePreferences {
         if (prefs.contains(LEGACY_BACKEND_KEY)) prefs.getInt(LEGACY_BACKEND_KEY, 0) else null,
     )
 
+    /** Missing keys keep the original iOS appearance without writing during reads or migration. */
+    fun readNavigationStyle(prefs: HookPrefs): AppNavigationBarStyle = AppNavigationBarStyle.fromValue(
+        prefs.getInt(ConfigKeys.MODULE_NAVIGATION_BAR_STYLE, AppNavigationBarStyle.default.value),
+    )
+
     /** Run off the main thread. Removal is the migration marker, in the same commit as the new mode. */
     fun loadAndMigrate(prefs: HookPrefs): AppThemeLoadResult {
         val mode = readMode(prefs)
@@ -46,9 +51,15 @@ internal object AppThemePreferences {
     fun saveSelection(prefs: HookPrefs, mode: AppThemeMode): Boolean = writeMode(prefs, mode.selectionValue)
 
     /** Save the sheet's complete draft together; cancellation never invokes this writer. */
-    fun saveTheme(prefs: HookPrefs, mode: AppThemeMode, style: AppMochiThemeStyle): Boolean = try {
+    fun saveTheme(
+        prefs: HookPrefs,
+        mode: AppThemeMode,
+        style: AppMochiThemeStyle,
+        navigationStyle: AppNavigationBarStyle = readNavigationStyle(prefs),
+    ): Boolean = try {
         val saved = prefs.edit().putInt(ConfigKeys.MODULE_THEME_MODE, mode.selectionValue)
             .putInt(ConfigKeys.MODULE_MOCHI_THEME_STYLE, style.value)
+            .putInt(ConfigKeys.MODULE_NAVIGATION_BAR_STYLE, navigationStyle.value)
             .remove(LEGACY_BACKEND_KEY).commit()
         if (saved) completedSaves.update { it + 1 }
         saved

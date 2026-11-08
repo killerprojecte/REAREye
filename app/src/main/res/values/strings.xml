@@ -1134,4 +1134,5 @@
     <string name="theme_editor_system">System</string>
     <string name="theme_editor_light">Light</string>
     <string name="theme_editor_dark">Dark</string>
+    <string name="theme_editor_navigation_style">Navigation style</string>
 </resources>

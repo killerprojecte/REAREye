@@ -3,6 +3,7 @@ package hk.uwu.mixui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -38,6 +39,10 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.kyant.backdrop.backdrops.layerBackdrop as iosLayerBackdrop
+import hk.uwu.mixui.components.iosnavigation.FloatingBottomBar
+import hk.uwu.mixui.components.iosnavigation.FloatingBottomBarItem
 import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.theme.MixTheme
@@ -51,6 +56,7 @@ import ui.feice.mochi.effect.glass.rememberMochiBarBackdrop
 
 /** No vendor state escapes into the application. Record the page, never the bar or popups. */
 class NavigationBackdrop internal constructor(
+    internal val ios: com.kyant.backdrop.backdrops.LayerBackdrop? = null,
     internal val miuix: top.yukonga.miuix.kmp.blur.LayerBackdrop? = null,
     internal val mochi: ui.feice.mochi.effect.glass.MochiBackdrop? = null,
 )
@@ -63,7 +69,8 @@ fun rememberNavigationBackdrop(): NavigationBackdrop = when (LocalMixUiBackend.c
             drawRect(surface)
             drawContent()
         } else null
-        remember(layer) { NavigationBackdrop(miuix = layer) }
+        val ios = com.kyant.backdrop.backdrops.rememberLayerBackdrop { drawRect(surface); drawContent() }
+        remember(layer, ios) { NavigationBackdrop(miuix = layer, ios = ios) }
     }
     MixUiBackend.Mochi -> {
         val layer = rememberMochiBarBackdrop(MixTheme.colorScheme.surface)
@@ -72,10 +79,15 @@ fun rememberNavigationBackdrop(): NavigationBackdrop = when (LocalMixUiBackend.c
 }
 
 fun Modifier.navigationBackdrop(backdrop: NavigationBackdrop): Modifier = when {
-    backdrop.miuix != null -> layerBackdrop(backdrop.miuix)
+    backdrop.ios != null -> with(backdrop.ios) {
+        val iosModifier = this@navigationBackdrop.iosLayerBackdrop(this)
+        if (backdrop.miuix != null) iosModifier.layerBackdrop(backdrop.miuix) else iosModifier
+    }
     backdrop.mochi != null -> mochiBackdropSource(backdrop.mochi)
     else -> this
 }
+
+enum class NavigationBarStyle { IOS, HyperOS }
 
 enum class NavigationBarMode { Normal, Floating, FloatingGlass, Translucent }
 
@@ -110,6 +122,7 @@ fun NavigationBar(
     backdrop: NavigationBackdrop,
     modifier: Modifier = Modifier,
     mode: NavigationBarMode = NavigationBarMode.Normal,
+    style: NavigationBarStyle = NavigationBarStyle.IOS,
     shadowVisibilityProgress: Float = 1f,
     onSecondaryAction: (String, NavigationAnchor) -> Unit = { _, _ -> },
     onSecondaryDrag: (Offset) -> Unit = {},
@@ -130,7 +143,7 @@ fun NavigationBar(
     } else items
     val direction = if (backend == MixUiBackend.Mochi) LayoutDirection.Ltr else ambientDirection
     val selectedIndex = renderedItems.indexOfFirst { it.key == selectedKey }.coerceAtLeast(0)
-    var nativeEpoch by remember(backend, mode) { mutableIntStateOf(0) }
+    var nativeEpoch by remember(backend, mode, style) { mutableIntStateOf(0) }
     val dispatch by rememberUpdatedState(onSelect)
     val secondary by rememberUpdatedState(onSecondaryAction)
     val drag by rememberUpdatedState(onSecondaryDrag)
@@ -138,13 +151,15 @@ fun NavigationBar(
     val edit by rememberUpdatedState(onEditAction)
     val inset = when {
         backend == MixUiBackend.Mochi -> 4.dp
+        mode == NavigationBarMode.Normal -> 0.dp
+        style == NavigationBarStyle.IOS -> 4.dp
         mode != NavigationBarMode.Normal -> 8.dp
         else -> 0.dp
     }
     val horizontalInset = with(density) { inset.toPx() }
     // Every pointerInput restart must receive a fresh gate. The old coroutine's
     // finally block retires its bridge, including when geometry changes mid-press.
-    val bridge = remember(backend, mode, renderedItems, horizontalInset, direction, density) {
+    val bridge = remember(backend, mode, style, renderedItems, horizontalInset, direction, density) {
         NavigationGestureBridge()
     }
     val activeBridge by rememberUpdatedState(bridge)
@@ -196,6 +211,7 @@ fun NavigationBar(
                     val x = if (direction == LayoutDirection.Rtl) size.width - down.position.x else down.position.x
                     val span = (size.width - horizontalInset * 2) / renderedItems.size
                     val index = if (span > 0f) ((x - horizontalInset) / span).toInt().coerceIn(renderedItems.indices) else 0
+                    var releaseIndex = index
                     val canOpen = renderedItems[index].secondaryActionLabel != null
                     val timeout = maxOf(180L, viewConfiguration.longPressTimeoutMillis / 2)
                     val held = canOpen && withTimeoutOrNull(timeout) {
@@ -213,15 +229,18 @@ fun NavigationBar(
                                 }
                                 bridge.selection.move(
                                     beyondSlop = (change.position - down.position).getDistance() > viewConfiguration.touchSlop,
+                                    horizontalDrag = kotlin.math.abs(change.position.x - down.position.x) > kotlin.math.abs(change.position.y - down.position.y),
                                     outside = change.position.x !in 0f..size.width.toFloat() ||
                                         change.position.y !in 0f..size.height.toFloat(),
                                     multiplePointers = event.changes.count { it.pressed } > 1,
                                 )
+                                val releaseX = if (direction == LayoutDirection.Rtl) size.width - change.position.x else change.position.x
+                                releaseIndex = if (span > 0f) ((releaseX - horizontalInset) / span).toInt().coerceIn(renderedItems.indices) else index
                                 pointerEnded = !change.pressed
                                 if (bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled) change.consume()
                             }
                             awaitPointerEvent(PointerEventPass.Final)
-                            if (pointerEnded || bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled) {
+                            if (pointerEnded || bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled || bridge.selection.intent == NavigationSelectionGate.Intent.Drag) {
                                 return@withTimeoutOrNull false
                             }
                         }
@@ -252,6 +271,7 @@ fun NavigationBar(
                             }
                             bridge.selection.move(
                                 beyondSlop = (change.position - down.position).getDistance() > viewConfiguration.touchSlop,
+                                    horizontalDrag = kotlin.math.abs(change.position.x - down.position.x) > kotlin.math.abs(change.position.y - down.position.y),
                                 outside = change.position.x !in 0f..size.width.toFloat() ||
                                     change.position.y !in 0f..size.height.toFloat(),
                                 multiplePointers = event.changes.count { it.pressed } > 1,
@@ -259,7 +279,9 @@ fun NavigationBar(
                             if (bridge.selection.intent == NavigationSelectionGate.Intent.Secondary) {
                                 drag(bridge.origin + change.position)
                             }
-                            if (bridge.selection.intent != NavigationSelectionGate.Intent.Tap) change.consume()
+                            if (bridge.selection.intent == NavigationSelectionGate.Intent.Secondary || bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled) change.consume()
+                            val releaseX = if (direction == LayoutDirection.Rtl) size.width - change.position.x else change.position.x
+                            releaseIndex = if (span > 0f) ((releaseX - horizontalInset) / span).toInt().coerceIn(renderedItems.indices) else index
                             pointerEnded = !change.pressed
                         }
                         awaitPointerEvent(PointerEventPass.Final)
@@ -269,19 +291,21 @@ fun NavigationBar(
                         secondaryFinished = true
                         end(cancelled)
                     }
+                    val wasDrag = bridge.selection.intent == NavigationSelectionGate.Intent.Drag
+                    if (wasDrag) bridge.selection.select(releaseIndex)
                     val result = bridge.selection.finish()
                     completed = true
                     // A rejected native selection can leave Mochi's private indicator at the
                     // wrong target. Recreate only the native subtree AFTER Main and gate finish.
                     val correctStaleMochiTarget = backend == MixUiBackend.Mochi &&
-                        result.selectedIndex != null && result.selectedIndex != index
+                        result.selectedIndex != null && result.selectedIndex != (if (wasDrag) releaseIndex else index)
                     if (result.resetNative || correctStaleMochiTarget) nativeEpoch++
                     result.selectedIndex?.let { nativeIndex ->
                         // Mochi glass press schedules its target asynchronously. A down/up
                         // in one input batch may therefore report the previous tab. For a
                         // valid, uncancelled Tap the pressed cell is authoritative; keep
                         // native callbacks for keyboard/accessibility and all native motion.
-                        val target = if (backend == MixUiBackend.Mochi) index else nativeIndex
+                        val target = if (wasDrag) releaseIndex else if (backend == MixUiBackend.Mochi) index else nativeIndex
                         dispatch(renderedItems[target].key)
                     }
                 } finally {
@@ -319,6 +343,23 @@ fun NavigationBar(
                                         selected = index == selectedIndex, onClick = { select(index) },
                                         icon = item.icon, label = item.label,
                                     )
+                                }
+                            }
+                        } else if (style == NavigationBarStyle.IOS) {
+                            FloatingBottomBar(
+                                selectedIndex = selectedIndex, onSelected = select,
+                                backdrop = requireNotNull(backdrop.ios), tabsCount = renderedItems.size,
+                                isBlurEnabled = glass, shadowVisibilityProgress = shadowVisibilityProgress,
+                            ) {
+                                renderedItems.forEachIndexed { index, item ->
+                                    FloatingBottomBarItem(
+                                        onClick = { select(index) },
+                                        modifier = Modifier.defaultMinSize(minWidth = 76.dp),
+                                    ) {
+                                        Icon(item.icon, contentDescription = item.label, tint = MixTheme.colorScheme.onSurface)
+                                        Text(item.label, fontSize = 11.sp, lineHeight = 14.sp,
+                                            color = MixTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
+                                    }
                                 }
                             }
                         } else {

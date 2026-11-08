@@ -335,6 +335,7 @@ tasks.withType<Test>().configureEach {
             includeTestsMatching("hk.uwu.reareye.ui.theme.AppThemeModeTest")
             includeTestsMatching("hk.uwu.reareye.ui.theme.AppThemePreferencesTest")
             includeTestsMatching("hk.uwu.reareye.ui.theme.AppMochiThemeStyleTest")
+            includeTestsMatching("hk.uwu.reareye.ui.theme.AppNavigationBarStyleTest")
             includeTestsMatching("hk.uwu.reareye.ui.components.config.MoreConfigGroupsTest")
         } else if (maryUiResources) {
             includeTestsMatching("hk.uwu.reareye.ui.components.Mary*LayoutTest")

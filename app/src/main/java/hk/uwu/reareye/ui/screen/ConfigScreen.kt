@@ -155,6 +155,7 @@ fun ConfigScreen(
     onAppListModeChange: (Boolean) -> Unit = {},
     onThemeModeChange: (Int) -> Unit = {},
     onMochiThemeStyleChange: (Int) -> Unit = {},
+    onNavigationBarStyleChange: (Int) -> Unit = {},
     onNavigationBarModeChange: (Int) -> Unit = {},
     onOpenRearStore: () -> Unit = {},
     onOpenRearStoreDetail: (String) -> Unit = {},
@@ -245,6 +246,7 @@ fun ConfigScreen(
         prefsManager,
         onThemeModeChange,
         onMochiThemeStyleChange,
+        onNavigationBarStyleChange,
         onNavigationBarModeChange,
     ) {
         { item: ConfigItem ->
@@ -256,6 +258,7 @@ fun ConfigScreen(
                 }
 
                 ConfigKeys.MODULE_THEME_MODE -> {
+                    onNavigationBarStyleChange(AppThemePreferences.readNavigationStyle(prefsManager.prefs).value)
                     onThemeModeChange(
                         AppThemePreferences.readMode(prefsManager.prefs).value
                     )

@@ -153,10 +153,33 @@ class ThemePreferenceControlsTest {
         assertEquals(AppMochiThemeStyle.Ios, style)
     }
 
+    @Test fun navigationStyleCancelSaveReopenAndBackendSwitchRemainTransactional() {
+        backing.edit().putInt(ConfigKeys.MODULE_THEME_MODE, 0).commit()
+        open(); edit()
+        choose("theme-navigation-tabs", "HyperOS")
+        assertEquals(AppNavigationBarStyle.IOS, AppThemePreferences.readNavigationStyle(store))
+        compose.onNodeWithContentDescription(label(R.string.theme_editor_close)).performClick(); frames()
+        assertEquals(0, commits.get())
+        edit()
+        save(); awaitCondition { callbacks == 1 }; frames()
+        assertEquals(AppNavigationBarStyle.IOS, AppThemePreferences.readNavigationStyle(store))
+        edit()
+        choose("theme-navigation-tabs", "HyperOS")
+        choose("theme-style-tabs", "Mochi")
+        compose.onNodeWithTag("theme-navigation-tabs").assertDoesNotExist()
+        choose("theme-style-tabs", "MIUIX")
+        save(); awaitCondition { callbacks == 2 }; frames()
+        assertEquals(AppNavigationBarStyle.HyperOS, AppThemePreferences.readNavigationStyle(store))
+        open(); edit(); save(); awaitCondition { callbacks == 3 }; frames()
+        assertEquals(AppNavigationBarStyle.HyperOS, AppThemePreferences.readNavigationStyle(store))
+        assertEquals(3, commits.get())
+    }
+
     @Test fun failedSaveRetainsDraftAndBlocksDuplicateCommit() {
         backing.edit().putInt(ConfigKeys.MODULE_THEME_MODE, 0).commit()
         open(); edit()
         choose("theme-palette-tabs", "Monet")
+        choose("theme-navigation-tabs", "HyperOS")
         failCommit = true
         commitGate = CountDownLatch(1)
         save()
@@ -174,6 +197,7 @@ class ThemePreferenceControlsTest {
         failCommit = false; commitGate = null
         save(); awaitCondition { callbacks == 1 }; frames()
         assertEquals(4, prefs.getInt(ConfigKeys.MODULE_THEME_MODE, -1))
+        assertEquals(AppNavigationBarStyle.HyperOS, AppThemePreferences.readNavigationStyle(store))
         assertEquals(2, commits.get())
     }
 

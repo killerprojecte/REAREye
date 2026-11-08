@@ -1,4 +1,4 @@
-package hk.uwu.reareye.ui.components.navigation
+package hk.uwu.mixui.components.iosnavigation
 
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown

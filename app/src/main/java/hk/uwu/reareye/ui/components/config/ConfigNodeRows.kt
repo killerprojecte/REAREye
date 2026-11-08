@@ -418,12 +418,14 @@ internal fun ThemeStyleConfigInput(
     var mode by remember(prefsManager) { mutableStateOf(AppThemePreferences.readMode(prefsManager.prefs)) }
     var style by remember(prefsManager) { mutableStateOf(AppMochiThemeStyle.fromValue(
         prefsManager.getInt(ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value))) }
+    var navigationStyle by remember(prefsManager) { mutableStateOf(AppThemePreferences.readNavigationStyle(prefsManager.prefs)) }
     var show by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     val themeRevision by AppThemePreferences.changes.collectAsState()
     LaunchedEffect(themeRevision, show) {
         if (!show) {
+            navigationStyle = AppThemePreferences.readNavigationStyle(prefsManager.prefs)
             mode = AppThemePreferences.readMode(prefsManager.prefs)
             style = AppMochiThemeStyle.fromValue(prefsManager.getInt(
                 ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value))
@@ -436,6 +438,7 @@ internal fun ThemeStyleConfigInput(
             " · " + stringResource(style.titleRes)
         } else "",
         onClick = { if (!saving) {
+            navigationStyle = AppThemePreferences.readNavigationStyle(prefsManager.prefs)
             mode = AppThemePreferences.readMode(prefsManager.prefs)
             style = AppMochiThemeStyle.fromValue(prefsManager.getInt(
                 ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value))
@@ -444,7 +447,8 @@ internal fun ThemeStyleConfigInput(
         } },
     )
     ThemeStyleSheet(
-        show = show, appliedMode = mode, appliedStyle = style, saving = saving, saveFailed = failed,
+        show = show, appliedMode = mode, appliedStyle = style, appliedNavigationStyle = navigationStyle,
+        saving = saving, saveFailed = failed,
         onDismiss = { if (!saving) { show = false; failed = false } },
         onSave = { draft ->
             if (!saving) {
@@ -454,11 +458,12 @@ internal fun ThemeStyleConfigInput(
                     // Once commit starts, navigation must not cancel delivery of its result.
                     withContext(NonCancellable) {
                         val saved = withContext(Dispatchers.IO) {
-                            AppThemePreferences.saveTheme(prefsManager.prefs, draft.mode, draft.mochiStyle)
+                            AppThemePreferences.saveTheme(prefsManager.prefs, draft.mode, draft.mochiStyle, draft.navigationStyle)
                         }
                         if (saved) {
                             mode = draft.mode
                             style = draft.mochiStyle
+                            navigationStyle = draft.navigationStyle
                             show = false
                             currentOnPreferenceChanged(item)
                         } else {

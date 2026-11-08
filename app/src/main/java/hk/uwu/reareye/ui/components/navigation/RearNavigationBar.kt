@@ -97,6 +97,7 @@ import com.kyant.backdrop.shadow.Shadow
 import com.kyant.capsule.ContinuousCapsule
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.config.ConfigType
+import hk.uwu.reareye.ui.theme.AppNavigationBarStyle
 import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
@@ -158,6 +159,7 @@ fun AppNavigationBar(
     currentScreen: String,
     navigationBarMode: ModuleNavigationBarMode,
     backdrop: NavigationBackdrop,
+    navigationBarStyle: AppNavigationBarStyle = AppNavigationBarStyle.default,
     shadowVisibilityProgress: Float = 1f,
     quickActionIds: List<String> = DefaultNavigationQuickActionIds,
     onQuickActionIdsChanged: (List<String>) -> Unit = {},
@@ -271,6 +273,7 @@ fun AppNavigationBar(
                     editActionLabel = if (item.route == CONFIG_ROUTE) editActionLabel else null,
                 )
             },
+            style = navigationBarStyle.style,
             selectedKey = currentScreen,
             onSelect = { route -> closeQuickActions(); onScreenSelected(route) },
             backdrop = backdrop,

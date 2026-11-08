@@ -12,6 +12,7 @@ import kotlin.math.roundToInt
 object ConfigKeys {
     const val MODULE_HIDE_LAUNCHER_ENTRY = "module_hide_launcher_entry"
     const val MODULE_MOCHI_THEME_STYLE = "module_mochi_theme_style"
+    const val MODULE_NAVIGATION_BAR_STYLE = "module_navigation_bar_style"
     const val MODULE_THEME_MODE = "module_theme_mode"
     const val MODULE_NAVIGATION_BAR_MODE = "module_navigation_bar_mode"
     const val MODULE_SEARCH_BAR_STYLE = "module_search_bar_style"

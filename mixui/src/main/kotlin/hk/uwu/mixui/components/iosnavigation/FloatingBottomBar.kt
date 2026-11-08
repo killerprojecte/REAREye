@@ -1,4 +1,4 @@
-package hk.uwu.reareye.ui.components.navigation
+package hk.uwu.mixui.components.iosnavigation
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOut

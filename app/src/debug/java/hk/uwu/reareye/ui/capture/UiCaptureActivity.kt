@@ -105,9 +105,10 @@ class UiCaptureActivity : ComponentActivity() {
                                 show = themeSheetVisible,
                                 appliedMode = themeModeOverride ?: initialMode,
                                 appliedStyle = hk.uwu.reareye.ui.theme.AppMochiThemeStyle.fromValue(mochiStyle.ordinal),
+                                appliedNavigationStyle = hk.uwu.reareye.ui.theme.AppThemePreferences.readNavigationStyle(themeSheetPrefs.prefs),
                                 onDismiss = { themeSheetVisible = false },
                                 onSave = { draft ->
-                                    if (hk.uwu.reareye.ui.theme.AppThemePreferences.saveTheme(themeSheetPrefs.prefs, draft.mode, draft.mochiStyle)) {
+                                    if (hk.uwu.reareye.ui.theme.AppThemePreferences.saveTheme(themeSheetPrefs.prefs, draft.mode, draft.mochiStyle, draft.navigationStyle)) {
                                         themeModeOverride = draft.mode
                                         mochiStyle = draft.mochiStyle.style
                                         themeSaveCount++

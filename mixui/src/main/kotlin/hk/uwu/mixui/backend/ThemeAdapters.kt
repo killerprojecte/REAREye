@@ -1,5 +1,7 @@
 package hk.uwu.mixui.backend
 
+import androidx.compose.ui.graphics.Color
+
 import hk.uwu.mixui.theme.MixColors
 import hk.uwu.mixui.theme.MixTextStyles
 
@@ -59,7 +61,12 @@ internal class MiuixColors(private val source: top.yukonga.miuix.kmp.theme.Color
     override val sliderBackground get() = source.sliderBackground
 }
 
-internal class MochiColors(private val source: ui.feice.mochi.theme.MochiColorScheme) : MixColors {
+internal class MochiColors(
+    private val source: ui.feice.mochi.theme.MochiColorScheme,
+    // MochiColorScheme.scrim is an opaque pigment, not an overlay opacity.
+    // Resolve MochiDefaults.scrim() under the active vendor theme.
+    override val windowDimming: Color,
+) : MixColors {
     override val primary get() = source.primary
     override val onPrimary get() = source.onPrimary
     override val primaryVariant get() = source.primaryContainer
@@ -109,7 +116,6 @@ internal class MochiColors(private val source: ui.feice.mochi.theme.MochiColorSc
     override val onSurfaceContainerHighest get() = source.onSurface
     override val outline get() = source.outline
     override val dividerLine get() = source.outlineVariant
-    override val windowDimming get() = source.scrim
     override val sliderKeyPoint get() = source.primary
     override val sliderKeyPointForeground get() = source.onPrimary
     override val sliderBackground get() = source.surfaceContainerHighest

@@ -73,8 +73,9 @@ fun MixUiHost(
                     ) {
                         val colors = MochiTheme.colorScheme
                         val styles = MochiTheme.textStyles
+                        val windowDimming = ui.feice.mochi.theme.MochiDefaults.scrim()
                         CompositionLocalProvider(
-                            LocalMixColors provides remember(colors) { MochiColors(colors) },
+                            LocalMixColors provides remember(colors, windowDimming) { MochiColors(colors, windowDimming) },
                             LocalMixTextStyles provides remember(styles) { MochiTextStyles(styles) },
                             content = hostedContent,
                         )

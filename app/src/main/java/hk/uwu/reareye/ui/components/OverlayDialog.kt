@@ -99,6 +99,9 @@ fun OverlayDialog(
         DisposableEffect(windowProvider) {
             val window = windowProvider?.window
             window?.setBackgroundDrawable(android.graphics.Color.TRANSPARENT.toDrawable())
+            // The Compose scrim owns dimming and its enter/exit animation. A second
+            // platform dim layer both darkens the page twice and outlives that animation.
+            window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             window?.let { WindowCompat.setDecorFitsSystemWindows(it, false) }
             onDispose {}
         }

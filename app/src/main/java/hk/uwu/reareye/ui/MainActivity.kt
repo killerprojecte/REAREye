@@ -69,6 +69,7 @@ import hk.uwu.reareye.ui.screen.MarySettingsScreen
 import hk.uwu.reareye.ui.screen.RearStoreScreen
 import hk.uwu.reareye.ui.screen.preloadHomeFrameNotice
 import hk.uwu.reareye.ui.theme.AppTheme
+import hk.uwu.reareye.ui.theme.AppNavigationBarStyle
 import hk.uwu.reareye.ui.theme.AppThemeMode
 import hk.uwu.reareye.ui.theme.AppMochiThemeStyle
 import hk.uwu.reareye.ui.theme.AppThemePreferences
@@ -89,6 +90,7 @@ private data class RemoteUiSettings(
     val mochiThemeStyleValue: Int,
     val themeModeValue: Int,
     val themeMigrationPending: Boolean,
+    val navigationBarStyleValue: Int,
     val navigationBarModeValue: Int,
     val navigationQuickActionIds: List<String>,
     val launcherHidden: Boolean,
@@ -220,6 +222,7 @@ class MainActivity : ComponentActivity() {
                             ),
                             themeModeValue = theme.mode.value,
                             themeMigrationPending = theme.migrationPending,
+                            navigationBarStyleValue = AppThemePreferences.readNavigationStyle(remotePrefsManager.prefs).value,
                             navigationBarModeValue = remotePrefsManager.getInt(
                                 ConfigKeys.MODULE_NAVIGATION_BAR_MODE,
                                 ModuleNavigationBarMode.default.value,
@@ -261,6 +264,9 @@ class MainActivity : ComponentActivity() {
             }
             var themeModeValue by remember(settings.themeModeValue) {
                 mutableIntStateOf(settings.themeModeValue)
+            }
+            var navigationBarStyleValue by remember(settings.navigationBarStyleValue) {
+                mutableIntStateOf(settings.navigationBarStyleValue)
             }
             var navigationBarModeValue by remember {
                 mutableIntStateOf(settings.navigationBarModeValue)
@@ -470,6 +476,7 @@ class MainActivity : ComponentActivity() {
                                                 },
                                                 onThemeModeChange = { themeModeValue = it },
                                                 onMochiThemeStyleChange = { mochiThemeStyleValue = it },
+                                                onNavigationBarStyleChange = { navigationBarStyleValue = it },
                                                 onNavigationBarModeChange = {
                                                     navigationBarModeValue = it
                                                 },
@@ -542,6 +549,7 @@ class MainActivity : ComponentActivity() {
                                             // so the Configuration tab stays highlighted while it is open.
                                             currentScreen = if (currentScreen == "store") "config" else currentScreen,
                                             navigationBarMode = navigationBarMode,
+                                            navigationBarStyle = AppNavigationBarStyle.fromValue(navigationBarStyleValue),
                                             backdrop = backdrop,
                                             shadowVisibilityProgress = navShadowProgress,
                                             quickActionIds = navigationQuickActionIds,
