@@ -196,8 +196,8 @@
 
     <string name="category_module_settings">模块设置</string>
     <string name="category_module_settings_desc">REAREye 模块自身设置</string>
-    <string name="module_theme_mode">主题样式</string>
-    <string name="module_theme_mode_desc">在不同主题样式之间切换</string>
+    <string name="module_theme_mode">主题模式</string>
+    <string name="module_theme_mode_desc">选择 MIUIX、Monet 或 Mochi，以及跟随系统、浅色或深色。</string>
     <string name="module_navigation_bar_mode">导航栏样式</string>
     <string name="module_navigation_bar_mode_desc">选择不同的导航栏样式</string>
     <string name="module_navigation_bar_mode_normal">普通</string>
@@ -216,9 +216,9 @@
     <string name="module_store_api_custom_domain">自定义 API 域名</string>
     <string name="module_store_api_custom_domain_help">只填写域名，不要包含 https:// 或路径</string>
     <string name="module_store_api_custom_domain_invalid">域名无效。这里只能填写主机名，不能包含协议、路径、查询或片段</string>
-    <string name="module_theme_mode_miuix_system">Miuix 跟随系统</string>
-    <string name="module_theme_mode_miuix_light">Miuix 浅色</string>
-    <string name="module_theme_mode_miuix_dark">Miuix 深色</string>
+    <string name="module_theme_mode_miuix_system">MIUIX 跟随系统</string>
+    <string name="module_theme_mode_miuix_light">MIUIX 浅色</string>
+    <string name="module_theme_mode_miuix_dark">MIUIX 深色</string>
     <string name="module_theme_mode_monet_system">Monet 跟随系统</string>
     <string name="module_theme_mode_monet_light">Monet 浅色</string>
     <string name="module_theme_mode_monet_dark">Monet 深色</string>
