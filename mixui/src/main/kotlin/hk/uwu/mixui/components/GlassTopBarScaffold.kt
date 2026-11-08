@@ -1,6 +1,7 @@
 package hk.uwu.mixui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
@@ -38,7 +39,8 @@ import ui.feice.mochi.effect.glass.rememberMochiBackdrop
  * content pass behind the bar. Forms belong in [overlayContent], never [content].
  * Two separate recordings avoid feedback: body-only for the bar; page plus bar
  * for forms. The root popup host, overlays and scrims are outside both recordings.
- * No backdrop or vendor scroll state escapes.
+ * No backdrop or vendor scroll state escapes. [pinnedHeader] sits below the bar
+ * and contributes to the returned content padding, for tabs or filters.
  *
  * MIUIX uses its collapsing glass bar when runtime shaders are supported and its
  * ordinary solid bar otherwise. Mochi uses its own title bar and root-theme
@@ -52,6 +54,8 @@ fun GlassTopBarScaffold(
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     overlayContent: @Composable () -> Unit = {},
+    topBarModifier: Modifier = Modifier,
+    pinnedHeader: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val background = MixTheme.colorScheme.surface
@@ -75,26 +79,31 @@ fun GlassTopBarScaffold(
                     // feed the form and its scrim back into its own glass.
                     popupHost = {},
                     topBar = {
-                        if (backdrop != null) {
-                            top.yukonga.miuix.kmp.glass.GlassTopAppBar(
-                                title = title,
-                                isContentScrolled = isContentScrolled,
-                                backdrop = backdrop,
-                                // Match the 799 GlassPage default: native band plus button
-                                // underlay. Progressive blur is an opt-in demo setting.
-                                progressiveBlur = false,
-                                scrollBehavior = scrollBehavior,
-                                navigationIcon = navigationIcon,
-                                actions = actions,
-                            )
-                        } else {
-                            top.yukonga.miuix.kmp.basic.TopAppBar(
-                                title = title,
-                                color = background,
-                                scrollBehavior = scrollBehavior,
-                                navigationIcon = navigationIcon,
-                                actions = actions,
-                            )
+                        Column {
+                            if (backdrop != null) {
+                                top.yukonga.miuix.kmp.glass.GlassTopAppBar(
+                                    title = title,
+                                    modifier = topBarModifier,
+                                    isContentScrolled = isContentScrolled,
+                                    backdrop = backdrop,
+                                    // Match the 799 GlassPage default: native band plus button
+                                    // underlay. Progressive blur is an opt-in demo setting.
+                                    progressiveBlur = false,
+                                    scrollBehavior = scrollBehavior,
+                                    navigationIcon = navigationIcon,
+                                    actions = actions,
+                                )
+                            } else {
+                                top.yukonga.miuix.kmp.basic.TopAppBar(
+                                    title = title,
+                                    modifier = topBarModifier,
+                                    color = background,
+                                    scrollBehavior = scrollBehavior,
+                                    navigationIcon = navigationIcon,
+                                    actions = actions,
+                                )
+                            }
+                            pinnedHeader()
                         }
                     },
                 ) { padding ->
@@ -122,15 +131,18 @@ fun GlassTopBarScaffold(
                     containerColor = background,
                     popupHost = {},
                     topBar = {
-                        ui.feice.mochi.navigation.MochiTitleBar(
-                            title = title,
-                            modifier = Modifier.windowInsetsPadding(horizontalBarInsets()),
-                            background = background,
-                            backgroundProgress = { if (isContentScrolled) 1f else 0f },
-                            backdrop = backdrop,
-                            navigationIcon = navigationIcon,
-                            actions = actions,
-                        )
+                        Column {
+                            ui.feice.mochi.navigation.MochiTitleBar(
+                                title = title,
+                                modifier = topBarModifier.windowInsetsPadding(horizontalBarInsets()),
+                                background = background,
+                                backgroundProgress = { if (isContentScrolled) 1f else 0f },
+                                backdrop = backdrop,
+                                navigationIcon = navigationIcon,
+                                actions = actions,
+                            )
+                            pinnedHeader()
+                        }
                     },
                 ) { padding ->
                     Box(Modifier.fillMaxSize().mochiBackdropSource(backdrop).background(background)) {

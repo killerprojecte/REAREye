@@ -4,14 +4,15 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -33,7 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -44,15 +45,13 @@ import hk.uwu.reareye.ui.featureGuideAnchor
 import kotlinx.coroutines.flow.distinctUntilChanged
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
-import hk.uwu.mixui.components.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import hk.uwu.mixui.components.TopBarIconButton
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.pageScrollFeedback
 import hk.uwu.mixui.components.Tabs
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import hk.uwu.mixui.components.ArrowPreference
 import top.yukonga.miuix.kmp.preference.ArrowPreference as MiuixArrowPreference
+import hk.uwu.mixui.components.ArrowPreference
 import hk.uwu.mixui.theme.MixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 private enum class DashboardTab { CARDS, COMPONENTS, WALLPAPERS, MORE }
 
@@ -84,8 +83,8 @@ internal fun ConfigDashboard(
     componentContent: @Composable (String?, () -> Unit, (String) -> Unit, ConfigDashboardAction?, () -> Unit) -> Unit = { _, _, _, _, _ -> },
     wallpaperContent: @Composable (ConfigDashboardAction?, () -> Unit) -> Unit = { _, _ -> },
 ) {
-    // Dashboard state must never collapse an incoming category/favorites header.
-    val scrollBehavior = MiuixScrollBehavior()
+    // Keep the More list at page scope so its glass bar observes the actual scroll.
+    val moreListState = rememberLazyListState(moreScrollIndex, moreScrollOffset)
     var selectedTab by remember(selectedTabIndex) {
         mutableStateOf(DashboardTab.entries.getOrNull(selectedTabIndex) ?: DashboardTab.CARDS)
     }
@@ -117,101 +116,97 @@ internal fun ConfigDashboard(
     )
     val tabTransition = updateTransition(selectedTab, label = "ConfigDashboardTabs")
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .then(modifier),
-    ) {
-        TopAppBar(
-            modifier = Modifier.featureGuideAnchor("config_header_${selectedTab.ordinal}"),
-            title = stringResource(
-                when (selectedTab) {
-                    DashboardTab.CARDS -> R.string.config_tab_cards
-                    DashboardTab.COMPONENTS -> R.string.config_tab_components
-                    DashboardTab.WALLPAPERS -> R.string.config_tab_wallpapers
-                    DashboardTab.MORE -> R.string.configuration_title
-                }
-            ),
-            navigationIcon = {
-                IconButton(
-                    onClick = onOpenStore,
-                    modifier = Modifier.featureGuideAnchor("config_store_button"),
-                ) {
+    GlassTopBarScaffold(
+        modifier = modifier.fillMaxSize(),
+        isContentScrolled = selectedTab == DashboardTab.MORE && moreListState.canScrollBackward,
+        topBarModifier = Modifier.featureGuideAnchor("config_header_${selectedTab.ordinal}"),
+        title = stringResource(
+            when (selectedTab) {
+                DashboardTab.CARDS -> R.string.config_tab_cards
+                DashboardTab.COMPONENTS -> R.string.config_tab_components
+                DashboardTab.WALLPAPERS -> R.string.config_tab_wallpapers
+                DashboardTab.MORE -> R.string.configuration_title
+            }
+        ),
+        navigationIcon = {
+            TopBarIconButton(
+                onClick = onOpenStore,
+                modifier = Modifier.featureGuideAnchor("config_store_button"),
+            ) {
+                Icon(
+                    Icons.Outlined.CloudDownload,
+                    contentDescription = stringResource(R.string.store_navigation),
+                )
+            }
+        },
+        actions = {
+            when (selectedTab) {
+                DashboardTab.CARDS -> TopBarIconButton(onClick = {
+                    pendingAction = ConfigDashboardAction.ADD_CARD
+                }) {
                     Icon(
-                        Icons.Outlined.CloudDownload,
-                        contentDescription = stringResource(R.string.store_navigation),
+                        Icons.Filled.Add,
+                        contentDescription = stringResource(R.string.rear_widget_add_card)
                     )
                 }
-            },
-            navigationIconPadding = 12.dp,
-            actions = {
-                when (selectedTab) {
-                    DashboardTab.CARDS -> IconButton(onClick = {
-                        pendingAction = ConfigDashboardAction.ADD_CARD
+
+                DashboardTab.COMPONENTS -> TopBarIconButton(onClick = {
+                    pendingAction = ConfigDashboardAction.ADD_COMPONENT
+                }) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = stringResource(R.string.rear_widget_add_business)
+                    )
+                }
+
+                DashboardTab.WALLPAPERS -> {
+                    TopBarIconButton(onClick = {
+                        pendingAction = ConfigDashboardAction.IMPORT_WALLPAPER
                     }) {
                         Icon(
                             Icons.Filled.Add,
-                            contentDescription = stringResource(R.string.rear_widget_add_card)
+                            contentDescription = stringResource(R.string.rear_wallpaper_import)
                         )
                     }
-
-                    DashboardTab.COMPONENTS -> IconButton(onClick = {
-                        pendingAction = ConfigDashboardAction.ADD_COMPONENT
+                    TopBarIconButton(onClick = {
+                        pendingAction = ConfigDashboardAction.REFRESH_WALLPAPER
                     }) {
                         Icon(
-                            Icons.Filled.Add,
-                            contentDescription = stringResource(R.string.rear_widget_add_business)
-                        )
-                    }
-
-                    DashboardTab.WALLPAPERS -> {
-                        IconButton(onClick = {
-                            pendingAction = ConfigDashboardAction.IMPORT_WALLPAPER
-                        }) {
-                            Icon(
-                                Icons.Filled.Add,
-                                contentDescription = stringResource(R.string.rear_wallpaper_import)
-                            )
-                        }
-                        IconButton(onClick = {
-                            pendingAction = ConfigDashboardAction.REFRESH_WALLPAPER
-                        }) {
-                            Icon(
-                                Icons.Rounded.Refresh,
-                                contentDescription = stringResource(R.string.rear_wallpaper_refresh)
-                            )
-                        }
-                    }
-
-                    DashboardTab.MORE -> IconButton(onClick = onMoreSearchRequested) {
-                        Icon(
-                            Icons.Rounded.Search,
-                            contentDescription = stringResource(R.string.config_more_search),
+                            Icons.Rounded.Refresh,
+                            contentDescription = stringResource(R.string.rear_wallpaper_refresh)
                         )
                     }
                 }
-            },
-            scrollBehavior = scrollBehavior,
-        )
-        Tabs(
-            tabs = tabs,
-            selectedTabIndex = selectedTab.ordinal,
-            onTabSelected = ::selectTab,
-            modifier = Modifier
-                .featureGuideAnchor("config_tabs")
-                .fillMaxWidth()
-                .padding(
-                    top = 4.dp,
-                    start = 12.dp,
-                    end = 12.dp,
-                    bottom = 8.dp,
-                ),
-        )
+
+                DashboardTab.MORE -> TopBarIconButton(onClick = onMoreSearchRequested) {
+                    Icon(
+                        Icons.Rounded.Search,
+                        contentDescription = stringResource(R.string.config_more_search),
+                    )
+                }
+            }
+        },
+        pinnedHeader = {
+            Tabs(
+                tabs = tabs,
+                selectedTabIndex = selectedTab.ordinal,
+                onTabSelected = ::selectTab,
+                modifier = Modifier
+                    .background(MixTheme.colorScheme.surface)
+                    .featureGuideAnchor("config_tabs")
+                    .fillMaxWidth()
+                    .padding(
+                        top = 4.dp,
+                        start = 12.dp,
+                        end = 12.dp,
+                        bottom = 8.dp,
+                    ),
+            )
+        },
+    ) { pagePadding ->
         BoxWithConstraints(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
+                .fillMaxSize(),
         ) {
             val pageWidth = maxWidth
             DashboardTab.entries.forEach { tab ->
@@ -234,6 +229,10 @@ internal fun ConfigDashboard(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            // Only More owns a scroll-padding contract. Existing managers
+                            // keep their viewport below the shared header.
+                            .then(if (tab == DashboardTab.MORE) Modifier else
+                                Modifier.padding(top = pagePadding.calculateTopPadding()))
                             .zIndex(
                                 when (tab) {
                                     tabTransition.targetState -> 1f
@@ -273,13 +272,13 @@ internal fun ConfigDashboard(
 
                             DashboardTab.MORE -> MoreTab(
                                 categories = moreCategories,
-                                bottomPadding = contentPadding.calculateBottomPadding(),
+                                topPadding = pagePadding.calculateTopPadding(),
+                                bottomPadding = maxOf(contentPadding.calculateBottomPadding(), pagePadding.calculateBottomPadding()),
+                                listState = moreListState,
                                 onOpenCategory = onOpenCategory,
                                 onOpenScriptManagement = onOpenScriptManagement,
                                 onOpenFavoriteCategory = onOpenFavoriteCategory,
                                 favoriteNodeCount = favoriteNodeCount,
-                                initialScrollIndex = moreScrollIndex,
-                                initialScrollOffset = moreScrollOffset,
                                 onScrollChanged = onMoreScrollChanged,
                             )
                         }
@@ -293,19 +292,15 @@ internal fun ConfigDashboard(
 @Composable
 private fun MoreTab(
     categories: List<MoreCategory>,
+    topPadding: Dp,
     bottomPadding: Dp,
+    listState: LazyListState,
     onOpenCategory: (ConfigCategory) -> Unit,
     onOpenScriptManagement: () -> Unit,
     onOpenFavoriteCategory: () -> Unit,
     favoriteNodeCount: Int,
-    initialScrollIndex: Int,
-    initialScrollOffset: Int,
     onScrollChanged: (Int, Int) -> Unit,
 ) {
-    val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = initialScrollIndex,
-        initialFirstVisibleItemScrollOffset = initialScrollOffset,
-    )
     LaunchedEffect(listState) {
         snapshotFlow {
             listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
@@ -317,9 +312,10 @@ private fun MoreTab(
         state = listState,
         modifier = Modifier
             .fillMaxSize()
-            .overScrollVertical()
-            .scrollEndHaptic(),
-        contentPadding = PaddingValues(bottom = bottomPadding + 12.dp),
+            .testTag("config-more-list")
+            .pageScrollFeedback(),
+        contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding + 12.dp),
+        overscrollEffect = null,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item(key = "more_favorites") {
