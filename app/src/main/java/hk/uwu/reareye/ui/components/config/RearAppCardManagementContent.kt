@@ -59,7 +59,7 @@ import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.InfiniteProgressIndicator
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TextField
+import hk.uwu.mixui.components.TextField
 import hk.uwu.mixui.theme.MixTheme
 
 @SuppressLint("LocalContextGetResourceValueCall")

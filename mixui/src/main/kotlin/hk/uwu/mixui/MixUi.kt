@@ -37,7 +37,17 @@ fun MixUiHost(backend: MixUiBackend = MixUiBackend.Miuix, colorMode: MixColorSch
         CompositionLocalProvider(LocalMixUiBackend provides backend, LocalMixUiRenderer provides renderer) {
             if (backend == MixUiBackend.Mochi) {
                 val palette = rememberMochiPalette(colorMode)
-                MochiTheme(colors = ui.feice.mochi.theme.animateMochiColorScheme(palette), systemBarAppearance = false) {
+                MochiTheme(
+                    colors = ui.feice.mochi.theme.animateMochiColorScheme(palette),
+                    systemBarAppearance = false,
+                    materials = ui.feice.mochi.ios.iosMaterials(
+                        isDark = palette.isDark,
+                        density = androidx.compose.ui.platform.LocalDensity.current.density,
+                        glass = true,
+                        blur = true,
+                        themeAccent = true,
+                    ),
+                ) {
                     val colors = MochiTheme.colorScheme
                     val styles = MochiTheme.textStyles
                     CompositionLocalProvider(

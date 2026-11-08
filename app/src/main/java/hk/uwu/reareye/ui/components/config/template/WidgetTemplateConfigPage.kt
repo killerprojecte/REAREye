@@ -136,7 +136,7 @@ import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Slider
 import hk.uwu.mixui.components.Tabs
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TextField
+import hk.uwu.mixui.components.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import hk.uwu.mixui.components.SwitchPreference

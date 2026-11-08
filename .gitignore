@@ -34,3 +34,6 @@ standalone-maml/**/*.zip
 REFACTOR_PLAN_2.0.md
 # Local build runtime and writable Android user home
 /.local-build/
+
+# Build-logic source package is not generated build output.
+!buildSrc/src/main/java/hk/uwu/build/

@@ -10,6 +10,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -112,12 +115,56 @@ class RealPageCaptureTest {
                             "No populated scene route is visible after scrolling"
                         }
                         save(folder, "scrolled.png")
+                        if (!dark && !java.lang.Boolean.getBoolean("ui.capture.baseline")) {
+                            val actions = compose.onAllNodes(hasClickAction())
+                            val nodes = actions.fetchSemanticsNodes()
+                            val backIndex = nodes.indices.firstOrNull {
+                                nodes[it].boundsInRoot.top < 100f && nodes[it].boundsInRoot.center.x < 80f
+                            } ?: error("No visible navigation button for glass press evidence")
+                            actions[backIndex].performTouchInput { down(center) }
+                            repeat(12) { frame ->
+                                compose.mainClock.advanceTimeBy(16)
+                                save(folder, "glass-pressed-${frame.toString().padStart(2, '0')}.png")
+                            }
+                            actions[backIndex].performTouchInput { up() }
+                            repeat(12) { frame ->
+                                compose.mainClock.advanceTimeBy(16)
+                                save(folder, "glass-released-${frame.toString().padStart(2, '0')}.png")
+                            }
+                        }
                     }
                     File(folder, "evidence.txt").writeText(
                         "Renderer: Robolectric 4.17 native graphics / Compose\n" +
                         "Fixture: $page; backend: $backend; dark: $dark\n" +
                         "Not a physical-device or full application integration test.\n" +
                         "Sampled frames require visual review before claiming an animation effect.\n")
+                }
+            }
+        }
+    }
+
+    @Test fun actualEditorFieldsAcceptChanges() {
+        for (backend in System.getProperty("ui.capture.backends", "miuix,mochi").orEmpty().split(",")) {
+            for (page in listOf("card-editor", "component-editor")) {
+                compose.mainClock.autoAdvance = false
+                compose.runOnUiThread {
+                    activity?.close()
+                    activity = Robolectric.buildActivity(UiCaptureActivity::class.java,
+                        Intent().putExtra("page", page).putExtra("backend", backend).putExtra("dark", false)).setup()
+                }
+                repeat(10) { compose.mainClock.advanceTimeBy(250); compose.waitForIdle() }
+                if (page == "card-editor") {
+                    compose.onNode(hasSetTextAction() and hasText("Fixture clock"))
+                        .performTextReplacement("Edited fixture")
+                    // The capture clock is manual: editing schedules recomposition and
+                    // focus/label motion, so advance frames before checking visible state.
+                    repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+                    compose.onNode(hasSetTextAction() and hasText("Edited fixture")).assertIsDisplayed()
+                } else {
+                    compose.onNode(hasSetTextAction() and hasText("/demo/clock.zip"))
+                        .performTextReplacement("/demo/edited.zip")
+                    repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+                    compose.onNode(hasSetTextAction() and hasText("/demo/edited.zip")).assertIsDisplayed()
                 }
             }
         }

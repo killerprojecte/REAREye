@@ -90,7 +90,7 @@ import hk.uwu.mixui.components.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TextField
+import hk.uwu.mixui.components.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme

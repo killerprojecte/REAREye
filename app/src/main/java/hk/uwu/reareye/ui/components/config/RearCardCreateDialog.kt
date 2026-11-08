@@ -48,7 +48,7 @@ import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import hk.uwu.mixui.components.Tabs
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TextField
+import hk.uwu.mixui.components.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.components.SpinnerPreference

@@ -85,7 +85,7 @@ import hk.uwu.mixui.components.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import hk.uwu.mixui.components.Switch
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TextField
+import hk.uwu.mixui.components.TextField
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import kotlin.math.roundToInt

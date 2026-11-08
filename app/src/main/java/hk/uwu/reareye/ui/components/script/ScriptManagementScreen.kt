@@ -89,7 +89,7 @@ import hk.uwu.mixui.components.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
+import hk.uwu.mixui.components.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical

@@ -63,7 +63,7 @@ import hk.uwu.mixui.components.GlassTopBarScaffold
 import hk.uwu.mixui.components.TopBarIconButton
 import androidx.compose.foundation.lazy.rememberLazyListState
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TextField
+import hk.uwu.mixui.components.TextField
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
