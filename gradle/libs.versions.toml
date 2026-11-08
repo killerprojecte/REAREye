@@ -20,7 +20,7 @@ compose-bom = "2026.09.00"
 compose-foundation-style = "1.12.1"
 androidx-activity-compose = "1.13.0"
 androidx-lifecycle-runtime-compose = "2.11.0"
-miuix = "0.9.4"
+miuix = "0.9.4-799d3d09-SNAPSHOT"
 mochi = "0.2.0"
 markdown-renderer = "0.46.0"
 coil = "3.6.3"
@@ -91,6 +91,7 @@ markdown-renderer = { module = "com.mikepenz:multiplatform-markdown-renderer", v
 markdown-code = { module = "com.mikepenz:multiplatform-markdown-renderer-code", version.ref = "markdown-renderer" }
 markdown-coil3 = { module = "com.mikepenz:multiplatform-markdown-renderer-coil3", version.ref = "markdown-renderer" }
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
+miuix-glass = { group = "top.yukonga.miuix.kmp", name = "miuix-glass", version.ref = "miuix" }
 miuix-ui = { group = "top.yukonga.miuix.kmp", name = "miuix-ui", version.ref = "miuix" }
 miuix-preference = { group = "top.yukonga.miuix.kmp", name = "miuix-preference", version.ref = "miuix" }
 miuix-icons = { group = "top.yukonga.miuix.kmp", name = "miuix-icons", version.ref = "miuix" }

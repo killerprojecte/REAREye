@@ -22,14 +22,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import hk.uwu.reareye.ui.components.RearBadgeGroup
-import hk.uwu.reareye.ui.components.RearBadgeItem
+import hk.uwu.mixui.components.BadgeGroup
+import hk.uwu.mixui.components.BadgeItem
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
-import top.yukonga.miuix.kmp.basic.Icon
+import hk.uwu.mixui.components.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 
 @Composable
@@ -38,7 +38,7 @@ fun ModuleStyleManagerCard(
     bottomPadding: Dp = 12.dp,
     title: String,
     summaryLines: List<String>,
-    badges: List<RearBadgeItem> = emptyList(),
+    badges: List<BadgeItem> = emptyList(),
     detailsBelowHeader: Boolean = false,
     trailing: @Composable (() -> Unit)? = null,
     headerVerticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
@@ -79,7 +79,7 @@ fun ModuleStyleManagerCard(
                     )
                     if (!detailsBelowHeader) {
                         if (badges.isNotEmpty()) {
-                            RearBadgeGroup(
+                            BadgeGroup(
                                 badges = badges,
                                 modifier = Modifier.padding(top = 2.dp),
                             )
@@ -100,7 +100,7 @@ fun ModuleStyleManagerCard(
 
             if (detailsBelowHeader) {
                 if (badges.isNotEmpty()) {
-                    RearBadgeGroup(badges = badges)
+                    BadgeGroup(badges = badges)
                 }
                 summaryLines.forEach { line ->
                     Text(

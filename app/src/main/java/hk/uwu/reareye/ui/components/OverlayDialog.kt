@@ -56,7 +56,7 @@ import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.anim.DecelerateEasing
 import top.yukonga.miuix.kmp.anim.folmeSpring
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.layout.DialogDefaults
 import hk.uwu.mixui.theme.MixTheme
 

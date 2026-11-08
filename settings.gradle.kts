@@ -17,6 +17,24 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        exclusiveContent {
+            forRepository {
+                maven {
+                    name = "MiuixSnapshots"
+                    val actions = providers.environmentVariable("GITHUB_ACTIONS").orNull == "true"
+                    url = uri(if (actions) "https://maven.pkg.github.com/compose-miuix-ui/miuix"
+                        else "https://repo.fastmcmirror.org/content/repositories/miuix-snapshots")
+                    if (actions) {
+                        credentials {
+                            username = providers.environmentVariable("GITHUB_ACTOR").orNull
+                            password = providers.environmentVariable("GITHUB_TOKEN").orNull
+                                ?: providers.environmentVariable("GITHUB_PKG_TOKEN").orNull
+                        }
+                    }
+                }
+            }
+            filter { includeGroup("top.yukonga.miuix.kmp") }
+        }
         mavenLocal()
         maven("https://jitpack.io")
         maven("https://repo.fastmcmirror.org/content/repositories/releases/")

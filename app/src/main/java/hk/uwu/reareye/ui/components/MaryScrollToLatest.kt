@@ -32,7 +32,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import kotlinx.coroutines.delay
-import top.yukonga.miuix.kmp.basic.Icon
+import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.theme.MixTheme
 
 /** Scroll activity, not incoming tokens or recomposition, owns the visibility timeout. */

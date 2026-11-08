@@ -43,7 +43,7 @@ import hk.uwu.reareye.ui.config.ConfigCategory
 import hk.uwu.reareye.ui.featureGuideAnchor
 import kotlinx.coroutines.flow.distinctUntilChanged
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
+import hk.uwu.mixui.components.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.TabRowWithContour

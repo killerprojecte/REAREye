@@ -40,10 +40,10 @@ import hk.uwu.reareye.ui.config.ModuleSearchBarStyle
 import hk.uwu.reareye.ui.config.PrefsManager
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
+import hk.uwu.mixui.components.Icon
 import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.SearchBar
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 
 @Composable

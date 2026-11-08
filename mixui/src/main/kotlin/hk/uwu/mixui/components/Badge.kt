@@ -1,4 +1,4 @@
-package hk.uwu.reareye.ui.components
+package hk.uwu.mixui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -19,23 +19,23 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Surface
-import top.yukonga.miuix.kmp.basic.Text
 import hk.uwu.mixui.theme.MixTheme
+import hk.uwu.mixui.motion.mixPressFeedback
 
-data class RearBadgePalette(
+data class BadgePalette(
     val background: Color,
     val text: Color,
 )
 
-data class RearBadgeItem(
+data class BadgeItem(
     val text: String,
     val emphasized: Boolean = false,
-    val palette: RearBadgePalette? = null,
+    val palette: BadgePalette? = null,
     val onClick: (() -> Unit)? = null,
 )
 
 @Composable
-fun rememberRearAccentBadgePalette(accent: Color): RearBadgePalette {
+fun rememberAccentBadgePalette(accent: Color): BadgePalette {
     val colorScheme = MixTheme.colorScheme
     val darkTheme = colorScheme.surface.luminance() < 0.5f
     val harmonizedAccent = if (darkTheme) {
@@ -51,12 +51,12 @@ fun rememberRearAccentBadgePalette(accent: Color): RearBadgePalette {
         harmonizedAccent,
     ) {
         if (darkTheme) {
-            RearBadgePalette(
+            BadgePalette(
                 background = lerp(colorScheme.surface, harmonizedAccent, 0.46f),
                 text = lerp(Color.White, harmonizedAccent, 0.34f),
             )
         } else {
-            RearBadgePalette(
+            BadgePalette(
                 background = lerp(colorScheme.surface, harmonizedAccent, 0.24f),
                 text = lerp(colorScheme.onSurface, harmonizedAccent, 0.72f),
             )
@@ -65,7 +65,7 @@ fun rememberRearAccentBadgePalette(accent: Color): RearBadgePalette {
 }
 
 @Composable
-private fun rememberRearDefaultBadgePalette(emphasized: Boolean): RearBadgePalette {
+private fun rememberDefaultBadgePalette(emphasized: Boolean): BadgePalette {
     val colorScheme = MixTheme.colorScheme
     val darkTheme = colorScheme.surface.luminance() < 0.5f
     return remember(
@@ -77,7 +77,7 @@ private fun rememberRearDefaultBadgePalette(emphasized: Boolean): RearBadgePalet
         colorScheme.secondaryContainer,
     ) {
         if (emphasized) {
-            RearBadgePalette(
+            BadgePalette(
                 background = if (darkTheme) {
                     lerp(colorScheme.surface, colorScheme.primary, 0.48f)
                 } else {
@@ -90,7 +90,7 @@ private fun rememberRearDefaultBadgePalette(emphasized: Boolean): RearBadgePalet
                 },
             )
         } else {
-            RearBadgePalette(
+            BadgePalette(
                 background = if (darkTheme) {
                     lerp(
                         colorScheme.surface,
@@ -107,18 +107,18 @@ private fun rememberRearDefaultBadgePalette(emphasized: Boolean): RearBadgePalet
 }
 
 @Composable
-fun RearBadgePill(
+fun Badge(
     text: String,
     emphasized: Boolean,
     modifier: Modifier = Modifier,
-    palette: RearBadgePalette? = null,
+    palette: BadgePalette? = null,
     singleLine: Boolean = true,
 ) {
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val pillFontSize = (13f / fontScale).sp
     val horizontalPadding = (10f / fontScale).dp.coerceAtLeast(7.dp)
     val verticalPadding = (7f / fontScale).dp.coerceAtLeast(5.dp)
-    val defaultPalette = rememberRearDefaultBadgePalette(emphasized)
+    val defaultPalette = rememberDefaultBadgePalette(emphasized)
     val resolvedPalette = palette ?: defaultPalette
 
     Surface(
@@ -140,8 +140,8 @@ fun RearBadgePill(
 }
 
 @Composable
-fun RearBadgeGroup(
-    badges: List<RearBadgeItem>,
+fun BadgeGroup(
+    badges: List<BadgeItem>,
     modifier: Modifier = Modifier,
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
 ) {
@@ -153,7 +153,7 @@ fun RearBadgeGroup(
         content = {
             badges.forEach { badge ->
                 val badgeModifier = if (badge.onClick != null) {
-                    Modifier.clickable(
+                    Modifier.mixPressFeedback().clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         role = Role.Button,
@@ -162,7 +162,7 @@ fun RearBadgeGroup(
                 } else {
                     Modifier
                 }
-                RearBadgePill(
+                Badge(
                     text = badge.text,
                     emphasized = badge.emphasized,
                     modifier = badgeModifier,

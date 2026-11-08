@@ -37,7 +37,7 @@ import hk.uwu.reareye.R
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.getTextInNode
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 
 /** Library-owned GFM parsing/rendering, with MIUIX styling rather than a Material theme. */

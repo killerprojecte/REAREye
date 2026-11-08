@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.layout.DialogDefaults
 import hk.uwu.mixui.theme.MixTheme
 

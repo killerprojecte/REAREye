@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components
 
+import hk.uwu.mixui.components.CompactTabs
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -38,9 +40,9 @@ import androidx.compose.ui.window.PopupProperties
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.context.ContextCategory
 import hk.uwu.reareye.agent.context.ContextSegment
-import top.yukonga.miuix.kmp.basic.Icon
+import hk.uwu.mixui.components.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 import java.text.NumberFormat
 import java.util.Locale
@@ -179,7 +181,7 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
                     Text(stringResource(R.string.mary_context_short_title), style = MixTheme.textStyles.body2,
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).testTag("mary-context-title"),
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    RearCompactTabs(
+                    CompactTabs(
                         tabs = listOf(stringResource(R.string.mary_context_category_mode), stringResource(R.string.mary_context_sequence_mode)),
                         selectedTabIndex = if (sequence) 1 else 0,
                         onTabSelected = { index ->

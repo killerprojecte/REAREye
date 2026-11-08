@@ -56,13 +56,13 @@ import hk.uwu.reareye.repository.bounds.CustomBoundsFillMode
 import hk.uwu.reareye.repository.bounds.CustomBoundsMode
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.reareye.ui.components.OverlayDialog
-import hk.uwu.reareye.ui.components.RearBadgeItem
+import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
 import hk.uwu.reareye.ui.components.card.SuperCard
 import hk.uwu.mixui.motion.ArtRevealItem
-import hk.uwu.reareye.ui.components.rememberRearAccentBadgePalette
+import hk.uwu.mixui.components.rememberAccentBadgePalette
 import hk.uwu.reareye.ui.config.ConfigItem
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.ConfigType
@@ -80,12 +80,12 @@ import hk.uwu.mixui.components.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.ColorPalette
 import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.basic.Icon
+import hk.uwu.mixui.components.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -939,17 +939,17 @@ private fun formatColorInt(color: Int): String =
     String.format(Locale.US, "#%08X", color)
 
 @Composable
-private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<RearBadgeItem> {
-    val statePalette = rememberRearAccentBadgePalette(
+private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<BadgeItem> {
+    val statePalette = rememberAccentBadgePalette(
         if (item.enabled) Color(0xFF10B981) else Color(0xFF64748B)
     )
-    val ratioPalette = rememberRearAccentBadgePalette(Color(0xFF6366F1))
-    val positionPalette = rememberRearAccentBadgePalette(Color(0xFF8B5CF6))
-    val densityPalette = rememberRearAccentBadgePalette(Color(0xFF0EA5E9))
-    val rotationPalette = rememberRearAccentBadgePalette(Color(0xFFF59E0B))
-    val fillPalette = rememberRearAccentBadgePalette(Color(0xFFEF4444))
+    val ratioPalette = rememberAccentBadgePalette(Color(0xFF6366F1))
+    val positionPalette = rememberAccentBadgePalette(Color(0xFF8B5CF6))
+    val densityPalette = rememberAccentBadgePalette(Color(0xFF0EA5E9))
+    val rotationPalette = rememberAccentBadgePalette(Color(0xFFF59E0B))
+    val fillPalette = rememberAccentBadgePalette(Color(0xFFEF4444))
     return listOf(
-        RearBadgeItem(
+        BadgeItem(
             text = if (item.enabled) {
                 stringResource(R.string.custom_bounds_enabled)
             } else {
@@ -958,7 +958,7 @@ private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<RearBadg
             emphasized = item.enabled,
             palette = statePalette,
         ),
-        RearBadgeItem(
+        BadgeItem(
             text = stringResource(
                 R.string.custom_bounds_badge_mode,
                 modeTitle(item.mode),
@@ -966,7 +966,7 @@ private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<RearBadg
             palette = ratioPalette,
         ),
         when (item.mode) {
-            CustomBoundsMode.CUSTOM_RATIO -> RearBadgeItem(
+            CustomBoundsMode.CUSTOM_RATIO -> BadgeItem(
                 text = stringResource(
                     R.string.custom_bounds_badge_ratio,
                     formatFloat(item.aspectRatio),
@@ -974,7 +974,7 @@ private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<RearBadg
                 palette = ratioPalette,
             )
 
-            CustomBoundsMode.EXACT_INSETS -> RearBadgeItem(
+            CustomBoundsMode.EXACT_INSETS -> BadgeItem(
                 text = stringResource(
                     R.string.custom_bounds_badge_insets,
                     "${item.insetLeft},${item.insetTop},${item.insetRight},${item.insetBottom}",
@@ -982,26 +982,26 @@ private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<RearBadg
                 palette = ratioPalette,
             )
 
-            else -> RearBadgeItem(
+            else -> BadgeItem(
                 text = stringResource(R.string.custom_bounds_auto_ratio_hint),
                 palette = ratioPalette,
             )
         },
-        RearBadgeItem(
+        BadgeItem(
             text = stringResource(
                 R.string.custom_bounds_badge_scale,
                 formatFloat(item.scale),
             ),
             palette = ratioPalette,
         ),
-        RearBadgeItem(
+        BadgeItem(
             text = stringResource(
                 R.string.custom_bounds_badge_position,
                 gravityTitle(item.gravity),
             ),
             palette = positionPalette,
         ),
-        RearBadgeItem(
+        BadgeItem(
             text = stringResource(
                 R.string.custom_bounds_badge_density,
                 item.densityDpi.takeIf { it > 0 }?.toString()
@@ -1009,14 +1009,14 @@ private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<RearBadg
             ),
             palette = densityPalette,
         ),
-        RearBadgeItem(
+        BadgeItem(
             text = stringResource(
                 R.string.custom_bounds_badge_rotation,
                 formatRotation(item.rotationDegrees),
             ),
             palette = rotationPalette,
         ),
-        RearBadgeItem(
+        BadgeItem(
             text = if (!item.fillEnabled) {
                 stringResource(R.string.custom_bounds_fill_disabled)
             } else if (item.fillMode == CustomBoundsFillMode.AUTO) {

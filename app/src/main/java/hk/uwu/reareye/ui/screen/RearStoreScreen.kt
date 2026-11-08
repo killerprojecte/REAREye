@@ -115,14 +115,14 @@ import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperRepository
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.reareye.ui.components.OverlayDialog
-import hk.uwu.reareye.ui.components.RearBadgeGroup
-import hk.uwu.reareye.ui.components.RearBadgeItem
-import hk.uwu.reareye.ui.components.RearBadgePalette
+import hk.uwu.mixui.components.BadgeGroup
+import hk.uwu.mixui.components.BadgeItem
+import hk.uwu.mixui.components.BadgePalette
 import hk.uwu.reareye.ui.components.RearSearchBar
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.SuperCard
 import hk.uwu.reareye.ui.components.config.WallpaperMetadataFields
-import hk.uwu.reareye.ui.components.rememberRearAccentBadgePalette
+import hk.uwu.mixui.components.rememberAccentBadgePalette
 import hk.uwu.reareye.ui.components.webview.ScrollWebView
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
@@ -148,7 +148,7 @@ import top.yukonga.miuix.kmp.basic.DropdownDefaults
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
-import top.yukonga.miuix.kmp.basic.Icon
+import hk.uwu.mixui.components.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
@@ -158,7 +158,7 @@ import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Delete
@@ -2014,7 +2014,7 @@ private fun RearStoreListCard(
     val badges = buildList {
         statusBadgeText?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = it,
                     emphasized = updateAvailable,
                 )
@@ -2022,7 +2022,7 @@ private fun RearStoreListCard(
         }
         metadataLabelRes?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(it),
                     emphasized = false,
                     palette = metadataPalette,
@@ -2038,7 +2038,7 @@ private fun RearStoreListCard(
                 stringResource(R.string.rear_store_unknown_author)
             },
             endActions = {
-                RearBadgeGroup(badges = badges)
+                BadgeGroup(badges = badges)
             },
             onClick = onClick,
             bottomAction = {
@@ -2122,7 +2122,7 @@ private fun RearStoreDetailHeroCard(
     val trailingHeroBadges = buildList {
         updateStateBadgeText?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = it,
                     emphasized = updateAvailable,
                 )
@@ -2130,7 +2130,7 @@ private fun RearStoreDetailHeroCard(
         }
         metadataLabelRes?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(it),
                     emphasized = false,
                     palette = metadataPalette,
@@ -2170,14 +2170,14 @@ private enum class RearStoreDetailHeroBadgeSlot {
 private fun RearStoreDetailHeroBadges(
     installedVersionLabel: String,
     installedVersionValue: String,
-    trailingBadges: List<RearBadgeItem>,
+    trailingBadges: List<BadgeItem>,
     modifier: Modifier = Modifier,
 ) {
     val installedFullBadge = remember(installedVersionLabel, installedVersionValue) {
-        RearBadgeItem(text = "$installedVersionLabel  $installedVersionValue")
+        BadgeItem(text = "$installedVersionLabel  $installedVersionValue")
     }
     val installedCompactBadge = remember(installedVersionLabel) {
-        RearBadgeItem(text = installedVersionLabel)
+        BadgeItem(text = installedVersionLabel)
     }
     val spacing = 6.dp
 
@@ -2188,10 +2188,10 @@ private fun RearStoreDetailHeroBadges(
 
         fun measureBadgeGroup(
             slot: RearStoreDetailHeroBadgeSlot,
-            badges: List<RearBadgeItem>,
+            badges: List<BadgeItem>,
             maxGroupWidth: Int = maxWidth,
         ) = subcompose(slot) {
-            RearBadgeGroup(
+            BadgeGroup(
                 badges = badges,
                 horizontalAlignment = Alignment.End,
             )
@@ -2266,7 +2266,7 @@ private fun RearStoreDetailHeroBadges(
 }
 
 @Composable
-private fun rememberMetadataBadgePalette(metadataType: RearStoreWidgetMetadataType): RearBadgePalette {
+private fun rememberMetadataBadgePalette(metadataType: RearStoreWidgetMetadataType): BadgePalette {
     val accent = when (metadataType) {
         RearStoreWidgetMetadataType.CARD -> Color(0xFF3B82F6)
         RearStoreWidgetMetadataType.NOTIFICATION -> Color(0xFF34A853)
@@ -2274,7 +2274,7 @@ private fun rememberMetadataBadgePalette(metadataType: RearStoreWidgetMetadataTy
         RearStoreWidgetMetadataType.WALLPAPER -> Color(0xFFEF4444)
         RearStoreWidgetMetadataType.UNKNOWN -> Color(0xFF64748B)
     }
-    return rememberRearAccentBadgePalette(accent)
+    return rememberAccentBadgePalette(accent)
 }
 
 @Composable
@@ -2529,26 +2529,26 @@ private enum class RearStoreInstallInfoBadgeGroup {
 }
 
 @Composable
-private fun rememberInstallInfoBadgePalette(group: RearStoreInstallInfoBadgeGroup): RearBadgePalette {
+private fun rememberInstallInfoBadgePalette(group: RearStoreInstallInfoBadgeGroup): BadgePalette {
     return when (group) {
         RearStoreInstallInfoBadgeGroup.COMPONENT -> {
-            rememberRearAccentBadgePalette(Color(0xFF10B981))
+            rememberAccentBadgePalette(Color(0xFF10B981))
         }
 
         RearStoreInstallInfoBadgeGroup.CARD -> {
-            rememberRearAccentBadgePalette(Color(0xFF6366F1))
+            rememberAccentBadgePalette(Color(0xFF6366F1))
         }
 
         RearStoreInstallInfoBadgeGroup.NOTIFICATION -> {
-            rememberRearAccentBadgePalette(Color(0xFF8B5CF6))
+            rememberAccentBadgePalette(Color(0xFF8B5CF6))
         }
 
         RearStoreInstallInfoBadgeGroup.WALLPAPER -> {
-            rememberRearAccentBadgePalette(Color(0xFF06B6D4))
+            rememberAccentBadgePalette(Color(0xFF06B6D4))
         }
 
         RearStoreInstallInfoBadgeGroup.WARNING -> {
-            rememberRearAccentBadgePalette(Color(0xFFF59E0B))
+            rememberAccentBadgePalette(Color(0xFFF59E0B))
         }
     }
 }
@@ -2571,14 +2571,14 @@ private fun RearStoreInstallInfoCard(
     val componentBadges = buildList {
         if (!installInfo.hasComponent) return@buildList
         add(
-            RearBadgeItem(
+            BadgeItem(
                 text = stringResource(R.string.rear_store_install_mode_widget_badge),
                 palette = componentPalette,
             )
         )
         installInfo.componentId?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(R.string.rear_store_install_badge_component_id, it),
                     palette = componentPalette,
                 )
@@ -2588,14 +2588,14 @@ private fun RearStoreInstallInfoCard(
     val cardBadges = buildList {
         if (!installInfo.hasCard) return@buildList
         add(
-            RearBadgeItem(
+            BadgeItem(
                 text = stringResource(R.string.rear_store_install_badge_card),
                 palette = cardPalette,
             )
         )
         installInfo.cardPackageName?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(R.string.rear_store_install_badge_card_package, it),
                     palette = cardPalette,
                 )
@@ -2605,14 +2605,14 @@ private fun RearStoreInstallInfoCard(
     val notificationBadges = buildList {
         if (!installInfo.hasScene) return@buildList
         add(
-            RearBadgeItem(
+            BadgeItem(
                 text = stringResource(R.string.rear_store_install_badge_scene),
                 palette = notificationPalette,
             )
         )
         installInfo.scenePackageName?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(R.string.rear_store_install_badge_scene_package, it),
                     palette = notificationPalette,
                 )
@@ -2622,7 +2622,7 @@ private fun RearStoreInstallInfoCard(
     val wallpaperBadges = buildList {
         if (!installInfo.hasWallpaper) return@buildList
         add(
-            RearBadgeItem(
+            BadgeItem(
                 text = stringResource(R.string.rear_store_install_mode_wallpaper_badge),
                 palette = wallpaperPalette,
             )
@@ -2631,7 +2631,7 @@ private fun RearStoreInstallInfoCard(
     val warningBadges = buildList {
         if (installInfo.hasComponent && !installInfo.hasBusinessSetup) {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(R.string.rear_store_install_missing_business_setup),
                     palette = warningPalette,
                 )
@@ -2639,7 +2639,7 @@ private fun RearStoreInstallInfoCard(
         }
         if (!installInfo.appListPermissionGranted && installInfo.missingPackages.isNotEmpty()) {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(R.string.rear_store_install_requirements_packages_permission),
                     palette = warningPalette,
                 )
@@ -2648,7 +2648,7 @@ private fun RearStoreInstallInfoCard(
         if (installInfo.missingPackages.isNotEmpty() && installInfo.appListPermissionGranted) {
             installInfo.missingPackages.forEach { pkg ->
                 add(
-                    RearBadgeItem(
+                    BadgeItem(
                         text = stringResource(
                             R.string.rear_store_install_requirements_missing_package_item,
                             pkg
@@ -2661,7 +2661,7 @@ private fun RearStoreInstallInfoCard(
         if (installInfo.failedConfigReasons.isNotEmpty()) {
             installInfo.failedConfigReasons.values.forEach { reason ->
                 add(
-                    RearBadgeItem(
+                    BadgeItem(
                         text = reason,
                         palette = warningPalette,
                     )
@@ -2683,19 +2683,19 @@ private fun RearStoreInstallInfoCard(
                 color = MixTheme.colorScheme.onBackground,
             )
             if (componentBadges.isNotEmpty()) {
-                RearBadgeGroup(badges = componentBadges)
+                BadgeGroup(badges = componentBadges)
             }
             if (cardBadges.isNotEmpty()) {
-                RearBadgeGroup(badges = cardBadges)
+                BadgeGroup(badges = cardBadges)
             }
             if (notificationBadges.isNotEmpty()) {
-                RearBadgeGroup(badges = notificationBadges)
+                BadgeGroup(badges = notificationBadges)
             }
             if (wallpaperBadges.isNotEmpty()) {
-                RearBadgeGroup(badges = wallpaperBadges)
+                BadgeGroup(badges = wallpaperBadges)
             }
             if (warningBadges.isNotEmpty()) {
-                RearBadgeGroup(badges = warningBadges)
+                BadgeGroup(badges = warningBadges)
             }
         }
     }

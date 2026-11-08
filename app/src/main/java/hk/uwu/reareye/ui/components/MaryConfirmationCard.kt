@@ -44,8 +44,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 
 internal const val MARY_TOOL_MOTION_MILLIS = 220

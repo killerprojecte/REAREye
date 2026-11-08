@@ -8,6 +8,7 @@ plugins {
 
 android {
     namespace = "hk.uwu.mixui"
+    buildToolsVersion = "37.0.0"
     compileSdk { version = release(37) { minorApiLevel = 0 } }
     defaultConfig { minSdk = 36 }
     buildFeatures { compose = true }
@@ -25,6 +26,7 @@ dependencies {
     implementation("androidx.compose.animation:animation")
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.miuix.ui)
+    implementation(libs.miuix.glass)
     implementation(libs.miuix.preference)
     implementation(libs.miuix.blur)
     implementation(libs.miuix.shader)

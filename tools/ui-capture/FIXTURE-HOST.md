@@ -112,3 +112,15 @@ The following remain outside this first fixture host:
 Empty manager fixtures are only empty-state evidence, not populated-list coverage.
 The guide wallpaper is synthetic; no actual wallpaper installation is exercised.
 Keep these gaps in the comparison manifest until artifacts prove each route.
+
+## Local simulated rendering
+
+Use the existing Robolectric 4.17 native graphics / Compose pixel renderer, without an emulator:
+
+`bash tools/run-local-gradle.sh -PisPublicBeta=true -PuiCapture=true :app:testDebugUnitTest`
+
+`isPublicBeta` uses the repository's existing UI-only packaging mode without native hook libraries. It is not a full native integration build. The local Android SDK must be configured normally. `GRADLE_BIN` can select an already-installed Gradle 9.6; otherwise the checked-in wrapper is used. The runner isolates writable Android settings and derives the current invocation's proxy without printing credentials.
+
+Output: `build/reports/ui-capture/<backend>/<theme>/<page>/`. These are real production-composable fixture PNGs, with sampled press/release frames on the cards route. They require visual review before claiming an animation effect. This test has been authored but has not yet completed a local rendering run. The recovered host includes 15 routes: the 10 manager/editor routes plus onboarding, about, scripts, unconfigured Mary settings and a synthetic version warning. These are not every application state. Onboarding retains actual permission probes, About retains real device/build metadata, scripts start empty on fresh test data, and Mary settings has no configured provider.
+
+Run `python3 tools/check_ui_boundary.py` for strict whole-repository MIUIX reference checking outside mixui. It currently fails because migration is incomplete; no exceptions are silently allowed.

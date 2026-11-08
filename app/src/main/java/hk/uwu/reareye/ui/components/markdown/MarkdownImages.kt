@@ -39,7 +39,7 @@ import com.mikepenz.markdown.utils.resolveImageAlt
 import com.mikepenz.markdown.utils.resolveImageLink
 import hk.uwu.reareye.R
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 import java.net.URI
 

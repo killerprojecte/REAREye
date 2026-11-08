@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components
 
+import hk.uwu.mixui.components.CompactTabs
+
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
@@ -401,7 +403,7 @@ class MaryContextCompositionLayoutTest {
             activity = Robolectric.buildActivity(ContextPreviewActivity::class.java).setup().also {
                 it.get().setContent {
                     MiuixTheme(ThemeController(ColorSchemeMode.Light)) {
-                        RearCompactTabs(labels.value, index.value, { chosen -> index.value = chosen }, Modifier.testTag("direct-tabs"))
+                        CompactTabs(labels.value, index.value, { chosen -> index.value = chosen }, Modifier.testTag("direct-tabs"))
                     }
                 }
             }
@@ -435,7 +437,7 @@ class MaryContextCompositionLayoutTest {
         assertTrue("Header retains at least48dp for title", title.width.value >= 48f)
         assertTrue("Removing dedicated mode row keeps popup compact", popup.height.value <= 304f)
         val popupId = node("mary-context-popup").fetchSemanticsNode().id
-        val track = node("rear-compact-tabs-track")
+        val track = node("compact-tabs-track")
         val stableTrackBounds = track.getUnclippedBoundsInRoot()
         assertEquals("Each tab fills half the shared track", (stableTrackBounds.width.value - 12f) / 2f, first.width.value, 1f)
         assertEquals("Second cell reaches contour trailing inset", stableTrackBounds.right.value - 5f, second.right.value, 1f)

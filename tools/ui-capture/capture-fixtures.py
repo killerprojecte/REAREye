@@ -8,7 +8,7 @@ a=p.parse_args()
 serial=subprocess.check_output(['adb','get-serialno'],text=True).strip()
 size=subprocess.check_output(['adb','shell','wm','size'],text=True).strip().split()[-1]
 w,h=map(int,size.split('x'))
-pages=['cards','card-editor','components','component-editor','wallpapers','more','scene-routes','business-extras','business-extra-editor','custom-bounds']
+pages=['cards','card-editor','components','component-editor','wallpapers','more','scene-routes','business-extras','business-extra-editor','custom-bounds','onboarding','about','scripts','mary-settings-unconfigured','version-dialog']
 a.output.mkdir(parents=True,exist_ok=True)
 for dark in [False, True]:
  for page in pages:

@@ -72,8 +72,8 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 
 /** Remember once per session, outside LazyColumn. No request/question bodies are retained here. */

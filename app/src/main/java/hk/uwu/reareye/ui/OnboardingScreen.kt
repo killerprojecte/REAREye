@@ -59,8 +59,8 @@ import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 
 private data class PermissionSnapshot(

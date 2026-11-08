@@ -15,11 +15,18 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import hk.uwu.reareye.R
+import hk.uwu.reareye.ui.OnboardingScreen
+import hk.uwu.reareye.ui.screen.AboutScreen
+import hk.uwu.reareye.ui.screen.MarySettingsScreen
+import hk.uwu.reareye.ui.components.script.ScriptManagementScreen
+import hk.uwu.reareye.ui.components.TargetAppVersionDialog
+import hk.uwu.reareye.version.AppVersionViolation
 import hk.uwu.reareye.ui.FeatureGuideAction
 import hk.uwu.reareye.ui.FeatureGuideDemoScreen
 import hk.uwu.reareye.ui.FeatureGuideDemoState
@@ -45,7 +52,7 @@ class UiCaptureActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CaptureTheme(backend, dark) {
-                Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+                Column(Modifier.fillMaxSize().safeDrawingPadding().testTag("fixture-root")) {
                     BasicText(
                         "FIXTURE HOST · $page · $backend · ${if (dark) "dark" else "light"}",
                         modifier = Modifier.fillMaxWidth().background(Color(0xFFFFE082)).padding(6.dp),
@@ -61,6 +68,7 @@ class UiCaptureActivity : ComponentActivity() {
         val PAGES = setOf(
             "cards", "card-editor", "components", "component-editor", "wallpapers", "more",
             "scene-routes", "business-extras", "business-extra-editor", "custom-bounds",
+            "onboarding", "about", "scripts", "mary-settings-unconfigured", "version-dialog",
         )
     }
 }
@@ -70,6 +78,14 @@ private fun FixturePage(page: String) {
     val state = remember { FeatureGuideDemoState(initialCardTitle = "Fixture clock") }
     val back: () -> Unit = {} // Root capture screen stays open; production dialogs still dismiss.
     when (page) {
+        "onboarding" -> OnboardingScreen(onFinished = {})
+        "about" -> AboutScreen()
+        "scripts" -> ScriptManagementScreen(onBack = back)
+        "mary-settings-unconfigured" -> MarySettingsScreen(onBack = back)
+        "version-dialog" -> TargetAppVersionDialog(
+            violations = listOf(AppVersionViolation("Fixture target app", "example.fixture", 1L, "1.0", 2L, true)),
+            onClose = back,
+        )
         "scene-routes" -> SceneRouteManagerScreen(state.prefsManager, back)
         "business-extras" -> BusinessExtraConfigManagerScreen(state.prefsManager, back)
         "business-extra-editor" -> BusinessExtraConfigScreen(state.prefsManager, "demo_clock", back)

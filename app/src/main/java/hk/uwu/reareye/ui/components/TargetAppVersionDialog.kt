@@ -23,7 +23,7 @@ import hk.uwu.reareye.version.AppVersionViolation
 import kotlinx.coroutines.delay
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 import kotlin.math.ceil
 

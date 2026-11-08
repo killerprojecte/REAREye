@@ -13,16 +13,6 @@
       ]
     },
     {
-      "path": "app/src/main/java/hk/uwu/reareye/ui/FeatureGuideOverlay.kt",
-      "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
-        "top.yukonga.miuix.kmp.basic.Icon",
-        "top.yukonga.miuix.kmp.basic.Text"
-      ],
-      "screenEntryPoints": []
-    },
-    {
       "path": "app/src/main/java/hk/uwu/reareye/ui/MainActivity.kt",
       "vendorImports": [
         "top.yukonga.miuix.kmp.basic.Scaffold"
@@ -32,12 +22,8 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/OnboardingScreen.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
-        "top.yukonga.miuix.kmp.basic.CardDefaults",
-        "top.yukonga.miuix.kmp.basic.Icon",
-        "top.yukonga.miuix.kmp.basic.Text"
+        "top.yukonga.miuix.kmp.basic.CardDefaults"
       ],
       "screenEntryPoints": [
         "OnboardingScreen"
@@ -46,11 +32,9 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/MaryApprovalControls.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.ListPopupDefaults",
         "top.yukonga.miuix.kmp.basic.PopupPositionProvider",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.overlay.OverlayListPopup",
         "top.yukonga.miuix.kmp.preference.ArrowPreference"
       ],
@@ -59,11 +43,8 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/MaryChatControls.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.RichTooltip",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TooltipBox",
         "top.yukonga.miuix.kmp.basic.TooltipDefaults",
         "top.yukonga.miuix.kmp.basic.rememberTooltipState",
@@ -72,19 +53,9 @@
       "screenEntryPoints": []
     },
     {
-      "path": "app/src/main/java/hk/uwu/reareye/ui/components/MaryConfirmationCard.kt",
-      "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Icon",
-        "top.yukonga.miuix.kmp.basic.Text"
-      ],
-      "screenEntryPoints": []
-    },
-    {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/MaryContextUsage.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Icon",
-        "top.yukonga.miuix.kmp.basic.IconButton",
-        "top.yukonga.miuix.kmp.basic.Text"
+        "top.yukonga.miuix.kmp.basic.IconButton"
       ],
       "screenEntryPoints": []
     },
@@ -92,19 +63,15 @@
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/MaryModelConfiguration.kt",
       "vendorImports": [
         "top.yukonga.miuix.kmp.basic.BasicComponent",
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
         "top.yukonga.miuix.kmp.basic.CircularProgressIndicator",
         "top.yukonga.miuix.kmp.basic.DropdownDefaults",
         "top.yukonga.miuix.kmp.basic.DropdownImpl",
         "top.yukonga.miuix.kmp.basic.DropdownItem",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.ListPopupColumn",
         "top.yukonga.miuix.kmp.basic.ListPopupDefaults",
         "top.yukonga.miuix.kmp.basic.PopupPositionProvider",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextField",
         "top.yukonga.miuix.kmp.overlay.OverlayDialog",
         "top.yukonga.miuix.kmp.overlay.OverlayListPopup",
@@ -114,27 +81,11 @@
       "screenEntryPoints": []
     },
     {
-      "path": "app/src/main/java/hk/uwu/reareye/ui/components/MaryScrollToLatest.kt",
-      "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Icon"
-      ],
-      "screenEntryPoints": []
-    },
-    {
-      "path": "app/src/main/java/hk/uwu/reareye/ui/components/MaryToolCards.kt",
-      "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Icon",
-        "top.yukonga.miuix.kmp.basic.Text"
-      ],
-      "screenEntryPoints": []
-    },
-    {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/OverlayDialog.kt",
       "vendorImports": [
         "top.yukonga.miuix.kmp.anim.DecelerateEasing",
         "top.yukonga.miuix.kmp.anim.folmeSpring",
         "top.yukonga.miuix.kmp.basic.Scaffold",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.layout.DialogDefaults"
       ],
       "screenEntryPoints": [
@@ -144,12 +95,8 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/PresetPackDialog.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
         "top.yukonga.miuix.kmp.basic.CardDefaults",
-        "top.yukonga.miuix.kmp.basic.Icon",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
         "top.yukonga.miuix.kmp.icon.extended.Download",
         "top.yukonga.miuix.kmp.utils.PressFeedbackType"
@@ -159,50 +106,25 @@
       ]
     },
     {
-      "path": "app/src/main/java/hk/uwu/reareye/ui/components/RearBadge.kt",
-      "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Surface",
-        "top.yukonga.miuix.kmp.basic.Text"
-      ],
-      "screenEntryPoints": []
-    },
-    {
-      "path": "app/src/main/java/hk/uwu/reareye/ui/components/RearCompactTabs.kt",
-      "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.TabRowDefaults",
-        "top.yukonga.miuix.kmp.basic.TabRowWithContour"
-      ],
-      "screenEntryPoints": []
-    },
-    {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/RearSearchBar.kt",
       "vendorImports": [
         "top.yukonga.miuix.kmp.basic.Card",
         "top.yukonga.miuix.kmp.basic.CardDefaults",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.InputField",
-        "top.yukonga.miuix.kmp.basic.SearchBar",
-        "top.yukonga.miuix.kmp.basic.Text"
+        "top.yukonga.miuix.kmp.basic.SearchBar"
       ],
       "screenEntryPoints": []
     },
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/SubscreenNotificationAccessPrompt.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.layout.DialogDefaults"
       ],
       "screenEntryPoints": []
     },
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/TargetAppVersionDialog.kt",
-      "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
-        "top.yukonga.miuix.kmp.basic.Text"
-      ],
+      "vendorImports": [],
       "screenEntryPoints": [
         "TargetAppVersionDialog"
       ]
@@ -222,9 +144,7 @@
         "top.yukonga.miuix.kmp.basic.Card",
         "top.yukonga.miuix.kmp.basic.CardDefaults",
         "top.yukonga.miuix.kmp.basic.HorizontalDivider",
-        "top.yukonga.miuix.kmp.basic.Icon",
-        "top.yukonga.miuix.kmp.basic.IconButton",
-        "top.yukonga.miuix.kmp.basic.Text"
+        "top.yukonga.miuix.kmp.basic.IconButton"
       ],
       "screenEntryPoints": []
     },
@@ -237,7 +157,6 @@
         "top.yukonga.miuix.kmp.basic.DropdownItem",
         "top.yukonga.miuix.kmp.basic.FabPosition",
         "top.yukonga.miuix.kmp.basic.FloatingActionButton",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator",
         "top.yukonga.miuix.kmp.basic.ListPopupColumn",
@@ -245,7 +164,6 @@
         "top.yukonga.miuix.kmp.basic.MiuixScrollBehavior",
         "top.yukonga.miuix.kmp.basic.PopupPositionProvider",
         "top.yukonga.miuix.kmp.basic.Scaffold",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
         "top.yukonga.miuix.kmp.icon.basic.Check",
@@ -263,15 +181,11 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/config/BusinessExtraConfigScreen.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator",
         "top.yukonga.miuix.kmp.basic.MiuixScrollBehavior",
         "top.yukonga.miuix.kmp.basic.Scaffold",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextField",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
@@ -290,15 +204,11 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/config/BusinessManagerScreen.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator",
         "top.yukonga.miuix.kmp.basic.MiuixScrollBehavior",
         "top.yukonga.miuix.kmp.basic.Scaffold",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextField",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
@@ -320,16 +230,12 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/config/CardManagerScreen.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator",
         "top.yukonga.miuix.kmp.basic.MiuixScrollBehavior",
         "top.yukonga.miuix.kmp.basic.Scaffold",
         "top.yukonga.miuix.kmp.basic.TabRowWithContour",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextField",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
@@ -350,7 +256,6 @@
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/config/ConfigDashboard.kt",
       "vendorImports": [
         "top.yukonga.miuix.kmp.basic.Card",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.ScrollBehavior",
         "top.yukonga.miuix.kmp.basic.TabRowWithContour",
@@ -367,12 +272,10 @@
         "top.yukonga.miuix.kmp.basic.DropdownDefaults",
         "top.yukonga.miuix.kmp.basic.DropdownImpl",
         "top.yukonga.miuix.kmp.basic.DropdownItem",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.ListPopupColumn",
         "top.yukonga.miuix.kmp.basic.ListPopupDefaults",
         "top.yukonga.miuix.kmp.basic.PopupPositionProvider",
         "top.yukonga.miuix.kmp.basic.Slider",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextField",
         "top.yukonga.miuix.kmp.overlay.OverlayListPopup",
         "top.yukonga.miuix.kmp.preference.ArrowPreference",
@@ -383,17 +286,13 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/config/CustomBoundsCompatManagerScreen.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
         "top.yukonga.miuix.kmp.basic.ColorPalette",
         "top.yukonga.miuix.kmp.basic.DropdownItem",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator",
         "top.yukonga.miuix.kmp.basic.MiuixScrollBehavior",
         "top.yukonga.miuix.kmp.basic.Scaffold",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextField",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
@@ -413,8 +312,6 @@
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/config/MoreSearchBottomSheet.kt",
       "vendorImports": [
         "top.yukonga.miuix.kmp.basic.Card",
-        "top.yukonga.miuix.kmp.basic.Icon",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
         "top.yukonga.miuix.kmp.icon.basic.Search",
         "top.yukonga.miuix.kmp.icon.basic.SearchCleanup",
@@ -428,12 +325,8 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/config/RearAppCardManagementContent.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextField",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
         "top.yukonga.miuix.kmp.icon.extended.Delete"
@@ -443,15 +336,12 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/config/RearCardCreateDialog.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.DropdownDefaults",
         "top.yukonga.miuix.kmp.basic.DropdownImpl",
         "top.yukonga.miuix.kmp.basic.DropdownItem",
         "top.yukonga.miuix.kmp.basic.ListPopupDefaults",
         "top.yukonga.miuix.kmp.basic.PopupPositionProvider",
         "top.yukonga.miuix.kmp.basic.TabRowWithContour",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextField",
         "top.yukonga.miuix.kmp.overlay.OverlayListPopup",
         "top.yukonga.miuix.kmp.preference.SwitchPreference",
@@ -466,13 +356,9 @@
       "vendorImports": [
         "top.yukonga.miuix.kmp.basic.BasicComponent",
         "top.yukonga.miuix.kmp.basic.BasicComponentDefaults",
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator",
         "top.yukonga.miuix.kmp.basic.ScrollBehavior",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextField",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
         "top.yukonga.miuix.kmp.icon.extended.Delete",
@@ -486,7 +372,6 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/config/RearWallpaperManagerScreen.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.MiuixScrollBehavior",
         "top.yukonga.miuix.kmp.basic.Scaffold",
@@ -499,15 +384,11 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/config/SceneRouteManagerScreen.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator",
         "top.yukonga.miuix.kmp.basic.MiuixScrollBehavior",
         "top.yukonga.miuix.kmp.basic.Scaffold",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextField",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
@@ -525,14 +406,10 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/config/template/TemplateVarConfigScreenScaffold.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator",
         "top.yukonga.miuix.kmp.basic.MiuixScrollBehavior",
         "top.yukonga.miuix.kmp.basic.Scaffold",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
         "top.yukonga.miuix.kmp.basic.rememberTopAppBarState",
         "top.yukonga.miuix.kmp.utils.overScrollVertical",
@@ -544,8 +421,6 @@
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/config/template/WidgetTemplateConfigPage.kt",
       "vendorImports": [
         "top.yukonga.miuix.kmp.basic.BasicComponent",
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
         "top.yukonga.miuix.kmp.basic.Checkbox",
         "top.yukonga.miuix.kmp.basic.ColorPalette",
@@ -553,13 +428,11 @@
         "top.yukonga.miuix.kmp.basic.DropdownDefaults",
         "top.yukonga.miuix.kmp.basic.DropdownImpl",
         "top.yukonga.miuix.kmp.basic.DropdownItem",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.ListPopupColumn",
         "top.yukonga.miuix.kmp.basic.ListPopupDefaults",
         "top.yukonga.miuix.kmp.basic.PopupPositionProvider",
         "top.yukonga.miuix.kmp.basic.Slider",
         "top.yukonga.miuix.kmp.basic.TabRowWithContour",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextField",
         "top.yukonga.miuix.kmp.overlay.OverlayListPopup",
         "top.yukonga.miuix.kmp.preference.ArrowPreference",
@@ -576,28 +449,10 @@
       ]
     },
     {
-      "path": "app/src/main/java/hk/uwu/reareye/ui/components/markdown/MarkdownImages.kt",
-      "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Text"
-      ],
-      "screenEntryPoints": []
-    },
-    {
-      "path": "app/src/main/java/hk/uwu/reareye/ui/components/markdown/MarkdownText.kt",
-      "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Text"
-      ],
-      "screenEntryPoints": []
-    },
-    {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/navigation/RearNavigationBar.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.NavigationBar",
         "top.yukonga.miuix.kmp.basic.NavigationBarDisplayMode",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextButton",
         "top.yukonga.miuix.kmp.overlay.OverlayBottomSheet"
       ],
@@ -606,15 +461,11 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/components/script/ScriptManagementScreen.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.MiuixScrollBehavior",
         "top.yukonga.miuix.kmp.basic.Scaffold",
         "top.yukonga.miuix.kmp.basic.SmallTopAppBar",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TextButton",
         "top.yukonga.miuix.kmp.basic.TextField",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
@@ -637,17 +488,14 @@
       "vendorImports": [
         "top.yukonga.miuix.kmp.basic.BasicComponent",
         "top.yukonga.miuix.kmp.basic.BasicComponentDefaults",
-        "top.yukonga.miuix.kmp.basic.Button",
         "top.yukonga.miuix.kmp.basic.Card",
         "top.yukonga.miuix.kmp.basic.CardDefaults",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator",
         "top.yukonga.miuix.kmp.basic.MiuixScrollBehavior",
         "top.yukonga.miuix.kmp.basic.Scaffold",
         "top.yukonga.miuix.kmp.basic.ScrollBehavior",
         "top.yukonga.miuix.kmp.basic.SmallTopAppBar",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
         "top.yukonga.miuix.kmp.blur.BlendColorEntry",
         "top.yukonga.miuix.kmp.blur.BlurBlendMode",
@@ -675,7 +523,6 @@
         "top.yukonga.miuix.kmp.basic.DropdownDefaults",
         "top.yukonga.miuix.kmp.basic.DropdownImpl",
         "top.yukonga.miuix.kmp.basic.DropdownItem",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.ListPopupColumn",
         "top.yukonga.miuix.kmp.basic.ListPopupDefaults",
@@ -683,7 +530,6 @@
         "top.yukonga.miuix.kmp.basic.PopupPositionProvider",
         "top.yukonga.miuix.kmp.basic.Scaffold",
         "top.yukonga.miuix.kmp.basic.ScrollBehavior",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
         "top.yukonga.miuix.kmp.overlay.OverlayListPopup",
         "top.yukonga.miuix.kmp.preference.ArrowPreference",
@@ -702,14 +548,12 @@
         "top.yukonga.miuix.kmp.basic.DropdownDefaults",
         "top.yukonga.miuix.kmp.basic.DropdownImpl",
         "top.yukonga.miuix.kmp.basic.DropdownItem",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.ListPopupColumn",
         "top.yukonga.miuix.kmp.basic.ListPopupDefaults",
         "top.yukonga.miuix.kmp.basic.MiuixScrollBehavior",
         "top.yukonga.miuix.kmp.basic.PopupPositionProvider",
         "top.yukonga.miuix.kmp.basic.Scaffold",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
         "top.yukonga.miuix.kmp.icon.extended.MoreCircle",
@@ -725,9 +569,7 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/ui/screen/MaryConversationSidebar.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
         "top.yukonga.miuix.kmp.icon.extended.Add",
         "top.yukonga.miuix.kmp.icon.extended.Delete",
@@ -741,11 +583,9 @@
       "vendorImports": [
         "top.yukonga.miuix.kmp.basic.Card",
         "top.yukonga.miuix.kmp.basic.CardDefaults",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.Scaffold",
         "top.yukonga.miuix.kmp.basic.SmallTopAppBar",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
         "top.yukonga.miuix.kmp.icon.extended.ExpandMore",
         "top.yukonga.miuix.kmp.icon.extended.More",
@@ -765,14 +605,12 @@
         "top.yukonga.miuix.kmp.basic.DropdownDefaults",
         "top.yukonga.miuix.kmp.basic.DropdownImpl",
         "top.yukonga.miuix.kmp.basic.DropdownItem",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.ListPopupColumn",
         "top.yukonga.miuix.kmp.basic.ListPopupDefaults",
         "top.yukonga.miuix.kmp.basic.MiuixScrollBehavior",
         "top.yukonga.miuix.kmp.basic.PopupPositionProvider",
         "top.yukonga.miuix.kmp.basic.Scaffold",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
         "top.yukonga.miuix.kmp.overlay.OverlayListPopup",
         "top.yukonga.miuix.kmp.preference.SwitchPreference"
@@ -786,15 +624,12 @@
       "vendorImports": [
         "top.yukonga.miuix.kmp.basic.BasicComponent",
         "top.yukonga.miuix.kmp.basic.BasicComponentDefaults",
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonDefaults",
         "top.yukonga.miuix.kmp.basic.Card",
         "top.yukonga.miuix.kmp.basic.CardDefaults",
         "top.yukonga.miuix.kmp.basic.DropdownDefaults",
         "top.yukonga.miuix.kmp.basic.DropdownImpl",
         "top.yukonga.miuix.kmp.basic.DropdownItem",
         "top.yukonga.miuix.kmp.basic.HorizontalDivider",
-        "top.yukonga.miuix.kmp.basic.Icon",
         "top.yukonga.miuix.kmp.basic.IconButton",
         "top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator",
         "top.yukonga.miuix.kmp.basic.ListPopupColumn",
@@ -804,7 +639,6 @@
         "top.yukonga.miuix.kmp.basic.Scaffold",
         "top.yukonga.miuix.kmp.basic.Surface",
         "top.yukonga.miuix.kmp.basic.TabRowWithContour",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.basic.TopAppBar",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
         "top.yukonga.miuix.kmp.icon.extended.Delete",
@@ -864,12 +698,8 @@
     {
       "path": "app/src/main/java/hk/uwu/reareye/utils/other/AboutLibrariesTools.kt",
       "vendorImports": [
-        "top.yukonga.miuix.kmp.basic.Button",
-        "top.yukonga.miuix.kmp.basic.ButtonColors",
         "top.yukonga.miuix.kmp.basic.Card",
         "top.yukonga.miuix.kmp.basic.HorizontalDivider",
-        "top.yukonga.miuix.kmp.basic.Icon",
-        "top.yukonga.miuix.kmp.basic.Text",
         "top.yukonga.miuix.kmp.icon.MiuixIcons",
         "top.yukonga.miuix.kmp.icon.extended.Link",
         "top.yukonga.miuix.kmp.overlay.OverlayBottomSheet"

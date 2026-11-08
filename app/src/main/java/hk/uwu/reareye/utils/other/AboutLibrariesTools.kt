@@ -35,8 +35,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import hk.uwu.reareye.R
-import hk.uwu.reareye.ui.components.RearBadgeGroup
-import hk.uwu.reareye.ui.components.RearBadgeItem
+import hk.uwu.mixui.components.BadgeGroup
+import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.reareye.ui.components.card.SuperCard
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -44,8 +44,8 @@ import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonColors
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
@@ -159,7 +159,7 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
                 LibraryCreditsRow(
                     developers = lib.developers,
                     licenseBadges = licenseEntries.map { (licenseId, license) ->
-                        RearBadgeItem(
+                        BadgeItem(
                             text = licenseBadgeText(licenseId, license),
                             emphasized = false,
                             onClick = license?.let { targetLicense ->
@@ -246,7 +246,7 @@ private fun licenseBadgeText(licenseId: String, license: License?): String {
 @Composable
 private fun LibraryCreditsRow(
     developers: List<Developer>,
-    licenseBadges: List<RearBadgeItem>,
+    licenseBadges: List<BadgeItem>,
     expanded: Boolean,
     onExpand: () -> Unit,
     onCollapse: () -> Unit,
@@ -262,7 +262,7 @@ private fun LibraryCreditsRow(
             emptyList()
         } else {
             listOf(
-                RearBadgeItem(
+                BadgeItem(
                     text = LicenseBadgeOverflowText,
                     emphasized = false,
                     onClick = onExpand,
@@ -312,7 +312,7 @@ private fun LibraryCreditsRow(
             }
             Box(contentAlignment = Alignment.CenterEnd) {
                 if (licenseBadges.isNotEmpty()) {
-                    RearBadgeGroup(
+                    BadgeGroup(
                         badges = licenseBadges,
                         modifier = Modifier.graphicsLayer { alpha = fullBadgeAlpha },
                         horizontalAlignment = Alignment.End,
@@ -321,7 +321,7 @@ private fun LibraryCreditsRow(
             }
             Box(contentAlignment = Alignment.CenterEnd) {
                 if (overflowBadges.isNotEmpty()) {
-                    RearBadgeGroup(
+                    BadgeGroup(
                         badges = overflowBadges,
                         modifier = Modifier.graphicsLayer { alpha = overflowBadgeAlpha },
                         horizontalAlignment = Alignment.End,

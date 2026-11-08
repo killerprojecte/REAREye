@@ -65,12 +65,12 @@ import hk.uwu.reareye.R
 import hk.uwu.reareye.script.ScriptProject
 import hk.uwu.reareye.script.ScriptProjectKind
 import hk.uwu.reareye.script.ScriptProjectStore
-import hk.uwu.reareye.ui.components.RearBadgeItem
+import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
 import hk.uwu.reareye.ui.components.card.SuperCard
-import hk.uwu.reareye.ui.components.rememberRearAccentBadgePalette
+import hk.uwu.mixui.components.rememberAccentBadgePalette
 import hk.uwu.reareye.ui.theme.rearAcrylicEffect
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
@@ -80,12 +80,12 @@ import kotlinx.coroutines.launch
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
+import hk.uwu.mixui.components.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
-import top.yukonga.miuix.kmp.basic.Text
+import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
@@ -353,8 +353,8 @@ internal fun ScriptList(
                         project.error?.let { add(it) }
                     },
                     badges = listOf(
-                        RearBadgeItem(
-                            kindLabel, palette = rememberRearAccentBadgePalette(
+                        BadgeItem(
+                            kindLabel, palette = rememberAccentBadgePalette(
                                 when (project.kind) {
                                     ScriptProjectKind.PROJECT -> Color(0xFF4A78D0)
                                     ScriptProjectKind.STANDALONE -> Color(0xFF279879)
@@ -363,7 +363,7 @@ internal fun ScriptList(
                             )
                         )
                     ) +
-                            listOfNotNull(project.componentId?.let { RearBadgeItem(it) }),
+                            listOfNotNull(project.componentId?.let { BadgeItem(it) }),
                     onCardClick = { onOpen(project) },
                     leftAction = {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {

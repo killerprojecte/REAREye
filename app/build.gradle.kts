@@ -172,6 +172,7 @@ android {
         // Resource APK requires the app's minSdk (36); keep existing SDK-35 JVM tests
         // resource-free. Opt into only Mary UI tests with -PmaryUiResources=true.
         unitTests.isIncludeAndroidResources = providers.gradleProperty("maryUiResources")
+            .map(String::toBoolean).getOrElse(false) || providers.gradleProperty("uiCapture")
             .map(String::toBoolean).getOrElse(false)
     }
     lint { checkReleaseBuilds = false }
@@ -306,17 +307,24 @@ tasks.withType<Test>().configureEach {
     jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
     val maryUiResources = providers.gradleProperty("maryUiResources")
         .map(String::toBoolean).getOrElse(false)
+    val uiCapture = providers.gradleProperty("uiCapture").map(String::toBoolean).getOrElse(false)
+    systemProperty("ui.capture.enabled", uiCapture.toString())
+    systemProperty("ui.capture.backends", providers.gradleProperty("uiCaptureBackends").getOrElse("miuix,mochi"))
+    systemProperty("ui.capture.output", rootProject.layout.buildDirectory.dir("reports/ui-capture").get().asFile.absolutePath)
     systemProperty("mary.ui.resources", maryUiResources.toString())
     systemProperty(
         "mary.ui.screenshotDir",
         rootProject.layout.buildDirectory.dir("reports/mary-ui").get().asFile.absolutePath
     )
     filter {
-        if (maryUiResources) {
+        if (uiCapture) {
+            includeTestsMatching("hk.uwu.reareye.ui.capture.RealPageCaptureTest")
+        } else if (maryUiResources) {
             includeTestsMatching("hk.uwu.reareye.ui.components.Mary*LayoutTest")
             includeTestsMatching("hk.uwu.reareye.ui.components.MaryContextRingRenderingTest")
             includeTestsMatching("hk.uwu.reareye.ui.components.markdown.*")
         } else {
+            excludeTestsMatching("hk.uwu.reareye.ui.capture.RealPageCaptureTest")
             excludeTestsMatching("hk.uwu.reareye.ui.components.Mary*LayoutTest")
             excludeTestsMatching("hk.uwu.reareye.ui.components.MaryContextRingRenderingTest")
             excludeTestsMatching("hk.uwu.reareye.ui.components.markdown.*")
