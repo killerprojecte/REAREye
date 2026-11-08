@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components.config
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -53,13 +55,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
+import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
+import hk.uwu.mixui.components.InfiniteProgressIndicator
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Delete
 import hk.uwu.mixui.theme.MixTheme
 
 @SuppressLint("LocalContextGetResourceValueCall")
@@ -335,7 +335,7 @@ internal fun RearAppCardManagementContent(
                     rightAction = {
                         if (card.canDelete) {
                             ModuleStyleDeleteAction(
-                                icon = MiuixIcons.Delete,
+                                icon = UiIcons.Delete,
                                 text = stringResource(R.string.rear_widget_action_delete),
                                 onClick = {
                                     scope.launch {

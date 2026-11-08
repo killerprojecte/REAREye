@@ -42,9 +42,9 @@ import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.config.ConfigCategory
 import hk.uwu.reareye.ui.featureGuideAnchor
 import kotlinx.coroutines.flow.distinctUntilChanged
-import top.yukonga.miuix.kmp.basic.Card
+import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
+import hk.uwu.mixui.components.IconButton
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.basic.TopAppBar

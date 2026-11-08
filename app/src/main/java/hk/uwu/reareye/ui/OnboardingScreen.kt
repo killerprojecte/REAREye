@@ -57,8 +57,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme

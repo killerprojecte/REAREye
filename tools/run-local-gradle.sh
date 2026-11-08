@@ -18,8 +18,10 @@ PY
 )"
     export GRADLE_OPTS="${GRADLE_OPTS:-} $proxy_args"
 fi
+# Forked test JVMs also need the writable home and current network route.
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Duser.home=$work/java-home ${proxy_args:-}"
 cd "$root"
-args=(--no-daemon --max-workers="${GRADLE_WORKERS:-1}" "-Dorg.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=512m -Duser.home=$work/java-home" -Pkotlin.compiler.execution.strategy=in-process)
+args=(--no-daemon --max-workers="${GRADLE_WORKERS:-1}" "-Dorg.gradle.jvmargs=${GRADLE_JVM_MEMORY:--Xmx2048m -XX:MaxMetaspaceSize=768m} -Duser.home=$work/java-home" -Pkotlin.compiler.execution.strategy=in-process)
 if [[ -n "${GRADLE_BIN:-}" ]]; then
     exec "$GRADLE_BIN" "${args[@]}" "$@"
 else

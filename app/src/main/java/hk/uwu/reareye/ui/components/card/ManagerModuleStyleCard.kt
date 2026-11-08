@@ -24,11 +24,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.mixui.components.BadgeItem
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
+import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 

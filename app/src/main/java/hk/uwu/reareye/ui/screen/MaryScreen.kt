@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.screen
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.content.Context
 import android.content.ContextWrapper
 import android.widget.Toast
@@ -100,17 +102,13 @@ import hk.uwu.mixui.motion.ArtShimmerSweep
 import hk.uwu.reareye.ui.components.rememberMaryTailFollowState
 import hk.uwu.reareye.ui.components.scrollMaryConversationToBottom
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
+import hk.uwu.mixui.components.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
-import top.yukonga.miuix.kmp.icon.extended.More
-import top.yukonga.miuix.kmp.icon.extended.Refresh
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -572,7 +570,7 @@ private fun ColumnScope.LandingState(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = MiuixIcons.Refresh,
+                    imageVector = UiIcons.Refresh,
                     contentDescription = null,
                     tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                     modifier = Modifier.size(16.dp),
@@ -827,7 +825,7 @@ private fun ThinkingPulseIcon() {
         label = "thinkingGlow",
     )
     Icon(
-        imageVector = MiuixIcons.More,
+        imageVector = UiIcons.More,
         contentDescription = null,
         tint = MixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = glow),
         modifier = Modifier.size(15.dp),
@@ -888,7 +886,7 @@ internal fun ReasoningCard(
                     ThinkingPulseIcon()
                 } else {
                     Icon(
-                        imageVector = MiuixIcons.More,
+                        imageVector = UiIcons.More,
                         contentDescription = null,
                         tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier.size(15.dp),
@@ -911,7 +909,7 @@ internal fun ReasoningCard(
                     label = "chevronRotation",
                 )
                 Icon(
-                    imageVector = MiuixIcons.ExpandMore,
+                    imageVector = UiIcons.ExpandMore,
                     contentDescription = null,
                     tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                     modifier = Modifier

@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -43,14 +45,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Download
 import hk.uwu.mixui.theme.MixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import hk.uwu.mixui.components.PressFeedbackType
 
 enum class PresetPackLocalStatus {
     LOADING,
@@ -178,7 +178,7 @@ fun PresetPackStatusCard(
         isUpdate -> Color(0xFF8A6B00)
         else -> Color(0xFF9D4A4A)
     }
-    val icon = if (isUpdate) MiuixIcons.Download else Icons.Rounded.ErrorOutline
+    val icon = if (isUpdate) UiIcons.Download else Icons.Rounded.ErrorOutline
     val title = when {
         isUpdate -> androidx.compose.ui.res.stringResource(R.string.preset_pack_update_title)
         snapshot.status == PresetPackLocalStatus.NOT_INSTALLED ->
@@ -420,7 +420,7 @@ fun PresetPackDialog(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text("下载 / 继续下载 ${release.version}")
-                        Icon(imageVector = MiuixIcons.Download, contentDescription = null)
+                        Icon(imageVector = UiIcons.Download, contentDescription = null)
                     }
                 }
             }

@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.interaction.ApprovalMode
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
+import hk.uwu.mixui.components.IconButton
 import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import hk.uwu.mixui.components.Text

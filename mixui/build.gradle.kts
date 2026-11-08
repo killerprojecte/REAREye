@@ -26,6 +26,7 @@ dependencies {
     implementation("androidx.compose.animation:animation")
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.miuix.ui)
+    implementation(libs.miuix.icons)
     implementation(libs.miuix.glass)
     implementation(libs.miuix.preference)
     implementation(libs.miuix.blur)

@@ -1,5 +1,7 @@
 package hk.uwu.reareye.utils.other
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.core.animateFloatAsState
@@ -42,12 +44,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonColors
-import top.yukonga.miuix.kmp.basic.Card
+import hk.uwu.mixui.components.Card
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import hk.uwu.mixui.theme.MixTheme
 
@@ -137,7 +137,7 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
                         }
                     ) {
                         Icon(
-                            imageVector = MiuixIcons.Link,
+                            imageVector = UiIcons.Link,
                             tint = MixTheme.colorScheme.onSurface,
                             contentDescription = null,
                         )

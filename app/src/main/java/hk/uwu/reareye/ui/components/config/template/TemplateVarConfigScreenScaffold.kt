@@ -28,8 +28,8 @@ import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import hk.uwu.mixui.components.Text

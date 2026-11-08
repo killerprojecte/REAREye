@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components.script
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.annotation.SuppressLint
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -79,9 +81,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
+import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
+import hk.uwu.mixui.components.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
@@ -89,8 +91,6 @@ import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Delete
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -389,7 +389,7 @@ internal fun ScriptList(
                     rightAction = {
                         if (project.kind != ScriptProjectKind.COMPONENT) {
                             ModuleStyleDeleteAction(
-                                icon = MiuixIcons.Delete,
+                                icon = UiIcons.Delete,
                                 text = stringResource(R.string.script_delete),
                                 onClick = { onDelete(project) },
                             )

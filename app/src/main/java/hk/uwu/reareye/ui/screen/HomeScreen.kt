@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.screen
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -84,13 +86,13 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
 import top.yukonga.miuix.kmp.basic.DropdownDefaults
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
+import hk.uwu.mixui.components.IconButton
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -98,11 +100,9 @@ import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Scaffold
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.MoreCircle
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.theme.MixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import hk.uwu.mixui.components.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -415,7 +415,7 @@ fun HomeScreen(
                             holdDownState = showTopMenu.value,
                         ) {
                             Icon(
-                                imageVector = MiuixIcons.Regular.MoreCircle,
+                                imageVector = UiIcons.Regular.MoreCircle,
                                 contentDescription = null,
                                 tint = MixTheme.colorScheme.onBackground,
                             )

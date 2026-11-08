@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components.config
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -63,17 +65,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
+import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -332,7 +332,7 @@ fun BusinessExtraConfigManagerScreen(
                                     },
                                     rightAction = {
                                         ModuleStyleDeleteAction(
-                                            icon = MiuixIcons.Delete,
+                                            icon = UiIcons.Delete,
                                             text = stringResource(R.string.rear_widget_action_delete),
                                             onClick = {
                                                 RearBusinessExtraConfigRepository.removeConfigForBusiness(

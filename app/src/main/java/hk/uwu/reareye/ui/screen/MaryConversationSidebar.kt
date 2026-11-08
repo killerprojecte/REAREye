@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.screen
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.view.KeyEvent as AndroidKeyEvent
 import android.view.View
 
@@ -56,13 +58,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
+import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Add
-import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.Settings
-import top.yukonga.miuix.kmp.icon.extended.Refresh
 import hk.uwu.mixui.theme.MixTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -370,7 +367,7 @@ internal fun MarySidebarContent(
                     label = stringResource(if (locked) R.string.mary_sidebar_locked else R.string.mary_session_lock),
                     enabled = hasSession && !locked, onClick = onLock, tag = "mary-sidebar-lock",
                 )
-                SidebarAction(MiuixIcons.Settings, stringResource(R.string.mary_settings_title),
+                SidebarAction(UiIcons.Settings, stringResource(R.string.mary_settings_title),
                     onClick = onOpenSettings, tag = "mary-sidebar-settings")
                 Box(Modifier.padding(horizontal = 12.dp, vertical = 16.dp).fillMaxWidth().height(1.dp)
                     .background(colors.outline.copy(alpha = 0.35f)))
@@ -390,7 +387,7 @@ internal fun MarySidebarContent(
                         color = colors.onSurfaceVariantSummary,
                         modifier = Modifier.padding(12.dp),
                     )
-                    if (loadFailed) SidebarAction(MiuixIcons.Refresh,
+                    if (loadFailed) SidebarAction(UiIcons.Refresh,
                         stringResource(R.string.credits_contributors_retry), onClick = onRetry,
                         tag = "mary-sidebar-retry")
                 }
@@ -421,7 +418,7 @@ internal fun MarySidebarContent(
                             tint = colors.onSurfaceVariantSummary)
                         IconButton(onClick = { onDelete(session.id) }, enabled = !deleting,
                             modifier = Modifier.size(48.dp).testTag("mary-sidebar-delete-${session.id}")) {
-                            Icon(MiuixIcons.Delete, stringResource(R.string.mary_history_delete),
+                            Icon(UiIcons.Delete, stringResource(R.string.mary_history_delete),
                                 modifier = Modifier.size(20.dp), tint = colors.onSurfaceVariantSummary)
                         }
                     }
@@ -438,7 +435,7 @@ internal fun MarySidebarContent(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(MiuixIcons.Add, null, tint = colors.onPrimary, modifier = Modifier.size(22.dp))
+            Icon(UiIcons.Add, null, tint = colors.onPrimary, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(10.dp))
             Text(stringResource(R.string.mary_action_new_chat), color = colors.onPrimary,
                 style = MixTheme.textStyles.body1, fontWeight = FontWeight.Medium)

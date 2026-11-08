@@ -383,7 +383,6 @@ dependencies {
     implementation(libs.coil.network.okhttp)
     implementation(libs.miuix.ui)
     implementation(libs.miuix.preference)
-    implementation(libs.miuix.icons)
     implementation(libs.miuix.blur)
     implementation(libs.miuix.shader)
     implementation(libs.haze)

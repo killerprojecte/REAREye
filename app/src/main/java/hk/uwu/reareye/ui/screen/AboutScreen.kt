@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.screen
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.content.Intent
 import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
@@ -107,11 +109,11 @@ import okhttp3.Request
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import hk.uwu.mixui.components.Button
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
@@ -125,11 +127,6 @@ import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Create
-import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.Info
-import top.yukonga.miuix.kmp.icon.extended.Link
 import hk.uwu.mixui.theme.MixTheme.colorScheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -786,7 +783,7 @@ private fun AboutRootContent(
                             onClick = onOpenPresetPackDialog,
                             endActions = {
                                 Icon(
-                                    imageVector = MiuixIcons.Download,
+                                    imageVector = UiIcons.Download,
                                     tint = colorScheme.onSurface,
                                     contentDescription = null,
                                 )
@@ -828,7 +825,7 @@ private fun AboutRootContent(
                                     onClick = onOpenContributors,
                                     endActions = {
                                         Icon(
-                                            imageVector = MiuixIcons.Create,
+                                            imageVector = UiIcons.Create,
                                             tint = colorScheme.onSurface,
                                             contentDescription = null
                                         )
@@ -876,7 +873,7 @@ private fun AboutRootContent(
                                         },
                                         endActions = {
                                             Icon(
-                                                imageVector = MiuixIcons.Link,
+                                                imageVector = UiIcons.Link,
                                                 tint = colorScheme.onSurface,
                                                 contentDescription = null
                                             )
@@ -917,7 +914,7 @@ private fun AboutRootContent(
                                     onClick = onOpenLibraries,
                                     endActions = {
                                         Icon(
-                                            imageVector = MiuixIcons.Info,
+                                            imageVector = UiIcons.Info,
                                             tint = colorScheme.onSurface,
                                             contentDescription = null
                                         )
@@ -1212,7 +1209,7 @@ private fun ContributorCard(
             endActions = {
                 if (hasLink) {
                     Icon(
-                        imageVector = MiuixIcons.Link,
+                        imageVector = UiIcons.Link,
                         tint = colorScheme.onSurface,
                         contentDescription = null,
                     )

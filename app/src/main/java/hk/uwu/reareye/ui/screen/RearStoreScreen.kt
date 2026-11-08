@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.screen
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -142,15 +144,15 @@ import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
 import top.yukonga.miuix.kmp.basic.DropdownDefaults
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -160,11 +162,6 @@ import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.Link
-import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
@@ -976,7 +973,7 @@ private fun RearStoreRootContent(
                                 holdDownState = showSortMenu.value,
                             ) {
                                 Icon(
-                                    imageVector = MiuixIcons.Regular.Sort,
+                                    imageVector = UiIcons.Regular.Sort,
                                     contentDescription = stringResource(R.string.app_list_sort),
                                     tint = MixTheme.colorScheme.onBackground,
                                 )
@@ -1440,7 +1437,7 @@ private fun RearStoreDetailContent(
                     if (installedWidget != null) {
                         IconButton(onClick = { showUninstallDialog = true }) {
                             Icon(
-                                imageVector = MiuixIcons.Delete,
+                                imageVector = UiIcons.Delete,
                                 contentDescription = stringResource(R.string.rear_store_uninstall_action),
                                 tint = MixTheme.colorScheme.error,
                             )
@@ -1458,7 +1455,7 @@ private fun RearStoreDetailContent(
                             }
                         ) {
                             Icon(
-                                imageVector = MiuixIcons.Regular.Link,
+                                imageVector = UiIcons.Regular.Link,
                                 contentDescription = stringResource(R.string.rear_store_open_repository),
                                 tint = MixTheme.colorScheme.onBackground,
                             )
@@ -1967,7 +1964,7 @@ private fun RearStoreUninstallCard(
                 )
             }
             ModuleStyleDeleteAction(
-                icon = MiuixIcons.Delete,
+                icon = UiIcons.Delete,
                 text = stringResource(R.string.rear_store_uninstall_action),
                 backgroundColor = actionBackgroundColor,
                 contentColor = actionContentColor,
@@ -2299,7 +2296,7 @@ private fun RearStoreDownloadBadge(
                 fontWeight = FontWeight.Medium,
             )
             Icon(
-                imageVector = MiuixIcons.Download,
+                imageVector = UiIcons.Download,
                 contentDescription = null,
                 tint = MixTheme.colorScheme.primary,
                 modifier = Modifier.size(15.dp),

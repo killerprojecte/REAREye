@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components.config
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,12 +52,9 @@ import androidx.compose.ui.unit.sp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.config.ConfigCategory
 import hk.uwu.reareye.ui.config.ConfigItem
-import top.yukonga.miuix.kmp.basic.Card
+import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.basic.Search
-import top.yukonga.miuix.kmp.icon.basic.SearchCleanup
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import hk.uwu.mixui.theme.MixTheme
@@ -214,7 +213,7 @@ private fun StableSearchInputField(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = MiuixIcons.Basic.Search,
+                    imageVector = UiIcons.Basic.Search,
                     contentDescription = null,
                     tint = secondaryColor,
                     modifier = Modifier
@@ -237,7 +236,7 @@ private fun StableSearchInputField(
                 }
                 if (value.text.isNotEmpty()) {
                     Icon(
-                        imageVector = MiuixIcons.Basic.SearchCleanup,
+                        imageVector = UiIcons.Basic.SearchCleanup,
                         contentDescription = null,
                         tint = secondaryColor,
                         modifier = Modifier

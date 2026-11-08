@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components.config
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
@@ -76,15 +78,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Card
+import hk.uwu.mixui.components.Card
 import top.yukonga.miuix.kmp.basic.DropdownDefaults
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.FabPosition
 import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -92,11 +94,6 @@ import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Scaffold
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.basic.Check
-import top.yukonga.miuix.kmp.icon.extended.MoreCircle
-import top.yukonga.miuix.kmp.icon.extended.Sort
-import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
@@ -504,7 +501,7 @@ private fun SelectionIndicator(selected: Boolean) {
             )
 
             Icon(
-                imageVector = MiuixIcons.Basic.Check,
+                imageVector = UiIcons.Basic.Check,
                 contentDescription = null,
                 tint = onPrimaryColor,
                 modifier = Modifier
@@ -677,7 +674,7 @@ fun AppListSelectorScreen(
                                 holdDownState = showSortMenu.value
                             ) {
                                 Icon(
-                                    imageVector = MiuixIcons.Regular.Sort,
+                                    imageVector = UiIcons.Regular.Sort,
                                     contentDescription = stringResource(R.string.app_list_sort),
                                     tint = MixTheme.colorScheme.onBackground,
                                 )
@@ -743,7 +740,7 @@ fun AppListSelectorScreen(
                                 holdDownState = showFilterMenu.value
                             ) {
                                 Icon(
-                                    imageVector = MiuixIcons.Regular.Tune,
+                                    imageVector = UiIcons.Regular.Tune,
                                     contentDescription = stringResource(R.string.app_list_filter),
                                     tint = MixTheme.colorScheme.onBackground,
                                 )
@@ -793,7 +790,7 @@ fun AppListSelectorScreen(
                                 holdDownState = showMoreMenu.value,
                             ) {
                                 Icon(
-                                    imageVector = MiuixIcons.MoreCircle,
+                                    imageVector = UiIcons.MoreCircle,
                                     contentDescription = stringResource(R.string.app_list_more_actions),
                                     tint = MixTheme.colorScheme.onBackground,
                                 )
