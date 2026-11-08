@@ -114,7 +114,7 @@ import top.yukonga.miuix.kmp.basic.NavigationBarDisplayMode
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 sealed interface NavigationQuickTarget {
     @Immutable
@@ -263,7 +263,7 @@ fun RearNavigationBar(
             NavigationBar(
                 modifier = modifier,
                 color = if (navigationBarMode == ModuleNavigationBarMode.NORMAL) {
-                    MiuixTheme.colorScheme.surface
+                    MixTheme.colorScheme.surface
                 } else {
                     Color.Transparent
                 },
@@ -375,13 +375,13 @@ fun RearNavigationBar(
                 Icon(
                     imageVector = item.icon,
                     contentDescription = item.label,
-                    tint = MiuixTheme.colorScheme.onSurface,
+                    tint = MixTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = item.label,
                     fontSize = 11.sp,
                     lineHeight = 14.sp,
-                    color = MiuixTheme.colorScheme.onSurface,
+                    color = MixTheme.colorScheme.onSurface,
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Visible,
@@ -465,7 +465,7 @@ private fun RowScope.RearNavigationBarItem(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val onSurfaceContainerColor = MiuixTheme.colorScheme.onSurfaceContainer
+    val onSurfaceContainerColor = MixTheme.colorScheme.onSurfaceContainer
     val tint = when {
         isPressed -> if (selected) {
             onSurfaceContainerColor.copy(alpha = 0.5f)
@@ -690,7 +690,7 @@ private fun NavigationQuickActionsBackdropLayer(
                 .height(40.dp)
                 .graphicsLayer { alpha = editTargetProgress }
                 .background(
-                    MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f),
+                    MixTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f),
                     ContinuousCapsule
                 ),
         )
@@ -700,7 +700,7 @@ private fun NavigationQuickActionsBackdropLayer(
                     .width(width)
                     .height(40.dp)
                     .background(
-                        MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.66f),
+                        MixTheme.colorScheme.surfaceContainer.copy(alpha = 0.66f),
                         ContinuousCapsule
                     ),
             )
@@ -843,16 +843,16 @@ private fun NavigationQuickActionButton(
 private fun rememberNavigationQuickActionStyle(
     navigationBarMode: ModuleNavigationBarMode,
 ): NavigationQuickActionStyle {
-    val isLight = MiuixTheme.colorScheme.surface.luminance() >= 0.5f
-    val outline = MiuixTheme.colorScheme.dividerLine.copy(alpha = if (isLight) 0.7f else 0.86f)
-    val primaryTint = MiuixTheme.colorScheme.primary.copy(alpha = if (isLight) 0.14f else 0.2f)
+    val isLight = MixTheme.colorScheme.surface.luminance() >= 0.5f
+    val outline = MixTheme.colorScheme.dividerLine.copy(alpha = if (isLight) 0.7f else 0.86f)
+    val primaryTint = MixTheme.colorScheme.primary.copy(alpha = if (isLight) 0.14f else 0.2f)
     return when (navigationBarMode) {
         ModuleNavigationBarMode.NORMAL -> NavigationQuickActionStyle(
-            containerColor = MiuixTheme.colorScheme.surface,
-            contentColor = MiuixTheme.colorScheme.onSurface,
+            containerColor = MixTheme.colorScheme.surface,
+            contentColor = MixTheme.colorScheme.onSurface,
             borderColor = outline,
-            hoveredContainerColor = blendColors(MiuixTheme.colorScheme.surface, primaryTint),
-            selectedContainerColor = blendColors(MiuixTheme.colorScheme.surface, primaryTint),
+            hoveredContainerColor = blendColors(MixTheme.colorScheme.surface, primaryTint),
+            selectedContainerColor = blendColors(MixTheme.colorScheme.surface, primaryTint),
             selectedBorderColor = outline,
             shadowAlpha = if (isLight) 0.13f else 0.28f,
             shadowElevation = 10.dp,
@@ -860,15 +860,15 @@ private fun rememberNavigationQuickActionStyle(
         )
 
         ModuleNavigationBarMode.SEMI_TRANSPARENT -> NavigationQuickActionStyle(
-            containerColor = MiuixTheme.colorScheme.surface.copy(alpha = 0.9f),
-            contentColor = MiuixTheme.colorScheme.onSurface,
+            containerColor = MixTheme.colorScheme.surface.copy(alpha = 0.9f),
+            contentColor = MixTheme.colorScheme.onSurface,
             borderColor = outline.copy(alpha = 0.9f),
             hoveredContainerColor = blendColors(
-                MiuixTheme.colorScheme.surface.copy(alpha = 0.94f),
+                MixTheme.colorScheme.surface.copy(alpha = 0.94f),
                 primaryTint
             ),
             selectedContainerColor = blendColors(
-                MiuixTheme.colorScheme.surface.copy(alpha = 0.94f),
+                MixTheme.colorScheme.surface.copy(alpha = 0.94f),
                 primaryTint
             ),
             selectedBorderColor = outline.copy(alpha = 0.9f),
@@ -878,15 +878,15 @@ private fun rememberNavigationQuickActionStyle(
         )
 
         ModuleNavigationBarMode.FLOATING -> NavigationQuickActionStyle(
-            containerColor = MiuixTheme.colorScheme.surfaceContainer,
-            contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
+            containerColor = MixTheme.colorScheme.surfaceContainer,
+            contentColor = MixTheme.colorScheme.onSurfaceContainer,
             borderColor = outline,
             hoveredContainerColor = blendColors(
-                MiuixTheme.colorScheme.surfaceContainer,
+                MixTheme.colorScheme.surfaceContainer,
                 primaryTint
             ),
             selectedContainerColor = blendColors(
-                MiuixTheme.colorScheme.surfaceContainer,
+                MixTheme.colorScheme.surfaceContainer,
                 primaryTint
             ),
             selectedBorderColor = outline,
@@ -901,7 +901,7 @@ private fun rememberNavigationQuickActionStyle(
             } else {
                 Color.White.copy(alpha = 0.065f)
             },
-            contentColor = MiuixTheme.colorScheme.onSurface,
+            contentColor = MixTheme.colorScheme.onSurface,
             borderColor = Color.White.copy(alpha = if (isLight) 0.34f else 0.15f),
             hoveredContainerColor = if (isLight) {
                 Color.White.copy(alpha = 0.18f)
@@ -1148,7 +1148,7 @@ private fun NavigationQuickActionEditor(
         ) {
             Text(
                 text = maxHint,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(horizontal = 4.dp),
             )
@@ -1186,7 +1186,7 @@ private fun NavigationQuickActionEditor(
 private fun NavigationQuickEditorSectionTitle(text: String) {
     Text(
         text = text,
-        color = MiuixTheme.colorScheme.onSurface,
+        color = MixTheme.colorScheme.onSurface,
         fontSize = 14.sp,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(horizontal = 4.dp),
@@ -1320,7 +1320,7 @@ private fun NavigationQuickEditorDropList(
                         if (draggingToFullActive) {
                             Modifier.border(
                                 width = 1.dp,
-                                color = MiuixTheme.colorScheme.dividerLine.copy(alpha = 0.9f),
+                                color = MixTheme.colorScheme.dividerLine.copy(alpha = 0.9f),
                                 shape = RoundedCornerShape(18.dp),
                             )
                         } else {
@@ -1332,7 +1332,7 @@ private fun NavigationQuickEditorDropList(
                 if (previewActiveIds.isEmpty()) {
                     Text(
                         text = stringResource(R.string.navigation_quick_active_empty),
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(8.dp),
                     )
@@ -1388,7 +1388,7 @@ private fun NavigationQuickEditorDropList(
                 if (availableActions.isEmpty()) {
                     Text(
                         text = stringResource(R.string.navigation_quick_available_empty),
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(8.dp),
                     )
@@ -1472,7 +1472,7 @@ private fun NavigationQuickEditorActionRow(
         animationSpec = tween(180, easing = FastOutSlowInEasing),
         label = "EditorRowAlpha",
     )
-    val contentColor = MiuixTheme.colorScheme.onSurfaceContainer
+    val contentColor = MixTheme.colorScheme.onSurfaceContainer
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1485,10 +1485,10 @@ private fun NavigationQuickEditorActionRow(
                 shape = ContinuousCapsule
                 clip = false
             }
-            .background(MiuixTheme.colorScheme.surfaceContainer, ContinuousCapsule)
+            .background(MixTheme.colorScheme.surfaceContainer, ContinuousCapsule)
             .border(
                 0.75.dp,
-                MiuixTheme.colorScheme.dividerLine.copy(alpha = 0.72f),
+                MixTheme.colorScheme.dividerLine.copy(alpha = 0.72f),
                 ContinuousCapsule
             )
             .padding(start = 14.dp, end = 8.dp),
@@ -1569,7 +1569,7 @@ private fun NavigationQuickDragHandle(
         Icon(
             imageVector = Icons.Rounded.Menu,
             contentDescription = null,
-            tint = MiuixTheme.colorScheme.onSurfaceContainer.copy(alpha = 0.62f),
+            tint = MixTheme.colorScheme.onSurfaceContainer.copy(alpha = 0.62f),
             modifier = Modifier.size(22.dp),
         )
     }

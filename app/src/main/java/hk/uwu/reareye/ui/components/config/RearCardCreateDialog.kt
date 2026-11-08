@@ -52,7 +52,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 internal fun RearCardCreateDialog(
@@ -90,7 +90,7 @@ internal fun RearCardCreateDialog(
     val autocompleteDensity = LocalDensity.current
     val autocompleteTextMeasurer = rememberTextMeasurer()
     val autocompleteTextStyle = TextStyle(
-        fontSize = MiuixTheme.textStyles.body1.fontSize,
+        fontSize = MixTheme.textStyles.body1.fontSize,
         fontWeight = FontWeight.Medium,
     )
     val autocompleteWidth = remember(
@@ -319,10 +319,10 @@ private fun RearBusinessAutocompleteTextField(
             Box(
                 modifier = Modifier
                     .clip(suggestionShape)
-                    .background(MiuixTheme.colorScheme.surfaceContainerHigh)
+                    .background(MixTheme.colorScheme.surfaceContainerHigh)
                     .border(
                         width = 1.dp,
-                        color = MiuixTheme.colorScheme.outline.copy(alpha = 0.32f),
+                        color = MixTheme.colorScheme.outline.copy(alpha = 0.32f),
                         shape = suggestionShape,
                     ),
             ) {

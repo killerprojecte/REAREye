@@ -57,7 +57,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 fun ConfigNodeRow(
@@ -108,7 +108,7 @@ private fun ConfigCategoryStartIcon(icon: ConfigCategoryIcon) {
                 Icon(
                     imageVector = icon.imageVector,
                     contentDescription = null,
-                    tint = MiuixTheme.colorScheme.onBackground,
+                    tint = MixTheme.colorScheme.onBackground,
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -429,9 +429,9 @@ fun RearStoreApiConfigInput(
         else -> validation.baseUrl
     }
     val customHelperColor = when {
-        customDomain.isBlank() -> MiuixTheme.colorScheme.onSurfaceVariantSummary
-        validation == null -> MiuixTheme.colorScheme.error
-        else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+        customDomain.isBlank() -> MixTheme.colorScheme.onSurfaceVariantSummary
+        validation == null -> MixTheme.colorScheme.error
+        else -> MixTheme.colorScheme.onSurfaceVariantSummary
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -545,8 +545,8 @@ fun FloatSliderConfigInput(
         )
         Text(
             text = summary,
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            style = MixTheme.textStyles.body2,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
             modifier = Modifier.padding(top = 2.dp)
         )
         Slider(
@@ -566,14 +566,14 @@ fun FloatSliderConfigInput(
         Row(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = sliderConfig.formatValue(sliderConfig.minValue),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
             Spacer(modifier = Modifier.weight(1f))
             Text(
                 text = sliderConfig.formatValue(sliderConfig.maxValue),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
         }
     }

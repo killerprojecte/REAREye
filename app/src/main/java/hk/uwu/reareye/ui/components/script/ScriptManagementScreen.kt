@@ -91,7 +91,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import top.yukonga.miuix.kmp.window.WindowBottomSheet
@@ -511,7 +511,7 @@ private fun ScriptEditor(
                         modifier = Modifier
                             .fillMaxHeight()
                             .fillMaxWidth(1f / 3f)
-                            .background(MiuixTheme.colorScheme.surfaceContainerHigh),
+                            .background(MixTheme.colorScheme.surfaceContainerHigh),
                     ) {
                         Column(
                             modifier = Modifier
@@ -555,9 +555,9 @@ private fun ScriptEditor(
                                         },
                                         contentDescription = null,
                                         tint = when {
-                                            file.isDirectory -> MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                            isLua -> MiuixTheme.colorScheme.primary
-                                            else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                            file.isDirectory -> MixTheme.colorScheme.onSurfaceVariantSummary
+                                            isLua -> MixTheme.colorScheme.primary
+                                            else -> MixTheme.colorScheme.onSurfaceVariantSummary
                                         },
                                     )
                                     Text(
@@ -567,9 +567,9 @@ private fun ScriptEditor(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         color = if (file.absolutePath == selectedFile.absolutePath) {
-                                            MiuixTheme.colorScheme.primary
+                                            MixTheme.colorScheme.primary
                                         } else {
-                                            MiuixTheme.colorScheme.onSurface
+                                            MixTheme.colorScheme.onSurface
                                         },
                                     )
                                 }
@@ -667,7 +667,7 @@ private fun ScriptOverwriteDialog(
     if (request == null) return
     WindowDialog(show = true, title = request.title, onDismissRequest = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text(request.message, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            Text(request.message, color = MixTheme.colorScheme.onSurfaceVariantSummary)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 TextButton(
                     text = stringResource(R.string.script_cancel),
@@ -740,7 +740,7 @@ private fun ScriptDebugBottomSheet(
                         .fillMaxWidth()
                         .heightIn(max = 180.dp)
                         .verticalScroll(rememberScrollState()),
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary
                 )
             }
         }

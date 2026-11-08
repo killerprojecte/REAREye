@@ -60,7 +60,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
@@ -228,7 +228,7 @@ internal fun RearAppCardManagementContent(
                             }
                         ),
                     backgroundColor = if (hoveredItemKey == itemKey) {
-                        MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
+                        MixTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
                     } else {
                         null
                     },
@@ -318,7 +318,7 @@ internal fun RearAppCardManagementContent(
                                 Icon(
                                     imageVector = Icons.Outlined.Lock,
                                     contentDescription = null,
-                                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                                 )
                             }
                             storeWidgetId?.let { widgetId ->

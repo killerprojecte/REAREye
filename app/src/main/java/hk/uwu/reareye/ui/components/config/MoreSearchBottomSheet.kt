@@ -58,7 +58,7 @@ import top.yukonga.miuix.kmp.icon.basic.Search
 import top.yukonga.miuix.kmp.icon.basic.SearchCleanup
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 internal fun MoreSearchBottomSheet(
@@ -159,7 +159,7 @@ internal fun MoreSearchBottomSheet(
                                         Icon(
                                             imageVector = entry.category.group.icon,
                                             contentDescription = null,
-                                            tint = MiuixTheme.colorScheme.primary,
+                                            tint = MixTheme.colorScheme.primary,
                                         )
                                     }
                                 },
@@ -189,20 +189,20 @@ private fun StableSearchInputField(
     modifier: Modifier = Modifier,
 ) {
     val currentOnValueChange by rememberUpdatedState(onValueChange)
-    val textColor = MiuixTheme.colorScheme.onSurface
-    val secondaryColor = MiuixTheme.colorScheme.onSurfaceContainerHigh
-    val capsuleColor = MiuixTheme.colorScheme.surfaceContainerHigh
+    val textColor = MixTheme.colorScheme.onSurface
+    val secondaryColor = MixTheme.colorScheme.onSurfaceContainerHigh
+    val capsuleColor = MixTheme.colorScheme.surfaceContainerHigh
 
     BasicTextField(
         value = value,
         onValueChange = currentOnValueChange,
         modifier = modifier,
         singleLine = true,
-        textStyle = MiuixTheme.textStyles.main.copy(
+        textStyle = MixTheme.textStyles.main.copy(
             color = textColor,
             fontWeight = FontWeight.Medium,
         ),
-        cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
+        cursorBrush = SolidColor(MixTheme.colorScheme.primary),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = {}),
         decorationBox = { innerTextField ->

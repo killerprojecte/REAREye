@@ -49,7 +49,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 @Serializable
 data class AboutLibraries(
@@ -138,7 +138,7 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
                     ) {
                         Icon(
                             imageVector = MiuixIcons.Link,
-                            tint = MiuixTheme.colorScheme.onSurface,
+                            tint = MixTheme.colorScheme.onSurface,
                             contentDescription = null,
                         )
                     }
@@ -150,7 +150,7 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
                         modifier = Modifier
                             .height(16.dp),
                         thickness = 1.dp,
-                        color = MiuixTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        color = MixTheme.colorScheme.outline.copy(alpha = 0.5f)
                     )
                 }
                 val licenseEntries = lib.licenses.map { licenseId ->
@@ -172,7 +172,7 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
                     onCollapse = { expandLicensesInline = false },
                 )
                 if (showLicenses.isNotEmpty()) {
-                    val primaryColor = MiuixTheme.colorScheme.primary
+                    val primaryColor = MixTheme.colorScheme.primary
                     val dialogTitle = remember(showLicenses) {
                         showLicenses.joinToString(" / ") { it.name }
                     }
@@ -220,7 +220,7 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
                                 .padding(top = 8.dp)
                                 .verticalScroll(rememberScrollState()),
                             text = annotatedText,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            color = MixTheme.colorScheme.onSurfaceVariantSummary
                         )
                     }
                 }
@@ -499,7 +499,7 @@ private fun buildLibraryDevelopersText(developers: List<Developer>): AnnotatedSt
                         url = url,
                         styles = TextLinkStyles(
                             SpanStyle(
-                                color = MiuixTheme.colorScheme.primary,
+                                color = MixTheme.colorScheme.primary,
                             )
                         )
                     ),

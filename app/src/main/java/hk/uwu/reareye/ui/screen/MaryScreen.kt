@@ -111,7 +111,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Refresh
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -541,7 +541,7 @@ private fun ColumnScope.LandingState(
 
             Text(
                 text = stringResource(R.string.mary_greeting),
-                style = MiuixTheme.textStyles.title4,
+                style = MixTheme.textStyles.title4,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
@@ -551,8 +551,8 @@ private fun ColumnScope.LandingState(
 
             Text(
                 text = stringResource(R.string.mary_greeting_subtitle),
-                style = MiuixTheme.textStyles.footnote1,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.footnote1,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -574,14 +574,14 @@ private fun ColumnScope.LandingState(
                 Icon(
                     imageVector = MiuixIcons.Refresh,
                     contentDescription = null,
-                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = stringResource(R.string.mary_shuffle),
-                    style = MiuixTheme.textStyles.footnote2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    style = MixTheme.textStyles.footnote2,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
         }
@@ -648,14 +648,14 @@ private fun UserBubble(text: String) {
             modifier = Modifier.widthIn(max = 300.dp),
             cornerRadius = 18.dp,
             colors = CardDefaults.defaultColors(
-                color = MiuixTheme.colorScheme.primary,
-                contentColor = MiuixTheme.colorScheme.onPrimary,
+                color = MixTheme.colorScheme.primary,
+                contentColor = MixTheme.colorScheme.onPrimary,
             ),
         ) {
             Text(
                 text = text,
-                style = MiuixTheme.textStyles.body1,
-                color = MiuixTheme.colorScheme.onPrimary,
+                style = MixTheme.textStyles.body1,
+                color = MixTheme.colorScheme.onPrimary,
                 // Dense CJK text at the default line height is what makes a bubble feel cramped.
                 lineHeight = 24.sp,
                 modifier = Modifier
@@ -704,15 +704,15 @@ private fun AssistantBubble(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
                 Card(
                     colors = CardDefaults.defaultColors(
-                        color = MiuixTheme.colorScheme.surfaceContainer,
-                        contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
+                        color = MixTheme.colorScheme.surfaceContainer,
+                        contentColor = MixTheme.colorScheme.onSurfaceContainer,
                     ),
                     cornerRadius = 18.dp,
                 ) {
                     if (text.isEmpty() && streaming) {
                         Text(
                             text = "…",
-                            style = MiuixTheme.textStyles.body1,
+                            style = MixTheme.textStyles.body1,
                             lineHeight = 24.sp,
                             modifier = Modifier
                                 .clip(
@@ -730,7 +730,7 @@ private fun AssistantBubble(
                         // exactly as typed, so a stray `*` cannot silently reformat it.
                         MarkdownText(
                             markdown = text,
-                            textColor = MiuixTheme.colorScheme.onSurfaceContainer,
+                            textColor = MixTheme.colorScheme.onSurfaceContainer,
                             modifier = Modifier
                                 .clip(
                                     RoundedCornerShape(
@@ -802,8 +802,8 @@ private fun rememberBlockExpansion(): BlockExpansion = remember { BlockExpansion
 private fun ReasoningHeaderLabel(streaming: Boolean) {
     Text(
         text = stringResource(if (streaming) R.string.mary_thinking else R.string.mary_thought),
-        style = MiuixTheme.textStyles.footnote2,
-        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        style = MixTheme.textStyles.footnote2,
+        color = MixTheme.colorScheme.onSurfaceVariantSummary,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
@@ -829,7 +829,7 @@ private fun ThinkingPulseIcon() {
     Icon(
         imageVector = MiuixIcons.More,
         contentDescription = null,
-        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = glow),
+        tint = MixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = glow),
         modifier = Modifier.size(15.dp),
     )
 }
@@ -865,8 +865,8 @@ internal fun ReasoningCard(
             ),
         cornerRadius = 16.dp,
         colors = CardDefaults.defaultColors(
-            color = MiuixTheme.colorScheme.surfaceContainer,
-            contentColor = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            color = MixTheme.colorScheme.surfaceContainer,
+            contentColor = MixTheme.colorScheme.onSurfaceVariantSummary,
         ),
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
@@ -890,7 +890,7 @@ internal fun ReasoningCard(
                     Icon(
                         imageVector = MiuixIcons.More,
                         contentDescription = null,
-                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier.size(15.dp),
                     )
                 }
@@ -913,7 +913,7 @@ internal fun ReasoningCard(
                 Icon(
                     imageVector = MiuixIcons.ExpandMore,
                     contentDescription = null,
-                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                     modifier = Modifier
                         .size(16.dp)
                         .graphicsLayer { rotationZ = chevron },
@@ -925,7 +925,7 @@ internal fun ReasoningCard(
                 MarkdownText(
                     markdown = text,
                     modifier = Modifier.testTag("mary-reasoning-markdown-$stateKey"),
-                    textColor = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    textColor = MixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
         }
@@ -942,20 +942,20 @@ internal fun NoticeCard(text: String, isError: Boolean) {
             color = if (isError) {
                 errorColors.container
             } else {
-                MiuixTheme.colorScheme.surfaceContainerHigh
+                MixTheme.colorScheme.surfaceContainerHigh
             },
             contentColor = if (isError) {
                 errorColors.content
             } else {
-                MiuixTheme.colorScheme.onSurfaceContainer
+                MixTheme.colorScheme.onSurfaceContainer
             },
         ),
     ) {
         Text(
             text = text,
-            style = MiuixTheme.textStyles.footnote1,
+            style = MixTheme.textStyles.footnote1,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            color = if (isError) errorColors.content else MiuixTheme.colorScheme.onSurfaceContainer,
+            color = if (isError) errorColors.content else MixTheme.colorScheme.onSurfaceContainer,
         )
     }
 }
@@ -986,15 +986,15 @@ private fun SuggestionCard(text: String, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.defaultColors(
-            color = MiuixTheme.colorScheme.surfaceContainer,
-            contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
+            color = MixTheme.colorScheme.surfaceContainer,
+            contentColor = MixTheme.colorScheme.onSurfaceContainer,
         ),
         cornerRadius = 20.dp,
         onClick = onClick,
     ) {
         Text(
             text = text,
-            style = MiuixTheme.textStyles.body1,
+            style = MixTheme.textStyles.body1,
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
         )
     }

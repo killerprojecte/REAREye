@@ -46,7 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 internal const val MARY_TOOL_MOTION_MILLIS = 220
 
@@ -77,7 +77,7 @@ internal fun MaryConfirmationCard(
     actions: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MixTheme.colorScheme
     val dark = scheme.surfaceContainerHigh.luminance() < 0.5f
     val errorColors = maryErrorColors(dark)
     val container =
@@ -183,7 +183,7 @@ internal fun MaryConfirmationActionButton(
     primary: Boolean = false,
     enabled: Boolean = true,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MixTheme.colorScheme
     val dark = scheme.surfaceContainerHigh.luminance() < 0.5f
     val foreground = when {
         !enabled -> scheme.onSurfaceVariantSummary.copy(alpha = 0.55f)

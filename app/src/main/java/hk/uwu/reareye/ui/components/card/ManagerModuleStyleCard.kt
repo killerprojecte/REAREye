@@ -30,7 +30,7 @@ import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 fun ModuleStyleManagerCard(
@@ -46,9 +46,9 @@ fun ModuleStyleManagerCard(
     scrollActionsHorizontally: Boolean = false,
     backgroundColor: Color? = null,
     contentColor: Color? = null,
-    titleColor: Color = contentColor ?: MiuixTheme.colorScheme.onSurface,
-    summaryColor: Color = contentColor ?: MiuixTheme.colorScheme.onSurfaceVariantSummary,
-    dividerColor: Color = MiuixTheme.colorScheme.outline.copy(alpha = 0.5f),
+    titleColor: Color = contentColor ?: MixTheme.colorScheme.onSurface,
+    summaryColor: Color = contentColor ?: MixTheme.colorScheme.onSurfaceVariantSummary,
+    dividerColor: Color = MixTheme.colorScheme.outline.copy(alpha = 0.5f),
     onCardClick: (() -> Unit)? = null,
     leftAction: @Composable () -> Unit,
     rightAction: @Composable () -> Unit,
@@ -142,7 +142,7 @@ fun ModuleStyleManagerCard(
             colors = backgroundColor?.let {
                 CardDefaults.defaultColors(
                     color = it,
-                    contentColor = contentColor ?: MiuixTheme.colorScheme.onSurface,
+                    contentColor = contentColor ?: MixTheme.colorScheme.onSurface,
                 )
             } ?: CardDefaults.defaultColors(),
             onClick = onCardClick,
@@ -166,7 +166,7 @@ fun ModuleStyleManagerCard(
             colors = backgroundColor?.let {
                 CardDefaults.defaultColors(
                     color = it,
-                    contentColor = contentColor ?: MiuixTheme.colorScheme.onSurface,
+                    contentColor = contentColor ?: MixTheme.colorScheme.onSurface,
                 )
             } ?: CardDefaults.defaultColors(),
         ) {
@@ -191,13 +191,13 @@ fun ModuleStyleIconAction(
     modifier: Modifier = Modifier.size(20.dp),
     icon: ImageVector,
     contentDescription: String? = null,
-    backgroundColor: Color = MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
+    backgroundColor: Color = MixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
     contentColor: Color? = null,
     onClick: () -> Unit,
 ) {
     val actionIconAlpha = if (backgroundColor.luminance() < 0.5f) 0.7f else 0.9f
     val actionIconTint =
-        (contentColor ?: MiuixTheme.colorScheme.onSurface).copy(alpha = actionIconAlpha)
+        (contentColor ?: MixTheme.colorScheme.onSurface).copy(alpha = actionIconAlpha)
     IconButton(
         minHeight = 35.dp,
         minWidth = 35.dp,
@@ -218,8 +218,8 @@ fun ModuleStyleTextAction(
     icon: ImageVector,
     text: String,
     enabled: Boolean = true,
-    backgroundColor: Color = MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
-    contentColor: Color = MiuixTheme.colorScheme.onSurface,
+    backgroundColor: Color = MixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
+    contentColor: Color = MixTheme.colorScheme.onSurface,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -259,8 +259,8 @@ fun ModuleStyleDeleteAction(
     icon: ImageVector,
     text: String,
     enabled: Boolean = true,
-    backgroundColor: Color = MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
-    contentColor: Color = MiuixTheme.colorScheme.onSurface,
+    backgroundColor: Color = MixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
+    contentColor: Color = MixTheme.colorScheme.onSurface,
     onClick: () -> Unit,
 ) {
     ModuleStyleTextAction(

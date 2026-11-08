@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 /** Scroll activity, not incoming tokens or recomposition, owns the visibility timeout. */
 @Composable
@@ -64,12 +64,12 @@ internal fun MaryScrollToLatest(
             onClick = onClick,
             enabled = visible,
             shape = CircleShape,
-            color = MiuixTheme.colorScheme.surfaceContainerHighest,
-            contentColor = MiuixTheme.colorScheme.onSurfaceContainerHighest,
+            color = MixTheme.colorScheme.surfaceContainerHighest,
+            contentColor = MixTheme.colorScheme.onSurfaceContainerHighest,
             shadowElevation = 4.dp,
             modifier = modifier.size(46.dp).testTag("mary-jump-to-latest")
                 .graphicsLayer { alpha = opacity }
-                .border(0.5.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.25f), CircleShape),
+                .border(0.5.dp, MixTheme.colorScheme.outline.copy(alpha = 0.25f), CircleShape),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(

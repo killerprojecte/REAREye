@@ -40,7 +40,7 @@ import com.mikepenz.markdown.utils.resolveImageLink
 import hk.uwu.reareye.R
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import java.net.URI
 
 /** Tests may supply a loader; production shares Coil's application-scoped loader and caches. */
@@ -160,8 +160,8 @@ private interface MarkdownImagePlaceholder
 @Composable
 private fun statusPainter(label: String): Painter {
     val measurer = rememberTextMeasurer()
-    val foreground = MiuixTheme.colorScheme.onSurfaceVariantSummary
-    val background = MiuixTheme.colorScheme.surfaceContainerHigh
+    val foreground = MixTheme.colorScheme.onSurfaceVariantSummary
+    val background = MixTheme.colorScheme.surfaceContainerHigh
     val text = remember(label, foreground, measurer) {
         measurer.measure(
             label,

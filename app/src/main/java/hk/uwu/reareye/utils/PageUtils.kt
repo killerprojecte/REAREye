@@ -16,7 +16,7 @@ import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurColors
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 fun pageContentPadding(
@@ -57,7 +57,7 @@ fun BlurredBar(
                 blurRadius = 25f * LocalDensity.current.density,
                 colors = BlurColors(
                     blendColors = listOf(
-                        BlendColorEntry(color = MiuixTheme.colorScheme.surface.copy(0.87f)),
+                        BlendColorEntry(color = MixTheme.colorScheme.surface.copy(0.87f)),
                     ),
                 ),
             )

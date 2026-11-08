@@ -92,7 +92,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import java.util.Locale
@@ -744,8 +744,8 @@ fun CustomBoundsCompatManagerScreen(
                     R.string.custom_bounds_rule_import_app_missing,
                     rejectedImportPackage.orEmpty(),
                 ),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
             Button(
                 onClick = { rejectedImportPackage = null },
@@ -768,8 +768,8 @@ fun CustomBoundsCompatManagerScreen(
                     R.string.custom_bounds_rule_import_overwrite_message,
                     pendingOverwriteConfig?.packageName.orEmpty(),
                 ),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
             Button(
                 onClick = {
@@ -798,8 +798,8 @@ fun CustomBoundsCompatManagerScreen(
         DialogFormColumn {
             Text(
                 text = importErrorMessage.orEmpty(),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
             Button(
                 onClick = { importErrorMessage = null },
@@ -850,15 +850,15 @@ private fun CustomBoundsInfoText(text: String) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
-            .background(MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f))
+            .background(MixTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f))
             .border(
                 width = 0.5.dp,
-                color = MiuixTheme.colorScheme.outline.copy(alpha = 0.18f),
+                color = MixTheme.colorScheme.outline.copy(alpha = 0.18f),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
             )
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        style = MiuixTheme.textStyles.body2,
-        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        style = MixTheme.textStyles.body2,
+        color = MixTheme.colorScheme.onSurfaceVariantSummary,
     )
 }
 
@@ -881,8 +881,8 @@ private fun CustomBoundsColorEditor(
     ) {
         Text(
             text = stringResource(R.string.custom_bounds_fill_palette),
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            style = MixTheme.textStyles.body2,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
         )
         ColorPalette(
             color = composeColor,
@@ -891,8 +891,8 @@ private fun CustomBoundsColorEditor(
         )
         Text(
             text = stringResource(R.string.custom_bounds_fill_color_help),
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            style = MixTheme.textStyles.body2,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -905,7 +905,7 @@ private fun CustomBoundsColorEditor(
                     .clip(RoundedCornerShape(999.dp))
                     .border(
                         width = 1.dp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                         shape = RoundedCornerShape(999.dp),
                     )
                     .background(parsedColor?.let(::Color) ?: Color.Transparent),
@@ -921,8 +921,8 @@ private fun CustomBoundsColorEditor(
         if (error) {
             Text(
                 text = stringResource(R.string.custom_bounds_fill_color_invalid),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.error,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.error,
                 modifier = Modifier.fillMaxWidth(),
             )
         }

@@ -74,7 +74,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 /** Remember once per session, outside LazyColumn. No request/question bodies are retained here. */
 @Stable
@@ -262,7 +262,7 @@ internal fun MaryToolCallCard(
                             ToolRisk.MUTATING -> R.string.mary_confirmation_risk_changes
                             ToolRisk.DESTRUCTIVE -> R.string.mary_confirmation_risk_destructive
                         }
-                    ), fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    ), fontSize = 12.sp, color = MixTheme.colorScheme.onSurfaceVariantSummary
                 )
                 // Keep this slot inside the risk group: the shell's spacedBy must not
                 // insert/remove an immediate 8dp gap at either end of the transition.
@@ -299,11 +299,11 @@ internal fun MaryToolCallCard(
                 ) {
                     Text(
                         stringResource(R.string.mary_tool_arguments), fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary
                     )
                     Icon(
                         Icons.Outlined.KeyboardArrowDown, contentDescription = null,
-                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier
                             .size(14.dp)
                             .rotate(detailsRotation)
@@ -414,7 +414,7 @@ private fun QuestionContents(
     val allowCustom = request.allowCustom && !compaction
     val options = if (compaction) request.options.take(2) else request.options
     val selection = if (editable) draft?.selected.orEmpty() else answer?.selectedIds.orEmpty()
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MixTheme.colorScheme
     SelectionContainer {
         Text(
             request.question,
@@ -424,7 +424,7 @@ private fun QuestionContents(
     }
     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
         if (multiple) Text(
-            stringResource(R.string.mary_ask_multiple), style = MiuixTheme.textStyles.footnote2,
+            stringResource(R.string.mary_ask_multiple), style = MixTheme.textStyles.footnote2,
             color = scheme.onSurfaceVariantSummary
         )
         options.forEachIndexed { index, option ->
@@ -545,11 +545,11 @@ private fun QuestionContents(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     stringResource(R.string.mary_tool_answer),
-                    style = MiuixTheme.textStyles.footnote2,
+                    style = MixTheme.textStyles.footnote2,
                     color = scheme.primary,
                     fontWeight = FontWeight.SemiBold
                 )
-                Text(answerSummary(request, answer).orEmpty(), style = MiuixTheme.textStyles.body2)
+                Text(answerSummary(request, answer).orEmpty(), style = MixTheme.textStyles.body2)
             }
         }
     }
@@ -559,7 +559,7 @@ private fun QuestionContents(
 private fun SubmissionFailure() {
     Text(
         stringResource(R.string.mary_tool_submit_failed), color = maryErrorColors().content,
-        style = MiuixTheme.textStyles.footnote2
+        style = MixTheme.textStyles.footnote2
     )
 }
 
@@ -579,22 +579,22 @@ private fun RawToolContents(arguments: String, result: String?, error: Boolean) 
                 if (arguments.isNotBlank()) {
                     Text(
                         stringResource(R.string.mary_tool_arguments),
-                        style = MiuixTheme.textStyles.footnote2,
-                        color = MiuixTheme.colorScheme.primary,
+                        style = MixTheme.textStyles.footnote2,
+                        color = MixTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold
                     )
-                    Text(arguments, style = MiuixTheme.textStyles.footnote2)
+                    Text(arguments, style = MixTheme.textStyles.footnote2)
                 }
                 if (result != null) {
                     Text(
                         stringResource(if (error) R.string.mary_tool_failed else R.string.mary_tool_result),
-                        style = MiuixTheme.textStyles.footnote2,
-                        color = if (error) maryErrorColors().content else MiuixTheme.colorScheme.primary,
+                        style = MixTheme.textStyles.footnote2,
+                        color = if (error) maryErrorColors().content else MixTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        result, style = MiuixTheme.textStyles.footnote2,
-                        color = if (error) maryErrorColors().content else MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        result, style = MixTheme.textStyles.footnote2,
+                        color = if (error) maryErrorColors().content else MixTheme.colorScheme.onSurfaceVariantSummary
                     )
                 }
             }

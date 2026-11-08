@@ -18,16 +18,16 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.compose.components.MarkdownComponentModel
 import org.intellij.markdown.ast.getTextInNode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 /** A task in an assistant message is a read-only status, not an editable form field. */
 @Composable
 internal fun MarkdownTaskCheckbox(model: MarkdownComponentModel) {
     val checked =
         model.node.getTextInNode(model.content).toString().trim().equals("[x]", ignoreCase = true)
-    val primary = MiuixTheme.colorScheme.primary
-    val outline = MiuixTheme.colorScheme.onSurfaceVariantSummary
-    val check = MiuixTheme.colorScheme.onPrimary
+    val primary = MixTheme.colorScheme.primary
+    val outline = MixTheme.colorScheme.onSurfaceVariantSummary
+    val check = MixTheme.colorScheme.onPrimary
     Canvas(Modifier
         .padding(end = 6.dp, top = 3.dp)
         .size(18.dp)

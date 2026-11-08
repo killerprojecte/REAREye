@@ -60,7 +60,7 @@ import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.capsule.ContinuousCapsule
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import kotlin.math.abs
 import kotlin.math.sign
 
@@ -124,12 +124,12 @@ fun FloatingBottomBar(
     quickGestureModifier: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val isInLightTheme = MiuixTheme.colorScheme.surface.luminance() >= 0.5f
-    val accentColor = MiuixTheme.colorScheme.primary
+    val isInLightTheme = MixTheme.colorScheme.surface.luminance() >= 0.5f
+    val accentColor = MixTheme.colorScheme.primary
     val containerColor = if (isBlurEnabled) {
-        MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.4f)
+        MixTheme.colorScheme.surfaceContainer.copy(alpha = 0.4f)
     } else {
-        MiuixTheme.colorScheme.surfaceContainer
+        MixTheme.colorScheme.surfaceContainer
     }
 
     val tabsBackdrop = if (isBlurEnabled) rememberLayerBackdrop() else null

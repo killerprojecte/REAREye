@@ -98,7 +98,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import java.util.IdentityHashMap
@@ -821,8 +821,8 @@ private fun ConfigNodeList(
                 ) {
                     Text(
                         text = stringResource(emptyStateRes),
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        style = MixTheme.textStyles.body2,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     )
                 }
@@ -958,8 +958,8 @@ internal fun ConfigNodeRowWithFavoriteMenu(
 @Composable
 private fun rememberFavoriteIconTint(): Color {
     return lerp(
-        start = MiuixTheme.colorScheme.error,
-        stop = MiuixTheme.colorScheme.errorContainer,
+        start = MixTheme.colorScheme.error,
+        stop = MixTheme.colorScheme.errorContainer,
         fraction = 0.32f,
     )
 }

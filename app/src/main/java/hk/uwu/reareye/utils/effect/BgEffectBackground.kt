@@ -15,7 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import top.yukonga.miuix.kmp.blur.asBrush
 import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 inline fun BgEffectBackground(
@@ -30,7 +30,7 @@ inline fun BgEffectBackground(
     content: @Composable (BoxScope.() -> Unit),
 ) {
     val shaderSupported = remember { isRuntimeShaderSupported() }
-    val surface = backgroundColor ?: MiuixTheme.colorScheme.surface
+    val surface = backgroundColor ?: MixTheme.colorScheme.surface
     val darkTheme = isDarkTheme ?: (surface.luminance() < 0.5f)
     if (!shaderSupported) {
         Box(

@@ -101,7 +101,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.MoreCircle
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -163,7 +163,7 @@ private fun rememberStatusCardPalette(
     titleStrength: Float = 0.46f,
     summaryStrength: Float = 0.28f,
 ): StatusCardPalette {
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
 
     return remember(
         accent,
@@ -417,7 +417,7 @@ fun HomeScreen(
                             Icon(
                                 imageVector = MiuixIcons.Regular.MoreCircle,
                                 contentDescription = null,
-                                tint = MiuixTheme.colorScheme.onBackground,
+                                tint = MixTheme.colorScheme.onBackground,
                             )
                         }
 
@@ -739,7 +739,7 @@ private fun WorkingStatusCard(
 ) {
     val palette = when {
         useMonetColors && !activated -> rememberStatusCardPalette(
-            accent = MiuixTheme.colorScheme.error,
+            accent = MixTheme.colorScheme.error,
             containerStrength = 0.24f,
         )
 
@@ -786,7 +786,7 @@ private fun WorkingStatusCard(
         )
 
         useMonetColors -> rememberStatusCardPalette(
-            accent = MiuixTheme.colorScheme.primary,
+            accent = MixTheme.colorScheme.primary,
             containerStrength = 0.22f,
         )
 
@@ -844,7 +844,7 @@ private fun WorkingStatusCard(
                         R.string.home_working_version,
                         statusVersion
                     ),
-                    style = MiuixTheme.textStyles.body2,
+                    style = MixTheme.textStyles.body2,
                     color = palette.summary,
                 )
             }
@@ -866,7 +866,7 @@ private fun EasterEggType.toTitleRes(): Int {
 @Composable
 private fun RootWarningCard(useMonetColors: Boolean) {
     val palette = if (useMonetColors) rememberStatusCardPalette(
-        accent = MiuixTheme.colorScheme.error,
+        accent = MixTheme.colorScheme.error,
         containerStrength = 0.2f,
         iconStrength = 0.82f,
         titleStrength = 0.42f,
@@ -908,7 +908,7 @@ private fun RootWarningCard(useMonetColors: Boolean) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = androidx.compose.ui.res.stringResource(R.string.home_root_warning_desc),
-                    style = MiuixTheme.textStyles.body2,
+                    style = MixTheme.textStyles.body2,
                     color = palette.summary,
                 )
             }
@@ -918,7 +918,7 @@ private fun RootWarningCard(useMonetColors: Boolean) {
 
 @Composable
 private fun FrameNoticeCard(title: String, summary: String, useMonetColors: Boolean) {
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
     val palette = if (useMonetColors) rememberStatusCardPalette(
         accent = lerp(colorScheme.primary, colorScheme.secondary, 0.35f),
         containerStrength = 0.2f,
@@ -963,7 +963,7 @@ private fun FrameNoticeCard(title: String, summary: String, useMonetColors: Bool
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = summary,
-                    style = MiuixTheme.textStyles.body2,
+                    style = MixTheme.textStyles.body2,
                     color = palette.summary,
                 )
             }
@@ -974,7 +974,7 @@ private fun FrameNoticeCard(title: String, summary: String, useMonetColors: Bool
 @Composable
 private fun UpdateWarningCard(currentHash: String, latestHash: String, useMonetColors: Boolean) {
     val context = LocalContext.current
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
     val palette = if (useMonetColors) rememberStatusCardPalette(
         accent = lerp(colorScheme.primary, colorScheme.secondary, 0.35f),
         containerStrength = 0.2f,
@@ -1032,7 +1032,7 @@ private fun UpdateWarningCard(currentHash: String, latestHash: String, useMonetC
                         currentHash,
                         latestHash,
                     ),
-                    style = MiuixTheme.textStyles.body2,
+                    style = MixTheme.textStyles.body2,
                     color = palette.summary,
                 )
             }
@@ -1110,7 +1110,7 @@ private fun UpdateInfoCard(currentHash: String, latestHash: String?, checking: B
     ) {
         Text(
             text = androidx.compose.ui.res.stringResource(R.string.home_update_title),
-            style = MiuixTheme.textStyles.title3,
+            style = MixTheme.textStyles.title3,
         )
         Spacer(modifier = Modifier.height(8.dp))
         InfoLine(
@@ -1132,12 +1132,12 @@ private fun UpdateInfoCard(currentHash: String, latestHash: String?, checking: B
 @Composable
 fun InfoLine(title: String, value: String, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
-        Text(text = title, style = MiuixTheme.textStyles.headline1)
+        Text(text = title, style = MixTheme.textStyles.headline1)
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = value,
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            style = MixTheme.textStyles.body2,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
         )
     }
 }

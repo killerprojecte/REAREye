@@ -38,14 +38,14 @@ import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.getTextInNode
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 /** Library-owned GFM parsing/rendering, with MIUIX styling rather than a Material theme. */
 @Composable
 fun MarkdownText(
     markdown: String,
     modifier: Modifier = Modifier,
-    textColor: Color = MiuixTheme.colorScheme.onSurfaceContainer,
+    textColor: Color = MixTheme.colorScheme.onSurfaceContainer,
 ) {
     // Mary supplies full snapshots, including replacements when changing sessions. An append-only
     // state would duplicate or retain text in that case. Parsing stays off the composition thread;
@@ -186,7 +186,7 @@ fun MarkdownText(
 
 @Composable
 internal fun miuixMarkdownColors(textColor: Color): DefaultMarkdownColors {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MixTheme.colorScheme
     return DefaultMarkdownColors(
         text = textColor,
         codeBackground = scheme.surfaceContainerHigh,
@@ -200,7 +200,7 @@ internal fun miuixMarkdownColors(textColor: Color): DefaultMarkdownColors {
 
 @Composable
 internal fun miuixMarkdownTypography(textColor: Color): DefaultMarkdownTypography {
-    val styles = MiuixTheme.textStyles
+    val styles = MixTheme.textStyles
     val body = styles.body1.copy(color = textColor, lineHeight = 24.sp)
     val heading = styles.title4.copy(color = textColor, fontWeight = FontWeight.Bold)
     val code = styles.footnote1.copy(color = textColor, fontFamily = FontFamily.Monospace)
@@ -214,14 +214,14 @@ internal fun miuixMarkdownTypography(textColor: Color): DefaultMarkdownTypograph
         text = body,
         code = code,
         inlineCode = body.copy(fontFamily = FontFamily.Monospace),
-        quote = body.copy(color = MiuixTheme.colorScheme.onSurfaceVariantSummary),
+        quote = body.copy(color = MixTheme.colorScheme.onSurfaceVariantSummary),
         paragraph = body,
         ordered = body,
         bullet = body,
         list = body,
         textLink = TextLinkStyles(
             style = SpanStyle(
-                color = MiuixTheme.colorScheme.primary,
+                color = MixTheme.colorScheme.primary,
                 textDecoration = TextDecoration.Underline,
             ),
         ),

@@ -35,7 +35,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -112,7 +112,7 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
                 ) {
                     Text(
                         text = unavailableText,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                     )
                 }
             }
@@ -151,8 +151,8 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
                                 onClick = onReset,
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(
-                                    color = MiuixTheme.colorScheme.error,
-                                    contentColor = MiuixTheme.colorScheme.onPrimary,
+                                    color = MixTheme.colorScheme.error,
+                                    contentColor = MixTheme.colorScheme.onPrimary,
                                 ),
                             ) {
                                 Text(text = resetText)

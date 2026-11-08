@@ -14,7 +14,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.TabRowDefaults
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 /** Mode tabs using Miuix's native selection, semantics and animated indicator.
  * [fillWidth] gives a dedicated, equal-width mode row; otherwise the group wraps its labels.
@@ -33,13 +33,13 @@ internal fun RearCompactTabs(
     if (tabs.isEmpty()) return
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
-    val style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Bold)
+    val style = MixTheme.textStyles.body2.copy(fontWeight = FontWeight.Bold)
     val sizes = tabs.map { measurer.measure(it, style = style, maxLines = 1).size }
     val tabWidth = with(density) { sizes.maxOf { it.width }.toDp() }.plus(16.dp).coerceAtLeast(56.dp)
     val trackHeight = with(density) { sizes.maxOf { it.height }.toDp() }.plus(14.dp).coerceAtLeast(36.dp)
     val spacing = 2.dp
     val width = tabWidth * tabs.size + spacing * (tabs.size - 1) + 10.dp
-    val colors = MiuixTheme.colorScheme
+    val colors = MixTheme.colorScheme
     Box(modifier.then(if (fillWidth) Modifier.fillMaxWidth() else Modifier.width(width)).heightIn(min = 48.dp), contentAlignment = Alignment.Center) {
         // Miuix0.9.4 expands equal cells to available width when their content minima fit;
         // its own LazyRow scrolls when labels need more room. Avoid a second subcompose layout

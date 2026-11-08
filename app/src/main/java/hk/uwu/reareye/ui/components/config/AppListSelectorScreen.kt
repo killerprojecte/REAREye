@@ -98,7 +98,7 @@ import top.yukonga.miuix.kmp.icon.extended.MoreCircle
 import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -246,13 +246,13 @@ private fun EmptyAppsCard() {
             Icon(
                 imageVector = Icons.Filled.Search,
                 contentDescription = null,
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                tint = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.app_list_empty_result),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
         }
     }
@@ -267,7 +267,7 @@ private fun AppSelectorRow(
     onToggle: () -> Unit,
 ) {
     val density = LocalDensity.current
-    val primaryColor = MiuixTheme.colorScheme.primary
+    val primaryColor = MixTheme.colorScheme.primary
     val selectionStyleState = remember(appItem.packageName) { MutableStyleState(null) }
     selectionStyleState.isSelected = selected
     val overlayShape = remember { RoundedCornerShape(20.dp) }
@@ -359,8 +359,8 @@ private fun AppSelectorRow(
                     )
                     Text(
                         text = appItem.packageName,
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        style = MixTheme.textStyles.body2,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -375,9 +375,9 @@ private fun AppSelectorRow(
 @OptIn(ExperimentalFoundationStyleApi::class)
 @Composable
 private fun SelectionIndicator(selected: Boolean) {
-    val primaryColor = MiuixTheme.colorScheme.primary
-    val outlineColor = MiuixTheme.colorScheme.outline
-    val onPrimaryColor = MiuixTheme.colorScheme.onPrimary
+    val primaryColor = MixTheme.colorScheme.primary
+    val outlineColor = MixTheme.colorScheme.outline
+    val onPrimaryColor = MixTheme.colorScheme.onPrimary
     val selectionStyleState = remember { MutableStyleState(null) }
     selectionStyleState.isSelected = selected
     val haloStyle = remember(primaryColor) {
@@ -666,7 +666,7 @@ fun AppListSelectorScreen(
                                 },
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = null,
-                                tint = MiuixTheme.colorScheme.onBackground,
+                                tint = MixTheme.colorScheme.onBackground,
                             )
                         }
                     },
@@ -679,7 +679,7 @@ fun AppListSelectorScreen(
                                 Icon(
                                     imageVector = MiuixIcons.Regular.Sort,
                                     contentDescription = stringResource(R.string.app_list_sort),
-                                    tint = MiuixTheme.colorScheme.onBackground,
+                                    tint = MixTheme.colorScheme.onBackground,
                                 )
                             }
                             OverlayListPopup(
@@ -745,7 +745,7 @@ fun AppListSelectorScreen(
                                 Icon(
                                     imageVector = MiuixIcons.Regular.Tune,
                                     contentDescription = stringResource(R.string.app_list_filter),
-                                    tint = MiuixTheme.colorScheme.onBackground,
+                                    tint = MixTheme.colorScheme.onBackground,
                                 )
                             }
                             OverlayListPopup(
@@ -767,7 +767,7 @@ fun AppListSelectorScreen(
                                                         imageVector = Icons.Filled.Apps,
                                                         contentDescription = null,
                                                         modifier = modifier,
-                                                        tint = MiuixTheme.colorScheme.onBackground,
+                                                        tint = MixTheme.colorScheme.onBackground,
                                                     )
                                                 },
                                                 title = stringResource(R.string.show_system_apps),
@@ -795,7 +795,7 @@ fun AppListSelectorScreen(
                                 Icon(
                                     imageVector = MiuixIcons.MoreCircle,
                                     contentDescription = stringResource(R.string.app_list_more_actions),
-                                    tint = MiuixTheme.colorScheme.onBackground,
+                                    tint = MixTheme.colorScheme.onBackground,
                                 )
                             }
                             OverlayListPopup(
@@ -817,7 +817,7 @@ fun AppListSelectorScreen(
                                                         imageVector = Icons.Filled.Delete,
                                                         contentDescription = null,
                                                         modifier = modifier,
-                                                        tint = MiuixTheme.colorScheme.onBackground,
+                                                        tint = MixTheme.colorScheme.onBackground,
                                                     )
                                                 },
                                                 title = stringResource(R.string.selection_clear),
@@ -862,7 +862,7 @@ fun AppListSelectorScreen(
                 Icon(
                     imageVector = Icons.Filled.Save,
                     contentDescription = stringResource(R.string.selection_save),
-                    tint = MiuixTheme.colorScheme.onPrimary,
+                    tint = MixTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(30.dp),
                 )
             }

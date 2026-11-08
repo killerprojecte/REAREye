@@ -140,7 +140,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -555,8 +555,8 @@ private fun RangeFieldEditor(
             ) {
                 Text(
                     text = field.from.toString(),
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    style = MixTheme.textStyles.body2,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 )
                 Slider(
                     modifier = Modifier
@@ -577,8 +577,8 @@ private fun RangeFieldEditor(
                 )
                 Text(
                     text = rangeEnd.toString(),
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    style = MixTheme.textStyles.body2,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
             if (field.tagName == "FontSize" || (field.tagName == "SeekBar" && field.uiType == 1)) {
@@ -591,8 +591,8 @@ private fun RangeFieldEditor(
                     ) {
                         Text(
                             text = stringResource(R.string.rear_widget_card_template_font_preview_title),
-                            style = MiuixTheme.textStyles.body2,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            style = MixTheme.textStyles.body2,
+                            color = MixTheme.colorScheme.onSurfaceVariantSummary,
                         )
                         Text(
                             text = stringResource(R.string.rear_widget_card_template_font_preview_text),
@@ -660,9 +660,9 @@ private fun AlignFieldEditor(
                             .border(
                                 width = if (selected) 2.dp else 1.dp,
                                 color = if (selected) {
-                                    MiuixTheme.colorScheme.primary
+                                    MixTheme.colorScheme.primary
                                 } else {
-                                    MiuixTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                    MixTheme.colorScheme.outline.copy(alpha = 0.35f)
                                 },
                                 shape = TemplateOptionCardShape,
                             )
@@ -682,18 +682,18 @@ private fun AlignFieldEditor(
                                 imageVector = option.icon,
                                 contentDescription = null,
                                 tint = if (selectedValue == option.value) {
-                                    MiuixTheme.colorScheme.primary
+                                    MixTheme.colorScheme.primary
                                 } else {
-                                    MiuixTheme.colorScheme.onBackground
+                                    MixTheme.colorScheme.onBackground
                                 },
                             )
                             Text(
                                 text = option.title,
-                                style = MiuixTheme.textStyles.body2,
+                                style = MixTheme.textStyles.body2,
                                 color = if (selected) {
-                                    MiuixTheme.colorScheme.primary
+                                    MixTheme.colorScheme.primary
                                 } else {
-                                    MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    MixTheme.colorScheme.onSurfaceVariantSummary
                                 },
                             )
                         }
@@ -804,8 +804,8 @@ private fun ImagePickFieldEditor(
         } else {
             Text(
                 text = stringResource(R.string.rear_widget_card_template_image_pick_summary),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
             Button(
@@ -1051,11 +1051,11 @@ private fun DateFieldEditor(
             } else {
                 stringResource(R.string.rear_widget_card_template_date_invalid)
             },
-            style = MiuixTheme.textStyles.body2,
+            style = MixTheme.textStyles.body2,
             color = if (valid) {
-                MiuixTheme.colorScheme.onSurfaceVariantSummary
+                MixTheme.colorScheme.onSurfaceVariantSummary
             } else {
-                MiuixTheme.colorScheme.error
+                MixTheme.colorScheme.error
             },
         )
     }
@@ -1439,8 +1439,8 @@ private fun ColorValueEditor(
         if (palette.isNotEmpty()) {
             Text(
                 text = stringResource(R.string.rear_widget_card_template_color_palette),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
             ColorPalette(
                 color = composeColor,
@@ -1462,9 +1462,9 @@ private fun ColorValueEditor(
                             .border(
                                 width = if (option.equals(currentValue, true)) 2.dp else 1.dp,
                                 color = if (option.equals(currentValue, true)) {
-                                    MiuixTheme.colorScheme.primary
+                                    MixTheme.colorScheme.primary
                                 } else {
-                                    MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    MixTheme.colorScheme.onSurfaceVariantSummary
                                 },
                                 shape = RoundedCornerShape(999.dp),
                             )
@@ -1477,8 +1477,8 @@ private fun ColorValueEditor(
 
         Text(
             text = stringResource(R.string.rear_widget_card_template_color_manual),
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            style = MixTheme.textStyles.body2,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
         )
         TextField(
             value = rawValue,
@@ -1507,7 +1507,7 @@ private fun ColorValueEditor(
                         .clip(RoundedCornerShape(999.dp))
                         .border(
                             1.dp,
-                            MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            MixTheme.colorScheme.onSurfaceVariantSummary,
                             RoundedCornerShape(999.dp)
                         )
                         .background(parsedColor?.let(::Color) ?: Color.Transparent),
@@ -1518,12 +1518,12 @@ private fun ColorValueEditor(
                 ) {
                     Text(
                         text = stringResource(R.string.rear_widget_card_template_color_advanced),
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        style = MixTheme.textStyles.body2,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                     )
                     Text(
                         text = rawValue.ifBlank { stringResource(R.string.rear_widget_card_template_color_invalid) },
-                        color = if (parsedColor == null) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.onBackground,
+                        color = if (parsedColor == null) MixTheme.colorScheme.error else MixTheme.colorScheme.onBackground,
                     )
                 }
                 Button(onClick = { showAdvancedPicker = true }) {
@@ -1653,9 +1653,9 @@ private fun TemplateImageOptionCard(
         imageValue
     }
     val selectedBorderColor = if (selected) {
-        MiuixTheme.colorScheme.primary
+        MixTheme.colorScheme.primary
     } else {
-        MiuixTheme.colorScheme.outline.copy(alpha = 0.35f)
+        MixTheme.colorScheme.outline.copy(alpha = 0.35f)
     }
     val interactionSource =
         remember(imageValue, darkImageValue, label) { MutableInteractionSource() }
@@ -1703,8 +1703,8 @@ private fun TemplateImageOptionCard(
                 secondaryLabel?.takeIf { it.isNotBlank() }?.let {
                     Text(
                         text = it,
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        style = MixTheme.textStyles.body2,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                     )
                 }
             }
@@ -1752,8 +1752,8 @@ private fun TemplatePreviewThumbnail(
         } else {
             Text(
                 text = stringResource(R.string.rear_widget_card_template_preview_unavailable),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 modifier = Modifier.padding(horizontal = 8.dp),
             )
         }

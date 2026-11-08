@@ -44,7 +44,7 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.SearchBar
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 fun RearSearchBar(
@@ -105,7 +105,7 @@ private fun DefaultRearSearchBar(
         )
     )
     val searchTextStyle = TextStyle(
-        color = MiuixTheme.colorScheme.onBackground,
+        color = MixTheme.colorScheme.onBackground,
         fontSize = 14.sp,
     )
 
@@ -116,7 +116,7 @@ private fun DefaultRearSearchBar(
         cornerRadius = 14.dp,
         colors = CardDefaults.defaultColors(
             color = searchAcrylicBase,
-            contentColor = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            contentColor = MixTheme.colorScheme.onSurfaceVariantSummary,
         )
     ) {
         Row(
@@ -130,7 +130,7 @@ private fun DefaultRearSearchBar(
             Icon(
                 imageVector = Icons.Filled.Search,
                 contentDescription = null,
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                 modifier = Modifier
                     .size(18.dp)
                     .padding(end = 6.dp),
@@ -144,7 +144,7 @@ private fun DefaultRearSearchBar(
                     .onFocusChanged { onSearchFocusChange(it.isFocused) },
                 singleLine = true,
                 textStyle = searchTextStyle,
-                cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
+                cursorBrush = SolidColor(MixTheme.colorScheme.primary),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(
                     onSearch = {
@@ -161,8 +161,8 @@ private fun DefaultRearSearchBar(
                         if (query.isEmpty()) {
                             Text(
                                 text = hint,
-                                style = MiuixTheme.textStyles.body2,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                style = MixTheme.textStyles.body2,
+                                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                             )
                         }
                         innerTextField()

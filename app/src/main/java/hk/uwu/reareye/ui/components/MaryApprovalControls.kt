@@ -49,7 +49,7 @@ import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 internal fun approvalModeTitle(mode: ApprovalMode): String = stringResource(
@@ -111,7 +111,7 @@ private val FullAccessWarning = Color(0xFFE97833)
 
 @Composable
 private fun approvalModeAccent(mode: ApprovalMode): Color =
-    if (mode == ApprovalMode.ALLOW_ALL) FullAccessWarning else MiuixTheme.colorScheme.primary
+    if (mode == ApprovalMode.ALLOW_ALL) FullAccessWarning else MixTheme.colorScheme.primary
 
 /** Compact composer entry; the settings page uses the exact same options below. */
 @Composable
@@ -209,13 +209,13 @@ private fun ApprovalModePopup(
             Text(
                 stringResource(R.string.mary_chat_approval_title),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                style = MiuixTheme.textStyles.footnote1,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                style = MixTheme.textStyles.footnote1,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary
             )
             ApprovalMode.entries.forEach { option ->
                 val selected = mode == option
                 val accent = approvalModeAccent(option)
-                val titleColor = if (selected) accent else MiuixTheme.colorScheme.onSurfaceContainer
+                val titleColor = if (selected) accent else MixTheme.colorScheme.onSurfaceContainer
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -238,14 +238,14 @@ private fun ApprovalModePopup(
                     )
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(
-                            approvalModeTitle(option), style = MiuixTheme.textStyles.body2,
+                            approvalModeTitle(option), style = MixTheme.textStyles.body2,
                             fontWeight = FontWeight.Medium, color = titleColor,
                             modifier = Modifier.testTag("mary-approval-option-title-${option.name}")
                         )
                         Text(
-                            approvalModeSummary(option), style = MiuixTheme.textStyles.footnote1,
+                            approvalModeSummary(option), style = MixTheme.textStyles.footnote1,
                             color = if (selected && option == ApprovalMode.ALLOW_ALL) accent
-                            else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            else MixTheme.colorScheme.onSurfaceVariantSummary,
                             modifier = Modifier.testTag("mary-approval-option-summary-${option.name}")
                         )
                     }

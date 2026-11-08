@@ -76,7 +76,7 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 internal data class ModelDraft(
     val provider: ProviderConfig = ProviderConfig(),
@@ -614,8 +614,8 @@ internal fun MarySettingsSectionTitle(title: Int) {
         modifier = Modifier
             .testTag("mary-model-section-$title")
             .padding(start = 16.dp, top = 8.dp),
-        style = MiuixTheme.textStyles.footnote1,
-        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+        style = MixTheme.textStyles.footnote1,
+        color = MixTheme.colorScheme.onSurfaceVariantSummary
     )
 }
 
@@ -666,8 +666,8 @@ internal fun MarySettingsHint(text: String) {
         modifier = Modifier
             .padding(horizontal = 16.dp)
             .padding(bottom = 14.dp),
-        style = MiuixTheme.textStyles.footnote2,
-        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+        style = MixTheme.textStyles.footnote2,
+        color = MixTheme.colorScheme.onSurfaceVariantSummary
     )
 }
 
@@ -685,11 +685,11 @@ internal fun MarySettingsDiagnostic(text: String) {
                 .fillMaxWidth()
                 .heightIn(max = 240.dp)
                 .verticalScroll(rememberScrollState()),
-            style = MiuixTheme.textStyles.body2.copy(
+            style = MixTheme.textStyles.body2.copy(
                 fontFamily = FontFamily.Monospace,
                 fontSize = 13.sp
             ),
-            color = MiuixTheme.colorScheme.error
+            color = MixTheme.colorScheme.error
         )
     }
 }

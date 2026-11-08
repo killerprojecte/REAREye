@@ -166,7 +166,7 @@ import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import java.io.ByteArrayInputStream
@@ -978,7 +978,7 @@ private fun RearStoreRootContent(
                                 Icon(
                                     imageVector = MiuixIcons.Regular.Sort,
                                     contentDescription = stringResource(R.string.app_list_sort),
-                                    tint = MiuixTheme.colorScheme.onBackground,
+                                    tint = MixTheme.colorScheme.onBackground,
                                 )
                             }
                             OverlayListPopup(
@@ -1005,7 +1005,7 @@ private fun RearStoreRootContent(
                                         )
                                         HorizontalDivider(
                                             thickness = 0.5.dp,
-                                            color = MiuixTheme.colorScheme.outline.copy(alpha = 0.35f),
+                                            color = MixTheme.colorScheme.outline.copy(alpha = 0.35f),
                                         )
                                         DropdownImpl(
                                             item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_updated_at)),
@@ -1442,7 +1442,7 @@ private fun RearStoreDetailContent(
                             Icon(
                                 imageVector = MiuixIcons.Delete,
                                 contentDescription = stringResource(R.string.rear_store_uninstall_action),
-                                tint = MiuixTheme.colorScheme.error,
+                                tint = MixTheme.colorScheme.error,
                             )
                         }
                     }
@@ -1460,7 +1460,7 @@ private fun RearStoreDetailContent(
                             Icon(
                                 imageVector = MiuixIcons.Regular.Link,
                                 contentDescription = stringResource(R.string.rear_store_open_repository),
-                                tint = MiuixTheme.colorScheme.onBackground,
+                                tint = MixTheme.colorScheme.onBackground,
                             )
                         }
                     }
@@ -1592,8 +1592,8 @@ private fun RearStoreDetailContent(
                     scope.launch { performUninstall(widgetId) }
                 },
                 colors = ButtonDefaults.buttonColors(
-                    color = MiuixTheme.colorScheme.error,
-                    contentColor = MiuixTheme.colorScheme.onPrimary,
+                    color = MixTheme.colorScheme.error,
+                    contentColor = MixTheme.colorScheme.onPrimary,
                 ),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -1898,7 +1898,7 @@ private fun RearStoreUninstallCard(
     installedWidget: RearStoreInstalledWidget,
     onClick: () -> Unit,
 ) {
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
     val darkTheme = colorScheme.surface.luminance() < 0.5f
     val backgroundColor = if (darkTheme) {
         lerp(colorScheme.error, Color.White, 0.12f).copy(alpha = 0.94f)
@@ -1984,7 +1984,7 @@ private fun RearStoreDialogMessageCard(message: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
-        color = MiuixTheme.colorScheme.onBackground,
+        color = MixTheme.colorScheme.onBackground,
         fontSize = 15.sp,
         fontWeight = FontWeight.Normal,
         textAlign = TextAlign.Start,
@@ -2045,14 +2045,14 @@ private fun RearStoreListCard(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     HorizontalDivider(
                         thickness = 0.5.dp,
-                        color = MiuixTheme.colorScheme.outline.copy(alpha = 0.4f),
+                        color = MixTheme.colorScheme.outline.copy(alpha = 0.4f),
                     )
                     descriptionText?.let {
                         Text(
                             text = it,
                             fontSize = 15.sp,
                             lineHeight = 22.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            color = MixTheme.colorScheme.onSurfaceVariantSummary,
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -2069,12 +2069,12 @@ private fun RearStoreListCard(
                             Icon(
                                 imageVector = Icons.Outlined.StarBorder,
                                 contentDescription = null,
-                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                                 modifier = Modifier.size(16.dp),
                             )
                             Text(
                                 text = item.stargazersCount.toString(),
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                                 fontSize = 12.sp,
                             )
                         }
@@ -2085,12 +2085,12 @@ private fun RearStoreListCard(
                             Icon(
                                 imageVector = Icons.Outlined.AccessTime,
                                 contentDescription = null,
-                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                                 modifier = Modifier.size(16.dp),
                             )
                             Text(
                                 text = isoDateLabel(item.updatedAt),
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                                 fontSize = 12.sp,
                             )
                         }
@@ -2283,7 +2283,7 @@ private fun RearStoreDownloadBadge(
     onClick: () -> Unit,
 ) {
     Surface(
-        color = MiuixTheme.colorScheme.primary.copy(alpha = 0.18f),
+        color = MixTheme.colorScheme.primary.copy(alpha = 0.18f),
         shape = RoundedCornerShape(18.dp),
         onClick = onClick,
     ) {
@@ -2294,14 +2294,14 @@ private fun RearStoreDownloadBadge(
         ) {
             Text(
                 text = text,
-                color = MiuixTheme.colorScheme.primary,
+                color = MixTheme.colorScheme.primary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
             )
             Icon(
                 imageVector = MiuixIcons.Download,
                 contentDescription = null,
-                tint = MiuixTheme.colorScheme.primary,
+                tint = MixTheme.colorScheme.primary,
                 modifier = Modifier.size(15.dp),
             )
         }
@@ -2326,7 +2326,7 @@ private fun RearStoreReleaseCard(
             endActions = {
                 Text(
                     text = isoDateLabel(release.publishedAt.ifBlank { release.createdAt }),
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
                     fontSize = 12.sp,
                 )
             },
@@ -2344,7 +2344,7 @@ private fun RearStoreReleaseCard(
                     if (release.assets.isNotEmpty()) {
                         HorizontalDivider(
                             thickness = 0.5.dp,
-                            color = MiuixTheme.colorScheme.outline.copy(alpha = 0.35f),
+                            color = MixTheme.colorScheme.outline.copy(alpha = 0.35f),
                         )
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2359,7 +2359,7 @@ private fun RearStoreReleaseCard(
                             if (index != release.assets.lastIndex) {
                                 HorizontalDivider(
                                     thickness = 0.5.dp,
-                                    color = MiuixTheme.colorScheme.outline.copy(alpha = 0.35f),
+                                    color = MixTheme.colorScheme.outline.copy(alpha = 0.35f),
                                 )
                             }
                         }
@@ -2407,7 +2407,7 @@ private fun RearStoreAssetRow(
                     asset.downloadCount,
                 ),
                 fontSize = 12.sp,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
         }
         Box(
@@ -2485,7 +2485,7 @@ private fun RearStoreInstallProgressChip(installState: RearStoreActiveInstall) {
         }
     }
     Surface(
-        color = MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
+        color = MixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
         shape = RoundedCornerShape(18.dp),
     ) {
         Row(
@@ -2498,20 +2498,20 @@ private fun RearStoreInstallProgressChip(installState: RearStoreActiveInstall) {
                     progress = { determinateProgress },
                     modifier = Modifier.size(16.dp),
                     strokeWidth = 2.2.dp,
-                    color = MiuixTheme.colorScheme.primary,
-                    trackColor = MiuixTheme.colorScheme.primary.copy(alpha = 0.16f),
+                    color = MixTheme.colorScheme.primary,
+                    trackColor = MixTheme.colorScheme.primary.copy(alpha = 0.16f),
                 )
             } else {
                 androidx.compose.material3.CircularProgressIndicator(
                     modifier = Modifier.size(16.dp),
                     strokeWidth = 2.2.dp,
-                    color = MiuixTheme.colorScheme.primary,
-                    trackColor = MiuixTheme.colorScheme.primary.copy(alpha = 0.16f),
+                    color = MixTheme.colorScheme.primary,
+                    trackColor = MixTheme.colorScheme.primary.copy(alpha = 0.16f),
                 )
             }
             Text(
                 text = statusText,
-                color = MiuixTheme.colorScheme.primary,
+                color = MixTheme.colorScheme.primary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -2680,7 +2680,7 @@ private fun RearStoreInstallInfoCard(
                 text = stringResource(R.string.rear_store_install_info_title),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MiuixTheme.colorScheme.onBackground,
+                color = MixTheme.colorScheme.onBackground,
             )
             if (componentBadges.isNotEmpty()) {
                 RearBadgeGroup(badges = componentBadges)
@@ -2751,7 +2751,7 @@ private fun RearStoreAuthorCard(
                 author.login.normalizedOrNull()?.let {
                     Text(
                         text = it,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                     )
                 }
             },
@@ -2787,7 +2787,7 @@ private fun RearStoreAuthorAvatar(
             modifier = modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(MiuixTheme.colorScheme.secondaryContainer.copy(alpha = placeholderAlpha)),
+                .background(MixTheme.colorScheme.secondaryContainer.copy(alpha = placeholderAlpha)),
         )
     }
 }
@@ -2828,7 +2828,7 @@ private fun MarkdownCardBody(
         ConfigKeys.MODULE_STORE_WEBVIEW_HARDWARE_ACCELERATION,
         true,
     )
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
     val backgroundColor = colorScheme.background
     val surfaceColor = colorScheme.surface
     val onSurfaceColor = colorScheme.onSurface
@@ -3083,7 +3083,7 @@ private fun RearStorePostInstallBrowser(url: String) {
         ConfigKeys.MODULE_STORE_WEBVIEW_HARDWARE_ACCELERATION,
         true,
     )
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
     val backgroundColor = if (webViewHardwareAccelerationEnabled) {
         Color.Transparent
     } else {

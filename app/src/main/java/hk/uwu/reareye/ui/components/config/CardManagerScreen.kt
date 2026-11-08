@@ -103,7 +103,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -676,7 +676,7 @@ fun CardManagerScreen(
                                                     Text(
                                                         text = stringResource(R.string.rear_widget_card_reorder_hint),
                                                         fontSize = 12.sp,
-                                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                                                     )
                                                     if (cardsLoaded) {
                                                         RearBadgeGroup(
@@ -774,9 +774,9 @@ fun CardManagerScreen(
                                                     } else Modifier
                                                 ),
                                             backgroundColor = if (isHighlighted) {
-                                                MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+                                                MixTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
                                             } else if (hoveredItemKey == item.id) {
-                                                MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
+                                                MixTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
                                             } else null,
                                             title = item.title,
                                             badges = buildList {
@@ -833,7 +833,7 @@ fun CardManagerScreen(
                                                     Icon(
                                                         imageVector = Icons.Outlined.Lock,
                                                         contentDescription = null,
-                                                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                        tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                                                     )
                                                 }
                                             },
@@ -1037,7 +1037,7 @@ fun CardManagerScreen(
                                         lockedCard.priority,
                                     ),
                                     fontSize = 12.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
                                 )
                             }
                         }

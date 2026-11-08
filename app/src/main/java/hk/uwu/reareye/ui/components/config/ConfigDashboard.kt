@@ -49,7 +49,7 @@ import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -330,7 +330,7 @@ private fun MoreTab(
                         Icon(
                             Icons.Rounded.Favorite,
                             contentDescription = null,
-                            tint = MiuixTheme.colorScheme.primary
+                            tint = MixTheme.colorScheme.primary
                         )
                     },
                     onClick = onOpenFavoriteCategory,
@@ -346,7 +346,7 @@ private fun MoreTab(
                         Icon(
                             Icons.Rounded.Code,
                             contentDescription = null,
-                            tint = MiuixTheme.colorScheme.primary
+                            tint = MixTheme.colorScheme.primary
                         )
                     },
                     onClick = onOpenScriptManagement,
@@ -362,7 +362,7 @@ private fun MoreTab(
                         Icon(
                             entry.group.icon,
                             contentDescription = null,
-                            tint = MiuixTheme.colorScheme.primary,
+                            tint = MixTheme.colorScheme.primary,
                         )
                     },
                     onClick = { onOpenCategory(entry.category) },

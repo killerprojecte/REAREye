@@ -49,7 +49,7 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 enum class PresetPackLocalStatus {
@@ -139,7 +139,7 @@ fun PresetPackStatusCard(
     useMonetColors: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
     val isUpdate = snapshot.status == PresetPackLocalStatus.READY && updateAvailable
     val background = when {
         isUpdate && useMonetColors -> lerp(colorScheme.surface, colorScheme.primary, 0.2f)
@@ -359,7 +359,7 @@ fun PresetPackDialog(
                             }"
                         )
                     }
-                    message?.let { Text(it, color = MiuixTheme.colorScheme.error) }
+                    message?.let { Text(it, color = MixTheme.colorScheme.error) }
                     if (downloadState.running) Text("正在后台下载，可息屏或关闭弹窗；中断后再次下载会自动续传。")
                 }
             }
@@ -487,8 +487,8 @@ fun PresetPackDialog(
                     enabled = !busy && installed != null,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        color = MiuixTheme.colorScheme.error,
-                        contentColor = MiuixTheme.colorScheme.onError,
+                        color = MixTheme.colorScheme.error,
+                        contentColor = MixTheme.colorScheme.onError,
                     ),
                 ) { Text("删除") }
             }

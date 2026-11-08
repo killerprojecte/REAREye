@@ -93,7 +93,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -578,7 +578,7 @@ fun BusinessManagerScreen(
                     ModuleStyleManagerCard(
                         modifier = Modifier.featureGuideAnchor("demo_component_preview"),
                         backgroundColor = if (isHighlighted) {
-                            MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+                            MixTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
                         } else null,
                         title = item.business,
                         summaryLines = listOf(item.filePath),
@@ -614,7 +614,7 @@ fun BusinessManagerScreen(
                                     Icon(
                                         imageVector = Icons.Outlined.Lock,
                                         contentDescription = null,
-                                        tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.82f),
+                                        tint = MixTheme.colorScheme.onSurface.copy(alpha = 0.82f),
                                     )
                                 }
                                 item.storeWidgetId

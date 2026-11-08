@@ -63,7 +63,7 @@ import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Refresh
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -337,7 +337,7 @@ internal fun MarySidebarContent(
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = MiuixTheme.colorScheme
+    val colors = MixTheme.colorScheme
     val closeFocus = remember { FocusRequester() }
     LaunchedEffect(visualOnly) { if (!visualOnly) closeFocus.requestFocus() }
     val formatter = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
@@ -352,7 +352,7 @@ internal fun MarySidebarContent(
             Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(stringResource(R.string.mary_title), style = MiuixTheme.textStyles.title3,
+            Text(stringResource(R.string.mary_title), style = MixTheme.textStyles.title3,
                 fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp).focusRequester(closeFocus).testTag("mary-sidebar-close")) {
                 Icon(Icons.Outlined.Close, stringResource(R.string.mary_sidebar_close))
@@ -374,7 +374,7 @@ internal fun MarySidebarContent(
                     onClick = onOpenSettings, tag = "mary-sidebar-settings")
                 Box(Modifier.padding(horizontal = 12.dp, vertical = 16.dp).fillMaxWidth().height(1.dp)
                     .background(colors.outline.copy(alpha = 0.35f)))
-                Text(stringResource(R.string.mary_history_title), style = MiuixTheme.textStyles.footnote1,
+                Text(stringResource(R.string.mary_history_title), style = MixTheme.textStyles.footnote1,
                     color = colors.onSurfaceVariantSummary,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
@@ -386,7 +386,7 @@ internal fun MarySidebarContent(
                             loadFailed -> R.string.mary_history_load_failed
                             else -> R.string.mary_history_empty
                         }),
-                        style = MiuixTheme.textStyles.footnote1,
+                        style = MixTheme.textStyles.footnote1,
                         color = colors.onSurfaceVariantSummary,
                         modifier = Modifier.padding(12.dp),
                     )
@@ -407,12 +407,12 @@ internal fun MarySidebarContent(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(session.title, style = MiuixTheme.textStyles.body1,
+                            Text(session.title, style = MixTheme.textStyles.body1,
                                 color = colors.onSurface,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(stringResource(R.string.mary_history_meta,
                                 formatter.format(Date(session.updatedAt)), session.messageCount),
-                                style = MiuixTheme.textStyles.footnote2,
+                                style = MixTheme.textStyles.footnote2,
                                 color = colors.onSurfaceVariantSummary,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
@@ -441,7 +441,7 @@ internal fun MarySidebarContent(
             Icon(MiuixIcons.Add, null, tint = colors.onPrimary, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(10.dp))
             Text(stringResource(R.string.mary_action_new_chat), color = colors.onPrimary,
-                style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.Medium)
+                style = MixTheme.textStyles.body1, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -454,7 +454,7 @@ private fun SidebarAction(
     onClick: () -> Unit,
     tag: String,
 ) {
-    val color = if (enabled) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurfaceVariantSummary
+    val color = if (enabled) MixTheme.colorScheme.onSurface else MixTheme.colorScheme.onSurfaceVariantSummary
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
@@ -463,6 +463,6 @@ private fun SidebarAction(
     ) {
         Icon(icon, null, modifier = Modifier.size(22.dp), tint = color)
         Spacer(Modifier.width(14.dp))
-        Text(label, style = MiuixTheme.textStyles.body1, color = color)
+        Text(label, style = MixTheme.textStyles.body1, color = color)
     }
 }

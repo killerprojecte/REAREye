@@ -59,7 +59,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import kotlin.math.roundToInt
 
 internal class FeatureGuideAnchors {
@@ -256,7 +256,7 @@ internal fun FeatureGuideOverlay(
                     bottom = if (anchorNearBottom) 0.dp else 24.dp,
                 )
                 .shadow(16.dp, RoundedCornerShape(20.dp))
-                .background(MiuixTheme.colorScheme.surface, RoundedCornerShape(22.dp))
+                .background(MixTheme.colorScheme.surface, RoundedCornerShape(22.dp))
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -267,24 +267,24 @@ internal fun FeatureGuideOverlay(
                     stepIndex + 1,
                     featureGuideSteps.size
                 ),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
             Text(
                 text = stringResource(step.titleRes),
-                style = MiuixTheme.textStyles.title4,
-                color = MiuixTheme.colorScheme.onSurface,
+                style = MixTheme.textStyles.title4,
+                color = MixTheme.colorScheme.onSurface,
             )
             if (step.dashboardTab != null) {
                 Text(
                     stringResource(R.string.guide_demo_notice),
-                    style = MiuixTheme.textStyles.body2
+                    style = MixTheme.textStyles.body2
                 )
             }
             Text(
                 text = stringResource(step.summaryRes),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
             if (stepIndex > 0) {
                 Button(onClick = onPrevious, modifier = Modifier.fillMaxWidth()) {
@@ -311,8 +311,8 @@ internal fun FeatureGuideOverlay(
                     onClick = onNext,
                     enabled = focus != null && step.action == null,
                     colors = ButtonDefaults.buttonColors(
-                        color = MiuixTheme.colorScheme.primary,
-                        contentColor = MiuixTheme.colorScheme.onPrimary,
+                        color = MixTheme.colorScheme.primary,
+                        contentColor = MixTheme.colorScheme.onPrimary,
                     ),
                     modifier = Modifier.weight(1f),
                 ) {

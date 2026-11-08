@@ -58,7 +58,7 @@ import top.yukonga.miuix.kmp.anim.folmeSpring
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.layout.DialogDefaults
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 internal val LocalOverlayDialogBounds = staticCompositionLocalOf { IntRect.Zero }
 
@@ -164,7 +164,7 @@ fun OverlayDialog(
         ) { _ ->
             Box(modifier = Modifier.fillMaxSize()) {
                 if (enableWindowDim) {
-                    val baseColor = MiuixTheme.colorScheme.windowDimming
+                    val baseColor = MixTheme.colorScheme.windowDimming
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -233,7 +233,7 @@ fun OverlayDialog(
                                     .fillMaxWidth()
                                     .padding(bottom = 12.dp),
                                 text = it,
-                                fontSize = MiuixTheme.textStyles.title4.fontSize,
+                                fontSize = MixTheme.textStyles.title4.fontSize,
                                 fontWeight = FontWeight.Medium,
                                 textAlign = TextAlign.Center,
                                 color = titleColor,
@@ -245,7 +245,7 @@ fun OverlayDialog(
                                     .fillMaxWidth()
                                     .padding(bottom = 12.dp),
                                 text = it,
-                                fontSize = MiuixTheme.textStyles.body1.fontSize,
+                                fontSize = MixTheme.textStyles.body1.fontSize,
                                 textAlign = TextAlign.Center,
                                 color = summaryColor,
                             )

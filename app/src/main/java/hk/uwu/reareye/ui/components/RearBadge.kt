@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 data class RearBadgePalette(
     val background: Color,
@@ -36,7 +36,7 @@ data class RearBadgeItem(
 
 @Composable
 fun rememberRearAccentBadgePalette(accent: Color): RearBadgePalette {
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
     val darkTheme = colorScheme.surface.luminance() < 0.5f
     val harmonizedAccent = if (darkTheme) {
         lerp(lerp(accent, Color.White, 0.28f), colorScheme.primary, 0.08f)
@@ -66,7 +66,7 @@ fun rememberRearAccentBadgePalette(accent: Color): RearBadgePalette {
 
 @Composable
 private fun rememberRearDefaultBadgePalette(emphasized: Boolean): RearBadgePalette {
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
     val darkTheme = colorScheme.surface.luminance() < 0.5f
     return remember(
         emphasized,

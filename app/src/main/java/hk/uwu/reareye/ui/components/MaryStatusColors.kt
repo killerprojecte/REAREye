@@ -3,7 +3,7 @@ package hk.uwu.reareye.ui.components
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 /** Opaque semantic error colors, shared by notices, tool results and submission failures. */
 internal data class MaryErrorColors(
@@ -29,4 +29,4 @@ internal fun maryErrorColors(dark: Boolean): MaryErrorColors = if (dark) {
 
 @Composable
 internal fun maryErrorColors(): MaryErrorColors =
-    maryErrorColors(dark = MiuixTheme.colorScheme.surfaceContainerHigh.luminance() < 0.5f)
+    maryErrorColors(dark = MixTheme.colorScheme.surfaceContainerHigh.luminance() < 0.5f)

@@ -31,7 +31,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.layout.DialogDefaults
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
@@ -75,7 +75,7 @@ internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
                         Text(
                             text = sentence,
                             modifier = Modifier.fillMaxWidth(),
-                            fontSize = MiuixTheme.textStyles.body1.fontSize,
+                            fontSize = MixTheme.textStyles.body1.fontSize,
                             textAlign = TextAlign.Start,
                             color = DialogDefaults.summaryColor(),
                         )
@@ -86,7 +86,7 @@ internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
                     text = it,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Start,
-                    color = MiuixTheme.colorScheme.error,
+                    color = MixTheme.colorScheme.error,
                 )
             }
             Button(

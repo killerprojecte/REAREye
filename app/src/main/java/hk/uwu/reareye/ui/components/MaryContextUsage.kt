@@ -41,7 +41,7 @@ import hk.uwu.reareye.agent.context.ContextSegment
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -97,7 +97,7 @@ private fun percent(value: Double?): String = value?.takeIf { it.isFinite() }?.l
 /** Independent native implementation. Composition estimates and provider usage are separate facts. */
 @Composable
 internal fun ContextUsageButton(summary: MaryUsageSummary) {
-    val colors = MiuixTheme.colorScheme
+    val colors = MixTheme.colorScheme
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     var expanded by remember { mutableStateOf(false) }
     var sequence by remember { mutableStateOf(false) }
@@ -176,7 +176,7 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.mary_context_short_title), style = MiuixTheme.textStyles.body2,
+                    Text(stringResource(R.string.mary_context_short_title), style = MixTheme.textStyles.body2,
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).testTag("mary-context-title"),
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                     RearCompactTabs(
@@ -199,11 +199,11 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
                     Column(Modifier.weight(1f)) {
                         Text(if (summary.loading) stringResource(R.string.mary_context_loading) else
                             "${if (used != null) approximation else ""}${compactTokens(used)} / ${compactTokens(summary.windowTokens.takeIf { it > 0 })}",
-                            style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.Medium)
-                        Text(stringResource(R.string.mary_context_capacity_label), style = MiuixTheme.textStyles.footnote2,
+                            style = MixTheme.textStyles.body1, fontWeight = FontWeight.Medium)
+                        Text(stringResource(R.string.mary_context_capacity_label), style = MixTheme.textStyles.footnote2,
                             color = colors.onSurfaceVariantSummary)
                     }
-                    Text(if (ratio == null) "—" else approximation + percent(ratio), style = MiuixTheme.textStyles.body1)
+                    Text(if (ratio == null) "—" else approximation + percent(ratio), style = MixTheme.textStyles.body1)
                 }
                 // The strip is an optional direct pointer shortcut. Named legend targets below
                 // remain 48dp; numeric detail text is deliberately not part of the strip hit area.
@@ -240,7 +240,7 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
                                     Spacer(Modifier.width(4.dp))
                                     Text(if (sequence) "${index + 1} · " + stringResource(contextCategoryLabel(segment.category))
                                         else stringResource(contextCategoryLabel(segment.category)),
-                                        style = MiuixTheme.textStyles.footnote1,
+                                        style = MixTheme.textStyles.footnote1,
                                         color = colors.onSurface)
                                 }
                             }
@@ -262,29 +262,29 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
                         })
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(name, style = MiuixTheme.textStyles.footnote1, fontWeight = FontWeight.Medium,
+                        Text(name, style = MixTheme.textStyles.footnote1, fontWeight = FontWeight.Medium,
                             modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         val amount = if (remaining) free else selected?.tokens?.toLong()
-                        if (amount != null) Text("≈" + NumberFormat.getIntegerInstance().format(amount), style = MiuixTheme.textStyles.footnote1)
+                        if (amount != null) Text("≈" + NumberFormat.getIntegerInstance().format(amount), style = MixTheme.textStyles.footnote1)
                     }
                     if (selected != null && used != null && used > 0) {
                         Text(stringResource(R.string.mary_context_shares,
                             percent(selected.tokens.toDouble() / used),
                             percent(summary.windowTokens.takeIf { it > 0 }?.let { selected.tokens.toDouble() / it })),
-                            style = MiuixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
+                            style = MixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
                     } else if (remaining && free != null) {
                         Text(stringResource(R.string.mary_context_free_share, percent(free.toDouble() / summary.windowTokens)),
-                            style = MiuixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
+                            style = MixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
                     }
                 }
                 Column(Modifier.fillMaxWidth().testTag("mary-context-provider")) {
                     Text(stringResource(R.string.mary_context_provider_input, compactTokens(summary.usage?.inputTokens.takeUnless { summary.loading }), percent(summary.cacheRatio.takeUnless { summary.loading })),
-                        style = MiuixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
+                        style = MixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
                     if (summary.budgetCorrectionTokens > 0) Text(
                         stringResource(R.string.mary_context_correction, compactTokens(summary.budgetCorrectionTokens)),
-                        style = MiuixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
+                        style = MixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
                     Text(stringResource(if (sequence) R.string.mary_context_sequence_note else R.string.mary_context_estimate_note),
-                        style = MiuixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary,
+                        style = MixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary,
                         modifier = Modifier.padding(top = 4.dp, bottom = 4.dp))
                 }
             }
@@ -294,7 +294,7 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
 
 @Composable
 private fun ContextStrip(segments: List<ContextSegment>, occupied: Float, modifier: Modifier) {
-    val track = MiuixTheme.colorScheme.outline.copy(alpha = 0.35f)
+    val track = MixTheme.colorScheme.outline.copy(alpha = 0.35f)
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     Canvas(modifier.clip(RoundedCornerShape(4.dp))) {
         drawRect(track)

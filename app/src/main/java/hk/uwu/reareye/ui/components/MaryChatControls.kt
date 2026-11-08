@@ -113,7 +113,7 @@ import top.yukonga.miuix.kmp.basic.TooltipBox
 import top.yukonga.miuix.kmp.basic.TooltipDefaults
 import top.yukonga.miuix.kmp.basic.rememberTooltipState
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.abs
@@ -174,9 +174,9 @@ private fun ReasoningGauge(effort: ReasoningEffort?, tint: Color) {
         tween(180),
         label = "reasoningNeedle"
     )
-    val track = MiuixTheme.colorScheme.outline
-    val needle = if (effort != null) MiuixTheme.colorScheme.onSurfaceContainer else track
-    val background = MiuixTheme.colorScheme.surfaceContainer
+    val track = MixTheme.colorScheme.outline
+    val needle = if (effort != null) MixTheme.colorScheme.onSurfaceContainer else track
+    val background = MixTheme.colorScheme.surfaceContainer
     Canvas(Modifier
         .size(26.dp)
         .testTag("mary-reasoning-dial")) {
@@ -241,7 +241,7 @@ internal fun ReasoningStrengthButton(
     SideEffect { currentOnExpandedChange(shown) }
     DisposableEffect(Unit) { onDispose { currentOnExpandedChange(false) } }
     val tint =
-        if (enabled && available) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(
+        if (enabled && available) MixTheme.colorScheme.primary else MixTheme.colorScheme.onSurfaceVariantSummary.copy(
             alpha = 0.5f
         )
     Box {
@@ -305,10 +305,10 @@ private fun ReasoningStrengthPicker(
     val lastIndex = levels.lastIndex
     val previewLabel = reasoningEffortLabel(levels[preview.coerceIn(0, lastIndex)])
     val title = stringResource(R.string.mary_chat_reasoning_title)
-    val primary = MiuixTheme.colorScheme.primary
-    val track = MiuixTheme.colorScheme.secondaryContainer
-    val dot = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.65f)
-    val thumb = MiuixTheme.colorScheme.onPrimary
+    val primary = MixTheme.colorScheme.primary
+    val track = MixTheme.colorScheme.secondaryContainer
+    val dot = MixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.65f)
+    val thumb = MixTheme.colorScheme.onPrimary
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val commit: (Int) -> Unit = { index ->
         if (currentShow && currentEnabled) currentOnSelected(levels[index.coerceIn(0, lastIndex)])
@@ -588,9 +588,9 @@ internal fun MaryComposer(
     val toolsVisible by remember { derivedStateOf { expansion.value > 0f } }
     // The outer clip also contains exiting tools within the shrinking safe-area bounds.
     val shape = RoundedCornerShape(28.dp)
-    val surface = MiuixTheme.colorScheme.surfaceContainer
+    val surface = MixTheme.colorScheme.surfaceContainer
     val shadowTint =
-        if (surface.luminance() < 0.35f) MiuixTheme.colorScheme.primary else Color.Black
+        if (surface.luminance() < 0.35f) MixTheme.colorScheme.primary else Color.Black
     val shadowAlpha = if (surface.luminance() < 0.35f) 0.009f else 0.0085f
     Layout(
         modifier = Modifier
@@ -634,8 +634,8 @@ internal fun MaryComposer(
                     .focusRequester(inputFocusRequester)
                     .onFocusChanged { focused = it.isFocused },
                 enabled = !locked,
-                textStyle = MiuixTheme.textStyles.body1.copy(color = MiuixTheme.colorScheme.onSurfaceContainer),
-                cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
+                textStyle = MixTheme.textStyles.body1.copy(color = MixTheme.colorScheme.onSurfaceContainer),
+                cursorBrush = SolidColor(MixTheme.colorScheme.primary),
                 maxLines = 4,
                 decorationBox = { inner ->
                     Box(
@@ -643,8 +643,8 @@ internal fun MaryComposer(
                         contentAlignment = Alignment.CenterStart
                     ) {
                         if (value.isEmpty()) Text(
-                            inputDescription, style = MiuixTheme.textStyles.body1,
-                            color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
+                            inputDescription, style = MixTheme.textStyles.body1,
+                            color = MixTheme.colorScheme.onSurfaceContainerVariant,
                             maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
                         inner()
@@ -743,7 +743,7 @@ private fun ComposerAttachButton(locked: Boolean) {
     ) {
         Icon(
             Icons.Outlined.Add, contentDescription = stringResource(R.string.mary_action_attach),
-            tint = MiuixTheme.colorScheme.onSurfaceContainer, modifier = Modifier.size(28.dp)
+            tint = MixTheme.colorScheme.onSurfaceContainer, modifier = Modifier.size(28.dp)
         )
     }
 }
@@ -789,10 +789,10 @@ private fun ComposerActionButton(
             Modifier
                 .size(32.dp)
                 .testTag("mary-composer-send-circle")
-                .background(MiuixTheme.colorScheme.primary, CircleShape),
+                .background(MixTheme.colorScheme.primary, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            val tint = MiuixTheme.colorScheme.onPrimary
+            val tint = MixTheme.colorScheme.onPrimary
             when (val glyph = maryComposerGlyph(action)) {
                 MaryComposerGlyph.WAVEFORM -> VoiceWaveIcon(
                     // Listening is the live session; the idle dictation glyph holds still.

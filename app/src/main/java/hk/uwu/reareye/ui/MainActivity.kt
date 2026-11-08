@@ -73,7 +73,7 @@ import hk.uwu.reareye.version.AppVersionGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 /**
  * Screen order drives the horizontal transition direction. The Rear Store is reachable from the
@@ -296,7 +296,7 @@ class MainActivity : ComponentActivity() {
                 val showNavigation =
                     navBarVisible && !(currentScreen == "config" && configInAppListMode)
                 val density = LocalDensity.current
-                val surfaceColor = MiuixTheme.colorScheme.surface
+                val surfaceColor = MixTheme.colorScheme.surface
                 val backdrop = rememberLayerBackdrop {
                     drawRect(surfaceColor)
                     drawContent()
