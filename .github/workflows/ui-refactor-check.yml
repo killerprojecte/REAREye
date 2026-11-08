@@ -18,19 +18,30 @@ jobs:
           - name: baseline
             ref: e554a382dabdb79994fa11a4482c072c9f968c82
           - name: candidate
-            ref: feat/ui-base-refactor
+            ref: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ matrix.ref }}
           fetch-depth: 0
-      - uses: amyu/setup-android@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: zulu
           java-version: "21"
+      - uses: amyu/setup-android@v5
       - uses: gradle/actions/setup-gradle@v6
+      - name: Use disposable debug signing for both comparison builds
+        run: |
+          cat > "$RUNNER_TEMP/ui-debug-signing.gradle" <<'INIT'
+          gradle.afterProject { p ->
+              if (p.path == ':app') {
+                  def android = p.extensions.findByName('android')
+                  android.buildTypes.getByName('debug').signingConfig = android.signingConfigs.getByName('debug')
+              }
+          }
+          INIT
       - name: Compile application and run existing unit tests
-        run: bash ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest
+        run: bash ./gradlew --no-daemon -I "$RUNNER_TEMP/ui-debug-signing.gradle" :app:assembleDebug :app:testDebugUnitTest
       - name: Check mixui module
         if: matrix.name == 'candidate'
         run: bash ./gradlew --no-daemon :mixui:assembleDebug :mixui:testDebugUnitTest
