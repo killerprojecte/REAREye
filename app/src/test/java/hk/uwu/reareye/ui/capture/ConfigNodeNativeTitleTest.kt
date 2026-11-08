@@ -52,12 +52,15 @@ class ConfigNodeNativeTitleTest {
     private var favoriteIds by mutableStateOf(emptySet<String>())
     private val opened = mutableListOf<String>()
     private var backs = 0
+    private lateinit var pagePrefs: PrefsManager
+    private val changed = mutableListOf<String>()
     private fun frames() { repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
     private fun label(id: Int) = activity!!.get().getString(id)
     private fun open(backend: MixUiBackend, nodes: List<ConfigNode>, favorites: Boolean = false, dark: Boolean = false) {
         compose.mainClock.autoAdvance = false
         opened.clear(); backs = 0; favoriteIds = emptySet()
         val prefs = PrefsManager(GuideMemoryPrefs())
+        pagePrefs = prefs; changed.clear()
         compose.runOnUiThread {
             activity?.close()
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
@@ -74,6 +77,7 @@ class ConfigNodeNativeTitleTest {
                             onOpenCategory = { opened += "category:${it.key}" },
                             onOpenAppList = { opened += "apps:${it.key}" },
                             onOpenManager = { opened += "manager:${it.key}" },
+                            onPreferenceChanged = { changed += it.key },
                             favoriteNodeIds = favoriteIds,
                             resolveFavoriteNodeId = { it.key },
                             onToggleFavorite = { node ->
@@ -97,6 +101,35 @@ class ConfigNodeNativeTitleTest {
     @After fun close() {
         compose.mainClock.autoAdvance = true
         compose.runOnUiThread { activity?.close(); activity = null }
+    }
+    @Test fun productionSingleAndMaskMenusPersistInBothBackendsAndThemes() {
+        val single = ConfigItem("capture_single", R.string.config_tab_cards,
+            type = ConfigType.EnumSingleSelect(1, listOf(
+                ConfigType.EnumOption(R.string.config_tab_components, 1),
+                ConfigType.EnumOption(R.string.config_tab_wallpapers, 2))))
+        val mask = ConfigItem("capture_mask", R.string.config_tab_more,
+            type = ConfigType.MaskMultiSelect(1, listOf(
+                ConfigType.MaskOption(R.string.config_tab_components, 1),
+                ConfigType.MaskOption(R.string.config_tab_wallpapers, 2))))
+        for (backend in MixUiBackend.entries) for (dark in listOf(false, true)) {
+            open(backend, listOf(single), dark = dark)
+            compose.onNodeWithText(label(R.string.config_tab_cards)).performClick(); frames()
+            capture("dropdown-${backend.name}-$dark-single-open")
+            compose.onNodeWithText(label(R.string.config_tab_wallpapers)).performClick(); frames()
+            assertEquals(2, pagePrefs.getInt("capture_single", -1))
+            assertEquals(listOf("capture_single"), changed)
+            open(backend, listOf(mask), dark = dark)
+            compose.onNodeWithText(label(R.string.config_tab_more)).performClick(); frames()
+            capture("dropdown-${backend.name}-$dark-multiple-open")
+            compose.onNodeWithText(label(R.string.config_tab_wallpapers)).performClick(); frames()
+            assertEquals(3, pagePrefs.getInt("capture_mask", -1))
+            assertEquals(listOf("capture_mask"), changed)
+            compose.onNodeWithText(label(R.string.config_tab_more)).performClick(); frames()
+            compose.onNodeWithText(label(R.string.config_tab_wallpapers)).assertIsOn()
+            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }; frames()
+            assertEquals(3, pagePrefs.getInt("capture_mask", -1))
+            assertEquals(1, changed.size)
+        }
     }
     @Test fun actualCategoryAndFavoritesUseNativeHeadersAndBackCallbacks() {
         for (backend in MixUiBackend.entries) for (favorites in listOf(false, true)) for (dark in listOf(false, true)) {

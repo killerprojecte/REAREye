@@ -66,12 +66,13 @@ fun LargeTitleLazyScaffold(
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val horizontalInsets = WindowInsets.displayCutout.union(WindowInsets.navigationBars)
         .only(WindowInsetsSides.Horizontal)
+    GlassPreferenceScene(modifier = modifier) {
     when (LocalMixUiBackend.current) {
         MixUiBackend.Miuix -> {
             val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior()
             val backdrop = if (isRuntimeShaderSupported()) rememberLayerBackdrop() else null
             Scaffold(
-                modifier = modifier,
+                popupHost = {},
                 containerColor = background,
                 topBar = {
                     Column(Modifier.fillMaxWidth().windowInsetsPadding(horizontalInsets)) {
@@ -131,7 +132,7 @@ fun LargeTitleLazyScaffold(
                 if (bottomObstruction > 0.dp) bottomObstruction + 8.dp else 0.dp,
             )
             Scaffold(
-                modifier = modifier,
+                popupHost = {},
                 containerColor = background,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
             ) {
@@ -152,5 +153,6 @@ fun LargeTitleLazyScaffold(
                 }
             }
         }
+    }
     }
 }

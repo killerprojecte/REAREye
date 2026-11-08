@@ -322,6 +322,7 @@ tasks.withType<Test>().configureEach {
         if (uiCapture) {
             includeTestsMatching("hk.uwu.reareye.ui.components.navigation.NativeNavigationInteractionTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.ConfigNodeNativeTitleTest")
+            includeTestsMatching("hk.uwu.reareye.ui.capture.ConfigOptionControlsTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.ConfigDashboardTopBarTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.CustomBoundsNativeTitleTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.ManagerNativeTopBarTest")
@@ -349,6 +350,7 @@ tasks.withType<Test>().configureEach {
         } else {
             excludeTestsMatching("hk.uwu.reareye.ui.components.navigation.NativeNavigationInteractionTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.ConfigNodeNativeTitleTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.capture.ConfigOptionControlsTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.ConfigDashboardTopBarTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.CustomBoundsNativeTitleTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.ManagerNativeTopBarTest")

@@ -126,20 +126,15 @@ import hk.uwu.mixui.components.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.ColorPalette
 import top.yukonga.miuix.kmp.basic.ColorPicker
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.Slider
+import hk.uwu.mixui.components.Slider
 import hk.uwu.mixui.components.Tabs
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.TextField
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.components.ArrowPreference
-import top.yukonga.miuix.kmp.preference.ArrowPreference as MiuixArrowPreference
+import hk.uwu.mixui.components.PreferenceRow
+import hk.uwu.mixui.components.GlassChoicePreference
+import hk.uwu.mixui.components.ChoiceOption
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
 import java.util.Locale
@@ -1383,7 +1378,7 @@ private fun AnimationFieldEditor(
 @Composable
 private fun CustomEditLinkFieldEditor(field: RearWidgetCustomEditLinkField) {
     val context = LocalContext.current
-    MiuixArrowPreference(
+    PreferenceRow(
         title = stringResource(R.string.rear_widget_card_template_external_editor),
         summary = field.deeplink,
         onClick = {
@@ -1853,52 +1848,22 @@ private fun SingleChoicePreference(
 ) {
     val popupScope = rememberCoroutineScope()
     var showPopup by remember(title, selectedValue, options) { mutableStateOf(false) }
-    val entries = remember(options, optionSummaries) {
-        options.mapIndexed { index, option ->
-            DropdownItem(
-                title = option,
-                summary = optionSummaries.getOrNull(index)?.takeIf { it.isBlank().not() },
-            )
-        }
-    }
-
-    Box(modifier = Modifier.fillMaxWidth()) {
-        MiuixArrowPreference(
-            title = title,
-            summary = summary,
-            holdDownState = showPopup,
-            onClick = { if (options.isNotEmpty()) showPopup = true },
-        )
-
-        OverlayListPopup(
-            show = showPopup,
-            popupModifier = Modifier.widthIn(min = 220.dp),
-            popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-            alignment = PopupPositionProvider.Align.End,
-            enableWindowDim = true,
-            onDismissRequest = { showPopup = false },
-            maxHeight = null,
-            minWidth = 220.dp,
-            renderInRootScaffold = true,
-        ) {
-            ListPopupColumn {
-                options.forEachIndexed { index, option ->
-                    DropdownImpl(
-                        item = entries[index],
-                        optionSize = options.size,
-                        isSelected = option == selectedValue,
-                        index = index,
-                        dropdownColors = DropdownDefaults.dropdownColors(),
-                        onSelectedIndexChange = {
-                            showPopup = false
-                            popupScope.launch {
-                                withFrameNanos { }
-                                onSelected(option)
-                            }
-                        },
-                    )
-                }
+    GlassChoicePreference(
+        title = title,
+        summary = summary,
+        expanded = showPopup,
+        onExpandedChange = { showPopup = it },
+        options = options.mapIndexed { index, option ->
+            ChoiceOption(title = option,
+                summary = optionSummaries.getOrNull(index)?.takeIf { it.isNotBlank() },
+                selected = option == selectedValue)
+        },
+        onOptionClick = { index ->
+            val option = options[index]
+            popupScope.launch {
+                withFrameNanos { }
+                onSelected(option)
             }
-        }
-    }
+        },
+    )
 }

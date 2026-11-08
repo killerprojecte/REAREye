@@ -55,19 +55,15 @@ import hk.uwu.reareye.ui.config.validateRearStoreCustomDomain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.Slider
+import hk.uwu.mixui.components.Slider
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.TextField
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.components.ArrowPreference
-import top.yukonga.miuix.kmp.preference.ArrowPreference as MiuixArrowPreference
+import hk.uwu.mixui.components.PreferenceRow
+import hk.uwu.mixui.components.GlassSelectPreference
+import hk.uwu.mixui.components.GlassChoicePreference
+import hk.uwu.mixui.components.ChoiceOption
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
 
@@ -100,7 +96,7 @@ fun ConfigNodeRow(
 
 @Composable
 fun ConfigCategoryNodeRow(category: ConfigCategory, onClick: () -> Unit) {
-    MiuixArrowPreference(
+    PreferenceRow(
         title = stringResource(category.titleRes),
         summary = category.descriptionRes?.let { stringResource(it) },
         startAction = category.icon?.let { icon ->
@@ -227,7 +223,7 @@ fun AppListConfigInput(
         "$description\n$selectedSummary"
     }
 
-    MiuixArrowPreference(
+    PreferenceRow(
         title = stringResource(item.titleRes),
         summary = summary,
         onClick = onClick
@@ -253,9 +249,6 @@ fun MaskMultiSelectConfigInput(
     val optionTitles = remember(item.key, options, configuration) {
         options.map { context.getString(it.titleRes) }
     }
-    val optionEntries = remember(item.key, optionTitles) {
-        optionTitles.map { DropdownItem(title = it) }
-    }
 
     val selectedLabels = options
         .mapIndexedNotNull { index, option ->
@@ -274,48 +267,25 @@ fun MaskMultiSelectConfigInput(
         "$description\n$selectedSummary"
     }
 
-    Box {
-        MiuixArrowPreference(
-            title = stringResource(item.titleRes),
-            summary = summary,
-            holdDownState = showModePopup.value,
-            onClick = { showModePopup.value = true }
-        )
-
-        OverlayListPopup(
-            show = showModePopup.value,
-            popupModifier = Modifier,
-            popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-            alignment = PopupPositionProvider.Align.End,
-            enableWindowDim = true,
-            onDismissRequest = { showModePopup.value = false },
-            maxHeight = null,
-            minWidth = 220.dp,
-            renderInRootScaffold = true,
-        ) {
-            ListPopupColumn {
-                options.forEachIndexed { index, option ->
-                    DropdownImpl(
-                        item = optionEntries[index],
-                        optionSize = options.size,
-                        isSelected = (selectedMask and option.maskValue) != 0,
-                        index = index,
-                        dropdownColors = DropdownDefaults.dropdownColors(),
-                        onSelectedIndexChange = {
-                            val nextMask = selectedMask xor option.maskValue
-                            showModePopup.value = false
-                            popupScope.launch {
-                                withFrameNanos { }
-                                selectedMask = nextMask
-                                prefsManager.putInt(item.key, selectedMask)
-                                onPreferenceChanged(item)
-                            }
-                        },
-                    )
-                }
+    GlassChoicePreference(
+        title = stringResource(item.titleRes),
+        summary = summary,
+        expanded = showModePopup.value,
+        onExpandedChange = { showModePopup.value = it },
+        multiple = true,
+        options = options.mapIndexed { index, option ->
+            ChoiceOption(title = optionTitles[index], selected = (selectedMask and option.maskValue) != 0)
+        },
+        onOptionClick = { index ->
+            val nextMask = selectedMask xor options[index].maskValue
+            popupScope.launch {
+                withFrameNanos { }
+                selectedMask = nextMask
+                prefsManager.putInt(item.key, selectedMask)
+                onPreferenceChanged(item)
             }
-        }
-    }
+        },
+    )
 }
 
 @SuppressLint("LocalContextGetResourceValueCall")
@@ -334,7 +304,6 @@ fun EnumSingleSelectConfigInput(
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val popupScope = rememberCoroutineScope()
-    val showEnumPopup = remember(item.key) { mutableStateOf(false) }
     var selectedValue by remember(item.key) {
         mutableIntStateOf(
             prefsManager.getInt(item.key, defaultValue)
@@ -344,9 +313,6 @@ fun EnumSingleSelectConfigInput(
     val enabled = true
     val optionTitles = remember(item.key, options, configuration) {
         options.map { context.getString(it.titleRes) }
-    }
-    val optionEntries = remember(item.key, optionTitles) {
-        optionTitles.map { DropdownItem(title = it) }
     }
 
     val selectedLabel = options
@@ -361,49 +327,22 @@ fun EnumSingleSelectConfigInput(
         "$description\n$selectedLabel"
     }
 
-    Box {
-        MiuixArrowPreference(
-            modifier = Modifier.semantics(mergeDescendants = true) { if (!enabled) disabled() },
-            title = stringResource(item.titleRes),
-            summary = summary,
-            holdDownState = showEnumPopup.value,
-            enabled = enabled,
-            onClick = { if (enabled) showEnumPopup.value = true }
-        )
-
-        OverlayListPopup(
-            show = showEnumPopup.value && enabled,
-            popupModifier = Modifier,
-            popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-            alignment = PopupPositionProvider.Align.End,
-            enableWindowDim = true,
-            onDismissRequest = { showEnumPopup.value = false },
-            maxHeight = null,
-            minWidth = 220.dp,
-            renderInRootScaffold = true,
-        ) {
-            ListPopupColumn {
-                options.forEachIndexed { index, option ->
-                    DropdownImpl(
-                        item = optionEntries[index],
-                        optionSize = options.size,
-                        isSelected = selectedOptionValue == option.value,
-                        index = index,
-                        dropdownColors = DropdownDefaults.dropdownColors(),
-                        onSelectedIndexChange = {
-                            showEnumPopup.value = false
-                            popupScope.launch {
-                                withFrameNanos { }
-                                prefsManager.putInt(item.key, option.value)
-                                selectedValue = option.value
-                                onPreferenceChanged(item)
-                            }
-                        },
-                    )
-                }
+    GlassSelectPreference(
+        title = stringResource(item.titleRes),
+        summary = summary,
+        items = optionTitles,
+        selectedIndex = options.indexOfFirst { it.value == selectedOptionValue },
+        enabled = enabled,
+        onSelectedIndexChange = { index ->
+            val option = options[index]
+            popupScope.launch {
+                withFrameNanos { }
+                prefsManager.putInt(item.key, option.value)
+                selectedValue = option.value
+                onPreferenceChanged(item)
             }
-        }
-    }
+        },
+    )
 }
 
 /** The production Settings entry. Only a successful atomic save notifies the app host. */
@@ -488,7 +427,6 @@ fun RearStoreApiConfigInput(
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val popupScope = rememberCoroutineScope()
-    val showApiPopup = remember(item.key) { mutableStateOf(false) }
     var selectedProviderValue by remember(item.key) {
         mutableIntStateOf(prefsManager.getInt(item.key, apiConfig.defaultProviderValue))
     }
@@ -499,9 +437,6 @@ fun RearStoreApiConfigInput(
     val validation = remember(customDomain) { validateRearStoreCustomDomain(customDomain) }
     val optionTitles = remember(configuration) {
         StoreApiProvider.selectableEntries.map { context.getString(it.titleRes) }
-    }
-    val optionEntries = remember(optionTitles) {
-        optionTitles.map { DropdownItem(title = it) }
     }
     val selectedLabel = optionTitles[StoreApiProvider.selectableEntries.indexOf(provider)]
     val description = item.descriptionRes?.let { stringResource(it) }
@@ -528,47 +463,21 @@ fun RearStoreApiConfigInput(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Box {
-            MiuixArrowPreference(
-                title = stringResource(item.titleRes),
-                summary = summary,
-                holdDownState = showApiPopup.value,
-                onClick = { showApiPopup.value = true },
-            )
-
-            OverlayListPopup(
-                show = showApiPopup.value,
-                popupModifier = Modifier,
-                popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                alignment = PopupPositionProvider.Align.End,
-                enableWindowDim = true,
-                onDismissRequest = { showApiPopup.value = false },
-                maxHeight = null,
-                minWidth = 220.dp,
-                renderInRootScaffold = true,
-            ) {
-                ListPopupColumn {
-                    StoreApiProvider.selectableEntries.forEachIndexed { index, option ->
-                        DropdownImpl(
-                            item = optionEntries[index],
-                            optionSize = StoreApiProvider.selectableEntries.size,
-                            isSelected = provider == option,
-                            index = index,
-                            dropdownColors = DropdownDefaults.dropdownColors(),
-                            onSelectedIndexChange = {
-                                showApiPopup.value = false
-                                popupScope.launch {
-                                    withFrameNanos { }
-                                    selectedProviderValue = option.value
-                                    prefsManager.putInt(item.key, selectedProviderValue)
-                                    onPreferenceChanged(item)
-                                }
-                            },
-                        )
-                    }
+        GlassSelectPreference(
+            title = stringResource(item.titleRes),
+            summary = summary,
+            items = optionTitles,
+            selectedIndex = StoreApiProvider.selectableEntries.indexOf(provider),
+            onSelectedIndexChange = { index ->
+                val option = StoreApiProvider.selectableEntries[index]
+                popupScope.launch {
+                    withFrameNanos { }
+                    selectedProviderValue = option.value
+                    prefsManager.putInt(item.key, selectedProviderValue)
+                    onPreferenceChanged(item)
                 }
-            }
-        }
+            },
+        )
 
         if (provider == StoreApiProvider.CUSTOM) {
             Column(
@@ -674,7 +583,7 @@ fun FloatSliderConfigInput(
 
 @Composable
 fun ManagerConfigInput(item: ConfigItem, onClick: () -> Unit) {
-    MiuixArrowPreference(
+    PreferenceRow(
         title = stringResource(item.titleRes),
         summary = item.descriptionRes?.let { stringResource(it) },
         onClick = onClick,

@@ -225,7 +225,9 @@ private fun GlassFormOverlayHost(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) {
         Box(Modifier.fillMaxSize()) {
-            page(Modifier.fillMaxSize().then(sceneModifier))
+            GlassPreferenceOverlayHost(backdrop = backdrop) {
+                page(Modifier.fillMaxSize().then(sceneModifier))
+            }
             CompositionLocalProvider(LocalGlassFormBackdrop provides backdrop) {
                 overlayContent()
             }

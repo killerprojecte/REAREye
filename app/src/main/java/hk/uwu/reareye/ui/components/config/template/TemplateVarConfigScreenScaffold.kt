@@ -32,6 +32,7 @@ import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.GlassPreferenceScene
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
@@ -164,10 +165,12 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
         }
     }
 
+    GlassPreferenceScene {
     if (embedded) {
         screenContent(contentPadding)
     } else {
         Scaffold(
+            popupHost = {},
             topBar = {
                 TopAppBar(
                     modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
@@ -187,5 +190,6 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
             contentWindowInsets = androidx.compose.foundation.layout.WindowInsets.systemBars,
             content = screenContent,
         )
+    }
     }
 }
