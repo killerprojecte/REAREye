@@ -942,6 +942,69 @@ class MaryChatLayoutTest {
     }
 
     @Test
+    fun nativeMaryTopBarRetainsMenuAndContextAcrossBackends() {
+        for (backend in hk.uwu.mixui.MixUiBackend.entries) {
+            var opens = 0
+            compose.runOnUiThread {
+                activity?.close()
+                val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+                activity = controller
+                controller.get().setContent {
+                    hk.uwu.mixui.MixUiHost(backend = backend, colorMode = hk.uwu.mixui.MixColorSchemeMode.Light) {
+                        Scaffold(topBar = {
+                            MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { opens++ })
+                        }) { }
+                    }
+                }
+            }
+            compose.waitForIdle()
+            node("mary-open-sidebar").assertIsEnabled().assertIsDisplayed()
+            node("mary-context-usage").assertIsDisplayed()
+            assertTrue(bounds("mary-open-sidebar").center.x < 72.dp)
+            repeat(2) { node("mary-open-sidebar").performClick() }
+            compose.runOnIdle { assertEquals(2, opens) }
+            screenshot("native-mary-topbar-${backend.name}.png", "root")
+        }
+    }
+
+    @Test
+    fun nativeLargeTitleHostsReachLastRowAndRestoreScroll() {
+        for (backend in hk.uwu.mixui.MixUiBackend.entries) {
+            val scroll = ScrollState(0)
+            compose.runOnUiThread {
+                activity?.close()
+                val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+                activity = controller
+                controller.get().setContent {
+                    hk.uwu.mixui.MixUiHost(backend = backend, colorMode = hk.uwu.mixui.MixColorSchemeMode.Light) {
+                        hk.uwu.mixui.components.LargeTitleColumnScaffold(
+                            title = "Mary settings", scrollState = scroll, bottomObstruction = 72.dp,
+                        ) {
+                            repeat(30) { index ->
+                                hk.uwu.mixui.components.Text("Setting $index",
+                                    Modifier.fillMaxWidth().height(44.dp).testTag("large-title-row-$index"))
+                            }
+                        }
+                    }
+                }
+            }
+            compose.waitForIdle()
+            node("large-title-row-0").assertIsDisplayed()
+            compose.runOnIdle {
+                assertTrue(scroll.maxValue > 0)
+                runBlocking { scroll.scrollTo(scroll.maxValue) }
+            }
+            compose.waitForIdle()
+            node("large-title-row-29").assertIsDisplayed()
+            screenshot("native-large-title-scrolled-${backend.name}.png", "root")
+            compose.runOnIdle { runBlocking { scroll.scrollTo(0) } }
+            compose.waitForIdle()
+            node("large-title-row-0").assertIsDisplayed()
+            screenshot("native-large-title-restored-${backend.name}.png", "root")
+        }
+    }
+
+    @Test
     fun darkQuestionUsesToolAccentAndComposerHasASubtleFeatheredHalo() {
         val request = AskRequest(
             "dark-drink", "Choose a drink", listOf(

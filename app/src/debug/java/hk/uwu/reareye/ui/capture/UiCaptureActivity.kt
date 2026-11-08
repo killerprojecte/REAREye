@@ -26,6 +26,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import hk.uwu.reareye.ui.screen.HomeScreen
+import hk.uwu.reareye.ui.screen.HomeScreenSnapshot
+import hk.uwu.reareye.ui.screen.RearStoreRootContent
+import hk.uwu.reareye.hook.support.ModuleActivationState
+import hk.uwu.reareye.ui.components.PresetPackHomeSnapshot
+import hk.uwu.reareye.ui.components.PresetPackLocalSnapshot
+import hk.uwu.reareye.ui.components.PresetPackLocalStatus
+import hk.uwu.reareye.repository.rearstore.RearStoreListItem
+import hk.uwu.reareye.repository.rearstore.RearStoreAuthor
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.OnboardingScreen
 import hk.uwu.reareye.ui.screen.AboutScreen
@@ -90,7 +99,7 @@ class UiCaptureActivity : ComponentActivity() {
                     Box(Modifier.weight(1f).fillMaxWidth()) { CaptureDialogHost {
                         androidx.compose.runtime.CompositionLocalProvider(
                             androidx.compose.ui.platform.LocalLayoutDirection provides if (rtl) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr,
-                        ) { FixturePage(page) }
+                        ) { FixturePage(page) { backPressCount++ } }
                         if (intent.getBooleanExtra("themeSheet", false)) {
                             hk.uwu.reareye.ui.theme.ThemeStyleSheet(
                                 show = themeSheetVisible,
@@ -117,13 +126,13 @@ class UiCaptureActivity : ComponentActivity() {
         val PAGES = setOf(
             "cards", "card-editor", "components", "component-editor", "wallpapers", "more",
             "scene-routes", "scene-routes-populated", "business-extras", "business-extra-editor", "custom-bounds",
-            "onboarding", "about", "scripts", "mary-settings-unconfigured", "version-dialog",
+            "home-offline", "store-catalog", "onboarding", "about", "scripts", "mary-settings-unconfigured", "version-dialog",
         )
     }
 }
 
 @Composable
-private fun FixturePage(page: String) {
+private fun FixturePage(page: String, onBack: () -> Unit) {
     val state = remember(page) {
         FeatureGuideDemoState(initialCardTitle = "Fixture clock").apply {
             if (page == "scene-routes-populated") {
@@ -140,8 +149,41 @@ private fun FixturePage(page: String) {
             }
         }
     }
-    val back: () -> Unit = {} // Root capture screen stays open; production dialogs still dismiss.
+    val back: () -> Unit = onBack // Records dispatch without leaving the controlled fixture.
     when (page) {
+        "home-offline" -> HomeScreen(
+            snapshot = remember {
+                HomeScreenSnapshot(
+                    activationState = ModuleActivationState.ACTIVE,
+                    hasRootAccess = true,
+                    latestCommitHash = hk.uwu.reareye.generated.AppProperties.GIT_HASH,
+                    presetPack = PresetPackHomeSnapshot(PresetPackLocalSnapshot(PresetPackLocalStatus.NOT_INSTALLED)),
+                )
+            },
+        )
+        "store-catalog" -> RearStoreRootContent(
+            bottomInnerPadding = 0.dp,
+            prefsManager = state.prefsManager,
+            installedWidgets = emptyMap(),
+            onOpenDetail = {}, // Explicit list-only fixture; never starts detail/network/install flows.
+            onBack = back,
+            loadItems = {
+                listOf(
+                    RearStoreListItem(
+                        id = "fixture-clock", name = "Fixture Aurora Clock",
+                        description = "A readable clock for the rear display.",
+                        author = RearStoreAuthor(name = "Fixture Studio"),
+                        type = "card", updatedAt = "2026-01-02T00:00:00Z", stargazersCount = 42,
+                    ),
+                    RearStoreListItem(
+                        id = "fixture-wallpaper", name = "Fixture Mountain Wallpaper",
+                        description = "A quiet landscape for the rear display.",
+                        author = RearStoreAuthor(name = "Fixture Studio"),
+                        type = "wallpaper", updatedAt = "2026-01-01T00:00:00Z", stargazersCount = 17,
+                    ),
+                )
+            },
+        )
         "onboarding" -> OnboardingScreen(onFinished = {})
         "about" -> AboutScreen()
         "scripts" -> ScriptManagementScreen(onBack = back)

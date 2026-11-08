@@ -875,12 +875,13 @@ fun RearStoreScreen(
 }
 
 @Composable
-private fun RearStoreRootContent(
+internal fun RearStoreRootContent(
     bottomInnerPadding: Dp,
     prefsManager: hk.uwu.reareye.ui.config.PrefsManager,
     installedWidgets: Map<String, RearStoreInstalledWidget>,
     onOpenDetail: (String) -> Unit,
     onBack: (() -> Unit)? = null,
+    loadItems: suspend () -> List<RearStoreListItem>? = { RearStoreRepository.loadWidgets(prefsManager) },
 ) {
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -904,7 +905,7 @@ private fun RearStoreRootContent(
         loadFailed = false
         val result = withContext(Dispatchers.IO) {
             runCatching {
-                RearStoreRepository.loadWidgets(prefsManager)
+                loadItems()
             }.getOrNull()
         }
         if (result == null) {

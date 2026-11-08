@@ -1,0 +1,169 @@
+package hk.uwu.mixui.components
+
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import hk.uwu.mixui.LocalMixUiBackend
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.theme.MixTheme
+
+/**
+ * Pinned, theme-colored title bar with native controls supplied by the caller.
+ * Both backends own their top status inset and protect horizontal system insets.
+ *
+ * This deliberately is not a drop-in alias for every MIUIX SmallTopAppBar option:
+ * custom title colors, alpha ramps, slot margins and inset overrides require a
+ * separate contract. In particular, no unsupported parameter is accepted and
+ * silently discarded. Existing slot state, focus modifiers and callbacks are
+ * forwarded without introducing another remembered interaction state.
+ */
+@Composable
+fun CompactTopBar(
+    title: String,
+    modifier: Modifier = Modifier,
+    navigationIcon: @Composable () -> Unit = {},
+    actions: @Composable RowScope.() -> Unit = {},
+) {
+    when (LocalMixUiBackend.current) {
+        MixUiBackend.Miuix -> top.yukonga.miuix.kmp.basic.SmallTopAppBar(
+            title = title,
+            modifier = modifier,
+            color = MixTheme.colorScheme.surface,
+            navigationIcon = navigationIcon,
+            actions = actions,
+        )
+        MixUiBackend.Mochi -> ui.feice.mochi.navigation.MochiTitleBar(
+            title = title,
+            modifier = modifier.windowInsetsPadding(horizontalBarInsets()),
+            background = MixTheme.colorScheme.surface,
+            navigationIcon = navigationIcon,
+            actions = actions,
+        )
+    }
+}
+
+/**
+ * Owns the vertical scroll boundary and the large-to-compact title transition.
+ * [content] must contain non-scrolling column children, not a nested scroll view.
+ * The optional Compose [scrollState] is the only exposed scrolling state; vendor
+ * scroll behavior and its nested-scroll connection stay inside this adapter.
+ *
+ * [bottomObstruction] is the height reserved for an existing bottom overlay,
+ * including its system inset. The host avoids the IME locally and disregards that
+ * overlay while the IME is open. Popup layout remains rooted in a full-window
+ * scaffold, outside that resizing subtree.
+ *
+ * Native geometry is intentional: MIUIX keeps 12dp side/heading gaps and 24dp
+ * bottom breathing room. Mochi retains its 16dp sides, large title and at least
+ * its native 40dp end padding; the bottom overlay still gets at least 24dp of
+ * clearance. This is not a pixel-equivalent arbitrary-padding API.
+ */
+@Composable
+fun LargeTitleColumnScaffold(
+    title: String,
+    modifier: Modifier = Modifier,
+    scrollState: ScrollState = rememberScrollState(),
+    bottomObstruction: Dp = 0.dp,
+    contentSpacing: Dp = 8.dp,
+    navigationIcon: @Composable () -> Unit = {},
+    actions: @Composable RowScope.() -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val background = MixTheme.colorScheme.surface
+    when (LocalMixUiBackend.current) {
+        MixUiBackend.Miuix -> {
+            val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior()
+            Scaffold(
+                modifier = modifier,
+                containerColor = background,
+                contentWindowInsets = WindowInsets.systemBars,
+                topBar = {
+                    top.yukonga.miuix.kmp.basic.TopAppBar(
+                        title = title,
+                        color = background,
+                        scrollBehavior = scrollBehavior,
+                        navigationIcon = navigationIcon,
+                        actions = actions,
+                    )
+                },
+            ) { padding ->
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .imePadding()
+                        .verticalScroll(scrollState)
+                        .padding(
+                            start = 12.dp,
+                            end = 12.dp,
+                            top = padding.calculateTopPadding() + 12.dp,
+                            bottom = 24.dp + if (imeVisible) 0.dp else maxOf(
+                                padding.calculateBottomPadding(), bottomObstruction,
+                            ),
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(contentSpacing),
+                    content = content,
+                )
+            }
+        }
+        MixUiBackend.Mochi -> {
+            // The native host calculates max(navigation inset + 40dp,
+            // bottom-bar inset + 16dp). Add 8dp to retain at least the existing
+            // page's 24dp clearance above a caller-specified bottom overlay.
+            val inheritedBottom = ui.feice.mochi.navigation.LocalMochiBottomBarInset.current
+            val bottomBarInset = if (imeVisible) 0.dp else maxOf(
+                inheritedBottom,
+                if (bottomObstruction > 0.dp) bottomObstruction + 8.dp else 0.dp,
+            )
+            Scaffold(
+                modifier = modifier,
+                containerColor = background,
+                // Mochi owns status and navigation insets. Do not apply a second
+                // scaffold content padding or recreate its scrolling container.
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            ) {
+                CompositionLocalProvider(
+                    ui.feice.mochi.navigation.LocalMochiBottomBarInset provides bottomBarInset,
+                ) {
+                    ui.feice.mochi.navigation.MochiLargeTitleScaffold(
+                        title = title,
+                        modifier = Modifier.imePadding().windowInsetsPadding(horizontalBarInsets()),
+                        scrollState = scrollState,
+                        background = background,
+                        contentSpacing = contentSpacing,
+                        navigationIcon = navigationIcon,
+                        actions = actions,
+                        content = content,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun horizontalBarInsets(): WindowInsets =
+    WindowInsets.displayCutout.union(WindowInsets.navigationBars).only(WindowInsetsSides.Horizontal)

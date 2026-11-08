@@ -62,6 +62,7 @@ import hk.uwu.reareye.R
 import hk.uwu.reareye.generated.AppProperties
 import hk.uwu.reareye.hook.support.ModuleActivationState
 import hk.uwu.reareye.hook.support.XposedModuleStatus
+import hk.uwu.reareye.ui.components.PresetPackHomeSnapshot
 import hk.uwu.reareye.ui.components.PresetPackLocalStatus
 import hk.uwu.reareye.ui.components.PresetPackStatusCard
 import hk.uwu.reareye.ui.components.isNewerThan
@@ -264,40 +265,52 @@ private suspend fun fetchLatestCommitHashFromNetwork(): String? {
     }
 }
 
+/** A read-only home state supplied by an offline owner. Null keeps the live device sources.
+ * All values are rendered by the same production page; no alternate sample layout is used.
+ */
+data class HomeScreenSnapshot(
+    val activationState: ModuleActivationState,
+    val hasRootAccess: Boolean,
+    val latestCommitHash: String?,
+    val presetPack: PresetPackHomeSnapshot,
+    val themeMode: AppThemeMode = AppThemeMode.default,
+)
+
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
 fun HomeScreen(
     bottomInnerPadding: Dp = 0.dp,
     onOpenPresetPackDialog: () -> Unit = {},
     presetPackRefreshToken: Any? = Unit,
+    snapshot: HomeScreenSnapshot? = null,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var activationState by remember { mutableStateOf(XposedModuleStatus.current()) }
+    var activationState by remember(snapshot) { mutableStateOf(snapshot?.activationState ?: XposedModuleStatus.current()) }
     val isActivated = activationState == ModuleActivationState.ACTIVE
-    val showTopMenu = remember { mutableStateOf(false) }
+    val showTopMenu = remember(snapshot) { mutableStateOf(false) }
     val scrollBehavior = MiuixScrollBehavior()
-    val prefsManager = remember { context.getPrefsManager() }
+    val prefsManager = remember(snapshot) { if (snapshot == null) context.getPrefsManager() else null }
     val hazeState = rememberAcrylicHazeState()
     val hazeStyle = rememberAcrylicHazeStyle()
     val coroutineScope = rememberCoroutineScope()
     val easterEggToastHolder = remember { ToastHolder() }
-    val presetPackHomeSnapshot = rememberPresetPackHomeSnapshot(presetPackRefreshToken)
+    val presetPackHomeSnapshot = snapshot?.presetPack ?: rememberPresetPackHomeSnapshot(presetPackRefreshToken)
     val presetPackSnapshot = presetPackHomeSnapshot.local
     val presetPackUpdateAvailable = presetPackHomeSnapshot.latest?.isNewerThan(
         presetPackSnapshot.installed?.manifest?.packVersion,
     ) == true
 
-    var latestCommitHash by remember { mutableStateOf<String?>(null) }
-    var isCheckingUpdate by remember { mutableStateOf(false) }
-    var hasRootAccess by remember { mutableStateOf<Boolean?>(null) }
-    val frameNotice = FrameNoticeCache.value
-    var easterEggType by remember {
-        mutableStateOf(EasterEggManager.getCurrentEasterEggType(context))
+    var latestCommitHash by remember(snapshot) { mutableStateOf(snapshot?.latestCommitHash) }
+    var isCheckingUpdate by remember(snapshot) { mutableStateOf(false) }
+    var hasRootAccess by remember(snapshot) { mutableStateOf<Boolean?>(snapshot?.hasRootAccess) }
+    val frameNotice = if (snapshot == null) FrameNoticeCache.value else null
+    var easterEggType by remember(snapshot) {
+        mutableStateOf(if (snapshot == null) EasterEggManager.getCurrentEasterEggType(context) else EasterEggType.NONE)
     }
-    val themeMode = remember(prefsManager) {
-        AppThemeMode.fromValue(
-            prefsManager.getInt(
+    val themeMode = remember(prefsManager, snapshot) {
+        snapshot?.themeMode ?: AppThemeMode.fromValue(
+            requireNotNull(prefsManager).getInt(
                 ConfigKeys.MODULE_THEME_MODE,
                 AppThemeMode.default.value,
             )
@@ -309,7 +322,8 @@ fun HomeScreen(
                 themeMode == AppThemeMode.MONET_DARK
     }
 
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, snapshot) {
+        if (snapshot != null) return@DisposableEffect onDispose {}
         val statusObserver: (ModuleActivationState) -> Unit = { activationState = it }
         val lifecycleObserver = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) XposedModuleStatus.refresh()
@@ -323,7 +337,8 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(snapshot) {
+        if (snapshot != null) return@LaunchedEffect
         if (!UpdateInfoCache.latestCommitHash.isNullOrBlank()) {
             latestCommitHash = UpdateInfoCache.latestCommitHash
             return@LaunchedEffect
@@ -342,7 +357,8 @@ fun HomeScreen(
         isCheckingUpdate = false
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(snapshot) {
+        if (snapshot != null) return@LaunchedEffect
         hasRootAccess = withContext(Dispatchers.IO) {
             RootHelper.hasRootAccess()
         }
@@ -411,7 +427,7 @@ fun HomeScreen(
                 actions = {
                     Box {
                         IconButton(
-                            onClick = { showTopMenu.value = true },
+                            onClick = { if (snapshot == null) showTopMenu.value = true },
                             holdDownState = showTopMenu.value,
                         ) {
                             Icon(
@@ -560,6 +576,7 @@ fun HomeScreen(
                                 easterEggType = easterEggType,
                                 useMonetColors = useMonetStatusColors,
                                 onLongPress = {
+                                    if (snapshot != null) return@WorkingStatusCard
                                     val result =
                                         EasterEggManager.toggleTodayEasterEggEnabled(context)
                                     if (!result.matchedToday) {
@@ -605,6 +622,7 @@ fun HomeScreen(
                                     currentHash = AppProperties.GIT_HASH.take(7),
                                     latestHash = latestCommitHash?.take(7).orEmpty(),
                                     useMonetColors = useMonetStatusColors,
+                                    onOpenRelease = if (snapshot == null) null else ({ }),
                                 )
                             }
 
@@ -972,7 +990,7 @@ private fun FrameNoticeCard(title: String, summary: String, useMonetColors: Bool
 }
 
 @Composable
-private fun UpdateWarningCard(currentHash: String, latestHash: String, useMonetColors: Boolean) {
+private fun UpdateWarningCard(currentHash: String, latestHash: String, useMonetColors: Boolean, onOpenRelease: (() -> Unit)? = null) {
     val context = LocalContext.current
     val colorScheme = MixTheme.colorScheme
     val palette = if (useMonetColors) rememberStatusCardPalette(
@@ -995,6 +1013,10 @@ private fun UpdateWarningCard(currentHash: String, latestHash: String, useMonetC
         colors = CardDefaults.defaultColors(color = palette.container),
         insideMargin = PaddingValues(14.dp),
         onClick = {
+            if (onOpenRelease != null) {
+                onOpenRelease()
+                return@Card
+            }
             @Suppress("KotlinConstantConditions", "SimplifyBooleanWithConstants")
             context.startActivity(
                 Intent(

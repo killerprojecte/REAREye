@@ -107,7 +107,7 @@ import hk.uwu.mixui.components.CardDefaults
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import hk.uwu.mixui.components.CompactTopBar
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
@@ -391,7 +391,7 @@ internal fun MaryTopBar(
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val menuFocus = menuFocusRequester ?: remember { androidx.compose.ui.focus.FocusRequester() }
-    SmallTopAppBar(
+    CompactTopBar(
         title = stringResource(R.string.mary_title),
         navigationIcon = {
             IconButton(onClick = {

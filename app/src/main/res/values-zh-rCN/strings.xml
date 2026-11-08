@@ -1122,6 +1122,7 @@
     <string name="mary_context_sequence_note">顺序为预算估算计入顺序，并非服务端序列化顺序；不含未发送草稿。</string>
     <string name="mary_context_saturated">估算已达上限，分类比例不可用</string>
     <string name="mary_context_empty">尚无上下文内容</string>
+    <string name="scene_route_navigate_back">返回</string>
 
     <string name="theme_editor_title">主题样式</string>
     <string name="theme_editor_close">关闭</string>

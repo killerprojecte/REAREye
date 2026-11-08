@@ -29,18 +29,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearWidgetConfigCodec
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.repository.rearwidget.RearWidgetSceneRouteConfig
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.reareye.ui.components.OverlayDialog
+import hk.uwu.mixui.components.GlassFormDialog
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
@@ -76,7 +73,6 @@ fun SceneRouteManagerScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val layoutDirection = LocalLayoutDirection.current
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val routes = remember { mutableStateListOf<RearWidgetSceneRouteConfig>() }
@@ -202,17 +198,72 @@ fun SceneRouteManagerScreen(
         navigationIcon = {
             TopBarIconButton(onClick = onBack) {
                 Icon(
-                    modifier = Modifier.graphicsLayer {
-                        if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                    },
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null,
+                    contentDescription = stringResource(R.string.scene_route_navigate_back),
                 )
             }
         },
         actions = {
-            TopBarIconButton(onClick = { if (loaded) openCreateDialog() }) {
-                Icon(imageVector = Icons.Filled.Add, contentDescription = null)
+            TopBarIconButton(onClick = { openCreateDialog() }, enabled = loaded) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = stringResource(R.string.rear_widget_add_scene_route),
+                )
+            }
+        },
+        overlayContent = {
+            GlassFormDialog(
+                show = showDialog,
+                title = stringResource(
+                    if (editingId == null) {
+                        R.string.rear_widget_add_scene_route
+                    } else {
+                        R.string.rear_widget_edit_scene_route
+                    }
+                ),
+                onDismissRequest = { showDialog = false },
+            ) {
+                DialogFormColumn {
+                    TextField(
+                        value = draftPackageName,
+                        onValueChange = { draftPackageName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.rear_widget_target_package),
+                        singleLine = true,
+                    )
+                    TextField(
+                        value = draftScene,
+                        onValueChange = { draftScene = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.rear_widget_scene_name),
+                        singleLine = true,
+                    )
+                    TextField(
+                        value = draftBusiness,
+                        onValueChange = { draftBusiness = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.rear_widget_business_name),
+                        singleLine = true,
+                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(
+                            onClick = { submitDialog() },
+                            colors = ButtonDefaults.buttonColorsPrimary(),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.rear_widget_confirm))
+                        }
+                        Button(
+                            onClick = { showDialog = false },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.rear_widget_cancel))
+                        }
+                    }
+                }
             }
         },
     ) { paddingValues ->
@@ -341,60 +392,6 @@ fun SceneRouteManagerScreen(
                             )
                         }
                     }
-                }
-            }
-        }
-    }
-
-    OverlayDialog(
-        show = showDialog,
-        title = stringResource(
-            if (editingId == null) {
-                R.string.rear_widget_add_scene_route
-            } else {
-                R.string.rear_widget_edit_scene_route
-            }
-        ),
-        onDismissRequest = { showDialog = false },
-    ) {
-        DialogFormColumn {
-            TextField(
-                value = draftPackageName,
-                onValueChange = { draftPackageName = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_widget_target_package),
-                singleLine = true,
-            )
-            TextField(
-                value = draftScene,
-                onValueChange = { draftScene = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_widget_scene_name),
-                singleLine = true,
-            )
-            TextField(
-                value = draftBusiness,
-                onValueChange = { draftBusiness = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_widget_business_name),
-                singleLine = true,
-            )
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = { submitDialog() },
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.rear_widget_confirm))
-                }
-                Button(
-                    onClick = { showDialog = false },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.rear_widget_cancel))
                 }
             }
         }

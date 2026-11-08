@@ -1122,6 +1122,7 @@
     <string name="mary_context_sequence_note">Order follows budget estimation, not exact provider serialization. Unsent draft excluded.</string>
     <string name="mary_context_saturated">Estimate limit reached; composition proportions unavailable</string>
     <string name="mary_context_empty">No context content</string>
+    <string name="scene_route_navigate_back">Back</string>
 
     <string name="theme_editor_title">Theme style</string>
     <string name="theme_editor_close">Close</string>
