@@ -74,6 +74,9 @@ import hk.uwu.reareye.ui.components.card.SuperCard
 import hk.uwu.mixui.components.rememberAccentBadgePalette
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import hk.uwu.mixui.components.BottomSheetAction
+import hk.uwu.mixui.components.BottomSheetActionButton
+import hk.uwu.mixui.components.BottomSheetActionIcon
 import hk.uwu.mixui.components.BottomSheet
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
@@ -609,17 +612,17 @@ internal fun ScriptRenameDialog(
         title = title,
         onDismissRequest = onDismiss,
         startAction = {
-            IconButton(onClick = onDismiss, modifier = Modifier.testTag("script-name-cancel")) {
-                Icon(Icons.Outlined.Close, stringResource(R.string.script_cancel))
+            BottomSheetActionButton(onClick = onDismiss, modifier = Modifier.testTag("script-name-cancel")) {
+                BottomSheetActionIcon(BottomSheetAction.Close, Icons.Outlined.Close, stringResource(R.string.script_cancel))
             }
         },
         endAction = {
-            IconButton(
+            BottomSheetActionButton(
                 onClick = { if (value.isNotBlank()) onConfirm(value) },
                 enabled = value.isNotBlank(),
                 modifier = Modifier.testTag("script-name-save"),
             ) {
-                Icon(Icons.Outlined.Check, stringResource(R.string.script_save))
+                BottomSheetActionIcon(BottomSheetAction.Save, Icons.Outlined.Check, stringResource(R.string.script_save))
             }
         },
     ) {

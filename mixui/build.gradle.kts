@@ -42,6 +42,7 @@ dependencies {
     implementation(libs.capsule)
     implementation(libs.miuix.ui)
     implementation(libs.miuix.icons)
+    implementation(libs.miuix.glassicons)
     implementation(libs.miuix.glass)
     implementation(libs.miuix.preference)
     implementation(libs.miuix.blur)

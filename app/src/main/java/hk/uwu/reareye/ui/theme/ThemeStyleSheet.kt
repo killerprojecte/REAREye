@@ -59,19 +59,27 @@ internal fun ThemeStyleSheet(
     onSave: (ThemeStyleDraft) -> Unit,
 ) {
     var draft by remember(show) { mutableStateOf(ThemeStyleDraft.from(appliedMode, appliedStyle, appliedNavigationStyle)) }
+    // Cancel is a transaction boundary even when close/reopen is coalesced into
+    // one frame. Do not depend only on observing an intermediate show=false.
+    val discardDraft: () -> Unit = {
+        if (!saving) {
+            draft = ThemeStyleDraft.from(appliedMode, appliedStyle, appliedNavigationStyle)
+            onDismiss()
+        }
+    }
     MixUiHost(backend = draft.backend, colorMode = draft.mode.colorSchemeMode, mochiStyle = draft.mochiStyle.style) {
     BottomSheet(
-        show = show, onDismissRequest = { if (!saving) onDismiss() }, title = stringResource(R.string.theme_editor_title),
+        show = show, onDismissRequest = discardDraft, title = stringResource(R.string.theme_editor_title),
         allowDismiss = !saving,
         startAction = {
-            IconButton(onClick = onDismiss, enabled = !saving) {
-                Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.theme_editor_close))
+            BottomSheetActionButton(onClick = discardDraft, enabled = !saving) {
+                BottomSheetActionIcon(BottomSheetAction.Close, Icons.Outlined.Close, contentDescription = stringResource(R.string.theme_editor_close))
             }
         },
         endAction = {
-            IconButton(onClick = { onSave(draft) }, enabled = !saving) {
+            BottomSheetActionButton(onClick = { onSave(draft) }, enabled = !saving) {
                 if (saving) CircularProgressIndicator(size = 20.dp, strokeWidth = 2.dp)
-                else Icon(Icons.Outlined.Check, contentDescription = stringResource(R.string.theme_editor_save))
+                else BottomSheetActionIcon(BottomSheetAction.Save, Icons.Outlined.Check, contentDescription = stringResource(R.string.theme_editor_save))
             }
         },
     ) {

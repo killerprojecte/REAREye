@@ -336,6 +336,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     // Keep the popup host full-window: MIUIX dialogs own their IME avoidance.
                     Scaffold { _ ->
+                        hk.uwu.mixui.components.GlassBottomSheetScene {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -627,6 +628,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                 )
                             }
+                        }
                         }
                     }
                 }

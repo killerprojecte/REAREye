@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.GlassBottomSheetScene
+import androidx.compose.ui.unit.dp
 import hk.uwu.mixui.components.Text
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.components.script.ScriptRenameDialog
@@ -59,10 +61,12 @@ class ScriptRenameHeaderTest {
             activity!!.get().setContent {
                 AppTheme(themeMode = mode) {
                     Scaffold(Modifier.fillMaxSize().testTag("script-naming-host")) {
+                        GlassBottomSheetScene {
                         Text("FIXTURE HOST · Production script naming sheet")
                         ScriptRenameDialog(visible, activity!!.get().getString(titleId), initial,
                             onDismiss = { visible = false },
                             onConfirm = { saved += it; visible = false })
+                        }
                     }
                 }
             }
@@ -94,8 +98,21 @@ class ScriptRenameHeaderTest {
             AppThemeMode.MOCHI_LIGHT, AppThemeMode.MOCHI_DARK)) {
             for (titleId in listOf(R.string.script_rename_project, R.string.script_rename_file, R.string.script_import_project)) {
                 open(mode, titleId)
-                save().assertIsDisplayed().assertIsEnabled()
-                cancel().assertIsDisplayed()
+                save().assertIsDisplayed().assertIsEnabled().assertWidthIsEqualTo(44.dp).assertHeightIsEqualTo(44.dp)
+                cancel().assertIsDisplayed().assertWidthIsEqualTo(44.dp).assertHeightIsEqualTo(44.dp)
+                if (mode.backend == hk.uwu.mixui.MixUiBackend.Miuix) {
+                    compose.onNodeWithTag("mixui-native-glass-sheet").assertIsDisplayed()
+                    assertFalse(ShadowDialog.getLatestDialog()?.isShowing == true)
+                    for (id in listOf(R.string.script_cancel, R.string.script_save)) {
+                        compose.onNodeWithContentDescription(activity!!.get().getString(id), useUnmergedTree = true)
+                            .assertWidthIsEqualTo(28.dp).assertHeightIsEqualTo(28.dp)
+                    }
+                } else {
+                    for (id in listOf(R.string.script_cancel, R.string.script_save)) {
+                        compose.onNodeWithContentDescription(activity!!.get().getString(id), useUnmergedTree = true)
+                            .assertWidthIsEqualTo(24.dp).assertHeightIsEqualTo(24.dp)
+                    }
+                }
                 val saveBounds = save().fetchSemanticsNode().boundsInRoot
                 val cancelBounds = cancel().fetchSemanticsNode().boundsInRoot
                 val fieldBounds = input().fetchSemanticsNode().boundsInRoot
@@ -106,7 +123,9 @@ class ScriptRenameHeaderTest {
                 capture("${mode.name}-${titleId}-header")
                 input().performTextReplacement("   "); frames()
                 save().assertIsNotEnabled()
-                save().performClick()
+                if (mode.backend == hk.uwu.mixui.MixUiBackend.Miuix) save().assertHasNoClickAction()
+                else save().performClick() // Native Mochi exposes a disabled action that returns false.
+                save().performTouchInput { click() }
                 assertTrue(saved.isEmpty())
                 assertTrue(visible)
                 input().performTextReplacement("discarded"); frames()

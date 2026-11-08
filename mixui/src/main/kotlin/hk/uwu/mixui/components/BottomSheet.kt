@@ -26,20 +26,26 @@ fun BottomSheet(
     content: @Composable () -> Unit,
 ) {
     when (LocalMixUiBackend.current) {
-        // The scaffold overlay host executes its content in the app's composition context.
-        // A window sheet retains the caller's theme, including native title and actions,
-        // so a local preview can differ from the applied app theme without leaking out.
-        MixUiBackend.Miuix -> top.yukonga.miuix.kmp.window.WindowBottomSheet(
-            show = show, onDismissRequest = onDismissRequest,
-            title = title, startAction = startAction, endAction = endAction,
-            allowDismiss = allowDismiss,
-        ) {
-            // MIUIX handles the top/IME insets, but leaves navigation/caption bars to
-            // its caller (as in its BottomSheetSection example). Reserve the visible
-            // content viewport rather than putting an unreachable spacer after it.
-            // Consumed IME insets are excluded by windowInsetsPadding automatically.
-            Box(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))) {
-                content()
+        MixUiBackend.Miuix -> {
+            val scene = LocalGlassSheetScene.current
+            val insetContent: @Composable () -> Unit = {
+                // The native sheet handles top/IME. Reserve the visible viewport
+                // once for horizontal cutouts and bottom navigation/caption bars.
+                Box(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))) {
+                    content()
+                }
+            }
+            if (scene != null) {
+                NativeGlassSheet(scene, show, onDismissRequest, title, startAction,
+                    endAction, allowDismiss, insetContent)
+            } else {
+                // Standalone/legacy callers without a page recording keep the
+                // ordinary native window. Never pretend a null source is glass.
+                top.yukonga.miuix.kmp.window.WindowBottomSheet(
+                    show = show, onDismissRequest = onDismissRequest,
+                    title = title, startAction = startAction, endAction = endAction,
+                    allowDismiss = allowDismiss, content = insetContent,
+                )
             }
         }
         MixUiBackend.Mochi -> {

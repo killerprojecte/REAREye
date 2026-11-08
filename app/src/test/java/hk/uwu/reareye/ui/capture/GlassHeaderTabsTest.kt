@@ -96,7 +96,8 @@ class GlassHeaderTabsTest {
             settle()
             assertEquals(0, selected.value)
             compose.onNode(hasText(label(R.string.config_tab_cards)) and hasClickAction()).assertIsSelected()
-            save(folder, "selected-cards.png")
+            // This selection-only host has no Cards body. Real Cards images
+            // come from ConfigDashboardTopBarTest, never this empty callback host.
             compose.onNode(hasText(label(R.string.config_tab_more)) and hasClickAction()).performTouchInput { click() }
             settle()
             assertEquals(3, selected.value)

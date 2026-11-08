@@ -94,6 +94,7 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 miuix-glass = { group = "top.yukonga.miuix.kmp", name = "miuix-glass", version.ref = "miuix" }
 miuix-ui = { group = "top.yukonga.miuix.kmp", name = "miuix-ui", version.ref = "miuix" }
 miuix-preference = { group = "top.yukonga.miuix.kmp", name = "miuix-preference", version.ref = "miuix" }
+miuix-glassicons = { group = "top.yukonga.miuix.kmp", name = "miuix-glass-icons", version.ref = "miuix" }
 miuix-icons = { group = "top.yukonga.miuix.kmp", name = "miuix-icons", version.ref = "miuix" }
 miuix-blur = { group = "top.yukonga.miuix.kmp", name = "miuix-blur", version.ref = "miuix" }
 miuix-shader = { group = "top.yukonga.miuix.kmp", name = "miuix-shader", version.ref = "miuix" }
