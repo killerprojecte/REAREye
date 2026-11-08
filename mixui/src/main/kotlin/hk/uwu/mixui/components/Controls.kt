@@ -19,14 +19,7 @@ fun Button(
     cornerRadius: Dp = ButtonDefaults.CornerRadius,
     minWidth: Dp = ButtonDefaults.MinWidth,
     minHeight: Dp = ButtonDefaults.MinHeight,
-    colors: ButtonColors = glassFormButtonColors(),
+    colors: ButtonColors = ButtonDefaults.buttonColors(),
     insideMargin: PaddingValues = ButtonDefaults.InsideMargin,
     content: @Composable RowScope.() -> Unit,
-) {
-    val form = LocalGlassFormStyle.current
-    // Explicit primary/custom colors keep their original appearance.
-    val outlined = if (form != null && colors == form.buttonColors()) {
-        modifier.glassFormOutline(form.outline.copy(alpha = if (enabled) 1f else 0.38f), cornerRadius)
-    } else modifier
-    LocalMixUiRenderer.current.Button(onClick, outlined, enabled, cornerRadius, minWidth, minHeight, colors, insideMargin, content)
-}
+) = LocalMixUiRenderer.current.Button(onClick, modifier, enabled, cornerRadius, minWidth, minHeight, colors, insideMargin, content)

@@ -296,6 +296,23 @@ class RealPageCaptureTest {
         org.junit.Assert.assertTrue("$description: expected rendered #${rgb.toString(16)}, found $count pixels", count >= 3)
     }
 
+    /** Native palettes differ: inspect visible, repeated text pixels against the dominant fill.
+     * Ignore transparent corners and isolated raster noise; do not mandate a custom outline. */
+    private fun assertRenderedTextContrast(bitmap: Bitmap, description: String) {
+        val colors = mutableMapOf<Int, Int>()
+        for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
+            val pixel = bitmap.getPixel(x, y)
+            if ((pixel ushr 24) >= 250) {
+                val rgb = pixel and 0xFFFFFF
+                colors[rgb] = (colors[rgb] ?: 0) + 1
+            }
+        }
+        val fill = colors.maxByOrNull { it.value }?.key
+            ?: error("$description has no opaque native surface")
+        val contrasting = colors.filter { (rgb, count) -> count >= 3 && contrastRatio(rgb, fill) >= 4.5 }
+        org.junit.Assert.assertTrue("$description has no readable text against #${fill.toString(16)}", contrasting.isNotEmpty())
+    }
+
     private fun contrastRatio(a: Int, b: Int): Double {
         fun luminance(rgb: Int): Double {
             val channels = listOf(16, 8, 0).map { shift ->
@@ -346,32 +363,21 @@ class RealPageCaptureTest {
             }
             // Inspect actual rendered controls, not just tokens: the native glass container
             // remains visible between them. Both renderers and both text directions are covered.
-            val fill = if (dark) 0x303030 else 0xFFFFFF
-            val label = if (dark) 0xDDDDDD else 0x515151
-            val ink = if (dark) 0xFAFAFA else 0x242424
-            val outline = if (dark) 0x999999 else 0x737373
             compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().indices.forEach { index ->
                 val image = compose.onAllNodes(hasSetTextAction())[index].captureToImage().asAndroidBitmap()
-                assertRenderedColor(image, fill, "field $index fill ($backend/$dark/$rtl)")
-                assertRenderedColor(image, label, "field $index label ($backend/$dark/$rtl)")
-                assertRenderedColor(image, outline, "field $index resting outline ($backend/$dark/$rtl)")
+                assertRenderedTextContrast(image, "native field $index ($backend/$dark/$rtl)")
             }
             val cancel = compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_cancel))
-            val cancelImage = cancel.captureToImage().asAndroidBitmap()
-            assertRenderedColor(cancelImage, fill, "cancel fill ($backend/$dark/$rtl)")
-            assertRenderedColor(cancelImage, ink, "cancel text ($backend/$dark/$rtl)")
-            assertRenderedColor(cancelImage, outline, "cancel outline ($backend/$dark/$rtl)")
-            org.junit.Assert.assertTrue("Label contrast", contrastRatio(label, fill) >= 4.5)
-            org.junit.Assert.assertTrue("Content contrast", contrastRatio(ink, fill) >= 4.5)
-            org.junit.Assert.assertTrue("Control outline contrast", contrastRatio(outline, fill) >= 3.0)
+            assertRenderedTextContrast(cancel.captureToImage().asAndroidBitmap(),
+                "native cancel ($backend/$dark/$rtl)")
             // Blank submission must retain the form instead of the native action auto-dismiss.
             compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_confirm)).performClick()
             repeat(5) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             compose.onAllNodes(hasSetTextAction()).assertCountEquals(3)
             compose.onAllNodes(hasSetTextAction())[0].performTextReplacement("example.cancelled")
             repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
-            assertRenderedColor(compose.onAllNodes(hasSetTextAction())[0].captureToImage().asAndroidBitmap(),
-                ink, "focused entered text ($backend/$dark/$rtl)")
+            assertRenderedTextContrast(compose.onAllNodes(hasSetTextAction())[0].captureToImage().asAndroidBitmap(),
+                "focused entered text ($backend/$dark/$rtl)")
             val filledDialog = compose.onNode(isRoot() and hasAnyDescendant(hasSetTextAction()), useUnmergedTree = true)
                 .captureToImage().asAndroidBitmap()
             File(folder, "filled-dialog.png").outputStream().use {
