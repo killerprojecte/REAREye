@@ -133,6 +133,7 @@ fun GlassTopBarScaffold(
                                     bottomContent = {
                                         CompositionLocalProvider(
                                             LocalGlassTabsSurfaceAlpha provides tabSurfaceAlpha.value,
+                                            LocalGlassTabsBackdrop provides backdrop,
                                         ) { pinnedHeader() }
                                     },
                                 )

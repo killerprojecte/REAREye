@@ -1,6 +1,7 @@
 package hk.uwu.mixui.components
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import top.yukonga.miuix.kmp.blur.Backdrop
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -14,13 +15,15 @@ import ui.feice.mochi.effect.glass.MochiGlassSurface
 import ui.feice.mochi.theme.MochiTheme
 
 /** Only the pinned header receives this context; page and sheet tabs stay ordinary. */
+internal val LocalGlassTabsBackdrop = staticCompositionLocalOf<Backdrop?> { null }
+
 internal val LocalGlassTabsSurfaceAlpha = staticCompositionLocalOf<Float?> { null }
 
 /**
  * Header tabs using each backend's native glass material over the host's body-only
  * recording. Outside [GlassTopBarScaffold]'s pinnedHeader, use ordinary native tabs.
  *
- * MIUIX inherits the native bottomContent backdrop and underlay. Mochi's native
+ * MIUIX uses the native GlassSegmentedTabRow joined track and its moving indicator. Mochi's native
  * segmented control has no glass API: its transparent track sits on the public
  * MochiGlassSurface with the same controlGlass material as toolbar buttons. Its
  * selection thumb, animation, gestures and semantics remain vendor-owned.
@@ -40,15 +43,23 @@ fun GlassTabs(
     }
     val selected = selectedTabIndex.coerceIn(tabs.indices)
     when (LocalMixUiBackend.current) {
-        MixUiBackend.Miuix -> top.yukonga.miuix.kmp.glass.GlassTabRow(
-            tabs = tabs,
-            selectedIndex = selected,
-            onSelect = onTabSelected,
-            // The native bar context supplies the body recording and underlay.
-            backdrop = null,
-            surfaceAlpha = surfaceAlpha,
-            modifier = modifier.testTag("glass-tabs-miuix"),
-        )
+        MixUiBackend.Miuix -> {
+            val backdrop = LocalGlassTabsBackdrop.current
+            if (backdrop == null) {
+                Tabs(tabs, selected, onTabSelected, modifier)
+            } else {
+                // Same joined-track component as the upstream Privacy / Security
+                // example: one glass outline with a travelling native indicator.
+                top.yukonga.miuix.kmp.glass.GlassSegmentedTabRow(
+                    tabs = tabs,
+                    selectedIndex = selected,
+                    onSelect = onTabSelected,
+                    backdrop = backdrop,
+                    surfaceAlpha = surfaceAlpha,
+                    modifier = modifier.testTag("glass-tabs-miuix"),
+                )
+            }
+        }
         MixUiBackend.Mochi -> {
             val backdrop = LocalMochiBackdrop.current
             val material = MochiTheme.materials.controlGlass
