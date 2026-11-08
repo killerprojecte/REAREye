@@ -32,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.CreateNewFolder
@@ -73,6 +74,7 @@ import hk.uwu.reareye.ui.components.card.SuperCard
 import hk.uwu.mixui.components.rememberAccentBadgePalette
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import hk.uwu.mixui.components.BottomSheet
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
@@ -594,7 +596,7 @@ internal fun ScriptEditorContent(
 }
 
 @Composable
-private fun ScriptRenameDialog(
+internal fun ScriptRenameDialog(
     show: Boolean,
     title: String,
     initialName: String,
@@ -602,22 +604,32 @@ private fun ScriptRenameDialog(
     onConfirm: (String) -> Unit,
 ) {
     var value by remember(show, initialName) { mutableStateOf(initialName) }
-    if (!show) return
-    WindowDialog(show = show, title = title, onDismissRequest = onDismiss) {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            TextField(
-                value = value,
-                onValueChange = { value = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.script_name),
-                singleLine = true,
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                IconButton(onClick = { if (value.isNotBlank()) onConfirm(value) }) {
-                    Icon(Icons.Outlined.Check, stringResource(R.string.script_save))
-                }
+    BottomSheet(
+        show = show,
+        title = title,
+        onDismissRequest = onDismiss,
+        startAction = {
+            IconButton(onClick = onDismiss, modifier = Modifier.testTag("script-name-cancel")) {
+                Icon(Icons.Outlined.Close, stringResource(R.string.script_cancel))
             }
-        }
+        },
+        endAction = {
+            IconButton(
+                onClick = { if (value.isNotBlank()) onConfirm(value) },
+                enabled = value.isNotBlank(),
+                modifier = Modifier.testTag("script-name-save"),
+            ) {
+                Icon(Icons.Outlined.Check, stringResource(R.string.script_save))
+            }
+        },
+    ) {
+        TextField(
+            value = value,
+            onValueChange = { value = it },
+            modifier = Modifier.fillMaxWidth().testTag("script-name-input"),
+            label = stringResource(R.string.script_name),
+            singleLine = true,
+        )
     }
 }
 

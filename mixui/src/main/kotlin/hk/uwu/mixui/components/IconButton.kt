@@ -9,6 +9,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import hk.uwu.mixui.LocalMixUiBackend
@@ -34,9 +37,15 @@ fun IconButton(
     minWidth: Dp = IconButtonDefaults.MinWidth,
     content: @Composable () -> Unit,
 ) {
+    // Native disabled buttons may drop their clickable semantics node. Keep the
+    // public action label/role/disabled state together on the stable outer node.
+    val buttonModifier = modifier.semantics(mergeDescendants = true) {
+        role = Role.Button
+        if (!enabled) disabled()
+    }
     when (LocalMixUiBackend.current) {
         MixUiBackend.Miuix -> top.yukonga.miuix.kmp.basic.IconButton(
-            onClick, modifier.mixPressFeedback(enabled), enabled, holdDownState,
+            onClick, buttonModifier.mixPressFeedback(enabled), enabled, holdDownState,
             backgroundColor, cornerRadius, minHeight, minWidth, content,
         )
         MixUiBackend.Mochi -> {
@@ -51,7 +60,7 @@ fun IconButton(
                 onClick = onClick,
                 // Keep the native button action independent inside clickable cards.
                 // Mochi owns onClick; this only prevents its semantics merging into the parent.
-                modifier = modifier.semantics(mergeDescendants = true) {}
+                modifier = buttonModifier
                     .defaultMinSize(minWidth = minWidth).graphicsLayer { scaleX = scale; scaleY = scale },
                 enabled = enabled, colors = colors, cornerRadius = cornerRadius,
                 minHeight = minHeight, contentPadding = PaddingValues(0.dp),
