@@ -14,7 +14,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -25,9 +24,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -54,7 +51,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -84,16 +80,14 @@ import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import hk.uwu.mixui.components.LargeTitleLazyScaffold
+import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import hk.uwu.mixui.components.TextField
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import hk.uwu.mixui.theme.MixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import top.yukonga.miuix.kmp.window.WindowBottomSheet
 import top.yukonga.miuix.kmp.window.WindowDialog
 
@@ -264,139 +258,95 @@ internal fun ScriptList(
     onNew: () -> Unit,
     onNewProject: () -> Unit,
 ) {
-    val haze = rememberAcrylicHazeState()
-    val style = rememberAcrylicHazeStyle()
-    val scrollBehavior = MiuixScrollBehavior()
-    val listState = rememberLazyListState()
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(haze, style),
-                color = Color.Transparent,
-                title = stringResource(R.string.script_management_title),
-                navigationIconPadding = 12.dp,
-                actionIconPadding = 12.dp,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            null
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onNew) {
-                        Icon(
-                            Icons.Outlined.NoteAdd,
-                            stringResource(R.string.script_new)
-                        )
-                    }
-                    IconButton(onClick = onNewProject) {
-                        Icon(
-                            Icons.Outlined.CreateNewFolder,
-                            stringResource(R.string.script_new_project)
-                        )
-                    }
-                    IconButton(onClick = onImport) {
-                        Icon(
-                            Icons.Outlined.FileUpload,
-                            stringResource(R.string.script_import)
-                        )
-                    }
-                    IconButton(onClick = onRefresh) {
-                        Icon(
-                            Icons.Outlined.Refresh,
-                            stringResource(R.string.script_refresh)
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-            )
+    LargeTitleLazyScaffold(
+        title = stringResource(R.string.script_management_title),
+        modifier = Modifier.testTag("script-project-list"),
+        bottomObstruction = bottomInnerPadding,
+        navigationIcon = {
+            TopBarIconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.scene_route_navigate_back))
+            }
         },
-    ) { padding ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .rearAcrylicSource(haze)
-                .padding(horizontal = 12.dp)
-                .testTag("script-project-list"),
-            contentPadding = PaddingValues(
-                top = padding.calculateTopPadding() + 12.dp,
-                bottom = padding.calculateBottomPadding() + bottomInnerPadding + 12.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            overscrollEffect = null,
-        ) {
-            if (projects.isEmpty()) item(key = "empty") {
-                Card(Modifier.fillMaxWidth()) { SuperCard(title = stringResource(R.string.script_empty)) }
+        actions = {
+            TopBarIconButton(onClick = onNew) {
+                Icon(Icons.Outlined.NoteAdd, stringResource(R.string.script_new))
             }
-            // Standalone scripts share a root; their entry file is their unique identity.
-            items(items = projects, key = { it.mainFile.absolutePath }) { project ->
-                val kindLabel = stringResource(
-                    when (project.kind) {
-                        ScriptProjectKind.STANDALONE -> R.string.script_kind_standalone
-                        ScriptProjectKind.PROJECT -> R.string.script_kind_project
-                        ScriptProjectKind.COMPONENT -> R.string.script_kind_component
-                    }
-                )
-                ModuleStyleManagerCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    bottomPadding = 0.dp,
-                    title = project.name,
-                    summaryLines = buildList {
-                        add(project.id)
-                        if (project.description.isNotBlank()) add(project.description)
-                        project.error?.let { add(it) }
-                    },
-                    badges = listOf(
-                        BadgeItem(
-                            kindLabel, palette = rememberAccentBadgePalette(
-                                when (project.kind) {
-                                    ScriptProjectKind.PROJECT -> Color(0xFF4A78D0)
-                                    ScriptProjectKind.STANDALONE -> Color(0xFF279879)
-                                    ScriptProjectKind.COMPONENT -> Color(0xFF9470C8)
-                                },
-                            )
+            TopBarIconButton(onClick = onNewProject) {
+                Icon(Icons.Outlined.CreateNewFolder, stringResource(R.string.script_new_project))
+            }
+            TopBarIconButton(onClick = onImport) {
+                Icon(Icons.Outlined.FileUpload, stringResource(R.string.script_import))
+            }
+            TopBarIconButton(onClick = onRefresh) {
+                Icon(Icons.Outlined.Refresh, stringResource(R.string.script_refresh))
+            }
+        },
+    ) {
+        if (projects.isEmpty()) item(key = "empty") {
+            Card(Modifier.fillMaxWidth()) { SuperCard(title = stringResource(R.string.script_empty)) }
+        }
+        // Standalone scripts share a root; their entry file is their unique identity.
+        items(items = projects, key = { it.mainFile.absolutePath }) { project ->
+            val kindLabel = stringResource(
+                when (project.kind) {
+                    ScriptProjectKind.STANDALONE -> R.string.script_kind_standalone
+                    ScriptProjectKind.PROJECT -> R.string.script_kind_project
+                    ScriptProjectKind.COMPONENT -> R.string.script_kind_component
+                }
+            )
+            ModuleStyleManagerCard(
+                modifier = Modifier.fillMaxWidth(),
+                bottomPadding = 0.dp,
+                title = project.name,
+                summaryLines = buildList {
+                    add(project.id)
+                    if (project.description.isNotBlank()) add(project.description)
+                    project.error?.let { add(it) }
+                },
+                badges = listOf(
+                    BadgeItem(
+                        kindLabel, palette = rememberAccentBadgePalette(
+                            when (project.kind) {
+                                ScriptProjectKind.PROJECT -> Color(0xFF4A78D0)
+                                ScriptProjectKind.STANDALONE -> Color(0xFF279879)
+                                ScriptProjectKind.COMPONENT -> Color(0xFF9470C8)
+                            },
                         )
-                    ) +
-                            listOfNotNull(project.componentId?.let { BadgeItem(it) }),
-                    onCardClick = { onOpen(project) },
-                    leftAction = {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            ModuleStyleIconAction(
-                                icon = Icons.Outlined.EditNote,
-                                contentDescription = stringResource(R.string.script_edit),
-                                onClick = { onOpen(project) },
-                            )
-                            if (project.kind != ScriptProjectKind.COMPONENT) {
-                                ModuleStyleIconAction(
-                                    icon = Icons.Outlined.DriveFileRenameOutline,
-                                    contentDescription = stringResource(R.string.script_rename),
-                                    onClick = { onRename(project) },
-                                )
-                            }
-                            ModuleStyleIconAction(
-                                icon = Icons.Outlined.FileDownload,
-                                contentDescription = stringResource(R.string.script_export),
-                                onClick = { onExport(project) },
-                            )
-                        }
-                    },
-                    rightAction = {
+                    )
+                ) +
+                        listOfNotNull(project.componentId?.let { BadgeItem(it) }),
+                onCardClick = { onOpen(project) },
+                leftAction = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ModuleStyleIconAction(
+                            icon = Icons.Outlined.EditNote,
+                            contentDescription = stringResource(R.string.script_edit),
+                            onClick = { onOpen(project) },
+                        )
                         if (project.kind != ScriptProjectKind.COMPONENT) {
-                            ModuleStyleDeleteAction(
-                                icon = UiIcons.Delete,
-                                text = stringResource(R.string.script_delete),
-                                onClick = { onDelete(project) },
+                            ModuleStyleIconAction(
+                                icon = Icons.Outlined.DriveFileRenameOutline,
+                                contentDescription = stringResource(R.string.script_rename),
+                                onClick = { onRename(project) },
                             )
                         }
-                    },
-                )
-            }
+                        ModuleStyleIconAction(
+                            icon = Icons.Outlined.FileDownload,
+                            contentDescription = stringResource(R.string.script_export),
+                            onClick = { onExport(project) },
+                        )
+                    }
+                },
+                rightAction = {
+                    if (project.kind != ScriptProjectKind.COMPONENT) {
+                        ModuleStyleDeleteAction(
+                            icon = UiIcons.Delete,
+                            text = stringResource(R.string.script_delete),
+                            onClick = { onDelete(project) },
+                        )
+                    }
+                },
+            )
         }
     }
 }

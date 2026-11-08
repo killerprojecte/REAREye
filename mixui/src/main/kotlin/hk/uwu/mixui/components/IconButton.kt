@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import hk.uwu.mixui.LocalMixUiBackend
@@ -48,7 +49,10 @@ fun IconButton(
             // MochiButton retains rectangular constraints, unlike its fixed-size icon variant.
             ui.feice.mochi.basic.MochiButton(
                 onClick = onClick,
-                modifier = modifier.defaultMinSize(minWidth = minWidth).graphicsLayer { scaleX = scale; scaleY = scale },
+                // Keep the native button action independent inside clickable cards.
+                // Mochi owns onClick; this only prevents its semantics merging into the parent.
+                modifier = modifier.semantics(mergeDescendants = true) {}
+                    .defaultMinSize(minWidth = minWidth).graphicsLayer { scaleX = scale; scaleY = scale },
                 enabled = enabled, colors = colors, cornerRadius = cornerRadius,
                 minHeight = minHeight, contentPadding = PaddingValues(0.dp),
             ) { content() }

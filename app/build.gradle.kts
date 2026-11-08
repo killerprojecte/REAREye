@@ -322,6 +322,7 @@ tasks.withType<Test>().configureEach {
         if (uiCapture) {
             includeTestsMatching("hk.uwu.reareye.ui.components.navigation.NativeNavigationInteractionTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.ConfigNodeNativeTitleTest")
+            includeTestsMatching("hk.uwu.reareye.ui.capture.ScriptListNativeTitleTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.RealPageCaptureTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.ThemePreferenceControlsTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.ThemeSheetPreviewTest")
@@ -340,6 +341,7 @@ tasks.withType<Test>().configureEach {
         } else {
             excludeTestsMatching("hk.uwu.reareye.ui.components.navigation.NativeNavigationInteractionTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.ConfigNodeNativeTitleTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.capture.ScriptListNativeTitleTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.RealPageCaptureTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.ThemePreferenceControlsTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.ThemeSheetPreviewTest")
