@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,10 +71,6 @@ import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
 import hk.uwu.reareye.ui.components.card.SuperCard
 import hk.uwu.mixui.components.rememberAccentBadgePalette
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import hk.uwu.mixui.components.Button
@@ -83,7 +81,7 @@ import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.LargeTitleLazyScaffold
 import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import hk.uwu.mixui.components.CompactTopBar
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import hk.uwu.mixui.components.TextField
@@ -357,7 +355,30 @@ private fun ScriptEditor(
     store: ScriptProjectStore,
     bottomInnerPadding: Dp,
     onBack: () -> Unit,
-    onSaved: () -> Unit
+    onSaved: () -> Unit,
+) {
+    val context = LocalContext.current
+    val executor = remember(context) { hk.uwu.reareye.script.ScriptExecutor(context) }
+    ScriptEditorContent(
+        project, store, bottomInnerPadding, onBack, onSaved,
+        loadProviders = { executor.providers(project) },
+        runProvider = { provider, params ->
+            val result = executor.execute(project, provider, params)
+            result.error ?: result.data?.toString().orEmpty()
+        },
+    )
+}
+
+/** The production editor UI and file operations, independent of the native Lua runtime. */
+@Composable
+internal fun ScriptEditorContent(
+    project: ScriptProject,
+    store: ScriptProjectStore,
+    bottomInnerPadding: Dp,
+    onBack: () -> Unit,
+    onSaved: () -> Unit,
+    loadProviders: suspend () -> List<hk.uwu.reareye.script.ScriptProvider>,
+    runProvider: suspend (String, Map<String, String>) -> String,
 ) {
     var files by remember(project.root.absolutePath) { mutableStateOf(store.projectEntries(project)) }
     var selectedFile by remember(project.root.absolutePath) { mutableStateOf(project.mainFile) }
@@ -370,11 +391,9 @@ private fun ScriptEditor(
     var runResult by remember(project.id) { mutableStateOf("") }
     var showDebug by remember(project.id) { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val scriptContext = LocalContext.current
-    val executor = remember(scriptContext) { hk.uwu.reareye.script.ScriptExecutor(scriptContext) }
     LaunchedEffect(project.id) {
         try {
-            providers = executor.providers(project)
+            providers = loadProviders()
             providerId = providers.firstOrNull()?.id.orEmpty()
         } catch (e: CancellationException) {
             throw e
@@ -383,8 +402,6 @@ private fun ScriptEditor(
         }
     }
     val editor = rememberLuaCodeEditorState()
-    val haze = rememberAcrylicHazeState()
-    val style = rememberAcrylicHazeStyle()
     fun saveCurrentFile() {
         source = editor.text()
         store.saveFile(selectedFile, source)
@@ -402,18 +419,14 @@ private fun ScriptEditor(
     }
     Scaffold(
         topBar = {
-            SmallTopAppBar(
-                modifier = Modifier.rearAcrylicEffect(haze, style),
-                color = Color.Transparent,
+            CompactTopBar(
                 title = selectedFile.name,
-                navigationIconPadding = 12.dp,
-                actionIconPadding = 12.dp,
                 navigationIcon = {
                     Row {
                         IconButton(onClick = onBack) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
-                                null
+                                stringResource(R.string.scene_route_navigate_back)
                             )
                         }
                         if (project.kind != ScriptProjectKind.STANDALONE) {
@@ -442,10 +455,11 @@ private fun ScriptEditor(
         Box(
             Modifier
                 .fillMaxSize()
-                .rearAcrylicSource(haze)
                 .padding(
                     top = padding.calculateTopPadding(),
-                    bottom = padding.calculateBottomPadding() + bottomInnerPadding
+                    start = padding.calculateStartPadding(androidx.compose.ui.platform.LocalLayoutDirection.current),
+                    end = padding.calculateEndPadding(androidx.compose.ui.platform.LocalLayoutDirection.current),
+                    bottom = maxOf(padding.calculateBottomPadding(), bottomInnerPadding)
                 )
         ) {
             Column(Modifier.fillMaxSize()) {
@@ -571,8 +585,7 @@ private fun ScriptEditor(
                 val params = paramsText.split('&').filter { it.contains('=') }
                     .associate { it.substringBefore('=') to it.substringAfter('=') }
                 runResult = if (selectedProvider.isBlank()) "No provider" else {
-                    val result = executor.execute(project, selectedProvider, params)
-                    result.error ?: result.data?.toString().orEmpty()
+                    runProvider(selectedProvider, params)
                 }
             }
         },
