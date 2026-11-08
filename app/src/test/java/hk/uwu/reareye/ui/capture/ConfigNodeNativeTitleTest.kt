@@ -19,6 +19,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import hk.uwu.mixui.MixColorSchemeMode
@@ -56,7 +57,15 @@ class ConfigNodeNativeTitleTest {
     private val changed = mutableListOf<String>()
     private fun frames() { repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
     private fun label(id: Int) = activity!!.get().getString(id)
-    private fun open(backend: MixUiBackend, nodes: List<ConfigNode>, favorites: Boolean = false, dark: Boolean = false) {
+    private fun open(
+        backend: MixUiBackend,
+        nodes: List<ConfigNode>,
+        favorites: Boolean = false,
+        dark: Boolean = false,
+        direction: LayoutDirection = LayoutDirection.Ltr,
+        fontScale: Float = 1f,
+        pageTitle: String = if (favorites) "Fixture Favorites" else "Fixture Category",
+    ) {
         compose.mainClock.autoAdvance = false
         opened.clear(); backs = 0; favoriteIds = emptySet()
         val prefs = PrefsManager(GuideMemoryPrefs())
@@ -66,10 +75,11 @@ class ConfigNodeNativeTitleTest {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().enableEdgeToEdge()
             activity!!.get().setContent {
+                NativeTitleTestEnvironment(direction, fontScale) {
                 MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
                     Box(Modifier.fillMaxSize()) {
                         ConfigNodePage(
-                            title = if (favorites) "Fixture Favorites" else "Fixture Category",
+                            title = pageTitle,
                             nodes = nodes,
                             prefsManager = prefs,
                             bottomObstruction = 96.dp,
@@ -88,6 +98,7 @@ class ConfigNodeNativeTitleTest {
                         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(96.dp)
                             .testTag("config-bottom-overlay"))
                     }
+                }
                 }
             }
         }
@@ -266,6 +277,35 @@ class ConfigNodeNativeTitleTest {
             assertTrue("Upward body gesture must collapse native title", collapsedTop < initialTop)
             assertEquals("Downward body gesture must restore native title", initialTop, restoredTop, 1.5f)
         }
+    }
+
+    @Test fun productionCategoryAndFavoritesTitleInsetsMatchMiuix() {
+        val failures = mutableListOf<String>()
+        val nodes = List(30) { index -> ConfigCategory(key = "alignment-$index", titleRes = R.string.config_tab_more) }
+        for (favorites in listOf(false, true)) for (fontScale in listOf(1f, 1.3f)) {
+            for (backend in MixUiBackend.entries) {
+                val titleText = if (favorites) "收藏 Favorites" else "通知与消息 Notifications"
+                open(backend, nodes, favorites = favorites, fontScale = fontScale, pageTitle = titleText)
+                val key = "alignment-${backend.name}-$favorites-$fontScale"
+                val expanded = compose.nativeTitleGeometry(titleText)
+                writeNativeTitleGeometry("config-native-lists", "$key-expanded", expanded)
+                capture("$key-expanded")
+                val title = expanded.maxBy { it.layout.layoutInput.style.fontSize.value }
+                val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+                val inset = title.startInset(root, LayoutDirection.Ltr)
+                if (kotlin.math.abs(inset - 26f) > 1f) failures += "$key title first-glyph inset=$inset, expected 26px"
+                repeat(2) { compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }; frames() }
+                val collapsed = compose.nativeTitleGeometry(titleText)
+                writeNativeTitleGeometry("config-native-lists", "$key-collapsed", collapsed)
+                capture("$key-collapsed")
+                assertTrue("$key keeps a visible native compact title", collapsed.any {
+                    it.layout.layoutInput.style.fontSize.value < 28f && it.bounds.height > 0f && it.bounds.bottom < 150f
+                })
+                compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back)).performClick()
+                compose.runOnIdle { assertEquals(1, backs) }
+            }
+        }
+        assertTrue(failures.joinToString("\n"), failures.isEmpty())
     }
 
 }

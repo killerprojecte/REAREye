@@ -336,6 +336,7 @@ tasks.withType<Test>().configureEach {
             includeTestsMatching("hk.uwu.reareye.ui.capture.ThemeSheetPreviewTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.ThemeSheetWindowInsetsTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.HomeNativeTitleTest")
+            includeTestsMatching("hk.uwu.reareye.ui.capture.MochiTitleAlignmentContractTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.RearStoreNativeTopBarTest")
             includeTestsMatching("hk.uwu.reareye.ui.components.ArrowPreferenceInteractionTest")
             includeTestsMatching("hk.uwu.reareye.ui.theme.AppThemeModeTest")
@@ -364,6 +365,7 @@ tasks.withType<Test>().configureEach {
             excludeTestsMatching("hk.uwu.reareye.ui.capture.ThemeSheetPreviewTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.ThemeSheetWindowInsetsTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.HomeNativeTitleTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.capture.MochiTitleAlignmentContractTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.RearStoreNativeTopBarTest")
             excludeTestsMatching("hk.uwu.reareye.ui.components.ArrowPreferenceInteractionTest")
             excludeTestsMatching("hk.uwu.reareye.ui.components.Mary*LayoutTest")
@@ -394,6 +396,10 @@ dependencies {
     implementation(libs.dexkit)
     implementation(libs.mmkv)
 
+    // Native vendor/scaffold comparisons are test-only; app production stays behind mixui.
+    testImplementation("io.github.feice11.mochi-compose:mochi-compose:${libs.versions.mochi.get()}") {
+        exclude(group = "com.materialkolor")
+    }
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.robolectric)

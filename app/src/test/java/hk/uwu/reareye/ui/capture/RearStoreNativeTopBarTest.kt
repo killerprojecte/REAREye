@@ -18,6 +18,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.Insets
@@ -90,6 +91,8 @@ class RearStoreNativeTopBarTest {
         dark: Boolean = false,
         bottomInset: Int = 24,
         items: List<RearStoreListItem>? = catalog,
+        direction: LayoutDirection = LayoutDirection.Ltr,
+        fontScale: Float = 1f,
     ) {
         compose.mainClock.autoAdvance = false
         openedIds.clear()
@@ -100,6 +103,7 @@ class RearStoreNativeTopBarTest {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().enableEdgeToEdge()
             activity!!.get().setContent {
+                NativeTitleTestEnvironment(direction, fontScale) {
                 MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
                     Box(Modifier.fillMaxSize()) {
                         RearStoreRootContent(
@@ -113,6 +117,7 @@ class RearStoreNativeTopBarTest {
                         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(96.dp)
                             .testTag("store-test-bottom-overlay"))
                     }
+                }
                 }
             }
         }
@@ -355,4 +360,42 @@ class RearStoreNativeTopBarTest {
             assertTrue(openedIds.isEmpty())
         }
     }
+    @Test fun productionStoreTitleInsetMatchesMiuixWithoutMovingSearchOrActions() {
+        val failures = mutableListOf<String>()
+        val items = List(24) { index -> catalog.first().copy(id = "alignment-$index", name = "Catalog item $index") }
+        for (dark in listOf(false, true)) for (fontScale in listOf(1f, 1.3f)) {
+            for (backend in MixUiBackend.entries) {
+                open(backend, dark = dark, items = items, fontScale = fontScale)
+                val titleText = label(R.string.store_navigation)
+                val key = "alignment-${backend.name}-$dark-$fontScale"
+                val expanded = compose.nativeTitleGeometry(titleText)
+                writeNativeTitleGeometry("rear-store-native-topbar", "$key-expanded", expanded)
+                capture("$key-expanded")
+                val title = expanded.maxBy { it.layout.layoutInput.style.fontSize.value }
+                val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+                val inset = title.startInset(root, LayoutDirection.Ltr)
+                if (kotlin.math.abs(inset - 26f) > 1f) failures += "$key title first-glyph inset=$inset, expected 26px"
+                if (backend == MixUiBackend.Mochi) {
+                    val search = compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot
+                    // The editable field is inside the production search card:
+                    // 16dp native body + 12dp row padding + 18dp search icon.
+                    assertEquals("Search content stays at its native position", 46f, search.left - root.left, 1.5f)
+                    assertEquals("Search trailing padding stays native", 28f, root.right - search.right, 1.5f)
+                }
+                repeat(2) { compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }; frames() }
+                val collapsed = compose.nativeTitleGeometry(titleText)
+                writeNativeTitleGeometry("rear-store-native-topbar", "$key-collapsed", collapsed)
+                capture("$key-collapsed")
+                assertTrue("$key retains native compact title", collapsed.any {
+                    it.layout.layoutInput.style.fontSize.value < 28f && it.bounds.height > 0f &&
+                        it.bounds.top >= 24f && it.bounds.bottom < 150f
+                })
+                compose.onNodeWithContentDescription(label(R.string.app_list_sort)).assertIsDisplayed()
+                compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back)).performClick()
+                assertEquals(1, backCalls)
+            }
+        }
+        assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
+
 }

@@ -18,6 +18,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.Insets
@@ -57,7 +58,13 @@ class HomeNativeTitleTest {
 
     private fun frames() { repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
 
-    private fun open(backend: MixUiBackend, dark: Boolean, bottomInset: Int) {
+    private fun open(
+        backend: MixUiBackend,
+        dark: Boolean,
+        bottomInset: Int,
+        direction: LayoutDirection = LayoutDirection.Ltr,
+        fontScale: Float = 1f,
+    ) {
         compose.mainClock.autoAdvance = false
         presetOpens = 0
         compose.runOnUiThread {
@@ -65,6 +72,7 @@ class HomeNativeTitleTest {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().enableEdgeToEdge()
             activity!!.get().setContent {
+                NativeTitleTestEnvironment(direction, fontScale) {
                 MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
                     Box(Modifier.fillMaxSize()) {
                         HomeScreen(
@@ -83,6 +91,7 @@ class HomeNativeTitleTest {
                         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(96.dp)
                             .testTag("home-test-bottom-overlay"))
                     }
+                }
                 }
             }
         }
@@ -166,4 +175,46 @@ class HomeNativeTitleTest {
             compose.onNodeWithText(label(R.string.home_status_working), useUnmergedTree = true).assertIsDisplayed()
         }
     }
+    @Test fun productionHomeTitleParagraphMatchesMiuixAndKeepsNativeCollapsedTitle() {
+        val failures = mutableListOf<String>()
+        for (dark in listOf(false, true)) for (fontScale in listOf(1f, 1.3f)) {
+            for (backend in MixUiBackend.entries) {
+                open(backend, dark, bottomInset = 24, fontScale = fontScale)
+                val key = "alignment-${backend.name}-$dark-$fontScale"
+                val expanded = compose.nativeTitleGeometry("REAREye")
+                writeNativeTitleGeometry("home-native-title", "$key-expanded", expanded)
+                capture("$key-expanded")
+                val title = expanded.maxBy { it.layout.layoutInput.style.fontSize.value }
+                val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+                val inset = title.startInset(root, LayoutDirection.Ltr)
+                if (kotlin.math.abs(inset - 26f) > 1f) failures += "$key title first-glyph inset=$inset, expected 26px"
+                // A title fix must not turn ordinary Chinese info rows into page titles.
+                if (backend == MixUiBackend.Mochi) {
+                    assertEquals(17.sp, layouts(label(R.string.status_card)).single().layoutInput.style.fontSize)
+                }
+                repeat(2) { compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }; frames() }
+                val collapsed = compose.nativeTitleGeometry("REAREye")
+                writeNativeTitleGeometry("home-native-title", "$key-collapsed", collapsed)
+                capture("$key-collapsed")
+                val compact = collapsed.firstOrNull {
+                    it.layout.layoutInput.style.fontSize.value < 28f && it.bounds.height > 0f &&
+                        it.bounds.top >= 24f && it.bounds.bottom < 150f
+                }
+                assertNotNull("$key must retain the native collapsed title", compact)
+                if (backend == MixUiBackend.Mochi) {
+                    assertEquals(17.sp, compact!!.layout.layoutInput.style.fontSize)
+                    assertTrue("Compact title must not inherit a large-title indent",
+                        compact.layout.layoutInput.style.textIndent == null ||
+                            compact.layout.layoutInput.style.textIndent == androidx.compose.ui.text.style.TextIndent.None)
+                    assertEquals(root.center.x, compact.bounds.center.x, 1.5f)
+                }
+                scroll(-100000f)
+                compose.onNode(hasScrollAction()).performTouchInput { swipeDown() }; frames()
+                writeNativeTitleGeometry("home-native-title", "$key-restored", compose.nativeTitleGeometry("REAREye"))
+                capture("$key-restored")
+            }
+        }
+        assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
+
 }

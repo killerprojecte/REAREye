@@ -80,7 +80,8 @@ fun CompactTopBar(
  * scaffold, outside that resizing subtree.
  *
  * Native geometry is intentional: MIUIX keeps 12dp side/heading gaps and 24dp
- * bottom breathing room. Mochi retains its 16dp sides, large title and at least
+ * bottom breathing room. Mochi retains its 16dp body sides and native large title with LTR alignment to
+ * MIUIX's 26dp title inset. It keeps at least
  * its native 40dp end padding; the bottom overlay still gets at least 24dp of
  * clearance. This is not a pixel-equivalent arbitrary-padding API.
  */
@@ -153,16 +154,24 @@ fun LargeTitleColumnScaffold(
                 CompositionLocalProvider(
                     ui.feice.mochi.navigation.LocalMochiBottomBarInset provides bottomBarInset,
                 ) {
-                    ui.feice.mochi.navigation.MochiLargeTitleScaffold(
-                        title = title,
-                        modifier = Modifier.imePadding().windowInsetsPadding(horizontalBarInsets()),
-                        scrollState = scrollState,
-                        background = background,
-                        contentSpacing = contentSpacing,
-                        navigationIcon = navigationIcon,
-                        actions = actions,
-                        content = content,
-                    )
+                    MochiLargeTitleAlignment(title) { callerStyle ->
+                        ui.feice.mochi.navigation.MochiLargeTitleScaffold(
+                            title = title,
+                            modifier = Modifier.imePadding().windowInsetsPadding(horizontalBarInsets()),
+                            scrollState = scrollState,
+                            background = background,
+                            contentSpacing = contentSpacing,
+                            navigationIcon = { callerStyle.Restore { navigationIcon() } },
+                            actions = {
+                                val rowScope = this
+                                callerStyle.Restore { actions(rowScope) }
+                            },
+                            content = {
+                                val columnScope = this
+                                callerStyle.Restore { content(columnScope) }
+                            },
+                        )
+                    }
                 }
             }
         }
