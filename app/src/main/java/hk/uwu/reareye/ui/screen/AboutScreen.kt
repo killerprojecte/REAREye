@@ -65,7 +65,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
@@ -90,10 +89,8 @@ import hk.uwu.reareye.repository.contributor.ContributorRepository
 import hk.uwu.reareye.ui.components.card.SuperCard
 import hk.uwu.mixui.motion.ArtRevealItem
 import hk.uwu.mixui.motion.ArtStaggeredReveal
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import hk.uwu.reareye.utils.blend.ColorBlendToken
 import hk.uwu.reareye.utils.effect.BgEffectBackground
 import hk.uwu.reareye.utils.other.DeviceConfigTools
@@ -112,14 +109,12 @@ import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.CardDefaults
 import hk.uwu.mixui.components.Icon
-import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import hk.uwu.mixui.components.Scaffold
-import top.yukonga.miuix.kmp.basic.ScrollBehavior
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import hk.uwu.mixui.components.pageScrollFeedback
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.TopBarIconButton
+import androidx.compose.ui.platform.testTag
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurBlendMode
 import top.yukonga.miuix.kmp.blur.BlurColors
@@ -128,8 +123,6 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
 import hk.uwu.mixui.theme.MixTheme.colorScheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import java.util.concurrent.ConcurrentHashMap
 
 private val AboutPageHorizontalPadding = 12.dp
@@ -262,8 +255,27 @@ fun AboutScreen(
     bottomInnerPadding: Dp = 0.dp,
     onOpenPresetPackDialog: () -> Unit = {},
 ) {
-    val versionText = rememberVersionText()
     val contributorState by ContributorRepository.state.collectAsState()
+    LaunchedEffect(Unit) { ContributorRepository.preload() }
+    AboutScreenContent(
+        bottomInnerPadding = bottomInnerPadding,
+        contributorState = contributorState,
+        onLoadContributors = { ContributorRepository.ensureLoaded(force = false) },
+        onRetryContributors = { ContributorRepository.ensureLoaded(force = true) },
+        onOpenPresetPackDialog = onOpenPresetPackDialog,
+    )
+}
+
+/** The production route tree with repository actions supplied by its owner. */
+@Composable
+internal fun AboutScreenContent(
+    contributorState: ContributorLoadState,
+    bottomInnerPadding: Dp = 0.dp,
+    onLoadContributors: () -> Unit = {},
+    onRetryContributors: () -> Unit = {},
+    onOpenPresetPackDialog: () -> Unit = {},
+) {
+    val versionText = rememberVersionText()
     val lazyListState = rememberLazyListState()
 
     var route by remember { mutableStateOf<AboutRoute>(AboutRoute.Root) }
@@ -305,13 +317,9 @@ fun AboutScreen(
         )
     }
 
-    LaunchedEffect(Unit) {
-        ContributorRepository.preload()
-    }
-
     LaunchedEffect(route) {
         if (route is AboutRoute.Contributors) {
-            ContributorRepository.ensureLoaded(force = false)
+            onLoadContributors()
         }
     }
 
@@ -388,24 +396,25 @@ fun AboutScreen(
             AboutRoute.Contributors -> AboutSecondaryPage(
                 title = stringResource(R.string.credits_contributors_title),
                 onBack = { route = AboutRoute.Root },
-            ) { paddingValues, scrollBehavior, hazeState ->
+            ) { paddingValues, listState, hazeState ->
                 ContributorListContent(
                     bottomInnerPadding = bottomInnerPadding,
                     paddingValues = paddingValues,
-                    scrollBehavior = scrollBehavior,
+                    lazyListState = listState,
                     hazeState = hazeState,
                     state = contributorState,
+                    onRetry = onRetryContributors,
                 )
             }
 
             AboutRoute.Licenses -> AboutSecondaryPage(
                 title = stringResource(R.string.licenses_name),
                 onBack = { route = AboutRoute.Root },
-            ) { paddingValues, scrollBehavior, hazeState ->
+            ) { paddingValues, listState, hazeState ->
                 LicenseContent(
                     bottomInnerPadding = bottomInnerPadding,
                     paddingValues = paddingValues,
-                    scrollBehavior = scrollBehavior,
+                    lazyListState = listState,
                     hazeState = hazeState,
                 )
             }
@@ -424,7 +433,6 @@ private fun AboutRootPage(
     onOpenLibraries: () -> Unit,
     onOpenPresetPackDialog: () -> Unit,
 ) {
-    val scrollBehavior = MiuixScrollBehavior()
     val hazeState = rememberAcrylicHazeState()
     val gradientFadeDistancePx = with(LocalDensity.current) {
         AboutGradientFadeDistance.toPx().coerceAtLeast(1f)
@@ -442,22 +450,14 @@ private fun AboutRootPage(
         }
     }
 
-    Scaffold(
-        topBar = {
-            SmallTopAppBar(
-                title = stringResource(R.string.about_navigation),
-                scrollBehavior = scrollBehavior,
-                color = colorScheme.surface.copy(alpha = if (scrollProgress == 1f) 1f else 0f),
-                titleColor = colorScheme.onSurface.copy(alpha = scrollProgress),
-                defaultWindowInsetsPadding = false,
-                navigationIconPadding = 12.dp,
-            )
-        }
+    GlassTopBarScaffold(
+        title = stringResource(R.string.about_navigation),
+        isContentScrolled = lazyListState.firstVisibleItemIndex > 0 ||
+            lazyListState.firstVisibleItemScrollOffset > 0,
     ) { paddingValues ->
         AboutRootContent(
             bottomInnerPadding = bottomInnerPadding,
             paddingValues = paddingValues,
-            scrollBehavior = scrollBehavior,
             hazeState = hazeState,
             versionText = versionText,
             entries = entries,
@@ -475,40 +475,24 @@ private fun AboutRootPage(
 private fun AboutSecondaryPage(
     title: String,
     onBack: () -> Unit,
-    content: @Composable (PaddingValues, ScrollBehavior, HazeState) -> Unit,
+    content: @Composable (PaddingValues, LazyListState, HazeState) -> Unit,
 ) {
-    val layoutDirection = LocalLayoutDirection.current
-    val scrollBehavior = MiuixScrollBehavior()
+    val listState = rememberLazyListState()
     val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                color = Color.Transparent,
-                title = title,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            modifier = Modifier.graphicsLayer {
-                                if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                            },
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
-                        )
-                    }
-                },
-                navigationIconPadding = 12.dp,
-                scrollBehavior = scrollBehavior,
-            )
-        }
+    GlassTopBarScaffold(
+        title = title,
+        isContentScrolled = listState.firstVisibleItemIndex > 0 ||
+            listState.firstVisibleItemScrollOffset > 0,
+        navigationIcon = {
+            TopBarIconButton(onClick = onBack, modifier = Modifier.testTag("about-back")) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.scene_route_navigate_back),
+                )
+            }
+        },
     ) { paddingValues ->
-        content(
-            paddingValues,
-            scrollBehavior,
-            hazeState,
-        )
+        content(paddingValues, listState, hazeState)
     }
 }
 
@@ -516,7 +500,6 @@ private fun AboutSecondaryPage(
 private fun AboutRootContent(
     bottomInnerPadding: Dp,
     paddingValues: PaddingValues,
-    scrollBehavior: ScrollBehavior,
     hazeState: HazeState,
     versionText: String,
     entries: List<CreditEntry>,
@@ -528,6 +511,7 @@ private fun AboutRootContent(
     animateEnter: Boolean,
 ) {
     val context = LocalContext.current
+    val layoutDirection = LocalLayoutDirection.current
     val visualTokens = rememberAboutVisualTokens()
 
     val backdrop = rememberLayerBackdrop()
@@ -716,12 +700,12 @@ private fun AboutRootContent(
             state = lazyListState,
             modifier = Modifier
                 .fillMaxSize()
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .rearAcrylicSource(hazeState)
-                .padding(horizontal = AboutPageHorizontalPadding),
+                .testTag("about-root-list")
+                .pageScrollFeedback()
+                .rearAcrylicSource(hazeState),
             contentPadding = PaddingValues(
+                start = paddingValues.calculateStartPadding(layoutDirection) + AboutPageHorizontalPadding,
+                end = paddingValues.calculateEndPadding(layoutDirection) + AboutPageHorizontalPadding,
                 top = scrollPadding.calculateTopPadding(),
                 bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
             ),
@@ -1048,21 +1032,24 @@ private fun AboutReveal(
 private fun ContributorListContent(
     bottomInnerPadding: Dp,
     paddingValues: PaddingValues,
-    scrollBehavior: ScrollBehavior,
+    lazyListState: LazyListState,
     hazeState: HazeState,
     state: ContributorLoadState,
+    onRetry: () -> Unit,
 ) {
+    val layoutDirection = LocalLayoutDirection.current
     val avatarPlaceholderAlpha = rememberSkeletonPulseAlpha("contributor-avatar-skeleton")
 
     LazyColumn(
+        state = lazyListState,
         modifier = Modifier
             .fillMaxSize()
-            .scrollEndHaptic()
-            .overScrollVertical()
-            .nestedScroll(scrollBehavior.nestedScrollConnection)
-            .rearAcrylicSource(hazeState)
-            .padding(horizontal = AboutPageHorizontalPadding),
+            .testTag("about-secondary-list")
+            .pageScrollFeedback()
+            .rearAcrylicSource(hazeState),
         contentPadding = PaddingValues(
+            start = paddingValues.calculateStartPadding(layoutDirection) + AboutPageHorizontalPadding,
+            end = paddingValues.calculateEndPadding(layoutDirection) + AboutPageHorizontalPadding,
             top = paddingValues.calculateTopPadding(),
             bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
         ),
@@ -1101,7 +1088,7 @@ private fun ContributorListContent(
                             summary = stringResource(R.string.credits_contributors_load_failed),
                             bottomAction = {
                                 Button(
-                                    onClick = { ContributorRepository.ensureLoaded(force = true) },
+                                    onClick = onRetry,
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Text(text = stringResource(R.string.credits_contributors_retry))
@@ -1151,24 +1138,26 @@ private fun ContributorListContent(
 private fun LicenseContent(
     bottomInnerPadding: Dp,
     paddingValues: PaddingValues,
-    scrollBehavior: ScrollBehavior,
+    lazyListState: LazyListState,
     hazeState: HazeState,
 ) {
     val context = LocalContext.current
+    val layoutDirection = LocalLayoutDirection.current
     val data = remember {
         loadLibraries(context)
     }
 
 
     LazyColumn(
+        state = lazyListState,
         modifier = Modifier
             .fillMaxSize()
-            .scrollEndHaptic()
-            .overScrollVertical()
-            .nestedScroll(scrollBehavior.nestedScrollConnection)
-            .rearAcrylicSource(hazeState)
-            .padding(horizontal = 12.dp),
+            .testTag("about-secondary-list")
+            .pageScrollFeedback()
+            .rearAcrylicSource(hazeState),
         contentPadding = PaddingValues(
+            start = paddingValues.calculateStartPadding(layoutDirection) + AboutPageHorizontalPadding,
+            end = paddingValues.calculateEndPadding(layoutDirection) + AboutPageHorizontalPadding,
             top = paddingValues.calculateTopPadding(),
             bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
         ),

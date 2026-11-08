@@ -23,6 +23,9 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.geometry.Offset
 import org.junit.After
@@ -389,6 +392,90 @@ class RealPageCaptureTest {
             save(folder, "pressed.png")
             back.performTouchInput { up() }; compose.waitForIdle()
             org.junit.Assert.assertEquals(1, context.backPressCount)
+        }
+    }
+
+    @Test fun aboutNativeHeadersKeepRoutesScrollingAndCallbacks() {
+        val directory = File(System.getProperty("ui.capture.output"), "about-native-headers")
+        for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) for (rtl in listOf(false, true)) {
+            compose.mainClock.autoAdvance = false
+            compose.runOnUiThread {
+                activity?.close()
+                activity = Robolectric.buildActivity(UiCaptureActivity::class.java,
+                    Intent().putExtra("page", "about").putExtra("backend", backend)
+                        .putExtra("dark", dark).putExtra("rtl", rtl)).setup()
+            }
+            fun settle() { repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
+            fun visible(text: String): Boolean {
+                val nodes = compose.onAllNodesWithText(text, useUnmergedTree = true)
+                return nodes.fetchSemanticsNodes().indices.any { nodes[it].isDisplayed() }
+            }
+            fun rootItem(text: String, upwards: Boolean = true) {
+                repeat(18) {
+                    if (visible(text)) return
+                    compose.onNodeWithTag("about-root-list").performTouchInput {
+                        if (upwards) swipeUp() else swipeDown()
+                    }
+                    settle()
+                }
+                error("About item not reachable: $text")
+            }
+            settle()
+            val context = activity!!.get()
+            val folder = File(directory, "$backend/${if (dark) "dark" else "light"}/${if (rtl) "rtl" else "ltr"}").apply { mkdirs() }
+            assertVisibleText("REAREye")
+            save(folder, "initial.png")
+            val preset = context.getString(hk.uwu.reareye.R.string.preset_pack_title)
+            rootItem(preset)
+            compose.onNodeWithText(preset).performClick()
+            org.junit.Assert.assertEquals(1, context.aboutPresetOpenCount)
+            val contributors = context.getString(hk.uwu.reareye.R.string.credits_contributors_title)
+            rootItem(contributors)
+            compose.onNodeWithText(contributors).performClick()
+            settle()
+            assertVisibleText("Fixture contributor 1")
+            compose.onNodeWithTag("about-back").assertIsDisplayed()
+            save(folder, "contributors.png")
+            // First spacer is index 0. Reach the final long, wrapping row without
+            // adding a nested scroll container or cutting its description short.
+            compose.onNodeWithTag("about-secondary-list").performScrollToIndex(24)
+            settle()
+            assertVisibleText("Fixture contributor 24")
+            save(folder, "contributors-scrolled.png")
+            compose.onNodeWithTag("about-back").performClick()
+            settle()
+            compose.onNodeWithTag("about-root-list").assertIsDisplayed()
+            val licenses = context.getString(hk.uwu.reareye.R.string.licenses_name)
+            rootItem(licenses)
+            compose.onNodeWithText(licenses).performClick()
+            settle()
+            val libraries = hk.uwu.reareye.utils.other.loadLibraries(context).libraries
+            check(libraries.isNotEmpty())
+            assertVisibleText(libraries.first().name)
+            save(folder, "licenses.png")
+            compose.onNodeWithTag("about-secondary-list").performScrollToIndex(libraries.lastIndex)
+            settle()
+            assertVisibleText(libraries.last().name)
+            save(folder, "licenses-scrolled.png")
+            compose.runOnUiThread { context.onBackPressedDispatcher.onBackPressed() }
+            settle()
+            compose.onNodeWithTag("about-root-list").assertIsDisplayed()
+            // Reopen after Back and exercise the native toolbar Back as well.
+            rootItem(licenses)
+            compose.onNodeWithText(licenses).performClick()
+            settle()
+            compose.onNodeWithTag("about-back").performClick()
+            settle()
+            rootItem(contributors, upwards = false)
+            compose.onNodeWithText(contributors).performClick()
+            settle()
+            compose.runOnUiThread { context.onBackPressedDispatcher.onBackPressed() }
+            settle()
+            compose.onNodeWithTag("about-root-list").assertIsDisplayed()
+            File(folder, "evidence.txt").writeText(
+                "Actual About production route tree with deterministic contributor data.\n" +
+                "Robolectric native graphics; not physical-device GPU evidence.\n" +
+                "Covers native header routes, long rows, bundled library list and preset callback.\n")
         }
     }
 

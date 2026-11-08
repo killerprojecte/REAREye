@@ -23,6 +23,8 @@ import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.utils.overScrollVertical
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import ui.feice.mochi.effect.glass.mochiBackdropSource
 import ui.feice.mochi.effect.glass.rememberMochiBarBackdrop
 import ui.feice.mochi.effect.glass.rememberMochiBackdrop
@@ -206,4 +208,11 @@ fun TopBarIconButton(
             onClick = onClick, modifier = buttonModifier, enabled = enabled, content = content,
         )
     }
+}
+
+/** Apply native edge feedback to the page's sole scroll container. */
+@Composable
+fun Modifier.pageScrollFeedback(): Modifier = when (LocalMixUiBackend.current) {
+    MixUiBackend.Miuix -> this.scrollEndHaptic().overScrollVertical()
+    MixUiBackend.Mochi -> this
 }

@@ -37,7 +37,6 @@ import hk.uwu.reareye.repository.rearstore.RearStoreListItem
 import hk.uwu.reareye.repository.rearstore.RearStoreAuthor
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.OnboardingScreen
-import hk.uwu.reareye.ui.screen.AboutScreen
 import hk.uwu.reareye.ui.screen.MarySettingsScreen
 import hk.uwu.reareye.ui.components.script.ScriptManagementScreen
 import hk.uwu.reareye.ui.components.TargetAppVersionDialog
@@ -65,6 +64,7 @@ class UiCaptureActivity : ComponentActivity() {
     var renderedBackend = hk.uwu.mixui.MixUiBackend.Miuix
         private set
     var mochiStyle by mutableStateOf(MixMochiStyle.Default)
+    var aboutPresetOpenCount = 0
     var backPressCount = 0
         private set
     var themeSignature: List<Long> = emptyList()
@@ -133,6 +133,7 @@ class UiCaptureActivity : ComponentActivity() {
 
 @Composable
 private fun FixturePage(page: String, onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val state = remember(page) {
         FeatureGuideDemoState(initialCardTitle = "Fixture clock").apply {
             if (page == "scene-routes-populated") {
@@ -185,7 +186,17 @@ private fun FixturePage(page: String, onBack: () -> Unit) {
             },
         )
         "onboarding" -> OnboardingScreen(onFinished = {})
-        "about" -> AboutScreen()
+        "about" -> hk.uwu.reareye.ui.screen.AboutScreenContent(
+            contributorState = hk.uwu.reareye.repository.contributor.ContributorLoadState.Loaded(
+                List(24) { index -> hk.uwu.reareye.repository.contributor.ContributorProfile(
+                    name = "Fixture contributor ${index + 1}",
+                    description = "Production contributor row with wrapping text. ".repeat(5),
+                ) },
+            ),
+            onOpenPresetPackDialog = {
+                (context as UiCaptureActivity).aboutPresetOpenCount++
+            },
+        )
         "scripts" -> ScriptManagementScreen(onBack = back)
         "mary-settings-unconfigured" -> MarySettingsScreen(onBack = back)
         "version-dialog" -> TargetAppVersionDialog(
