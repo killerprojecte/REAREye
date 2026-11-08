@@ -2,13 +2,18 @@ name: Build and Release
 
 on:
   push:
-    branches: [ "master", "main", "dev" ]
+    branches: [ "master", "main", "dev", "feat/ui-base-refactor" ]
   workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
+      GITHUB_TOKEN: ${{ github.token }}
       KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
       KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
       KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
