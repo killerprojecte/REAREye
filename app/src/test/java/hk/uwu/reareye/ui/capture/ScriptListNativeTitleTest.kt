@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.unit.dp
@@ -75,7 +76,7 @@ class ScriptListNativeTitleTest {
             capture("${backend.name}-${if (dark) "dark" else "light"}-empty")
             listOf(R.string.script_new, R.string.script_new_project, R.string.script_import,
                 R.string.script_refresh, R.string.scene_route_navigate_back).forEach { id ->
-                compose.onNodeWithContentDescription(label(id)).assertIsDisplayed().performClick()
+                compose.onNodeWithContentDescription(label(id)).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick) { it() }
             }
             assertEquals(listOf("new", "project", "import", "refresh", "back"), events)
         }
@@ -86,11 +87,11 @@ class ScriptListNativeTitleTest {
             description = "A script description that wraps across the native row.") }
         for (backend in MixUiBackend.entries) for (dark in listOf(false, true)) {
             open(backend, dark, projects)
-            compose.onNodeWithText("Script 0").assertIsDisplayed().performClick()
-            compose.onAllNodesWithContentDescription(label(R.string.script_edit))[0].performClick()
-            compose.onAllNodesWithContentDescription(label(R.string.script_rename))[0].performClick()
-            compose.onAllNodesWithContentDescription(label(R.string.script_export))[0].performClick()
-            compose.onAllNodesWithText(label(R.string.script_delete))[0].performClick()
+            compose.onNodeWithText("Script 0").assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick) { it() }
+            compose.onAllNodesWithContentDescription(label(R.string.script_edit))[0].performSemanticsAction(SemanticsActions.OnClick) { it() }
+            compose.onAllNodesWithContentDescription(label(R.string.script_rename))[0].performSemanticsAction(SemanticsActions.OnClick) { it() }
+            compose.onAllNodesWithContentDescription(label(R.string.script_export))[0].performSemanticsAction(SemanticsActions.OnClick) { it() }
+            compose.onAllNodesWithText(label(R.string.script_delete))[0].performSemanticsAction(SemanticsActions.OnClick) { it() }
             assertEquals("$backend dark=$dark", listOf("open:id-0", "open:id-0", "rename:id-0", "export:id-0", "delete:id-0"), events)
             events.clear()
             compose.onAllNodesWithContentDescription(label(R.string.script_rename))[0].performTouchInput { click() }

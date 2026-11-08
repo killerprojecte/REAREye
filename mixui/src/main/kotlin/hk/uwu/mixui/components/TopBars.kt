@@ -170,5 +170,5 @@ fun LargeTitleColumnScaffold(
 }
 
 @Composable
-private fun horizontalBarInsets(): WindowInsets =
+internal fun horizontalBarInsets(): WindowInsets =
     WindowInsets.displayCutout.union(WindowInsets.navigationBars).only(WindowInsetsSides.Horizontal)

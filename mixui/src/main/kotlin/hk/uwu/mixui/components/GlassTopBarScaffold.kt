@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -123,6 +124,7 @@ fun GlassTopBarScaffold(
                     topBar = {
                         ui.feice.mochi.navigation.MochiTitleBar(
                             title = title,
+                            modifier = Modifier.windowInsetsPadding(horizontalBarInsets()),
                             background = background,
                             backgroundProgress = { if (isContentScrolled) 1f else 0f },
                             backdrop = backdrop,
@@ -183,7 +185,9 @@ fun TopBarIconButton(
     enabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val buttonModifier = modifier.semantics(mergeDescendants = !enabled) {
+    // Native Mochi buttons expose an action but do not merge their icon label.
+    // Keep the label and vendor-owned action in one accessible control.
+    val buttonModifier = modifier.semantics(mergeDescendants = true) {
         role = Role.Button
         if (!enabled) disabled()
     }

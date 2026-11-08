@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.Dp
 import hk.uwu.mixui.components.ButtonColors
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
 import hk.uwu.mixui.motion.mixPressFeedback
 
 /** Internal adapter contract: public APIs never expose vendor-specific types. */
@@ -37,7 +38,8 @@ internal object MochiBackend : MixUiRenderer {
         CompositionLocalProvider(top.yukonga.miuix.kmp.theme.LocalContentColor provides
             if (enabled) colors.contentColor else colors.disabledContentColor) {
             ui.feice.mochi.basic.MochiButton(onClick = onClick,
-                modifier = modifier.defaultMinSize(minWidth = minWidth), enabled = enabled,
+                modifier = modifier.semantics(mergeDescendants = true) {}
+                    .defaultMinSize(minWidth = minWidth), enabled = enabled,
                 cornerRadius = cornerRadius, minHeight = minHeight, colors = vendorColors,
                 contentPadding = insideMargin, content = content)
         }
