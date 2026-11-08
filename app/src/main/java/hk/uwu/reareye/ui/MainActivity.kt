@@ -40,14 +40,14 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import hk.uwu.mixui.components.navigationBackdrop
+import hk.uwu.mixui.components.rememberNavigationBackdrop
 import hk.uwu.reareye.ui.components.PresetPackDialog
 import hk.uwu.reareye.ui.components.SubscreenNotificationAccessPrompt
 import hk.uwu.reareye.ui.components.TargetAppVersionDialog
 import hk.uwu.mixui.motion.ArtVisibilityMotion
 import hk.uwu.reareye.ui.components.navigation.NavigationQuickTarget
-import hk.uwu.reareye.ui.components.navigation.RearNavigationBar
+import hk.uwu.reareye.ui.components.navigation.AppNavigationBar
 import hk.uwu.reareye.ui.components.navigation.encodeNavigationQuickActionIds
 import hk.uwu.reareye.ui.components.navigation.parseNavigationQuickActionIds
 import hk.uwu.reareye.ui.config.ConfigKeys
@@ -81,7 +81,7 @@ import hk.uwu.mixui.theme.MixTheme
 /**
  * Screen order drives the horizontal transition direction. The Rear Store is reachable from the
  * configuration header rather than the bottom bar, so it keeps a slot here for its transition
- * while [RearNavigationBar] renders only the four bottom-bar destinations.
+ * while [AppNavigationBar] renders only the four bottom-bar destinations.
  */
 private val MainScreenOrder = listOf("home", "store", "mary", "config", "about")
 
@@ -314,16 +314,13 @@ class MainActivity : ComponentActivity() {
                 mochiStyle = AppMochiThemeStyle.fromValue(mochiThemeStyleValue).style,
             ) {
                 val navigationBarMode = ModuleNavigationBarMode.fromValue(navigationBarModeValue)
-                val enableFloatingGlass =
-                    navigationBarMode == ModuleNavigationBarMode.FLOATING_GLASS
+                val enableNavigationGlass =
+                    navigationBarMode == ModuleNavigationBarMode.FLOATING_GLASS ||
+                        navigationBarMode == ModuleNavigationBarMode.SEMI_TRANSPARENT
                 val showNavigation =
                     navBarVisible && !(currentScreen == "config" && configInAppListMode)
                 val density = LocalDensity.current
-                val surfaceColor = MixTheme.colorScheme.surface
-                val backdrop = rememberLayerBackdrop {
-                    drawRect(surfaceColor)
-                    drawContent()
-                }
+                val backdrop = rememberNavigationBackdrop()
                 var stableBottomInset by remember { mutableStateOf(0.dp) }
                 val marySidebarGestureHost = remember { MarySidebarPageGestureHost() }
 
@@ -347,8 +344,8 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxSize()
                                     .marySidebarBackground(marySidebarGestureHost)
                                     .then(
-                                        if (enableFloatingGlass) {
-                                            Modifier.layerBackdrop(backdrop)
+                                        if (enableNavigationGlass) {
+                                            Modifier.navigationBackdrop(backdrop)
                                         } else {
                                             Modifier
                                         }
@@ -540,7 +537,7 @@ class MainActivity : ComponentActivity() {
                                         slideDivisor = 3,
                                         hiddenOffsetFallback = 28.dp,
                                     ) {
-                                        RearNavigationBar(
+                                        AppNavigationBar(
                                             // The Rear Store is a configuration-level destination,
                                             // so the Configuration tab stays highlighted while it is open.
                                             currentScreen = if (currentScreen == "store") "config" else currentScreen,

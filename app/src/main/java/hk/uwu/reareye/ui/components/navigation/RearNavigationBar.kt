@@ -10,24 +10,18 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -47,15 +41,16 @@ import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.Widgets
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,7 +60,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -104,16 +98,17 @@ import com.kyant.capsule.ContinuousCapsule
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.config.ConfigType
 import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
-import hk.uwu.reareye.utils.BlurredBar
-import hk.uwu.reareye.utils.blend.rememberBlurBackdrop
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Icon
-import top.yukonga.miuix.kmp.basic.NavigationBar
-import top.yukonga.miuix.kmp.basic.NavigationBarDisplayMode
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import hk.uwu.mixui.components.NavigationBar
+import hk.uwu.mixui.components.NavigationBarMode
+import hk.uwu.mixui.components.NavigationBackdrop
+import hk.uwu.mixui.components.NavigationItem
+import hk.uwu.mixui.components.NavigationAnchor
 import hk.uwu.mixui.theme.MixTheme
 
 sealed interface NavigationQuickTarget {
@@ -156,14 +151,13 @@ private const val CONFIG_ROUTE = "config"
 private const val ABOUT_ROUTE = "about"
 private const val EDIT_QUICK_ACTIONS_KEY = "__edit_quick_actions__"
 private const val QUICK_ACTION_BUTTON_WIDTH_DP = 176
-private const val QUICK_ACTION_HALF_LONG_PRESS_MIN_MS = 180L
 
 @Composable
-fun RearNavigationBar(
+fun AppNavigationBar(
     modifier: Modifier = Modifier,
     currentScreen: String,
     navigationBarMode: ModuleNavigationBarMode,
-    backdrop: Backdrop,
+    backdrop: NavigationBackdrop,
     shadowVisibilityProgress: Float = 1f,
     quickActionIds: List<String> = DefaultNavigationQuickActionIds,
     onQuickActionIdsChanged: (List<String>) -> Unit = {},
@@ -175,6 +169,8 @@ fun RearNavigationBar(
     val configLabel = stringResource(R.string.configuration_navigation)
     val aboutLabel = stringResource(R.string.about_navigation)
     val editLabel = stringResource(R.string.navigation_quick_edit)
+    val quickMenuLabel = stringResource(R.string.navigation_quick_available_title)
+    val editActionLabel = stringResource(R.string.navigation_quick_edit_title)
     val allQuickActions = rememberNavigationQuickActions()
     val quickActionLookup = remember(allQuickActions) { allQuickActions.associateBy { it.id } }
     val enabledQuickActions = remember(quickActionIds, allQuickActions) {
@@ -219,6 +215,9 @@ fun RearNavigationBar(
     var expandedQuickActionsRoute by remember { mutableStateOf<String?>(null) }
     var showQuickActionEditor by remember { mutableStateOf(false) }
 
+    var menuAnchor by remember { mutableStateOf(NavigationAnchor(0f, 0f, 1f)) }
+    var navigationHostPosition by remember { mutableStateOf(Offset.Zero) }
+
     fun openQuickActions(
         item: NavigationDestination,
         anchorCenterX: Float,
@@ -226,6 +225,7 @@ fun RearNavigationBar(
         density: Float
     ) {
         if (item.quickActions.isNotEmpty()) {
+            menuAnchor = NavigationAnchor(anchorCenterX, anchorTop, density)
             quickMenuController.begin(anchorCenterX, anchorTop, density)
             expandedQuickActionsRoute = item.route
         }
@@ -247,6 +247,8 @@ fun RearNavigationBar(
         expandedQuickActionsRoute = null
     }
 
+    BackHandler(enabled = expandedQuickActionsRoute != null) { closeQuickActions() }
+
     NavigationQuickActionEditor(
         show = showQuickActionEditor,
         selectedIds = quickActionIds,
@@ -258,135 +260,62 @@ fun RearNavigationBar(
         },
     )
 
-    if (navigationBarMode == ModuleNavigationBarMode.NORMAL || navigationBarMode == ModuleNavigationBarMode.SEMI_TRANSPARENT) {
-        val bar: @Composable () -> Unit = {
-            NavigationBar(
-                modifier = modifier,
-                color = if (navigationBarMode == ModuleNavigationBarMode.NORMAL) {
-                    MixTheme.colorScheme.surface
-                } else {
-                    Color.Transparent
-                },
-                mode = NavigationBarDisplayMode.IconAndText,
-            ) {
-                items.forEach { item ->
-                    RearNavigationBarItem(
-                        item = item,
-                        selected = currentScreen == item.route,
-                        expanded = expandedQuickActionsRoute == item.route,
-                        navigationBarMode = navigationBarMode,
-                        editLabel = editLabel,
-                        quickMenuController = quickMenuController,
-                        onClick = {
-                            closeQuickActions()
-                            onScreenSelected(item.route)
-                        },
-                        onOpenQuickActions = { anchorCenterX, anchorTop, density ->
-                            openQuickActions(item, anchorCenterX, anchorTop, density)
-                        },
-                        onDismissQuickActions = ::closeQuickActions,
-                        onOpenEditor = ::openEditor,
-                        onQuickActionSelected = ::selectQuickAction,
-                    )
-                }
-            }
-        }
-        if (navigationBarMode == ModuleNavigationBarMode.SEMI_TRANSPARENT) {
-            val enable = rememberBlurBackdrop(true)
-            BlurredBar(backdrop = enable, bar)
-        } else {
-            bar()
-        }
-        return
-    }
-
-    val enableGlass = navigationBarMode == ModuleNavigationBarMode.FLOATING_GLASS
-    val selectedIndex = items.indexOfFirst { it.route == currentScreen }.coerceAtLeast(0)
-    val selectedItem = items.getOrNull(selectedIndex)
-    val selectedOverlayQuickGesture = selectedItem?.let { item ->
-        Modifier.navigationQuickActionDragGesture(
-            enabled = item.quickActions.isNotEmpty(),
-            actions = item.quickActions,
-            quickMenuController = quickMenuController,
-            onOpenQuickActions = { anchorCenterX, anchorTop, density ->
-                openQuickActions(item, anchorCenterX, anchorTop, density)
+    Box(modifier.onGloballyPositioned { navigationHostPosition = it.positionInRoot() }) {
+        NavigationBar(
+            items = items.map { item ->
+                NavigationItem(
+                    key = item.route,
+                    label = item.label,
+                    icon = item.icon,
+                    secondaryActionLabel = if (item.quickActions.isNotEmpty()) quickMenuLabel else null,
+                    editActionLabel = if (item.route == CONFIG_ROUTE) editActionLabel else null,
+                )
             },
-            onDismissQuickActions = ::closeQuickActions,
-            onOpenEditor = ::openEditor,
-            onQuickActionSelected = ::selectQuickAction,
+            selectedKey = currentScreen,
+            onSelect = { route -> closeQuickActions(); onScreenSelected(route) },
+            backdrop = backdrop,
+            mode = when (navigationBarMode) {
+                ModuleNavigationBarMode.NORMAL -> NavigationBarMode.Normal
+                ModuleNavigationBarMode.FLOATING -> NavigationBarMode.Floating
+                ModuleNavigationBarMode.FLOATING_GLASS -> NavigationBarMode.FloatingGlass
+                ModuleNavigationBarMode.SEMI_TRANSPARENT -> NavigationBarMode.Translucent
+            },
+            shadowVisibilityProgress = shadowVisibilityProgress,
+            onEditAction = { route -> if (route == CONFIG_ROUTE) openEditor() },
+            onSecondaryAction = { route, anchor ->
+                items.firstOrNull { it.route == route }?.let { item ->
+                    openQuickActions(item, anchor.centerX, anchor.top, anchor.density)
+                }
+            },
+            onSecondaryDrag = { pointer ->
+                items.firstOrNull { it.route == expandedQuickActionsRoute }?.let { item ->
+                    quickMenuController.updateHover(pointer, item.quickActions)
+                }
+            },
+            onSecondaryEnd = { cancelled ->
+                val action = items.firstOrNull { it.route == expandedQuickActionsRoute }
+                    ?.quickActions?.firstOrNull { it.id == quickMenuController.hoveredKey }
+                when {
+                    cancelled -> closeQuickActions()
+                    quickMenuController.hoveredKey == EDIT_QUICK_ACTIONS_KEY -> openEditor()
+                    action != null -> selectQuickAction(action.target)
+                    else -> closeQuickActions()
+                }
+            },
         )
-    } ?: Modifier
-
-    FloatingBottomBar(
-        modifier = modifier
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {},
+        items.forEach { item ->
+            NavigationQuickActionsPopup(
+                expanded = expandedQuickActionsRoute == item.route,
+                actions = item.quickActions,
+                navigationBarMode = navigationBarMode,
+                editLabel = editLabel,
+                quickMenuController = quickMenuController,
+                anchor = menuAnchor,
+                hostPosition = navigationHostPosition,
+                onDismissRequest = ::closeQuickActions,
+                onOpenEditor = ::openEditor,
+                onActionSelected = ::selectQuickAction,
             )
-            .padding(
-                bottom = 12.dp + WindowInsets.navigationBars.asPaddingValues()
-                    .calculateBottomPadding()
-            ),
-        selectedIndex = selectedIndex,
-        onSelected = {
-            closeQuickActions()
-            onScreenSelected(items[it].route)
-        },
-        backdrop = backdrop,
-        tabsCount = items.size,
-        isBlurEnabled = enableGlass,
-        shadowVisibilityProgress = shadowVisibilityProgress,
-        selectedOverlayModifier = Modifier,
-        renderDuplicateContentLayer = true,
-        quickGestureModifier = selectedOverlayQuickGesture,
-    ) {
-        items.forEachIndexed { index, item ->
-            FloatingBottomBarItem(
-                onClick = {
-                    closeQuickActions()
-                    onScreenSelected(items[index].route)
-                },
-                quickGestureModifier = Modifier.navigationQuickActionDragGesture(
-                    enabled = item.quickActions.isNotEmpty(),
-                    actions = item.quickActions,
-                    quickMenuController = quickMenuController,
-                    onOpenQuickActions = { anchorCenterX, anchorTop, density ->
-                        openQuickActions(item, anchorCenterX, anchorTop, density)
-                    },
-                    onDismissQuickActions = ::closeQuickActions,
-                    onOpenEditor = ::openEditor,
-                    onQuickActionSelected = ::selectQuickAction,
-                ),
-                popup = {
-                    NavigationQuickActionsPopup(
-                        expanded = expandedQuickActionsRoute == item.route,
-                        actions = item.quickActions,
-                        navigationBarMode = navigationBarMode,
-                        editLabel = editLabel,
-                        quickMenuController = quickMenuController,
-                        onDismissRequest = ::closeQuickActions,
-                        onOpenEditor = ::openEditor,
-                        onActionSelected = ::selectQuickAction,
-                    )
-                },
-                modifier = Modifier.defaultMinSize(minWidth = 76.dp),
-            ) {
-                Icon(
-                    imageVector = item.icon,
-                    contentDescription = item.label,
-                    tint = MixTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = item.label,
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
-                    color = MixTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Visible,
-                )
-            }
         }
     }
 }
@@ -450,96 +379,9 @@ private fun rememberNavigationQuickActions(): List<NavigationQuickAction> {
 }
 
 @Composable
-private fun RowScope.RearNavigationBarItem(
-    item: NavigationDestination,
-    selected: Boolean,
-    expanded: Boolean,
-    navigationBarMode: ModuleNavigationBarMode,
-    editLabel: String,
-    quickMenuController: NavigationQuickMenuController,
-    onClick: () -> Unit,
-    onOpenQuickActions: (anchorCenterX: Float, anchorTop: Float, density: Float) -> Unit,
-    onDismissQuickActions: () -> Unit,
-    onOpenEditor: () -> Unit,
-    onQuickActionSelected: (NavigationQuickTarget) -> Unit,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val onSurfaceContainerColor = MixTheme.colorScheme.onSurfaceContainer
-    val tint = when {
-        isPressed -> if (selected) {
-            onSurfaceContainerColor.copy(alpha = 0.5f)
-        } else {
-            onSurfaceContainerColor.copy(alpha = 0.6f)
-        }
-
-        selected -> onSurfaceContainerColor
-        else -> onSurfaceContainerColor.copy(alpha = 0.4f)
-    }
-    val fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-
-    Box(
-        modifier = Modifier
-            .height(64.dp)
-            .weight(1f),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationQuickActionDragGesture(
-                    enabled = item.quickActions.isNotEmpty(),
-                    actions = item.quickActions,
-                    quickMenuController = quickMenuController,
-                    onOpenQuickActions = onOpenQuickActions,
-                    onDismissQuickActions = onDismissQuickActions,
-                    onOpenEditor = onOpenEditor,
-                    onQuickActionSelected = onQuickActionSelected,
-                )
-                .combinedClickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = onClick,
-                    onLongClick = null,
-                ),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top,
-        ) {
-            Icon(
-                imageVector = item.icon,
-                contentDescription = item.label,
-                tint = tint,
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .size(26.dp),
-            )
-            Text(
-                modifier = Modifier.padding(bottom = 8.dp),
-                text = item.label,
-                color = tint,
-                fontSize = 12.sp,
-                fontWeight = fontWeight,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        NavigationQuickActionsPopup(
-            expanded = expanded,
-            actions = item.quickActions,
-            navigationBarMode = navigationBarMode,
-            editLabel = editLabel,
-            quickMenuController = quickMenuController,
-            onDismissRequest = onDismissQuickActions,
-            onOpenEditor = onOpenEditor,
-            onActionSelected = onQuickActionSelected,
-        )
-    }
-}
-
-@Composable
 private fun NavigationQuickActionsPopup(
+    anchor: NavigationAnchor,
+    hostPosition: Offset,
     expanded: Boolean,
     actions: List<NavigationQuickAction>,
     navigationBarMode: ModuleNavigationBarMode,
@@ -551,8 +393,10 @@ private fun NavigationQuickActionsPopup(
 ) {
     val density = LocalDensity.current
     val menuBackdrop = rememberLayerBackdrop()
-    val positionProvider = remember(density) {
+    val positionProvider = remember(density, anchor, hostPosition) {
         NavigationQuickActionsPopupPositionProvider(
+            anchor = anchor,
+            hostPosition = hostPosition,
             spacingPx = with(density) { 10.dp.roundToPx() },
             windowPaddingPx = with(density) { 12.dp.roundToPx() },
         )
@@ -1026,86 +870,6 @@ private class NavigationQuickMenuController {
         }
         return hoveredKey
     }
-}
-
-private fun Modifier.navigationQuickActionDragGesture(
-    enabled: Boolean,
-    actions: List<NavigationQuickAction>,
-    quickMenuController: NavigationQuickMenuController,
-    onOpenQuickActions: (anchorCenterX: Float, anchorTop: Float, density: Float) -> Unit,
-    onDismissQuickActions: () -> Unit,
-    onOpenEditor: () -> Unit,
-    onQuickActionSelected: (NavigationQuickTarget) -> Unit,
-): Modifier {
-    if (!enabled) return this
-
-    var rootOffset = Offset.Zero
-    return this
-        .onGloballyPositioned { coordinates ->
-            rootOffset = coordinates.positionInRoot()
-        }
-        .pointerInput(actions) {
-            awaitEachGesture {
-                val down =
-                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                val longPressTimeout = maxOf(
-                    QUICK_ACTION_HALF_LONG_PRESS_MIN_MS,
-                    viewConfiguration.longPressTimeoutMillis / 2,
-                )
-                val longPressTriggered = withTimeoutOrNull(longPressTimeout) {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        val change = event.changes.firstOrNull { it.id == down.id }
-                            ?: return@withTimeoutOrNull false
-                        if (!change.pressed || change.isConsumed ||
-                            (change.position - down.position).getDistance() > viewConfiguration.touchSlop ||
-                            event.changes.count { it.pressed } > 1
-                        ) {
-                            return@withTimeoutOrNull false
-                        }
-                    }
-                } == null
-
-                if (!longPressTriggered) return@awaitEachGesture
-
-                val anchorCenterX = rootOffset.x + size.width / 2f
-                val anchorTop = rootOffset.y
-                onOpenQuickActions(anchorCenterX, anchorTop, density)
-                var latestRootPosition = rootOffset + down.position
-                quickMenuController.updateHover(latestRootPosition, actions)
-
-                var released = false
-                while (!released) {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    event.changes.forEach { change ->
-                        if (change.id == down.id) {
-                            latestRootPosition = rootOffset + change.position
-                            quickMenuController.updateHover(latestRootPosition, actions)
-                            if (change.changedToUpIgnoreConsumed()) {
-                                released = true
-                            }
-                            change.consume()
-                        }
-                    }
-                }
-
-                quickMenuController.updateHover(latestRootPosition, actions)
-                val hoveredKey = quickMenuController.hoveredKey
-                quickMenuController.reset()
-                when (hoveredKey) {
-                    EDIT_QUICK_ACTIONS_KEY -> onOpenEditor()
-                    null -> onDismissQuickActions()
-                    else -> {
-                        val action = actions.firstOrNull { it.id == hoveredKey }
-                        if (action != null) {
-                            onQuickActionSelected(action.target)
-                        } else {
-                            onDismissQuickActions()
-                        }
-                    }
-                }
-            }
-        }
 }
 
 @Composable
@@ -1609,6 +1373,8 @@ private fun findNavigationEditorInsertIndex(
 }
 
 private class NavigationQuickActionsPopupPositionProvider(
+    private val anchor: NavigationAnchor,
+    private val hostPosition: Offset,
     private val spacingPx: Int,
     private val windowPaddingPx: Int,
 ) : PopupPositionProvider {
@@ -1618,16 +1384,17 @@ private class NavigationQuickActionsPopupPositionProvider(
         layoutDirection: LayoutDirection,
         popupContentSize: IntSize,
     ): IntOffset {
-        val preferredX = anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2
+        val preferredX = (anchorBounds.left + anchor.centerX - hostPosition.x - popupContentSize.width / 2f).toInt()
         val minX = windowPaddingPx
         val maxX = (windowSize.width - popupContentSize.width - windowPaddingPx)
             .coerceAtLeast(minX)
         val x = preferredX.coerceIn(minX, maxX)
 
-        val preferredY = anchorBounds.top - popupContentSize.height - spacingPx
+        val anchorTopInWindow = (anchorBounds.top + anchor.top - hostPosition.y).toInt()
+        val preferredY = anchorTopInWindow - popupContentSize.height - spacingPx
         val maxY = (windowSize.height - popupContentSize.height - windowPaddingPx)
             .coerceAtLeast(windowPaddingPx)
-        val fallbackY = anchorBounds.bottom + spacingPx
+        val fallbackY = anchorTopInWindow + spacingPx
         val y = if (preferredY >= windowPaddingPx) {
             preferredY
         } else {

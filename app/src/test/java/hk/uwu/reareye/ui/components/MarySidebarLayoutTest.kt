@@ -47,7 +47,7 @@ import hk.uwu.reareye.agent.data.AgentSessionSummary
 import hk.uwu.reareye.ui.screen.MaryConversationSidebar
 import hk.uwu.reareye.ui.screen.MaryFloatingChatLayout
 import hk.uwu.reareye.ui.screen.MaryTopBar
-import hk.uwu.reareye.ui.components.navigation.RearNavigationBar
+import hk.uwu.reareye.ui.components.navigation.AppNavigationBar
 import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import org.junit.*
@@ -1063,9 +1063,9 @@ class MarySidebarLayoutTest {
                             MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { showing.value = true }, menuFocusRequester = menuFocus)
                             }
                             Box(Modifier.fillMaxWidth().align(Alignment.BottomCenter).marySidebarBackground(pageHost).testTag("sidebar-nav-underlay")) {
-                            RearNavigationBar(modifier = Modifier.align(Alignment.BottomCenter).testTag("fixture-navigation"),
+                            AppNavigationBar(modifier = Modifier.align(Alignment.BottomCenter).testTag("fixture-navigation"),
                                 currentScreen = "mary", navigationBarMode = ModuleNavigationBarMode.NORMAL,
-                                backdrop = rememberLayerBackdrop(), onScreenSelected = { navigationClicks++; maryActive.value = it == "mary" })
+                                backdrop = hk.uwu.mixui.components.rememberNavigationBackdrop(), onScreenSelected = { navigationClicks++; maryActive.value = it == "mary" })
                             }
                             MaryConversationSidebar(show = showing.value, revision = revision.value, gestureState = gestures,
                                 currentSessionId = "session-0", hasSession = hasSession, locked = locked,

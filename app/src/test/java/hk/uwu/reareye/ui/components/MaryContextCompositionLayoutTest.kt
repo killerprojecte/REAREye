@@ -31,7 +31,7 @@ import hk.uwu.reareye.agent.ProviderConfig
 import hk.uwu.reareye.agent.context.ContextCategory
 import hk.uwu.reareye.agent.context.ContextComposition
 import hk.uwu.reareye.agent.context.ContextSegment
-import hk.uwu.reareye.ui.components.navigation.RearNavigationBar
+import hk.uwu.reareye.ui.components.navigation.AppNavigationBar
 import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
 import hk.uwu.reareye.ui.screen.*
 import org.junit.*
@@ -557,8 +557,8 @@ class MaryContextCompositionLayoutTest {
                                     MaryTopBar(summary.value, onOpenMenu = { sidebar.value = true }, menuFocusRequester = menuFocus)
                                 }
                                 Box(Modifier.fillMaxWidth().align(Alignment.BottomCenter).marySidebarBackground(pageHost)) {
-                                    RearNavigationBar(currentScreen = "mary", navigationBarMode = ModuleNavigationBarMode.NORMAL,
-                                        backdrop = rememberLayerBackdrop(), onScreenSelected = { navigated++ })
+                                    AppNavigationBar(currentScreen = "mary", navigationBarMode = ModuleNavigationBarMode.NORMAL,
+                                        backdrop = hk.uwu.mixui.components.rememberNavigationBackdrop(), onScreenSelected = { navigated++ })
                                 }
                                 MaryConversationSidebar(show = sidebar.value, revision = 0, currentSessionId = null,
                                     hasSession = false, locked = false, load = { emptyList() }, onDismiss = { sidebar.value = false },
