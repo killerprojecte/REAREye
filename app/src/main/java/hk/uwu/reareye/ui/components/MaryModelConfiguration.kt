@@ -75,7 +75,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
+import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
 
 internal data class ModelDraft(

@@ -4,11 +4,16 @@ import android.app.Application
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.geometry.Offset
 import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -50,8 +55,25 @@ class RealPageCaptureTest {
                         activity = Robolectric.buildActivity(UiCaptureActivity::class.java,
                             Intent().putExtra("page", page).putExtra("backend", backend).putExtra("dark", dark)).setup()
                     }
-                    compose.mainClock.advanceTimeBy(2500)
-                    compose.waitForIdle()
+                    repeat(10) {
+                        compose.mainClock.advanceTimeBy(250)
+                        compose.waitForIdle()
+                    }
+                    if (page == "version-dialog") {
+                        compose.onNodeWithText("Fixture target app", useUnmergedTree = true).assertIsDisplayed()
+                    }
+                    val editorTitle = when (page) {
+                        "card-editor" -> hk.uwu.reareye.R.string.rear_widget_edit_card
+                        "component-editor" -> hk.uwu.reareye.R.string.rear_widget_edit_business
+                        else -> null
+                    }
+                    if (editorTitle != null) {
+                        compose.onNodeWithText(activity!!.get().getString(editorTitle), useUnmergedTree = true).assertIsDisplayed()
+                    }
+                    if (page == "cards" && !java.lang.Boolean.getBoolean("ui.capture.baseline")) {
+                        compose.onAllNodesWithTag("tabs-$backend", useUnmergedTree = true).assertCountEquals(2)
+                        compose.onAllNodesWithTag("tabs-$backend", useUnmergedTree = true)[1].assertIsDisplayed()
+                    }
                     val folder = File(directory, "$backend/${if (dark) "dark" else "light"}/$page").apply { mkdirs() }
                     save(folder, "initial.png")
                     if (!dark && page == "cards") {
@@ -69,6 +91,16 @@ class RealPageCaptureTest {
                             }
                         }
                     }
+                    if (!dark && page == "cards" && !java.lang.Boolean.getBoolean("ui.capture.baseline")) {
+                        compose.onAllNodesWithTag("tabs-$backend", useUnmergedTree = true)[1].performTouchInput {
+                            down(Offset(width * 0.75f, height * 0.5f))
+                            up()
+                        }
+                        repeat(24) { index ->
+                            compose.mainClock.advanceTimeBy(16)
+                            save(folder, "tab-selection-${index.toString().padStart(2, '0')}.png")
+                        }
+                    }
                     File(folder, "evidence.txt").writeText(
                         "Renderer: Robolectric 4.17 native graphics / Compose\n" +
                         "Fixture: $page; backend: $backend; dark: $dark\n" +
@@ -80,8 +112,14 @@ class RealPageCaptureTest {
     }
 
     private fun save(folder: File, name: String) {
-        val image = compose.onNodeWithTag("fixture-root", useUnmergedTree = true)
-            .captureToImage().asAndroidBitmap()
+        val image = compose.onRoot(useUnmergedTree = true).captureToImage().asAndroidBitmap()
+        if (name == "initial.png") {
+            val colors = mutableSetOf<Int>()
+            for (y in 32 until image.height step 8) for (x in 0 until image.width step 8) {
+                colors.add(image.getPixel(x, y))
+            }
+            check(colors.size > 3) { "Blank fixture content: $folder" }
+        }
         File(folder, name).outputStream().use { check(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
     }
 }

@@ -46,7 +46,7 @@ import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
-import top.yukonga.miuix.kmp.basic.TabRowWithContour
+import hk.uwu.mixui.components.Tabs
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import hk.uwu.mixui.theme.MixTheme
@@ -191,7 +191,7 @@ internal fun ConfigDashboard(
             },
             scrollBehavior = scrollBehavior,
         )
-        TabRowWithContour(
+        Tabs(
             tabs = tabs,
             selectedTabIndex = selectedTab.ordinal,
             onTabSelected = ::selectTab,

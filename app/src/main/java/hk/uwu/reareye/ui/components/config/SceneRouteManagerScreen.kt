@@ -67,7 +67,7 @@ import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
+import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar

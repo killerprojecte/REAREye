@@ -58,7 +58,7 @@ class UiCaptureActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxWidth().background(Color(0xFFFFE082)).padding(6.dp),
                         style = TextStyle(color = Color.Black, fontSize = 11.sp),
                     )
-                    Box(Modifier.weight(1f).fillMaxWidth()) { FixturePage(page) }
+                    Box(Modifier.weight(1f).fillMaxWidth()) { CaptureDialogHost { FixturePage(page) } }
                 }
             }
         }

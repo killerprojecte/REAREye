@@ -92,7 +92,7 @@ import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.Scaffold
+import hk.uwu.mixui.components.Scaffold
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar

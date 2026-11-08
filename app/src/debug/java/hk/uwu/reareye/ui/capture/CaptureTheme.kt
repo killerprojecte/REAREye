@@ -14,3 +14,9 @@ internal fun CaptureTheme(backend: String, dark: Boolean, content: @Composable (
         content = content,
     )
 }
+
+/** Supply the same overlay host that the production root provides. */
+@Composable
+internal fun CaptureDialogHost(content: @Composable () -> Unit) {
+    hk.uwu.mixui.components.Scaffold(contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)) { content() }
+}

@@ -134,12 +134,12 @@ import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Slider
-import top.yukonga.miuix.kmp.basic.TabRowWithContour
+import hk.uwu.mixui.components.Tabs
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
+import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -856,7 +856,7 @@ private fun MultiImageFieldEditor(
     ) {
         TemplateSectionHeader(title = field.resolvedTitle())
         if (hasDarkVariant) {
-            TabRowWithContour(
+            Tabs(
                 tabs = listOf(
                     stringResource(R.string.rear_widget_card_template_preview_light),
                     stringResource(R.string.rear_widget_card_template_preview_dark),

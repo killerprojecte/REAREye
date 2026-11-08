@@ -44,7 +44,7 @@ import kotlinx.coroutines.withContext
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
+import hk.uwu.mixui.components.Scaffold
 import top.yukonga.miuix.kmp.basic.TopAppBar
 
 @Stable

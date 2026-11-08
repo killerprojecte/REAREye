@@ -72,7 +72,7 @@ import hk.uwu.reareye.ui.theme.AppThemeMode
 import hk.uwu.reareye.version.AppVersionGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Scaffold
+import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.theme.MixTheme
 
 /**

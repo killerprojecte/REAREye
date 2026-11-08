@@ -96,13 +96,13 @@ import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
+import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.Switch
-import top.yukonga.miuix.kmp.basic.TabRowWithContour
+import hk.uwu.mixui.components.Tabs
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.preference.SwitchPreference
+import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -622,7 +622,7 @@ fun CardManagerScreen(
                     .rearAcrylicSource(hazeState)
                     .padding(top = pageTopPadding),
             ) {
-                TabRowWithContour(
+                Tabs(
                     tabs = listOf(
                         stringResource(R.string.rear_widget_card_tab_normal),
                         stringResource(R.string.rear_widget_card_tab_app),

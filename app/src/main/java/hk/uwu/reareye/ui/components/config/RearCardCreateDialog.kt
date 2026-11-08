@@ -46,11 +46,11 @@ import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.TabRowWithContour
+import hk.uwu.mixui.components.Tabs
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.preference.SwitchPreference
+import hk.uwu.mixui.components.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
 import hk.uwu.mixui.theme.MixTheme
 
@@ -124,7 +124,7 @@ internal fun RearCardCreateDialog(
         onDismissRequest = onDismissRequest,
     ) {
         DialogFormColumn {
-            TabRowWithContour(
+            Tabs(
                 tabs = listOf(
                     stringResource(R.string.rear_widget_card_tab_normal),
                     stringResource(R.string.rear_widget_card_tab_app),
