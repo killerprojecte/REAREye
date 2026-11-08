@@ -331,6 +331,40 @@ class NativeNavigationInteractionTest {
         }
     }
 
+    @Test fun captureNativeSelectionMotion() {
+        for (backend in MixUiBackend.entries) {
+            host(backend, NavigationBarMode.FloatingGlass, false)
+            val started = compose.mainClock.currentTime
+            val timestamps = mutableListOf<String>()
+            var frame = 0
+            fun captureFrame() {
+                picture("${backend.name}-motion-${frame.toString().padStart(3, '0')}")
+                timestamps += "$frame,${compose.mainClock.currentTime - started}"
+                frame++
+            }
+            captureFrame()
+            val target = point("Config")
+            scene().performTouchInput { down(target) }
+            repeat(5) {
+                compose.mainClock.advanceTimeBy(40, ignoreFrameDuration = true)
+                compose.waitForIdle()
+                captureFrame()
+            }
+            scene().performTouchInput { up() }
+            repeat(20) {
+                compose.mainClock.advanceTimeBy(40, ignoreFrameDuration = true)
+                compose.waitForIdle()
+                captureFrame()
+            }
+            compose.runOnIdle {
+                assertEquals(listOf("config"), selections)
+                assertEquals("config", selected)
+            }
+            File(System.getProperty("ui.capture.output"), "native-navigation-v2/${backend.name}-motion-timestamps.csv")
+                .writeText("frame,compose_clock_ms\n" + timestamps.joinToString("\n") + "\n")
+        }
+    }
+
     private fun invokeCustomAction(label: String) {
         val actions = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions))
             .fetchSemanticsNode().config[SemanticsActions.CustomActions]

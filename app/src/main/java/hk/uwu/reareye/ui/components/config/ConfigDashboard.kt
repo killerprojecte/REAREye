@@ -45,7 +45,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
-import top.yukonga.miuix.kmp.basic.ScrollBehavior
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import hk.uwu.mixui.components.Tabs
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import hk.uwu.mixui.components.ArrowPreference
@@ -68,7 +68,6 @@ enum class ConfigDashboardAction {
 internal fun ConfigDashboard(
     moreCategories: List<MoreCategory>,
     contentPadding: PaddingValues,
-    scrollBehavior: ScrollBehavior,
     modifier: Modifier = Modifier,
     onOpenCategory: (ConfigCategory) -> Unit,
     onOpenScriptManagement: () -> Unit,
@@ -85,6 +84,8 @@ internal fun ConfigDashboard(
     componentContent: @Composable (String?, () -> Unit, (String) -> Unit, ConfigDashboardAction?, () -> Unit) -> Unit = { _, _, _, _, _ -> },
     wallpaperContent: @Composable (ConfigDashboardAction?, () -> Unit) -> Unit = { _, _ -> },
 ) {
+    // Dashboard state must never collapse an incoming category/favorites header.
+    val scrollBehavior = MiuixScrollBehavior()
     var selectedTab by remember(selectedTabIndex) {
         mutableStateOf(DashboardTab.entries.getOrNull(selectedTabIndex) ?: DashboardTab.CARDS)
     }

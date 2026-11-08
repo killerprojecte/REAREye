@@ -14,12 +14,10 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -40,7 +38,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -94,14 +91,13 @@ import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import hk.uwu.mixui.components.Scaffold
-import top.yukonga.miuix.kmp.basic.ScrollBehavior
+import hk.uwu.mixui.components.LargeTitleLazyScaffold
+import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.components.ArrowPreference
 import hk.uwu.mixui.theme.MixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import java.util.IdentityHashMap
 
 private sealed interface ConfigRoute {
@@ -198,7 +194,6 @@ fun ConfigScreen(
             depth = routeStack.size,
         )
     }
-    val scrollBehavior = MiuixScrollBehavior()
     val hazeState = rememberAcrylicHazeState()
     val hazeStyle = rememberAcrylicHazeStyle()
     val routeScope = rememberCoroutineScope()
@@ -416,7 +411,6 @@ fun ConfigScreen(
                         top = paddingValues.calculateTopPadding(),
                         bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
                     ),
-                    scrollBehavior = scrollBehavior,
                     modifier = Modifier.rearAcrylicSource(hazeState),
                     onOpenCategory = { category ->
                         // More owns these categories, so returning keeps the More tab selected.
@@ -500,90 +494,40 @@ fun ConfigScreen(
                     },
                 )
 
-                is ConfigRoute.Category -> ConfigSubpageLayout(
+                is ConfigRoute.Category -> ConfigNodePage(
                     title = stringResource(route.category.titleRes),
                     onBack = ::navigateBack,
-                    scrollBehavior = scrollBehavior,
-                    topBarModifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                ) {
-                    ConfigNodeList(
-                        nodes = route.category.children,
-                        prefsManager = prefsManager,
-                        contentPadding = PaddingValues(
-                            bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
-                        ),
-                        scrollBehavior = scrollBehavior,
-                        modifier = Modifier.rearAcrylicSource(hazeState),
-                        onOpenCategory = { category ->
-                            routeStack = routeStack + ConfigRoute.Category(category)
-                        },
-                        onOpenAppList = { item ->
-                            openOverlayRoute(ConfigRoute.AppList(item))
-                        },
-                        onOpenManager = { item -> openManagerItem(item) },
-                        onPreferenceChanged = handlePreferenceChanged,
-                        favoriteNodeIds = favoriteNodeIds,
-                        resolveFavoriteNodeId = { node ->
-                            favoriteNodeIndex.nodeIdLookup[node]
-                        },
-                        onToggleFavorite = { node ->
-                            toggleFavoriteNode(node)
-                        },
-                    )
-                }
+                    nodes = route.category.children,
+                    prefsManager = prefsManager,
+                    bottomObstruction = bottomInnerPadding,
+                    onOpenCategory = { category ->
+                        routeStack = routeStack + ConfigRoute.Category(category)
+                    },
+                    onOpenAppList = { item ->
+                        openOverlayRoute(ConfigRoute.AppList(item))
+                    },
+                    onOpenManager = { item -> openManagerItem(item) },
+                    onPreferenceChanged = handlePreferenceChanged,
+                    favoriteNodeIds = favoriteNodeIds,
+                    resolveFavoriteNodeId = { node ->
+                        favoriteNodeIndex.nodeIdLookup[node]
+                    },
+                    onToggleFavorite = { node ->
+                        toggleFavoriteNode(node)
+                    },
+                )
 
                 ConfigRoute.LyricsManager -> {
                     val lyricsCategory = findConfigCategoryByTitleRes(
                         REAREyeConfig,
                         R.string.subcategory_lyrics,
                     )
-                    ConfigSubpageLayout(
+                    ConfigNodePage(
                         title = stringResource(R.string.subcategory_lyrics),
                         onBack = ::navigateBack,
-                        scrollBehavior = scrollBehavior,
-                        topBarModifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                    ) {
-                        ConfigNodeList(
-                            nodes = lyricsCategory?.children.orEmpty(),
-                            prefsManager = prefsManager,
-                            contentPadding = PaddingValues(
-                                bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
-                            ),
-                            scrollBehavior = scrollBehavior,
-                            modifier = Modifier.rearAcrylicSource(hazeState),
-                            onOpenCategory = { category ->
-                                routeStack = routeStack + ConfigRoute.Category(category)
-                            },
-                            onOpenAppList = { item ->
-                                openOverlayRoute(ConfigRoute.AppList(item))
-                            },
-                            onOpenManager = { item -> openManagerItem(item) },
-                            onPreferenceChanged = handlePreferenceChanged,
-                            favoriteNodeIds = favoriteNodeIds,
-                            resolveFavoriteNodeId = { node ->
-                                favoriteNodeIndex.nodeIdLookup[node]
-                            },
-                            onToggleFavorite = { node ->
-                                toggleFavoriteNode(node)
-                            },
-                        )
-                    }
-                }
-
-                ConfigRoute.Favorites -> ConfigSubpageLayout(
-                    title = stringResource(R.string.config_favorites_title),
-                    onBack = ::navigateBack,
-                    scrollBehavior = scrollBehavior,
-                    topBarModifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                ) {
-                    ConfigNodeList(
-                        nodes = favoriteNodes,
+                        nodes = lyricsCategory?.children.orEmpty(),
                         prefsManager = prefsManager,
-                        contentPadding = PaddingValues(
-                            bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
-                        ),
-                        scrollBehavior = scrollBehavior,
-                        modifier = Modifier.rearAcrylicSource(hazeState),
+                        bottomObstruction = bottomInnerPadding,
                         onOpenCategory = { category ->
                             routeStack = routeStack + ConfigRoute.Category(category)
                         },
@@ -592,7 +536,6 @@ fun ConfigScreen(
                         },
                         onOpenManager = { item -> openManagerItem(item) },
                         onPreferenceChanged = handlePreferenceChanged,
-                        emptyStateRes = R.string.config_favorites_empty,
                         favoriteNodeIds = favoriteNodeIds,
                         resolveFavoriteNodeId = { node ->
                             favoriteNodeIndex.nodeIdLookup[node]
@@ -603,10 +546,33 @@ fun ConfigScreen(
                     )
                 }
 
+                ConfigRoute.Favorites -> ConfigNodePage(
+                    title = stringResource(R.string.config_favorites_title),
+                    onBack = ::navigateBack,
+                    nodes = favoriteNodes,
+                    prefsManager = prefsManager,
+                    bottomObstruction = bottomInnerPadding,
+                    onOpenCategory = { category ->
+                        routeStack = routeStack + ConfigRoute.Category(category)
+                    },
+                    onOpenAppList = { item ->
+                        openOverlayRoute(ConfigRoute.AppList(item))
+                    },
+                    onOpenManager = { item -> openManagerItem(item) },
+                    onPreferenceChanged = handlePreferenceChanged,
+                    emptyStateRes = R.string.config_favorites_empty,
+                    favoriteNodeIds = favoriteNodeIds,
+                    resolveFavoriteNodeId = { node ->
+                        favoriteNodeIndex.nodeIdLookup[node]
+                    },
+                    onToggleFavorite = { node ->
+                        toggleFavoriteNode(node)
+                    },
+                )
+
                 is ConfigRoute.WallpaperTemplate -> ConfigSubpageLayout(
                     title = stringResource(R.string.rear_wallpaper_template_title),
                     onBack = ::navigateBack,
-                    scrollBehavior = scrollBehavior,
                     topBarModifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
                 ) {
                     RearWallpaperTemplateConfigScreen(
@@ -704,10 +670,11 @@ fun ConfigScreen(
 private fun ConfigSubpageLayout(
     title: String,
     onBack: () -> Unit,
-    scrollBehavior: ScrollBehavior,
     topBarModifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
+    // Template editor still owns its embedded scroll container. Keep its legacy state local.
+    val scrollBehavior = MiuixScrollBehavior()
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             modifier = topBarModifier,
@@ -750,11 +717,12 @@ private fun findConfigCategoryByTitleRes(
 }
 
 @Composable
-private fun ConfigNodeList(
+internal fun ConfigNodePage(
     nodes: List<ConfigNode>,
     prefsManager: PrefsManager,
-    contentPadding: PaddingValues,
-    scrollBehavior: ScrollBehavior,
+    title: String,
+    onBack: () -> Unit,
+    bottomObstruction: Dp,
     modifier: Modifier = Modifier,
     onOpenCategory: (ConfigCategory) -> Unit,
     onOpenAppList: (ConfigItem) -> Unit,
@@ -773,17 +741,21 @@ private fun ConfigNodeList(
         derivedStateOf { listState.isScrollInProgress }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxHeight()
-            .scrollEndHaptic()
-            .overScrollVertical()
-            .nestedScroll(scrollBehavior.nestedScrollConnection)
-            .then(modifier)
-            .padding(horizontal = 12.dp),
-        contentPadding = contentPadding,
-        overscrollEffect = null
+    LargeTitleLazyScaffold(
+        title = title,
+        modifier = modifier,
+        listState = listState,
+        bottomObstruction = bottomObstruction,
+        // Rows already own their spacing; the page must not add a second gap.
+        contentSpacing = 0.dp,
+        navigationIcon = {
+            TopBarIconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.scene_route_navigate_back),
+                )
+            }
+        },
     ) {
         if (showFavoriteCategoryEntry) {
             item(key = "favorite_config_category_entry") {
