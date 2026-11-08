@@ -66,7 +66,8 @@ import top.yukonga.miuix.kmp.basic.Slider
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.preference.ArrowPreference
+import hk.uwu.mixui.components.ArrowPreference
+import top.yukonga.miuix.kmp.preference.ArrowPreference as MiuixArrowPreference
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
 
@@ -99,7 +100,7 @@ fun ConfigNodeRow(
 
 @Composable
 fun ConfigCategoryNodeRow(category: ConfigCategory, onClick: () -> Unit) {
-    ArrowPreference(
+    MiuixArrowPreference(
         title = stringResource(category.titleRes),
         summary = category.descriptionRes?.let { stringResource(it) },
         startAction = category.icon?.let { icon ->
@@ -226,7 +227,7 @@ fun AppListConfigInput(
         "$description\n$selectedSummary"
     }
 
-    ArrowPreference(
+    MiuixArrowPreference(
         title = stringResource(item.titleRes),
         summary = summary,
         onClick = onClick
@@ -274,7 +275,7 @@ fun MaskMultiSelectConfigInput(
     }
 
     Box {
-        ArrowPreference(
+        MiuixArrowPreference(
             title = stringResource(item.titleRes),
             summary = summary,
             holdDownState = showModePopup.value,
@@ -361,7 +362,7 @@ fun EnumSingleSelectConfigInput(
     }
 
     Box {
-        ArrowPreference(
+        MiuixArrowPreference(
             modifier = Modifier.semantics(mergeDescendants = true) { if (!enabled) disabled() },
             title = stringResource(item.titleRes),
             summary = summary,
@@ -523,7 +524,7 @@ fun RearStoreApiConfigInput(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Box {
-            ArrowPreference(
+            MiuixArrowPreference(
                 title = stringResource(item.titleRes),
                 summary = summary,
                 holdDownState = showApiPopup.value,
@@ -668,7 +669,7 @@ fun FloatSliderConfigInput(
 
 @Composable
 fun ManagerConfigInput(item: ConfigItem, onClick: () -> Unit) {
-    ArrowPreference(
+    MiuixArrowPreference(
         title = stringResource(item.titleRes),
         summary = item.descriptionRes?.let { stringResource(it) },
         onClick = onClick,

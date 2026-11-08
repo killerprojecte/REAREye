@@ -2,6 +2,7 @@ package hk.uwu.mixui.icons
 
 import androidx.compose.ui.graphics.vector.ImageVector
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 import top.yukonga.miuix.kmp.icon.basic.Check
 import top.yukonga.miuix.kmp.icon.basic.Search
 import top.yukonga.miuix.kmp.icon.basic.SearchCleanup
@@ -33,6 +34,7 @@ object Icons {
     val Refresh: ImageVector get() = MiuixIcons.Refresh
     val Settings: ImageVector get() = MiuixIcons.Settings
     object Basic {
+        val ArrowRight: ImageVector get() = MiuixIcons.Basic.ArrowRight
         val Check: ImageVector get() = MiuixIcons.Basic.Check
         val Search: ImageVector get() = MiuixIcons.Basic.Search
         val SearchCleanup: ImageVector get() = MiuixIcons.Basic.SearchCleanup

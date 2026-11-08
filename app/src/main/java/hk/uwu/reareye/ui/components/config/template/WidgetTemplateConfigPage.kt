@@ -138,7 +138,8 @@ import hk.uwu.mixui.components.Tabs
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.preference.ArrowPreference
+import hk.uwu.mixui.components.ArrowPreference
+import top.yukonga.miuix.kmp.preference.ArrowPreference as MiuixArrowPreference
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
 import java.util.Locale
@@ -1382,7 +1383,7 @@ private fun AnimationFieldEditor(
 @Composable
 private fun CustomEditLinkFieldEditor(field: RearWidgetCustomEditLinkField) {
     val context = LocalContext.current
-    ArrowPreference(
+    MiuixArrowPreference(
         title = stringResource(R.string.rear_widget_card_template_external_editor),
         summary = field.deeplink,
         onClick = {
@@ -1862,7 +1863,7 @@ private fun SingleChoicePreference(
     }
 
     Box(modifier = Modifier.fillMaxWidth()) {
-        ArrowPreference(
+        MiuixArrowPreference(
             title = title,
             summary = summary,
             holdDownState = showPopup,

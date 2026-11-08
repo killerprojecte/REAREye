@@ -48,7 +48,8 @@ import hk.uwu.mixui.components.IconButton
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import hk.uwu.mixui.components.Tabs
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.preference.ArrowPreference
+import hk.uwu.mixui.components.ArrowPreference
+import top.yukonga.miuix.kmp.preference.ArrowPreference as MiuixArrowPreference
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -355,7 +356,7 @@ private fun MoreTab(
         }
         items(categories, key = { it.group.id }) { entry ->
             MoreSurface {
-                ArrowPreference(
+                MiuixArrowPreference(
                     title = stringResource(entry.group.titleRes),
                     summary = stringResource(entry.group.descriptionRes),
                     startAction = {
