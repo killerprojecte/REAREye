@@ -1,0 +1,25 @@
+name: MIUIX package access probe
+on:
+  push:
+    branches: ["feat/ui-base-refactor"]
+    paths: ["tools/miuix/probe-packages.py", ".github/workflows/miuix-package-probe.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: read
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Try job token before optional package credential
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_PKG_TOKEN: ${{ secrets.GITHUB_PKG_TOKEN }}
+        run: python tools/miuix/probe-packages.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: miuix-public-package-metadata
+          path: package-evidence/metadata.json
