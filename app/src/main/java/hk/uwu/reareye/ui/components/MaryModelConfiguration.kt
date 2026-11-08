@@ -58,8 +58,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.DropdownDefaults

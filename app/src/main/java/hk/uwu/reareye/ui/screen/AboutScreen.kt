@@ -106,7 +106,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
-import top.yukonga.miuix.kmp.basic.Button
+import hk.uwu.mixui.components.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon

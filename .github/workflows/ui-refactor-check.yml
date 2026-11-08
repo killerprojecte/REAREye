@@ -43,7 +43,7 @@ jobs:
       - name: Compile application and run existing unit tests
         run: bash ./gradlew --no-daemon -I "$RUNNER_TEMP/ui-debug-signing.gradle" :app:assembleDebug :app:testDebugUnitTest
       - name: Check mixui module
-        if: matrix.name == 'candidate'
+        if: ${{ !cancelled() && matrix.name == 'candidate' }}
         run: bash ./gradlew --no-daemon :mixui:assembleDebug :mixui:testDebugUnitTest
       - uses: actions/upload-artifact@v7
         if: always()

@@ -75,8 +75,8 @@ import hk.uwu.reareye.widgetapi.RearWallpaperScheduleEntry
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator

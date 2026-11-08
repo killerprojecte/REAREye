@@ -55,8 +55,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import kotlinx.coroutines.delay
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import hk.uwu.mixui.theme.MixTheme

@@ -1,0 +1,80 @@
+name: UI fixture captures
+on:
+  push:
+    branches: ["feat/ui-base-refactor"]
+    paths:
+      - "app/src/debug/**"
+      - "tools/ui-capture/**"
+      - ".github/workflows/ui-capture.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: baseline-miuix
+            ref: e554a382dabdb79994fa11a4482c072c9f968c82
+            backend: miuix
+          - name: candidate-miuix
+            ref: ${{ github.sha }}
+            backend: miuix
+          - name: candidate-mochi
+            ref: ${{ github.sha }}
+            backend: mochi
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: harness
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.ref }}
+          path: target
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: "21"
+      - uses: amyu/setup-android@v5
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Overlay debug-only baseline fixture
+        if: matrix.name == 'baseline-miuix'
+        run: python harness/tools/ui-capture/prepare-baseline-fixture.py target
+      - name: Build fixture APK with disposable debug key
+        working-directory: target
+        run: |
+          cat > "$RUNNER_TEMP/debug-signing.gradle" <<'INIT'
+          gradle.afterProject { p ->
+              if (p.path == ':app') {
+                  def android = p.extensions.findByName('android')
+                  android.buildTypes.getByName('debug').signingConfig = android.signingConfigs.getByName('debug')
+              }
+          }
+          INIT
+          bash ./gradlew --no-daemon -I "$RUNNER_TEMP/debug-signing.gradle" :app:assembleDebug
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: false
+          script: |
+            adb install -r "$(find target/app/build/outputs/apk/debug -name '*.apk' | head -1)"
+            python harness/tools/ui-capture/capture-fixtures.py --backend ${{ matrix.backend }} --output evidence/${{ matrix.name }}
+      - name: Save fixture metadata
+        if: always()
+        run: |
+          mkdir -p evidence
+          printf 'Source: %s\nHarness: %s\nType: debug-only real-page fixture, not full application integration\n' '${{ matrix.ref }}' '${{ github.sha }}' > evidence/source.txt
+          adb logcat -d > evidence/logcat.txt 2>/dev/null || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ui-fixtures-${{ matrix.name }}
+          path: evidence/
+          if-no-files-found: warn

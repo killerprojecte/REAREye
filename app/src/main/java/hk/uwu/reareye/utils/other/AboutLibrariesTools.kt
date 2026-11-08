@@ -40,8 +40,8 @@ import hk.uwu.reareye.ui.components.RearBadgeItem
 import hk.uwu.reareye.ui.components.card.SuperCard
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonColors
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonColors
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon

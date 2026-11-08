@@ -39,8 +39,8 @@ import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.reareye.ui.components.LocalOverlayDialogBounds
 import hk.uwu.reareye.ui.components.OverlayDialog
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.DropdownDefaults
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.DropdownItem

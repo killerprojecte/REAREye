@@ -104,7 +104,7 @@ import hk.uwu.reareye.agent.interaction.ApprovalMode
 import hk.uwu.reareye.agent.provider.ChatEvent
 import hk.uwu.reareye.agent.voice.MaryVoicePhase
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import hk.uwu.mixui.components.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.RichTooltip

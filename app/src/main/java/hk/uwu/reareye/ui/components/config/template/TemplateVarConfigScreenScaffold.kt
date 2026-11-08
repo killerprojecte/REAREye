@@ -25,8 +25,8 @@ import hk.uwu.reareye.ui.theme.rearAcrylicEffect
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator

@@ -27,7 +27,15 @@ def main():
         for step in scenario['steps']:
             action = step['action']
             if action == 'launch':
-                adb('shell', 'am', 'start', '-W', '-n', scenario['component'])
+                extras = []
+                for key, value in step.get('extras', {}).items():
+                    if isinstance(value, bool):
+                        extras += ['--ez', key, str(value).lower()]
+                    elif isinstance(value, str):
+                        extras += ['--es', key, value]
+                    else:
+                        raise ValueError('Launch extras must be strings or booleans')
+                adb('shell', 'am', 'start', '-S', '-W', '-n', scenario['component'], *extras)
             elif action == 'tap':
                 adb('shell', 'input', 'tap', str(step['x']), str(step['y']))
             elif action == 'swipe':

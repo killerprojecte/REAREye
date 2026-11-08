@@ -1,5 +1,8 @@
 package hk.uwu.reareye.ui.components.motion
 
+import hk.uwu.mixui.motion.ArtStaggeredReveal
+import hk.uwu.mixui.motion.ArtVisibilityMotion
+
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent

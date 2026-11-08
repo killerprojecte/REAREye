@@ -1,6 +1,8 @@
 package hk.uwu.mixui.components
 
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.unit.Dp
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import hk.uwu.mixui.LocalMixUiRenderer
@@ -10,5 +12,14 @@ fun Switch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Mo
     LocalMixUiRenderer.current.Switch(checked, onCheckedChange, modifier, enabled)
 
 @Composable
-fun Button(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, content: @Composable RowScope.() -> Unit) =
-    LocalMixUiRenderer.current.Button(onClick, modifier, enabled, content)
+fun Button(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    cornerRadius: Dp = ButtonDefaults.CornerRadius,
+    minWidth: Dp = ButtonDefaults.MinWidth,
+    minHeight: Dp = ButtonDefaults.MinHeight,
+    colors: ButtonColors = ButtonDefaults.buttonColors(),
+    insideMargin: PaddingValues = ButtonDefaults.InsideMargin,
+    content: @Composable RowScope.() -> Unit,
+) = LocalMixUiRenderer.current.Button(onClick, modifier, enabled, cornerRadius, minWidth, minHeight, colors, insideMargin, content)
