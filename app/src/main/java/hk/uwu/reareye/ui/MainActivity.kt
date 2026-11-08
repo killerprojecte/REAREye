@@ -69,6 +69,7 @@ import hk.uwu.reareye.ui.screen.RearStoreScreen
 import hk.uwu.reareye.ui.screen.preloadHomeFrameNotice
 import hk.uwu.reareye.ui.theme.AppTheme
 import hk.uwu.reareye.ui.theme.AppThemeMode
+import hk.uwu.reareye.ui.theme.AppUiBackend
 import hk.uwu.reareye.version.AppVersionGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -83,6 +84,7 @@ import hk.uwu.mixui.theme.MixTheme
 private val MainScreenOrder = listOf("home", "store", "mary", "config", "about")
 
 private data class RemoteUiSettings(
+    val uiBackendValue: Int,
     val themeModeValue: Int,
     val navigationBarModeValue: Int,
     val navigationQuickActionIds: List<String>,
@@ -207,6 +209,9 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         RemoteUiSettings(
+                            uiBackendValue = remotePrefsManager.getInt(
+                                ConfigKeys.MODULE_UI_BACKEND, AppUiBackend.default.value,
+                            ),
                             themeModeValue = remotePrefsManager.getInt(
                                 ConfigKeys.MODULE_THEME_MODE,
                                 AppThemeMode.default.value,
@@ -239,6 +244,7 @@ class MainActivity : ComponentActivity() {
                 return@setContent
             }
 
+            var uiBackendValue by remember { mutableIntStateOf(settings.uiBackendValue) }
             var themeModeValue by remember {
                 mutableIntStateOf(settings.themeModeValue)
             }
@@ -289,7 +295,10 @@ class MainActivity : ComponentActivity() {
                 navBarVisible = true
             }
 
-            AppTheme(themeMode = AppThemeMode.fromValue(themeModeValue)) {
+            AppTheme(
+                themeMode = AppThemeMode.fromValue(themeModeValue),
+                backend = AppUiBackend.fromValue(uiBackendValue).backend,
+            ) {
                 val navigationBarMode = ModuleNavigationBarMode.fromValue(navigationBarModeValue)
                 val enableFloatingGlass =
                     navigationBarMode == ModuleNavigationBarMode.FLOATING_GLASS
@@ -449,6 +458,7 @@ class MainActivity : ComponentActivity() {
                                                     configInAppListMode = it
                                                 },
                                                 onThemeModeChange = { themeModeValue = it },
+                                                onUiBackendChange = { uiBackendValue = it },
                                                 onNavigationBarModeChange = {
                                                     navigationBarModeValue = it
                                                 },

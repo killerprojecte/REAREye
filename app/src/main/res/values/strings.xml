@@ -1111,4 +1111,8 @@
     <string name="mary_context_sequence_note">Order follows budget estimation, not exact provider serialization. Unsent draft excluded.</string>
     <string name="mary_context_saturated">Estimate limit reached; composition proportions unavailable</string>
     <string name="mary_context_empty">No context content</string>
+    <string name="module_ui_backend">Component library</string>
+    <string name="module_ui_backend_desc">Switch MIUIX or Mochi controls. Migration is in progress; some controls still use compatibility rendering.</string>
+    <string name="module_ui_backend_miuix">MIUIX</string>
+    <string name="module_ui_backend_mochi">Mochi</string>
 </resources>

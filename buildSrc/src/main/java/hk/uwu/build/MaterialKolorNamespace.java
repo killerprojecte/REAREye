@@ -19,7 +19,9 @@ public final class MaterialKolorNamespace {
                 String s = (String) value;
                 // Kotlin Metadata d2/xs/pn and JVM reflection names. Leave the encoded d1
                 // protobuf untouched: its type names reference the separate d2 string table.
-                if (s.startsWith("com/materialkolor/") || s.startsWith("Lcom/materialkolor/") || s.startsWith("("))
+                if (s.startsWith("com/materialkolor/") || s.startsWith("Lcom/materialkolor/") ||
+                    s.startsWith("(") || s.startsWith("[") ||
+                    s.matches("[A-Za-z_$][A-Za-z0-9_$]*\\(.*"))
                     return s.replace(OLD, NEW);
                 if (s.startsWith("com.materialkolor."))
                     return s.replace("com.materialkolor.", "hk.uwu.mixui.shaded.materialkolor4.");

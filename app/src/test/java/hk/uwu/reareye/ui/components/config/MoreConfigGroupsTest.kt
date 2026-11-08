@@ -23,7 +23,7 @@ class MoreConfigGroupsTest {
         assertEquals(expectedKeys, assignedKeys.toSet())
         assertEquals(assignedKeys.size, assignedKeys.distinct().size)
         assertTrue((assignedKeys.toSet() - originalKeys.toSet()).isEmpty())
-        assertEquals(listOf(14, 2, 10, 4, 5, 16, 7), MoreConfigGroups.map { it.itemKeys.size })
+        assertEquals(listOf(14, 2, 10, 4, 5, 16, 1, 8), MoreConfigGroups.map { it.itemKeys.size })
         assertEquals(7, MoreConfigGroups.map { it.icon }.distinct().size)
 
         val categories = buildMoreCategories(REAREyeConfig)

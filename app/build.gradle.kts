@@ -308,6 +308,8 @@ tasks.withType<Test>().configureEach {
     val maryUiResources = providers.gradleProperty("maryUiResources")
         .map(String::toBoolean).getOrElse(false)
     val uiCapture = providers.gradleProperty("uiCapture").map(String::toBoolean).getOrElse(false)
+    // Native graphics plus both page suites exceeds Gradle's default 512 MiB test heap.
+    if (uiCapture) maxHeapSize = "2g"
     systemProperty("ui.capture.enabled", uiCapture.toString())
     systemProperty("ui.capture.backends", providers.gradleProperty("uiCaptureBackends").getOrElse("miuix,mochi"))
     systemProperty("ui.capture.output", rootProject.layout.buildDirectory.dir("reports/ui-capture").get().asFile.absolutePath)
@@ -319,6 +321,8 @@ tasks.withType<Test>().configureEach {
     filter {
         if (uiCapture) {
             includeTestsMatching("hk.uwu.reareye.ui.capture.RealPageCaptureTest")
+            includeTestsMatching("hk.uwu.reareye.ui.theme.AppUiBackendTest")
+            includeTestsMatching("hk.uwu.reareye.ui.components.config.MoreConfigGroupsTest")
         } else if (maryUiResources) {
             includeTestsMatching("hk.uwu.reareye.ui.components.Mary*LayoutTest")
             includeTestsMatching("hk.uwu.reareye.ui.components.MaryContextRingRenderingTest")

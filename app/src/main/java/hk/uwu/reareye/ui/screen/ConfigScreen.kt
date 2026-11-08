@@ -76,6 +76,7 @@ import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import hk.uwu.reareye.ui.config.REAREyeConfig
 import hk.uwu.reareye.ui.theme.AppThemeMode
+import hk.uwu.reareye.ui.theme.AppUiBackend
 import hk.uwu.reareye.ui.theme.rearAcrylicEffect
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
@@ -157,6 +158,7 @@ fun ConfigScreen(
     onQuickManagerTargetHandled: () -> Unit = {},
     onAppListModeChange: (Boolean) -> Unit = {},
     onThemeModeChange: (Int) -> Unit = {},
+    onUiBackendChange: (Int) -> Unit = {},
     onNavigationBarModeChange: (Int) -> Unit = {},
     onOpenRearStore: () -> Unit = {},
     onOpenRearStoreDetail: (String) -> Unit = {},
@@ -247,10 +249,17 @@ fun ConfigScreen(
     val handlePreferenceChanged = remember(
         prefsManager,
         onThemeModeChange,
+        onUiBackendChange,
         onNavigationBarModeChange,
     ) {
         { item: ConfigItem ->
             when (item.key) {
+                ConfigKeys.MODULE_UI_BACKEND -> {
+                    onUiBackendChange(prefsManager.getInt(
+                        ConfigKeys.MODULE_UI_BACKEND, AppUiBackend.default.value,
+                    ))
+                }
+
                 ConfigKeys.MODULE_THEME_MODE -> {
                     onThemeModeChange(
                         prefsManager.getInt(

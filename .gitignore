@@ -37,3 +37,4 @@ REFACTOR_PLAN_2.0.md
 
 # Build-logic source package is not generated build output.
 !buildSrc/src/main/java/hk/uwu/build/
+!buildSrc/src/test/java/hk/uwu/build/

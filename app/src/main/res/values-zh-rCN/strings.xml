@@ -1111,4 +1111,8 @@
     <string name="mary_context_sequence_note">顺序为预算估算计入顺序，并非服务端序列化顺序；不含未发送草稿。</string>
     <string name="mary_context_saturated">估算已达上限，分类比例不可用</string>
     <string name="mary_context_empty">尚无上下文内容</string>
+    <string name="module_ui_backend">组件库</string>
+    <string name="module_ui_backend_desc">切换 MIUIX 或 Mochi 组件。迁移仍在进行，部分组件暂用兼容渲染。</string>
+    <string name="module_ui_backend_miuix">MIUIX</string>
+    <string name="module_ui_backend_mochi">Mochi</string>
 </resources>

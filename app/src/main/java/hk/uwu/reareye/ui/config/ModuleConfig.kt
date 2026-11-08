@@ -6,10 +6,12 @@ import androidx.compose.material.icons.filled.Tune
 import hk.uwu.reareye.R
 import hk.uwu.reareye.lyrics.LyricParser
 import hk.uwu.reareye.ui.theme.AppThemeMode
+import hk.uwu.reareye.ui.theme.AppUiBackend
 import kotlin.math.roundToInt
 
 object ConfigKeys {
     const val MODULE_HIDE_LAUNCHER_ENTRY = "module_hide_launcher_entry"
+    const val MODULE_UI_BACKEND = "module_ui_backend"
     const val MODULE_THEME_MODE = "module_theme_mode"
     const val MODULE_NAVIGATION_BAR_MODE = "module_navigation_bar_mode"
     const val MODULE_SEARCH_BAR_STYLE = "module_search_bar_style"
@@ -241,6 +243,17 @@ val REAREyeConfig = listOf(
         titleRes = R.string.category_module_settings,
         descriptionRes = R.string.category_module_settings_desc,
         children = listOf(
+            ConfigItem(
+                key = ConfigKeys.MODULE_UI_BACKEND,
+                titleRes = R.string.module_ui_backend,
+                descriptionRes = R.string.module_ui_backend_desc,
+                type = ConfigType.EnumSingleSelect(
+                    defaultValue = AppUiBackend.default.value,
+                    options = AppUiBackend.entries.map {
+                        ConfigType.EnumOption(titleRes = it.titleRes, value = it.value)
+                    },
+                ),
+            ),
             ConfigItem(
                 key = ConfigKeys.MODULE_THEME_MODE,
                 titleRes = R.string.module_theme_mode,
