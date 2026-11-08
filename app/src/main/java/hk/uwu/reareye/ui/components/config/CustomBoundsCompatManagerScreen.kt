@@ -81,7 +81,6 @@ import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
 import top.yukonga.miuix.kmp.basic.ColorPalette
-import top.yukonga.miuix.kmp.basic.DropdownItem
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.InfiniteProgressIndicator
@@ -91,7 +90,7 @@ import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import hk.uwu.mixui.components.SwitchPreference
-import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
+import hk.uwu.mixui.components.SpinnerPreference
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -829,13 +828,10 @@ private fun CustomBoundsDropdownPreference(
     onSelected: (Int) -> Unit,
 ) {
     val optionTitles = options.map { stringResource(it.titleRes) }
-    val optionEntries = remember(optionTitles) {
-        optionTitles.map { DropdownItem(title = it) }
-    }
     val selectedIndex = options.indexOfFirst { it.value == selectedValue }.coerceAtLeast(0)
-    WindowSpinnerPreference(
+    SpinnerPreference(
         modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
-        items = optionEntries,
+        options = optionTitles,
         selectedIndex = selectedIndex,
         title = title,
         summary = description,

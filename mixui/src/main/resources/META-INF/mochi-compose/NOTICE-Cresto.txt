@@ -1,0 +1,18 @@
+Cresto / Glasense Overscroll
+===========================
+Authors: Kyant & Nevoit (Nevodev/Cresto contributors)
+Repository: https://github.com/Nevodev/Cresto
+Pinned revision: 74564563a686106d76d7d9a403dd994a4fbcb6a7
+Source: https://github.com/Nevodev/Cresto/tree/74564563a686106d76d7d9a403dd994a4fbcb6a7/glasense-ui/src/main/java/com/nevoit/glasense/core/interaction/overscroll
+License: Apache License 2.0 (see LICENSE-Cresto.txt)
+
+Includes adaptations of OffsetOverscrollEffect.kt and the exponential formula
+from util/ProgressConverter.kt. Modified by mochi-compose contributors:
+- package and internal visibility; Mochi public API retained as a delegating facade;
+- live spring/curve parameters and observable visible offset/axis for title/refresh;
+- measured viewport size and standard Compose layer placement instead of SingleLayout;
+- optional scope and visible-offset callback for custom dropdown scrolling;
+- reset support for programmatic dropdown positioning.
+The upstream scrolling, spring velocity handoff, frame timing probe and
+isInProgress=false behavior are retained. Mochi's existing fling deceleration
+(0.998, stop near rest at 1dp/s) remains a separate policy.

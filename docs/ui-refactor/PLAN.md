@@ -1,39 +1,42 @@
-# UI base refactor work log
+# UI base refactor status
 
 Branch: `feat/ui-base-refactor`. Baseline: `dev@e554a382dabdb79994fa11a4482c072c9f968c82`. Neither dev nor main is modified.
 
 ## Contract
 
-- `mixui` owns backend-neutral controls, tokens and shared motion. Vendor types must not escape its public API.
-- MIUIX and Mochi render the same application state/callbacks/layout contract. No duplicated screen business logic.
-- Shared Mochi press feedback is usable on MIUIX/custom components. Do not layer it again over a Mochi component with its own press animation.
-- Migrate controls/theme, then preferences/popups, then navigation/glass. Remove app vendor dependencies only after the final call site moves.
-- Preserve all existing preference values, callbacks, accessibility semantics, disabled states, cancellation and back/IME behavior.
+`mixui` owns neutral controls, theme tokens and motion; app business logic and stored configuration stay in the app. Public adapter signatures do not expose vendor types. Each backend should use its real controls rather than present a MIUIX control as Mochi. Transitional compatibility paths must be explicit.
 
-## Current implementation, incomplete
+## Implemented
 
-- Added the Android `mixui` submodule and MIUIX/Mochi button/switch adapters.
-- Existing application switches now use the neutral API.
-- Moved all existing `ArtMotion` helpers, unchanged apart from package, into `mixui`; their existing application usages now import that module.
-- Exposed shared Mochi press deformation and applied it to the MIUIX button adapter.
-- Existing AppTheme hosts the adapter context; default remains MIUIX. The rest of the application is not yet migrated. There is not yet a production backend selector.
+- Neutral theme modes, 53 color and 14 typography tokens, Text, Icon, Button, Switch, Card, IconButton, progress indicators, Badge groups and icons.
+- Shared ArtMotion and press feedback; native Mochi controls retain their own motion rather than receiving a second press effect.
+- All five page TabRow sites use native MIUIX tabs or MochiSegmentedControl. CompactTabs has its own compact native implementations.
+- All thirteen labelled SwitchPreference calls route through mixui. Two simple string spinner sites use native WindowSpinnerPreference or MochiDropdown/MochiListRow.
+- Neutral Scaffold slots/insets and popup lifetime host. Both backends currently share the internal layout infrastructure.
+- SceneRouteManagerScreen uses real MIUIX GlassTopAppBar/GlassIconButton with a non-null page-only backdrop. Popups and the bar itself are excluded from recording. Mochi uses its native solid TitleBar/BarIconButton; root glass materials are not enabled yet.
 
-## Dependency evidence
+## Incomplete
 
-Mochi: Maven Central metadata verified 0.2.0; inspected tag `v0.2.0@3f4eda8603443af2774cf450b47d13f1f311eea7`, Apache-2.0. The consumed APIs match that tag, not unreleased main.
+The application still defaults to MIUIX; there is no selectable production backend setting yet. Full migration is not complete. Top bars/scroll infrastructure, text fields, dropdown/popups and theme controllers still contain direct vendor calls. Whole-tree `tools/check_ui_boundary.py` intentionally reports remaining violations, with no hidden allowlist.
 
-MIUIX: current app version 0.9.4. Inspected upstream main `b7a5f08f5a8c20350406e1665a97fbf99b5d9c8c`. Source publishes commit-suffixed snapshots to `https://maven.pkg.github.com/compose-miuix-ui/miuix`; unauthenticated metadata returned HTTP 401. The source-derived candidate `0.9.4-b7a5f08-SNAPSHOT` is **not verified as published/latest** and is not silently substituted. Latest source includes `miuix-glass` with GlassTopAppBar, GlassNavigationBar, GlassDialog, GlassBottomSheet and glassSurface adapters. Snapshot resolution and actual glass migration remain pending.
+At published commit e57e5a6, app/main direct MIUIX references were 218 in 38 files, versus 542 in 58 baseline files (comments/string literals excluded). This 59.8% reference reduction is a dependency metric, not a claim of 59.8% functional completion.
 
-## Build and visual evidence
+## Dependencies and R8 correction
 
-Baseline wrapper build was attempted, not passed: Gradle Java download reported network unreachable. Curl download worked, but local extraction ran out of /tmp space. Only that rebuildable partial tool download was removed. A separate Android task subsequently identified an SDK37 and adb installation that can be reused read-only; no emulator or connected device has been verified. A task-local Gradle cache will be used, without modifying that SDK. No screenshots or animation captures have been produced.
+MIUIX uses verified `0.9.4-799d3d09-SNAPSHOT`, including the actual glass module. Actions resolves GitHub Packages; local builds resolve the configured anonymous mirror. No credential belongs in source or build logs.
 
-The source inventory is reproducible with `python tools/ui_inventory.py`; it is not a screen-coverage claim. Before acceptance, record every reachable route/modal state from baseline and both backends, with matching locale/theme/font scale/data. Required flows include onboarding, home/config/store/Mary/about, nested managers/editors, permission/error/empty/loading states and popups; dynamic root/Xposed-dependent data requires a controlled fixture or the real device, explicitly labeled.
+Mochi 0.2.0 was compiled against MaterialKolor 4 and Backdrop 1. Its old binary references missing DynamicScheme classes under MaterialKolor 6 and a removed Android RenderEffect overload under Backdrop 2. A root palette bridge made the debug render path work but did not fix release R8. The e57e5a6 release CI therefore failed at minification.
 
-For animation evidence record press/release/cancel while scrolling, switch drag, dialog/sheet interruption, route enter/back, light/dark changes and glass scrolling on both backends. Record device/API, refresh rate, animation scale and capture timing. Static screenshots do not prove animation or runtime-shader glass behavior. A library's demo GIF is not REAREye evidence.
+The pinned upstream core is now recompiled inside mixui against the shared dependencies. Original core binary is excluded; native mochi-ios recipes remain. See `mixui/vendor/mochi-compose/UPSTREAM.md`, Apache license, third-party notices and original source hashes. Of 170 upstream Kotlin files, 168 are unchanged and two adapt the moved DynamicScheme type and RenderEffect overload. There are no invented class stubs or added missing-class warning suppressions. The recompiled runtime has no old DynamicScheme descriptors.
 
-The first comparison CI run reached the existing baseline's `validateSigningDebug` and failed because debug is configured to use the release signing key. The comparison workflow now overrides **only debug signing**, on both baseline and candidate, to the runner's disposable debug key; it does not need or export the user's release key. This changes install signature, not layout, and must be considered when installing alongside an existing release. The build is still not claimed successful until the rerun completes.
+## Local verification and limits
 
-Second migration in progress: app color/typography reads now target MixTheme's own 53 color and 14 typography tokens, with separate adapters. MIUIX values are forwarded unchanged; Mochi uses its own corresponding semantic tokens. Existing MIUIX-only test/previews have a transitional default adapter. Application business logic and stored theme values remain unchanged.
+A complete JDK 21, Android platforms 36/37 and Gradle 9.6 are used with the existing Robolectric 4.17 native graphics renderer, not an emulator. Local UI-only build mode is `-PisPublicBeta=true`; native hook integration and a signed release APK are not claimed by that mode.
 
-The first candidate CI run also reached application Kotlin compilation and failed at the same release-signing requirement as baseline. This is not a successful build or test result. The new workflow pins candidate checkout to the triggering commit. MIUIX glass is absent from the verified 0.9.4 release; unreleased main contains it, while authenticated package metadata is still unavailable.
+Run `tools/run-local-gradle.sh -PisPublicBeta=true -PuiCapture=true :mixui:testDebugUnitTest :app:testDebugUnitTest :app:minifyReleaseWithR8`.
+
+The source-recompiled core passed local compilation, mixui unit tests, 64 captured fixture views (16 states, two themes, two backends), and real release R8 minification. A dedicated palette test additionally exercises every native palette style in light/dark. Full production CI must independently pass on the published commit.
+
+The previous 15-state comparison contains 30 baseline and 60 candidate images. Initial previews incorrectly missed three overlay states; those previews are superseded by root-popup/full-root captures with visible-title and nonblank-pixel checks. Current captured cards assert both real tab groups and sample tab selection at 16 ms intervals. Scene-route fixtures now include 16 in-memory routes and a scrolled state.
+
+These are real production composables with controlled fixture data, not every application state or physical-device evidence. Home live state, configured Mary chat, Store/network/install flows and all nested modal/permission/error states remain to be covered. Native graphics screenshots do not by themselves prove physical GPU shader fidelity, accessibility, IME or interrupted gestures.

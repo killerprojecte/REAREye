@@ -5,7 +5,9 @@ import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -13,6 +15,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.geometry.Offset
 import org.junit.After
 import org.junit.Assume.assumeTrue
@@ -100,6 +103,15 @@ class RealPageCaptureTest {
                             compose.mainClock.advanceTimeBy(16)
                             save(folder, "tab-selection-${index.toString().padStart(2, '0')}.png")
                         }
+                    }
+                    if (page == "scene-routes-populated") {
+                        compose.onRoot(useUnmergedTree = true).performTouchInput { swipeUp() }
+                        repeat(8) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+                        val sceneRows = compose.onAllNodesWithText("example.fixture", useUnmergedTree = true)
+                        check(sceneRows.fetchSemanticsNodes().indices.any { sceneRows[it].isDisplayed() }) {
+                            "No populated scene route is visible after scrolling"
+                        }
+                        save(folder, "scrolled.png")
                     }
                     File(folder, "evidence.txt").writeText(
                         "Renderer: Robolectric 4.17 native graphics / Compose\n" +

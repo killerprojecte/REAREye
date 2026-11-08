@@ -67,7 +67,7 @@ class UiCaptureActivity : ComponentActivity() {
     companion object {
         val PAGES = setOf(
             "cards", "card-editor", "components", "component-editor", "wallpapers", "more",
-            "scene-routes", "business-extras", "business-extra-editor", "custom-bounds",
+            "scene-routes", "scene-routes-populated", "business-extras", "business-extra-editor", "custom-bounds",
             "onboarding", "about", "scripts", "mary-settings-unconfigured", "version-dialog",
         )
     }
@@ -75,7 +75,22 @@ class UiCaptureActivity : ComponentActivity() {
 
 @Composable
 private fun FixturePage(page: String) {
-    val state = remember { FeatureGuideDemoState(initialCardTitle = "Fixture clock") }
+    val state = remember(page) {
+        FeatureGuideDemoState(initialCardTitle = "Fixture clock").apply {
+            if (page == "scene-routes-populated") {
+                val routes = (1..16).map { index ->
+                    hk.uwu.reareye.repository.rearwidget.RearWidgetSceneRouteConfig(
+                        id = "fixture-scene-$index", packageName = "example.fixture",
+                        scene = "fixture_scene_$index", business = "fixture_widget_$index",
+                    )
+                }
+                prefsManager.putString(
+                    hk.uwu.reareye.ui.config.ConfigKeys.REAR_WIDGET_SCENE_ROUTE_DATA,
+                    hk.uwu.reareye.repository.rearwidget.RearWidgetConfigCodec.encodeSceneRoutes(routes),
+                )
+            }
+        }
+    }
     val back: () -> Unit = {} // Root capture screen stays open; production dialogs still dismiss.
     when (page) {
         "onboarding" -> OnboardingScreen(onFinished = {})
@@ -86,7 +101,7 @@ private fun FixturePage(page: String) {
             violations = listOf(AppVersionViolation("Fixture target app", "example.fixture", 1L, "1.0", 2L, true)),
             onClose = back,
         )
-        "scene-routes" -> SceneRouteManagerScreen(state.prefsManager, back)
+        "scene-routes", "scene-routes-populated" -> SceneRouteManagerScreen(state.prefsManager, back)
         "business-extras" -> BusinessExtraConfigManagerScreen(state.prefsManager, back)
         "business-extra-editor" -> BusinessExtraConfigScreen(state.prefsManager, "demo_clock", back)
         "custom-bounds" -> CustomBoundsCompatManagerScreen(state.prefsManager, back)

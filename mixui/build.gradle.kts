@@ -10,7 +10,10 @@ android {
     namespace = "hk.uwu.mixui"
     buildToolsVersion = "37.0.0"
     compileSdk { version = release(37) { minorApiLevel = 0 } }
-    defaultConfig { minSdk = 36 }
+    defaultConfig {
+        minSdk = 36
+        consumerProguardFiles("vendor/mochi-compose/consumer-rules.pro")
+    }
     buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -31,7 +34,15 @@ dependencies {
     implementation(libs.miuix.preference)
     implementation(libs.miuix.blur)
     implementation(libs.miuix.shader)
-    implementation(libs.mochi.compose)
+    // Recompile the pinned core source against shared MaterialKolor 6 and Backdrop 2.
+    // Exclude the old 0.2 binary; it contains missing class/method descriptors.
+    implementation("io.github.feice11.mochi-compose:mochi-ios:${libs.versions.mochi.get()}") {
+        exclude(group = "io.github.feice11.mochi-compose", module = "mochi-compose")
+    }
+    implementation(libs.capsule)
+    implementation(libs.backdrop)
+    implementation(libs.androidx.activity.compose)
+    implementation("org.jetbrains.kotlinx:kotlinx-collections-immutable:0.5.2")
     implementation("com.materialkolor:material-color-utilities:6.0.0")
     testImplementation(libs.junit)
 }

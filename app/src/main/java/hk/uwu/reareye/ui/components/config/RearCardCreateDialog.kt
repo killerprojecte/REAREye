@@ -51,7 +51,7 @@ import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.components.SwitchPreference
-import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
+import hk.uwu.mixui.components.SpinnerPreference
 import hk.uwu.mixui.theme.MixTheme
 
 @Composable
@@ -145,8 +145,8 @@ internal fun RearCardCreateDialog(
                 if (businesses.isNotEmpty()) {
                     val safeBusinessIndex =
                         selectedAppBusinessIndex.coerceIn(0, businesses.lastIndex)
-                    WindowSpinnerPreference(
-                        items = businesses.map { business -> DropdownItem(title = business.business) },
+                    SpinnerPreference(
+                        options = businesses.map { business -> business.business },
                         selectedIndex = safeBusinessIndex,
                         title = stringResource(R.string.rear_widget_app_bound_component_title),
                         summary = businesses[safeBusinessIndex].business,
