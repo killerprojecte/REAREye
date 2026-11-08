@@ -41,6 +41,10 @@ fun GlassFormDialog(
         check(!show) { "GlassFormDialog must be inside GlassTopBarScaffold.overlayContent" }
         return
     }
+    val style = glassFormStyle()
+    val styledContent: @Composable () -> Unit = {
+        CompositionLocalProvider(LocalGlassFormStyle provides style, content = content)
+    }
     when (backdrop) {
         is GlassFormBackdrop.Miuix -> top.yukonga.miuix.kmp.glass.GlassDialog(
             show = show,
@@ -49,7 +53,7 @@ fun GlassFormDialog(
             modifier = modifier,
             backdrop = backdrop.value,
             renderInRootScaffold = true,
-            content = content,
+            content = styledContent,
         )
         is GlassFormBackdrop.Mochi -> CompositionLocalProvider(
             LocalMochiBackdrop provides backdrop.value,
@@ -64,7 +68,7 @@ fun GlassFormDialog(
                 actions = persistentListOf(),
                 dismissOnOutsideTap = true,
                 dismissOnBack = true,
-                content = { content() },
+                content = { styledContent() },
             )
         }
     }

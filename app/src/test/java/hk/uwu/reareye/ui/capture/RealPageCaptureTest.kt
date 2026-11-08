@@ -285,6 +285,30 @@ class RealPageCaptureTest {
         }
     }
 
+    private fun assertRenderedColor(bitmap: Bitmap, rgb: Int, description: String) {
+        var count = 0
+        for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
+            val pixel = bitmap.getPixel(x, y)
+            if (listOf(0, 8, 16).all { shift ->
+                    kotlin.math.abs(((pixel shr shift) and 255) - ((rgb shr shift) and 255)) <= 4
+                }) count++
+        }
+        org.junit.Assert.assertTrue("$description: expected rendered #${rgb.toString(16)}, found $count pixels", count >= 3)
+    }
+
+    private fun contrastRatio(a: Int, b: Int): Double {
+        fun luminance(rgb: Int): Double {
+            val channels = listOf(16, 8, 0).map { shift ->
+                val value = ((rgb shr shift) and 255) / 255.0
+                if (value <= 0.04045) value / 12.92 else Math.pow((value + 0.055) / 1.055, 2.4)
+            }
+            return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+        }
+        val first = luminance(a)
+        val second = luminance(b)
+        return (maxOf(first, second) + 0.05) / (minOf(first, second) + 0.05)
+    }
+
     @Test fun sceneRouteGlassButtonsOpenDismissAndNavigateInBothDirections() {
         val directory = File(System.getProperty("ui.capture.output"), "scene-route-controls")
         for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) for (rtl in listOf(false, true)) {
@@ -320,13 +344,43 @@ class RealPageCaptureTest {
             File(folder, "add-dialog.png").outputStream().use {
                 check(dialogImage.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
+            // Inspect actual rendered controls, not just tokens: the native glass container
+            // remains visible between them. Both renderers and both text directions are covered.
+            val fill = if (dark) 0x303030 else 0xFFFFFF
+            val label = if (dark) 0xDDDDDD else 0x515151
+            val ink = if (dark) 0xFAFAFA else 0x242424
+            val outline = if (dark) 0x999999 else 0x737373
+            compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().indices.forEach { index ->
+                val image = compose.onAllNodes(hasSetTextAction())[index].captureToImage().asAndroidBitmap()
+                assertRenderedColor(image, fill, "field $index fill ($backend/$dark/$rtl)")
+                assertRenderedColor(image, label, "field $index label ($backend/$dark/$rtl)")
+                assertRenderedColor(image, outline, "field $index resting outline ($backend/$dark/$rtl)")
+            }
+            val cancel = compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_cancel))
+            val cancelImage = cancel.captureToImage().asAndroidBitmap()
+            assertRenderedColor(cancelImage, fill, "cancel fill ($backend/$dark/$rtl)")
+            assertRenderedColor(cancelImage, ink, "cancel text ($backend/$dark/$rtl)")
+            assertRenderedColor(cancelImage, outline, "cancel outline ($backend/$dark/$rtl)")
+            org.junit.Assert.assertTrue("Label contrast", contrastRatio(label, fill) >= 4.5)
+            org.junit.Assert.assertTrue("Content contrast", contrastRatio(ink, fill) >= 4.5)
+            org.junit.Assert.assertTrue("Control outline contrast", contrastRatio(outline, fill) >= 3.0)
             // Blank submission must retain the form instead of the native action auto-dismiss.
             compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_confirm)).performClick()
             repeat(5) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             compose.onAllNodes(hasSetTextAction()).assertCountEquals(3)
-            compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_cancel)).performClick()
+            compose.onAllNodes(hasSetTextAction())[0].performTextReplacement("example.cancelled")
+            repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+            assertRenderedColor(compose.onAllNodes(hasSetTextAction())[0].captureToImage().asAndroidBitmap(),
+                ink, "focused entered text ($backend/$dark/$rtl)")
+            val filledDialog = compose.onNode(isRoot() and hasAnyDescendant(hasSetTextAction()), useUnmergedTree = true)
+                .captureToImage().asAndroidBitmap()
+            File(folder, "filled-dialog.png").outputStream().use {
+                check(filledDialog.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+            cancel.performClick()
             repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+            compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_badge_scene_route_count, 16)).assertIsDisplayed()
             add.performClick()
             repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             compose.onAllNodes(hasSetTextAction()).assertCountEquals(3)
@@ -337,6 +391,10 @@ class RealPageCaptureTest {
             add.performClick()
             repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             val fields = compose.onAllNodes(hasSetTextAction())
+            fields.fetchSemanticsNodes().forEach {
+                org.junit.Assert.assertEquals("Cancelled draft must not survive reopening", "",
+                    it.config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text)
+            }
             listOf("example.saved", "saved_scene", "saved_widget").forEachIndexed { index, value ->
                 fields[index].performTextReplacement(value)
                 compose.mainClock.advanceTimeBy(100); compose.waitForIdle()
