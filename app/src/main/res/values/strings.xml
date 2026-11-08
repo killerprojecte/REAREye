@@ -196,8 +196,19 @@
 
     <string name="category_module_settings">Module Settings</string>
     <string name="category_module_settings_desc">Settings for REAREye itself</string>
-    <string name="module_theme_mode">Theme Style</string>
-    <string name="module_theme_mode_desc">Switch between theme variants</string>
+    <string name="module_mochi_theme_style">Theme style</string>
+    <string name="module_mochi_theme_style_desc">Choose a Mochi theme mode to change its style.</string>
+    <string name="module_mochi_theme_style_default">Mochi (MD3 Expressive)</string>
+    <string name="module_mochi_theme_style_ios">iOS</string>
+    <string name="module_mochi_theme_style_nothing">Nothing</string>
+    <string name="module_theme_mode_mochi_system">Mochi Follow System</string>
+    <string name="module_theme_mode_mochi_light">Mochi Light</string>
+    <string name="module_theme_mode_mochi_dark">Mochi Dark</string>
+    <string name="module_theme_mode_legacy_monet_desc">Your previous Mochi Monet colors are preserved until you select a theme mode again.</string>
+    <string name="module_theme_migration_pending">Your current theme is preserved, but the settings update could not be saved. It will retry when you reopen the app.</string>
+    <string name="module_theme_mode_save_failed">Could not save the theme mode. Please try again.</string>
+    <string name="module_theme_mode">Theme mode</string>
+    <string name="module_theme_mode_desc">Choose MIUIX, Monet or Mochi with system, light or dark appearance.</string>
     <string name="module_navigation_bar_mode">Navigation Bar Style</string>
     <string name="module_navigation_bar_mode_desc">Choose different navigation bar layout</string>
     <string name="module_navigation_bar_mode_normal">Standard</string>
@@ -216,9 +227,9 @@
     <string name="module_store_api_custom_domain">Custom API Domain</string>
     <string name="module_store_api_custom_domain_help">Only enter the domain, without https:// or any path</string>
     <string name="module_store_api_custom_domain_invalid">Invalid domain. Only the host is allowed, with no protocol, path, query, or fragment</string>
-    <string name="module_theme_mode_miuix_system">Miuix Follow System</string>
-    <string name="module_theme_mode_miuix_light">Miuix Light</string>
-    <string name="module_theme_mode_miuix_dark">Miuix Dark</string>
+    <string name="module_theme_mode_miuix_system">MIUIX Follow System</string>
+    <string name="module_theme_mode_miuix_light">MIUIX Light</string>
+    <string name="module_theme_mode_miuix_dark">MIUIX Dark</string>
     <string name="module_theme_mode_monet_system">Monet Follow System</string>
     <string name="module_theme_mode_monet_light">Monet Light</string>
     <string name="module_theme_mode_monet_dark">Monet Dark</string>
@@ -1111,8 +1122,15 @@
     <string name="mary_context_sequence_note">Order follows budget estimation, not exact provider serialization. Unsent draft excluded.</string>
     <string name="mary_context_saturated">Estimate limit reached; composition proportions unavailable</string>
     <string name="mary_context_empty">No context content</string>
-    <string name="module_ui_backend">Component library</string>
-    <string name="module_ui_backend_desc">Switch MIUIX or Mochi controls. Migration is in progress; some controls still use compatibility rendering.</string>
-    <string name="module_ui_backend_miuix">MIUIX</string>
-    <string name="module_ui_backend_mochi">Mochi</string>
+
+    <string name="theme_editor_title">Theme style</string>
+    <string name="theme_editor_close">Close</string>
+    <string name="theme_editor_save">Save</string>
+    <string name="theme_editor_style">Style</string>
+    <string name="theme_editor_palette">Palette</string>
+    <string name="theme_editor_brightness">Brightness</string>
+    <string name="theme_editor_default">Default</string>
+    <string name="theme_editor_system">System</string>
+    <string name="theme_editor_light">Light</string>
+    <string name="theme_editor_dark">Dark</string>
 </resources>

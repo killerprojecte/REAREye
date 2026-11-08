@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,9 +25,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import hk.uwu.reareye.R
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.reareye.ui.theme.AppThemeMode
+import hk.uwu.reareye.ui.theme.AppThemePreferences
+import hk.uwu.reareye.ui.theme.AppMochiThemeStyle
+import hk.uwu.reareye.ui.theme.ThemeStyleSheet
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.NonCancellable
 import hk.uwu.reareye.ui.components.rememberPackageIconBitmap
 import hk.uwu.reareye.ui.config.ConfigCategory
 import hk.uwu.reareye.ui.config.ConfigCategoryIcon
@@ -315,13 +326,21 @@ fun EnumSingleSelectConfigInput(
     prefsManager: PrefsManager,
     onPreferenceChanged: (ConfigItem) -> Unit = {},
 ) {
+    if (item.key == ConfigKeys.MODULE_THEME_MODE) {
+        ThemeStyleConfigInput(item, prefsManager, onPreferenceChanged)
+        return
+    }
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val popupScope = rememberCoroutineScope()
     val showEnumPopup = remember(item.key) { mutableStateOf(false) }
     var selectedValue by remember(item.key) {
-        mutableIntStateOf(prefsManager.getInt(item.key, defaultValue))
+        mutableIntStateOf(
+            prefsManager.getInt(item.key, defaultValue)
+        )
     }
+    val selectedOptionValue = selectedValue
+    val enabled = true
     val optionTitles = remember(item.key, options, configuration) {
         options.map { context.getString(it.titleRes) }
     }
@@ -330,7 +349,7 @@ fun EnumSingleSelectConfigInput(
     }
 
     val selectedLabel = options
-        .indexOfFirst { it.value == selectedValue }
+        .indexOfFirst { it.value == selectedOptionValue }
         .takeIf { it >= 0 }
         ?.let { optionTitles[it] }
         ?: optionTitles.firstOrNull().orEmpty()
@@ -343,14 +362,16 @@ fun EnumSingleSelectConfigInput(
 
     Box {
         ArrowPreference(
+            modifier = Modifier.semantics(mergeDescendants = true) { if (!enabled) disabled() },
             title = stringResource(item.titleRes),
             summary = summary,
             holdDownState = showEnumPopup.value,
-            onClick = { showEnumPopup.value = true }
+            enabled = enabled,
+            onClick = { if (enabled) showEnumPopup.value = true }
         )
 
         OverlayListPopup(
-            show = showEnumPopup.value,
+            show = showEnumPopup.value && enabled,
             popupModifier = Modifier,
             popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
             alignment = PopupPositionProvider.Align.End,
@@ -365,15 +386,15 @@ fun EnumSingleSelectConfigInput(
                     DropdownImpl(
                         item = optionEntries[index],
                         optionSize = options.size,
-                        isSelected = selectedValue == option.value,
+                        isSelected = selectedOptionValue == option.value,
                         index = index,
                         dropdownColors = DropdownDefaults.dropdownColors(),
                         onSelectedIndexChange = {
                             showEnumPopup.value = false
                             popupScope.launch {
                                 withFrameNanos { }
+                                prefsManager.putInt(item.key, option.value)
                                 selectedValue = option.value
-                                prefsManager.putInt(item.key, selectedValue)
                                 onPreferenceChanged(item)
                             }
                         },
@@ -382,6 +403,72 @@ fun EnumSingleSelectConfigInput(
             }
         }
     }
+}
+
+/** The production Settings entry. Only a successful atomic save notifies the app host. */
+@Composable
+internal fun ThemeStyleConfigInput(
+    item: ConfigItem,
+    prefsManager: PrefsManager,
+    onPreferenceChanged: (ConfigItem) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val currentOnPreferenceChanged by rememberUpdatedState(onPreferenceChanged)
+    var mode by remember(prefsManager) { mutableStateOf(AppThemePreferences.readMode(prefsManager.prefs)) }
+    var style by remember(prefsManager) { mutableStateOf(AppMochiThemeStyle.fromValue(
+        prefsManager.getInt(ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value))) }
+    var show by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    val themeRevision by AppThemePreferences.changes.collectAsState()
+    LaunchedEffect(themeRevision, show) {
+        if (!show) {
+            mode = AppThemePreferences.readMode(prefsManager.prefs)
+            style = AppMochiThemeStyle.fromValue(prefsManager.getInt(
+                ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value))
+        }
+    }
+    ArrowPreference(
+        modifier = Modifier.testTag("theme-style-entry"),
+        title = stringResource(R.string.theme_editor_title),
+        summary = stringResource(mode.titleRes) + if (mode.backend == MixUiBackend.Mochi) {
+            " · " + stringResource(style.titleRes)
+        } else "",
+        onClick = { if (!saving) {
+            mode = AppThemePreferences.readMode(prefsManager.prefs)
+            style = AppMochiThemeStyle.fromValue(prefsManager.getInt(
+                ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value))
+            failed = false
+            show = true
+        } },
+    )
+    ThemeStyleSheet(
+        show = show, appliedMode = mode, appliedStyle = style, saving = saving, saveFailed = failed,
+        onDismiss = { if (!saving) { show = false; failed = false } },
+        onSave = { draft ->
+            if (!saving) {
+                saving = true
+                failed = false
+                scope.launch {
+                    // Once commit starts, navigation must not cancel delivery of its result.
+                    withContext(NonCancellable) {
+                        val saved = withContext(Dispatchers.IO) {
+                            AppThemePreferences.saveTheme(prefsManager.prefs, draft.mode, draft.mochiStyle)
+                        }
+                        if (saved) {
+                            mode = draft.mode
+                            style = draft.mochiStyle
+                            show = false
+                            currentOnPreferenceChanged(item)
+                        } else {
+                            failed = true
+                        }
+                        saving = false
+                    }
+                }
+            }
+        },
+    )
 }
 
 @SuppressLint("LocalContextGetResourceValueCall")

@@ -196,8 +196,19 @@
 
     <string name="category_module_settings">模块设置</string>
     <string name="category_module_settings_desc">REAREye 模块自身设置</string>
-    <string name="module_theme_mode">主题样式</string>
-    <string name="module_theme_mode_desc">在不同主题样式之间切换</string>
+    <string name="module_mochi_theme_style">主题样式</string>
+    <string name="module_mochi_theme_style_desc">选择 Mochi 主题模式后可更改样式。</string>
+    <string name="module_mochi_theme_style_default">Mochi（MD3 Expressive）</string>
+    <string name="module_mochi_theme_style_ios">iOS</string>
+    <string name="module_mochi_theme_style_nothing">Nothing</string>
+    <string name="module_theme_mode_mochi_system">Mochi 跟随系统</string>
+    <string name="module_theme_mode_mochi_light">Mochi 浅色</string>
+    <string name="module_theme_mode_mochi_dark">Mochi 深色</string>
+    <string name="module_theme_mode_legacy_monet_desc">已保留此前的 Mochi Monet 取色，重新选择主题模式后更新。</string>
+    <string name="module_theme_migration_pending">已保留当前主题，但未能保存设置更新。下次打开应用时会重试。</string>
+    <string name="module_theme_mode_save_failed">未能保存主题模式，请重试。</string>
+    <string name="module_theme_mode">主题模式</string>
+    <string name="module_theme_mode_desc">选择 MIUIX、Monet 或 Mochi，以及跟随系统、浅色或深色。</string>
     <string name="module_navigation_bar_mode">导航栏样式</string>
     <string name="module_navigation_bar_mode_desc">选择不同的导航栏样式</string>
     <string name="module_navigation_bar_mode_normal">普通</string>
@@ -216,9 +227,9 @@
     <string name="module_store_api_custom_domain">自定义 API 域名</string>
     <string name="module_store_api_custom_domain_help">只填写域名，不要包含 https:// 或路径</string>
     <string name="module_store_api_custom_domain_invalid">域名无效。这里只能填写主机名，不能包含协议、路径、查询或片段</string>
-    <string name="module_theme_mode_miuix_system">Miuix 跟随系统</string>
-    <string name="module_theme_mode_miuix_light">Miuix 浅色</string>
-    <string name="module_theme_mode_miuix_dark">Miuix 深色</string>
+    <string name="module_theme_mode_miuix_system">MIUIX 跟随系统</string>
+    <string name="module_theme_mode_miuix_light">MIUIX 浅色</string>
+    <string name="module_theme_mode_miuix_dark">MIUIX 深色</string>
     <string name="module_theme_mode_monet_system">Monet 跟随系统</string>
     <string name="module_theme_mode_monet_light">Monet 浅色</string>
     <string name="module_theme_mode_monet_dark">Monet 深色</string>
@@ -1111,8 +1122,15 @@
     <string name="mary_context_sequence_note">顺序为预算估算计入顺序，并非服务端序列化顺序；不含未发送草稿。</string>
     <string name="mary_context_saturated">估算已达上限，分类比例不可用</string>
     <string name="mary_context_empty">尚无上下文内容</string>
-    <string name="module_ui_backend">组件库</string>
-    <string name="module_ui_backend_desc">切换 MIUIX 或 Mochi 组件。迁移仍在进行，部分组件暂用兼容渲染。</string>
-    <string name="module_ui_backend_miuix">MIUIX</string>
-    <string name="module_ui_backend_mochi">Mochi</string>
+
+    <string name="theme_editor_title">主题样式</string>
+    <string name="theme_editor_close">关闭</string>
+    <string name="theme_editor_save">保存</string>
+    <string name="theme_editor_style">样式</string>
+    <string name="theme_editor_palette">配色</string>
+    <string name="theme_editor_brightness">主题</string>
+    <string name="theme_editor_default">默认</string>
+    <string name="theme_editor_system">系统</string>
+    <string name="theme_editor_light">浅色</string>
+    <string name="theme_editor_dark">深色</string>
 </resources>

@@ -147,7 +147,6 @@ internal val MoreConfigGroups = listOf(
         descriptionRes = R.string.config_more_reareye_settings_desc,
         icon = Icons.Rounded.Tune,
         itemKeys = listOf(
-            ConfigKeys.MODULE_UI_BACKEND,
             ConfigKeys.MODULE_THEME_MODE,
             ConfigKeys.MODULE_NAVIGATION_BAR_MODE,
             ConfigKeys.MODULE_SEARCH_BAR_STYLE,

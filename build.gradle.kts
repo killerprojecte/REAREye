@@ -9,7 +9,8 @@ plugins {
     id("com.mikepenz.aboutlibraries.plugin") version "14.1.0" apply false
 }
 
-// Only Mochi's Maven core requires the MaterialKolor 4 namespace compatibility transform.
+// Mochi core needs private MaterialKolor 4 references; its optional Nothing AAR needs
+// firmware fonts without established redistribution permission replaced by Inter aliases.
 // Apply the attribute to consumers too, so app/runtime never reselects the original AAR.
 val mochiCompatible = Attribute.of("hk.uwu.mochi.materialkolor4-isolated", Boolean::class.javaObjectType)
 subprojects {

@@ -12,11 +12,16 @@ public abstract class RelocateMochiArtifact implements TransformAction<Transform
     public abstract Provider<FileSystemLocation> getInputArtifact();
     @Override public void transform(TransformOutputs outputs) {
         var input = getInputArtifact().get().getAsFile();
-        if (!input.getName().equals("mochi-compose-0.2.0.aar")) {
-            outputs.file(input);
-            return;
+        try {
+            switch (input.getName()) {
+                case "mochi-compose-0.2.0.aar" ->
+                    MaterialKolorNamespace.mochiArtifact(input, outputs.file(input.getName()));
+                case NothingFontCompatibility.ARTIFACT_NAME ->
+                    NothingFontCompatibility.sanitizeArtifact(input, outputs.file(input.getName()));
+                default -> outputs.file(input);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Cannot prepare Maven Mochi compatibility artifact: " + input.getName(), e);
         }
-        try { MaterialKolorNamespace.mochiArtifact(input, outputs.file(input.getName())); }
-        catch (IOException e) { throw new RuntimeException("Cannot isolate Maven Mochi MaterialKolor references", e); }
     }
 }

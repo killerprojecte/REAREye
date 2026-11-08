@@ -22,6 +22,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -69,7 +70,8 @@ import hk.uwu.reareye.ui.screen.RearStoreScreen
 import hk.uwu.reareye.ui.screen.preloadHomeFrameNotice
 import hk.uwu.reareye.ui.theme.AppTheme
 import hk.uwu.reareye.ui.theme.AppThemeMode
-import hk.uwu.reareye.ui.theme.AppUiBackend
+import hk.uwu.reareye.ui.theme.AppMochiThemeStyle
+import hk.uwu.reareye.ui.theme.AppThemePreferences
 import hk.uwu.reareye.version.AppVersionGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -84,8 +86,9 @@ import hk.uwu.mixui.theme.MixTheme
 private val MainScreenOrder = listOf("home", "store", "mary", "config", "about")
 
 private data class RemoteUiSettings(
-    val uiBackendValue: Int,
+    val mochiThemeStyleValue: Int,
     val themeModeValue: Int,
+    val themeMigrationPending: Boolean,
     val navigationBarModeValue: Int,
     val navigationQuickActionIds: List<String>,
     val launcherHidden: Boolean,
@@ -182,9 +185,11 @@ class MainActivity : ComponentActivity() {
 
             val remotePrefsManager = remember { applicationContext.getPrefsManager() }
             val remoteRevision = rememberRemotePrefsStatusRevision()
+            val themeRevision by AppThemePreferences.changes.collectAsState()
             var remoteUiSettings by remember { mutableStateOf<RemoteUiSettings?>(null) }
+            var themeMigrationWarningShown by rememberSaveable { mutableStateOf(false) }
 
-            LaunchedEffect(remoteRevision) {
+            LaunchedEffect(remoteRevision, themeRevision) {
                 val loadedRemoteUiSettings = withContext(Dispatchers.IO) {
                     if (!remotePrefsManager.isRemoteReady()) {
                         null
@@ -208,14 +213,13 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
+                        val theme = AppThemePreferences.loadAndMigrate(remotePrefsManager.prefs)
                         RemoteUiSettings(
-                            uiBackendValue = remotePrefsManager.getInt(
-                                ConfigKeys.MODULE_UI_BACKEND, AppUiBackend.default.value,
+                            mochiThemeStyleValue = remotePrefsManager.getInt(
+                                ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value,
                             ),
-                            themeModeValue = remotePrefsManager.getInt(
-                                ConfigKeys.MODULE_THEME_MODE,
-                                AppThemeMode.default.value,
-                            ),
+                            themeModeValue = theme.mode.value,
+                            themeMigrationPending = theme.migrationPending,
                             navigationBarModeValue = remotePrefsManager.getInt(
                                 ConfigKeys.MODULE_NAVIGATION_BAR_MODE,
                                 ModuleNavigationBarMode.default.value,
@@ -231,6 +235,14 @@ class MainActivity : ComponentActivity() {
 
                 remoteUiSettings = loadedRemoteUiSettings
                 loadedRemoteUiSettings?.let { settings ->
+                    if (settings.themeMigrationPending && !themeMigrationWarningShown) {
+                        themeMigrationWarningShown = true
+                        android.widget.Toast.makeText(
+                            applicationContext,
+                            hk.uwu.reareye.R.string.module_theme_migration_pending,
+                            android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                    }
                     ModuleSettingsController.syncLauncherEntryVisibility(
                         context = applicationContext,
                         hidden = settings.launcherHidden,
@@ -244,8 +256,10 @@ class MainActivity : ComponentActivity() {
                 return@setContent
             }
 
-            var uiBackendValue by remember { mutableIntStateOf(settings.uiBackendValue) }
-            var themeModeValue by remember {
+            var mochiThemeStyleValue by remember(settings.mochiThemeStyleValue) {
+                mutableIntStateOf(settings.mochiThemeStyleValue)
+            }
+            var themeModeValue by remember(settings.themeModeValue) {
                 mutableIntStateOf(settings.themeModeValue)
             }
             var navigationBarModeValue by remember {
@@ -297,7 +311,7 @@ class MainActivity : ComponentActivity() {
 
             AppTheme(
                 themeMode = AppThemeMode.fromValue(themeModeValue),
-                backend = AppUiBackend.fromValue(uiBackendValue).backend,
+                mochiStyle = AppMochiThemeStyle.fromValue(mochiThemeStyleValue).style,
             ) {
                 val navigationBarMode = ModuleNavigationBarMode.fromValue(navigationBarModeValue)
                 val enableFloatingGlass =
@@ -458,7 +472,7 @@ class MainActivity : ComponentActivity() {
                                                     configInAppListMode = it
                                                 },
                                                 onThemeModeChange = { themeModeValue = it },
-                                                onUiBackendChange = { uiBackendValue = it },
+                                                onMochiThemeStyleChange = { mochiThemeStyleValue = it },
                                                 onNavigationBarModeChange = {
                                                     navigationBarModeValue = it
                                                 },

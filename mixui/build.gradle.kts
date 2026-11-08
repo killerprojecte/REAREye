@@ -47,6 +47,9 @@ dependencies {
     implementation("io.github.feice11.mochi-compose:mochi-ios:${libs.versions.mochi.get()}") {
         exclude(group = "com.materialkolor")
     }
+    implementation("io.github.feice11.mochi-compose:mochi-nothing:${libs.versions.mochi.get()}") {
+        exclude(group = "com.materialkolor")
+    }
     add(mochiMaterialKolor4.name, "com.materialkolor:material-color-utilities-android:4.1.1@aar")
     implementation(files(isolateMochiMaterialKolor.flatMap { it.outputJar }))
     implementation("com.materialkolor:material-color-utilities:6.0.0")

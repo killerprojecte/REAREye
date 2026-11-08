@@ -1,16 +1,26 @@
 package hk.uwu.reareye.ui.capture
 
 import androidx.compose.runtime.Composable
-import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.MixMochiStyle
 import hk.uwu.reareye.ui.theme.AppTheme
 import hk.uwu.reareye.ui.theme.AppThemeMode
 
 /** Kept separate so the same fixture body can be overlaid on the MIUIX-only baseline. */
 @Composable
-internal fun CaptureTheme(backend: String, dark: Boolean, content: @Composable () -> Unit) {
+internal fun CaptureTheme(
+    backend: String,
+    dark: Boolean,
+    mochiStyle: MixMochiStyle = MixMochiStyle.Default,
+    themeModeOverride: AppThemeMode? = null,
+    content: @Composable () -> Unit,
+) {
     AppTheme(
-        themeMode = if (dark) AppThemeMode.MIUIX_DARK else AppThemeMode.MIUIX_LIGHT,
-        backend = if (backend == "mochi") MixUiBackend.Mochi else MixUiBackend.Miuix,
+        themeMode = themeModeOverride ?: if (backend == "mochi") {
+            if (dark) AppThemeMode.MOCHI_DARK else AppThemeMode.MOCHI_LIGHT
+        } else {
+            if (dark) AppThemeMode.MIUIX_DARK else AppThemeMode.MIUIX_LIGHT
+        },
+        mochiStyle = mochiStyle,
         content = content,
     )
 }

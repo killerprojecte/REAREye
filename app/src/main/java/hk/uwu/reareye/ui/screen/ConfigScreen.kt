@@ -75,8 +75,8 @@ import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
 import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import hk.uwu.reareye.ui.config.REAREyeConfig
-import hk.uwu.reareye.ui.theme.AppThemeMode
-import hk.uwu.reareye.ui.theme.AppUiBackend
+import hk.uwu.reareye.ui.theme.AppMochiThemeStyle
+import hk.uwu.reareye.ui.theme.AppThemePreferences
 import hk.uwu.reareye.ui.theme.rearAcrylicEffect
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
@@ -158,7 +158,7 @@ fun ConfigScreen(
     onQuickManagerTargetHandled: () -> Unit = {},
     onAppListModeChange: (Boolean) -> Unit = {},
     onThemeModeChange: (Int) -> Unit = {},
-    onUiBackendChange: (Int) -> Unit = {},
+    onMochiThemeStyleChange: (Int) -> Unit = {},
     onNavigationBarModeChange: (Int) -> Unit = {},
     onOpenRearStore: () -> Unit = {},
     onOpenRearStoreDetail: (String) -> Unit = {},
@@ -249,24 +249,24 @@ fun ConfigScreen(
     val handlePreferenceChanged = remember(
         prefsManager,
         onThemeModeChange,
-        onUiBackendChange,
+        onMochiThemeStyleChange,
         onNavigationBarModeChange,
     ) {
         { item: ConfigItem ->
             when (item.key) {
-                ConfigKeys.MODULE_UI_BACKEND -> {
-                    onUiBackendChange(prefsManager.getInt(
-                        ConfigKeys.MODULE_UI_BACKEND, AppUiBackend.default.value,
+                ConfigKeys.MODULE_MOCHI_THEME_STYLE -> {
+                    onMochiThemeStyleChange(prefsManager.getInt(
+                        ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value,
                     ))
                 }
 
                 ConfigKeys.MODULE_THEME_MODE -> {
                     onThemeModeChange(
-                        prefsManager.getInt(
-                            ConfigKeys.MODULE_THEME_MODE,
-                            AppThemeMode.default.value,
-                        )
+                        AppThemePreferences.readMode(prefsManager.prefs).value
                     )
+                    onMochiThemeStyleChange(prefsManager.getInt(
+                        ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value,
+                    ))
                 }
 
                 ConfigKeys.MODULE_NAVIGATION_BAR_MODE -> {

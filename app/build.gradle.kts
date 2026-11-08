@@ -321,7 +321,11 @@ tasks.withType<Test>().configureEach {
     filter {
         if (uiCapture) {
             includeTestsMatching("hk.uwu.reareye.ui.capture.RealPageCaptureTest")
-            includeTestsMatching("hk.uwu.reareye.ui.theme.AppUiBackendTest")
+            includeTestsMatching("hk.uwu.reareye.ui.capture.ThemePreferenceControlsTest")
+            includeTestsMatching("hk.uwu.reareye.ui.capture.ThemeSheetPreviewTest")
+            includeTestsMatching("hk.uwu.reareye.ui.theme.AppThemeModeTest")
+            includeTestsMatching("hk.uwu.reareye.ui.theme.AppThemePreferencesTest")
+            includeTestsMatching("hk.uwu.reareye.ui.theme.AppMochiThemeStyleTest")
             includeTestsMatching("hk.uwu.reareye.ui.components.config.MoreConfigGroupsTest")
         } else if (maryUiResources) {
             includeTestsMatching("hk.uwu.reareye.ui.components.Mary*LayoutTest")
@@ -329,6 +333,8 @@ tasks.withType<Test>().configureEach {
             includeTestsMatching("hk.uwu.reareye.ui.components.markdown.*")
         } else {
             excludeTestsMatching("hk.uwu.reareye.ui.capture.RealPageCaptureTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.capture.ThemePreferenceControlsTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.capture.ThemeSheetPreviewTest")
             excludeTestsMatching("hk.uwu.reareye.ui.components.Mary*LayoutTest")
             excludeTestsMatching("hk.uwu.reareye.ui.components.MaryContextRingRenderingTest")
             excludeTestsMatching("hk.uwu.reareye.ui.components.markdown.*")

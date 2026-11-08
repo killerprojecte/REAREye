@@ -14,6 +14,12 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
+import hk.uwu.mixui.MixMochiStyle
+import hk.uwu.mixui.theme.MixTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
@@ -42,6 +48,18 @@ import hk.uwu.reareye.ui.components.config.SceneRouteManagerScreen
  * Keep MainActivity and its version/activation gates unchanged.
  */
 class UiCaptureActivity : ComponentActivity() {
+    var themeSheetVisible by mutableStateOf(false)
+    val themeSheetPrefs = hk.uwu.reareye.ui.config.PrefsManager(hk.uwu.reareye.ui.GuideMemoryPrefs())
+    var themeSaveCount = 0
+        private set
+    var themeModeOverride by mutableStateOf<hk.uwu.reareye.ui.theme.AppThemeMode?>(null)
+    var renderedBackend = hk.uwu.mixui.MixUiBackend.Miuix
+        private set
+    var mochiStyle by mutableStateOf(MixMochiStyle.Default)
+    var backPressCount = 0
+        private set
+    var themeSignature: List<Long> = emptyList()
+        private set
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val page = intent.getStringExtra("page") ?: "cards"
@@ -49,16 +67,47 @@ class UiCaptureActivity : ComponentActivity() {
         require(backend in setOf("miuix", "mochi")) { "Unknown capture backend: $backend" }
         require(page in PAGES) { "Unknown fixture page: $page. Available: $PAGES" }
         val dark = intent.getBooleanExtra("dark", false)
+        mochiStyle = MixMochiStyle.entries.firstOrNull { it.name == intent.getStringExtra("style") } ?: MixMochiStyle.Default
+        themeSheetVisible = intent.getBooleanExtra("themeSheet", false)
+        val initialMode = hk.uwu.reareye.ui.theme.AppThemeMode.fromValue(
+            if (backend == "mochi") { if (dark) 8 else 7 } else { if (dark) 1 else 0 })
+        themeSheetPrefs.putInt(hk.uwu.reareye.ui.config.ConfigKeys.MODULE_THEME_MODE, initialMode.value)
+        themeSheetPrefs.putInt(hk.uwu.reareye.ui.config.ConfigKeys.MODULE_MOCHI_THEME_STYLE, mochiStyle.ordinal)
+        val rtl = intent.getBooleanExtra("rtl", false)
         enableEdgeToEdge()
         setContent {
-            CaptureTheme(backend, dark) {
+            CaptureTheme(backend, dark, mochiStyle, themeModeOverride = themeModeOverride) {
+                val colors = MixTheme.colorScheme
+                val actualBackend = hk.uwu.mixui.LocalMixUiBackend.current
+                SideEffect { renderedBackend = actualBackend }
+                SideEffect { themeSignature = listOf(colors.primary.value.toLong(), colors.surface.value.toLong(), colors.onSurface.value.toLong()) }
                 Column(Modifier.fillMaxSize().safeDrawingPadding().testTag("fixture-root")) {
                     BasicText(
-                        "FIXTURE HOST · $page · $backend · ${if (dark) "dark" else "light"}",
+                        "FIXTURE HOST · $page · ${actualBackend.name.lowercase()} · ${themeModeOverride?.name ?: if (dark) "dark" else "light"}",
                         modifier = Modifier.fillMaxWidth().background(Color(0xFFFFE082)).padding(6.dp),
                         style = TextStyle(color = Color.Black, fontSize = 11.sp),
                     )
-                    Box(Modifier.weight(1f).fillMaxWidth()) { CaptureDialogHost { FixturePage(page) } }
+                    Box(Modifier.weight(1f).fillMaxWidth()) { CaptureDialogHost {
+                        androidx.compose.runtime.CompositionLocalProvider(
+                            androidx.compose.ui.platform.LocalLayoutDirection provides if (rtl) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr,
+                        ) { FixturePage(page) }
+                        if (intent.getBooleanExtra("themeSheet", false)) {
+                            hk.uwu.reareye.ui.theme.ThemeStyleSheet(
+                                show = themeSheetVisible,
+                                appliedMode = themeModeOverride ?: initialMode,
+                                appliedStyle = hk.uwu.reareye.ui.theme.AppMochiThemeStyle.fromValue(mochiStyle.ordinal),
+                                onDismiss = { themeSheetVisible = false },
+                                onSave = { draft ->
+                                    if (hk.uwu.reareye.ui.theme.AppThemePreferences.saveTheme(themeSheetPrefs.prefs, draft.mode, draft.mochiStyle)) {
+                                        themeModeOverride = draft.mode
+                                        mochiStyle = draft.mochiStyle.style
+                                        themeSaveCount++
+                                        themeSheetVisible = false
+                                    }
+                                },
+                            )
+                        }
+                    } }
                 }
             }
         }

@@ -3,6 +3,8 @@ package hk.uwu.mixui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import hk.uwu.mixui.backend.MiuixBackend
 import hk.uwu.mixui.backend.MochiBackend
@@ -15,9 +17,14 @@ import hk.uwu.mixui.theme.LocalMixColors
 import hk.uwu.mixui.theme.LocalMixTextStyles
 import ui.feice.mochi.theme.MochiTheme
 import hk.uwu.mixui.backend.rememberMochiPalette
+import hk.uwu.mixui.backend.mochiAppearance
+import ui.feice.mochi.ios.LocalIosPalette
+import ui.feice.mochi.theme.LocalMochiControlPalette
 
 /** Stable application choices, independent of either vendor's theme classes. */
 enum class MixUiBackend { Miuix, Mochi }
+/** Mochi appearance only; MIUIX ignores this choice. No vendor theme types escape mixui. */
+enum class MixMochiStyle { Default, Ios, Nothing }
 enum class MixColorSchemeMode { System, Light, Dark, MonetSystem, MonetLight, MonetDark }
 
 internal val LocalMixUiRenderer = staticCompositionLocalOf<MixUiRenderer> { MiuixBackend }
@@ -25,7 +32,16 @@ val LocalMixUiBackend = staticCompositionLocalOf { MixUiBackend.Miuix }
 
 /** Owns both vendor themes during migration; application code only selects neutral tokens. */
 @Composable
-fun MixUiHost(backend: MixUiBackend = MixUiBackend.Miuix, colorMode: MixColorSchemeMode = MixColorSchemeMode.System, content: @Composable () -> Unit) {
+fun MixUiHost(
+    backend: MixUiBackend = MixUiBackend.Miuix,
+    colorMode: MixColorSchemeMode = MixColorSchemeMode.System,
+    mochiStyle: MixMochiStyle = MixMochiStyle.Default,
+    content: @Composable () -> Unit,
+) {
+    // Move only app content across vendor wrappers. Theme internals remain branch-local,
+    // while remembered navigation, editors and drafts keep their composition identity.
+    val currentContent = rememberUpdatedState(content)
+    val hostedContent = remember { movableContentOf { currentContent.value() } }
     val renderer = when (backend) {
         MixUiBackend.Miuix -> MiuixBackend
         MixUiBackend.Mochi -> MochiBackend
@@ -37,24 +53,32 @@ fun MixUiHost(backend: MixUiBackend = MixUiBackend.Miuix, colorMode: MixColorSch
         CompositionLocalProvider(LocalMixUiBackend provides backend, LocalMixUiRenderer provides renderer) {
             if (backend == MixUiBackend.Mochi) {
                 val palette = rememberMochiPalette(colorMode)
-                MochiTheme(
-                    colors = ui.feice.mochi.theme.animateMochiColorScheme(palette),
-                    systemBarAppearance = false,
-                    materials = ui.feice.mochi.ios.iosMaterials(
-                        isDark = palette.isDark,
-                        density = androidx.compose.ui.platform.LocalDensity.current.density,
-                        glass = true,
-                        blur = true,
-                        themeAccent = true,
-                    ),
+                val appearance = remember(mochiStyle, palette) { mochiAppearance(mochiStyle, palette) }
+                // Keep one theme/content call site: changing style must not reset screen state.
+                CompositionLocalProvider(
+                    LocalMochiControlPalette provides appearance.controls,
+                    LocalIosPalette provides (appearance.iosPalette ?: LocalIosPalette.current),
                 ) {
-                    val colors = MochiTheme.colorScheme
-                    val styles = MochiTheme.textStyles
-                    CompositionLocalProvider(
-                        LocalMixColors provides remember(colors) { MochiColors(colors) },
-                        LocalMixTextStyles provides remember(styles) { MochiTextStyles(styles) },
-                        content = content,
-                    )
+                    MochiTheme(
+                        colors = ui.feice.mochi.theme.animateMochiColorScheme(appearance.colors),
+                        textStyles = appearance.textStyles,
+                        systemBarAppearance = false,
+                        materials = ui.feice.mochi.ios.iosMaterials(
+                            isDark = palette.isDark,
+                            density = androidx.compose.ui.platform.LocalDensity.current.density,
+                            glass = true,
+                            blur = true,
+                            themeAccent = mochiStyle != MixMochiStyle.Ios,
+                        ),
+                    ) {
+                        val colors = MochiTheme.colorScheme
+                        val styles = MochiTheme.textStyles
+                        CompositionLocalProvider(
+                            LocalMixColors provides remember(colors) { MochiColors(colors) },
+                            LocalMixTextStyles provides remember(styles) { MochiTextStyles(styles) },
+                            content = hostedContent,
+                        )
+                    }
                 }
             } else {
                 val colors = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
@@ -62,7 +86,7 @@ fun MixUiHost(backend: MixUiBackend = MixUiBackend.Miuix, colorMode: MixColorSch
                 CompositionLocalProvider(
                     LocalMixColors provides remember(colors) { MiuixColors(colors) },
                     LocalMixTextStyles provides remember(styles) { MiuixTextStyles(styles) },
-                    content = content,
+                    content = hostedContent,
                 )
             }
         }
