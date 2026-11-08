@@ -74,6 +74,8 @@ fun RearWallpaperManagerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    BindDashboardPage(embedded, listState)
+    val dashboardPadding = if (embedded) LocalDashboardPadding.current else PaddingValues(0.dp)
     val retainedState = state ?: rememberRearWallpaperManagerState()
     val wallpapers = retainedState.wallpapers
     val schedule = retainedState.schedule
@@ -357,7 +359,7 @@ fun RearWallpaperManagerScreen(
         val content: @Composable (PaddingValues) -> Unit = { padding ->
             RearWallpaperManagementContent(
                 paddingValues = PaddingValues(
-                    top = padding.calculateTopPadding() + contentPadding.calculateTopPadding(),
+                    top = padding.calculateTopPadding() + contentPadding.calculateTopPadding() + dashboardPadding.calculateTopPadding(),
                     bottom = padding.calculateBottomPadding() + contentPadding.calculateBottomPadding(),
                 ),
                 listState = listState,
@@ -409,6 +411,7 @@ fun RearWallpaperManagerScreen(
             content(PaddingValues(0.dp))
         } else {
             GlassTopBarScaffold(
+                contentListState = listState,
                 isContentScrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0,
                 title = stringResource(R.string.rear_wallpaper_manager),
                 navigationIcon = {

@@ -9,6 +9,13 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyListState
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -34,6 +41,9 @@ import ui.feice.mochi.effect.glass.mochiBackdropSource
 import ui.feice.mochi.effect.glass.rememberMochiBarBackdrop
 import ui.feice.mochi.effect.glass.rememberMochiBackdrop
 
+/** Allows a keep-alive page host to attach native scroll only to its selected page. */
+val LocalPageTopBarScrollConnection = staticCompositionLocalOf<NestedScrollConnection?> { null }
+
 /**
  * Page host with a vendor-native top bar and a page-only backdrop.
  *
@@ -54,6 +64,8 @@ fun GlassTopBarScaffold(
     title: String,
     isContentScrolled: Boolean,
     modifier: Modifier = Modifier,
+    contentListState: LazyListState? = null,
+    attachNestedScrollToContent: Boolean = true,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     overlayContent: @Composable () -> Unit = {},
@@ -64,7 +76,23 @@ fun GlassTopBarScaffold(
     val background = MixTheme.colorScheme.surface
     when (LocalMixUiBackend.current) {
         MixUiBackend.Miuix -> {
-            val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior()
+            // Scope native collapse to the active list (including manager sub-tabs).
+            // Do not equate a short list's zero offset with a request to expand: native
+            // pre-scroll can legitimately collapse the bar before the list moves.
+            val nativeState = key(contentListState) {
+                top.yukonga.miuix.kmp.basic.rememberTopAppBarState()
+            }
+            val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior(state = nativeState)
+            LaunchedEffect(contentListState, nativeState) {
+                val list = contentListState ?: return@LaunchedEffect
+                // Wait for the vendor bar to measure its finite collapse range. Restore
+                // a previously scrolled list only on selection, never on every idle frame.
+                snapshotFlow { nativeState.heightOffsetLimit }.first { it > -Float.MAX_VALUE }
+                if (list.canScrollBackward) {
+                    nativeState.heightOffset = nativeState.heightOffsetLimit
+                    nativeState.contentOffset = -1f
+                }
+            }
             val supported = isRuntimeShaderSupported()
             val backdrop = if (supported) rememberLayerBackdrop() else null
             val formBackdrop = if (supported) rememberLayerBackdrop() else null
@@ -124,10 +152,14 @@ fun GlassTopBarScaffold(
                 ) { padding ->
                     Box(
                         Modifier.fillMaxSize()
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
+                            .then(if (attachNestedScrollToContent) Modifier.nestedScroll(scrollBehavior.nestedScrollConnection) else Modifier)
                             .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
                             .background(background),
-                    ) { content(padding) }
+                    ) {
+                        CompositionLocalProvider(LocalPageTopBarScrollConnection provides scrollBehavior.nestedScrollConnection) {
+                            content(padding)
+                        }
+                    }
                 }
             }
         }

@@ -7,6 +7,7 @@ import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +23,8 @@ import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,6 +34,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import hk.uwu.mixui.components.LocalPageTopBarScrollConnection
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
@@ -83,6 +88,7 @@ internal fun ConfigDashboard(
     wallpaperContent: @Composable (ConfigDashboardAction?, () -> Unit) -> Unit = { _, _ -> },
 ) {
     // Keep the More list at page scope so its glass bar observes the actual scroll.
+    val pages = remember { DashboardTab.entries.associateWith { DashboardPage() } }
     val moreListState = rememberLazyListState(moreScrollIndex, moreScrollOffset)
     var selectedTab by remember(selectedTabIndex) {
         mutableStateOf(DashboardTab.entries.getOrNull(selectedTabIndex) ?: DashboardTab.CARDS)
@@ -115,9 +121,12 @@ internal fun ConfigDashboard(
     )
     val tabTransition = updateTransition(selectedTab, label = "ConfigDashboardTabs")
 
+    val activeList = if (selectedTab == DashboardTab.MORE) moreListState else pages.getValue(selectedTab).listState
     GlassTopBarScaffold(
         modifier = modifier.fillMaxSize(),
-        isContentScrolled = selectedTab == DashboardTab.MORE && moreListState.canScrollBackward,
+        isContentScrolled = activeList?.canScrollBackward == true,
+        contentListState = activeList,
+        attachNestedScrollToContent = false,
         topBarModifier = Modifier.featureGuideAnchor("config_header_${selectedTab.ordinal}"),
         title = stringResource(
             when (selectedTab) {
@@ -186,6 +195,7 @@ internal fun ConfigDashboard(
             }
         },
         pinnedHeader = {
+            Column {
             GlassTabs(
                 tabs = tabs,
                 selectedTabIndex = selectedTab.ordinal,
@@ -200,6 +210,8 @@ internal fun ConfigDashboard(
                         bottom = 8.dp,
                     ),
             )
+            pages.getValue(selectedTab).header?.invoke()
+            }
         },
     ) { pagePadding ->
         BoxWithConstraints(
@@ -207,9 +219,14 @@ internal fun ConfigDashboard(
                 .fillMaxSize(),
         ) {
             val pageWidth = maxWidth
+            val scrollConnection = LocalPageTopBarScrollConnection.current
             DashboardTab.entries.forEach { tab ->
                 if (tab != selectedTab && loadedTabMask and (1 shl tab.ordinal) == 0) return@forEach
                 key(tab) {
+                    // Header heights differ (Cards has a second tab row). A hidden page
+                    // retains its own padding instead of being relaid out by another tab.
+                    val retainedPadding = remember { mutableStateOf(pagePadding) }
+                    if (tab == selectedTab) SideEffect { retainedPadding.value = pagePadding }
                     val tabPosition by tabTransition.animateFloat(
                         transitionSpec = {
                             tween(durationMillis = 320, easing = FastOutSlowInEasing)
@@ -227,10 +244,9 @@ internal fun ConfigDashboard(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            // Only More owns a scroll-padding contract. Existing managers
-                            // keep their viewport below the shared header.
-                            .then(if (tab == DashboardTab.MORE) Modifier else
-                                Modifier.padding(top = pagePadding.calculateTopPadding()))
+                            // Offscreen retained pages cannot send scroll deltas to the bar.
+                            .then(if (tab == selectedTab && scrollConnection != null)
+                                Modifier.nestedScroll(scrollConnection) else Modifier)
                             .zIndex(
                                 when (tab) {
                                     tabTransition.targetState -> 1f
@@ -243,42 +259,47 @@ internal fun ConfigDashboard(
                                 translationX = tabPosition * pageWidth.toPx()
                             },
                     ) {
-                        when (tab) {
-                            DashboardTab.CARDS -> cardContent(
-                                focusCardId,
-                                { focusCardId = null },
-                                { business ->
-                                    focusComponentBusiness = business
-                                    selectTab(DashboardTab.COMPONENTS.ordinal)
-                                },
-                                pendingAction.takeIf { selectedTab == DashboardTab.CARDS },
-                            ) { pendingAction = null }
+                        CompositionLocalProvider(
+                            LocalDashboardPage provides pages.getValue(tab),
+                            LocalDashboardPadding provides if (tab == selectedTab) pagePadding else retainedPadding.value,
+                        ) {
+                            when (tab) {
+                                DashboardTab.CARDS -> cardContent(
+                                    focusCardId,
+                                    { focusCardId = null },
+                                    { business ->
+                                        focusComponentBusiness = business
+                                        selectTab(DashboardTab.COMPONENTS.ordinal)
+                                    },
+                                    pendingAction.takeIf { selectedTab == DashboardTab.CARDS },
+                                ) { pendingAction = null }
 
-                            DashboardTab.COMPONENTS -> componentContent(
-                                focusComponentBusiness,
-                                { focusComponentBusiness = null },
-                                { cardId ->
-                                    focusCardId = cardId
-                                    selectTab(DashboardTab.CARDS.ordinal)
-                                },
-                                pendingAction.takeIf { selectedTab == DashboardTab.COMPONENTS },
-                            ) { pendingAction = null }
+                                DashboardTab.COMPONENTS -> componentContent(
+                                    focusComponentBusiness,
+                                    { focusComponentBusiness = null },
+                                    { cardId ->
+                                        focusCardId = cardId
+                                        selectTab(DashboardTab.CARDS.ordinal)
+                                    },
+                                    pendingAction.takeIf { selectedTab == DashboardTab.COMPONENTS },
+                                ) { pendingAction = null }
 
-                            DashboardTab.WALLPAPERS -> wallpaperContent(
-                                pendingAction.takeIf { selectedTab == DashboardTab.WALLPAPERS },
-                            ) { pendingAction = null }
+                                DashboardTab.WALLPAPERS -> wallpaperContent(
+                                    pendingAction.takeIf { selectedTab == DashboardTab.WALLPAPERS },
+                                ) { pendingAction = null }
 
-                            DashboardTab.MORE -> MoreTab(
-                                categories = moreCategories,
-                                topPadding = pagePadding.calculateTopPadding(),
-                                bottomPadding = maxOf(contentPadding.calculateBottomPadding(), pagePadding.calculateBottomPadding()),
-                                listState = moreListState,
-                                onOpenCategory = onOpenCategory,
-                                onOpenScriptManagement = onOpenScriptManagement,
-                                onOpenFavoriteCategory = onOpenFavoriteCategory,
-                                favoriteNodeCount = favoriteNodeCount,
-                                onScrollChanged = onMoreScrollChanged,
-                            )
+                                DashboardTab.MORE -> MoreTab(
+                                    categories = moreCategories,
+                                    topPadding = pagePadding.calculateTopPadding(),
+                                    bottomPadding = maxOf(contentPadding.calculateBottomPadding(), pagePadding.calculateBottomPadding()),
+                                    listState = moreListState,
+                                    onOpenCategory = onOpenCategory,
+                                    onOpenScriptManagement = onOpenScriptManagement,
+                                    onOpenFavoriteCategory = onOpenFavoriteCategory,
+                                    favoriteNodeCount = favoriteNodeCount,
+                                    onScrollChanged = onMoreScrollChanged,
+                                )
+                            }
                         }
                     }
                 }

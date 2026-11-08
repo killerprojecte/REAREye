@@ -115,6 +115,8 @@ fun BusinessManagerScreen(
     val layoutDirection = LocalLayoutDirection.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    BindDashboardPage(embedded, listState)
+    val dashboardPadding = if (embedded) LocalDashboardPadding.current else PaddingValues(0.dp)
     val widgets = remember { mutableStateListOf<RearBusinessConfig>() }
     val cards = remember { mutableStateListOf<RearCardConfig>() }
     val appCards = remember { mutableStateListOf<RearAppCardInfo>() }
@@ -491,7 +493,7 @@ fun BusinessManagerScreen(
                 .padding(horizontal = 12.dp),
             contentPadding = PaddingValues(
                 top = if (embedded) {
-                    contentPadding.calculateTopPadding()
+                    contentPadding.calculateTopPadding() + dashboardPadding.calculateTopPadding()
                 } else {
                     paddingValues.calculateTopPadding() + contentPadding.calculateTopPadding()
                 },
@@ -734,6 +736,7 @@ fun BusinessManagerScreen(
         Scaffold { pageContent(it) }
     } else {
         GlassTopBarScaffold(
+            contentListState = listState,
             title = stringResource(R.string.rear_widget_business_manager),
             isContentScrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0,
             navigationIcon = {

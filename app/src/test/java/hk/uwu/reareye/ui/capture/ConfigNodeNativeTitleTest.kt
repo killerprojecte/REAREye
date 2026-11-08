@@ -196,4 +196,43 @@ class ConfigNodeNativeTitleTest {
             compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back)).assertIsDisplayed()
         }
     }
+    @Test fun shortNotificationCategoryRestoresAfterBodyPullDown() {
+        org.junit.Assume.assumeTrue(java.lang.Boolean.getBoolean("ui.capture.enabled"))
+        val group = hk.uwu.reareye.ui.components.config.buildMoreCategories(REAREyeConfig)
+            .first { it.group.id == "notifications_route" }
+        for (dark in listOf(false, true)) {
+            open(MixUiBackend.Miuix, group.category.children, dark = dark)
+            val list = compose.onNode(hasScrollAction())
+            val first = compose.onNodeWithText(label(requireNotNull(group.category.children.first().titleRes)))
+            val initialTop = first.fetchSemanticsNode().boundsInRoot.top
+            capture("miuix-short-notifications-$dark-expanded")
+            list.performTouchInput { swipeUp(durationMillis = 500) }; frames()
+            capture("miuix-short-notifications-$dark-collapsed")
+            val collapsedTop = first.fetchSemanticsNode().boundsInRoot.top
+            list.performTouchInput { swipeDown(durationMillis = 500) }; frames()
+            capture("miuix-short-notifications-$dark-restored")
+            val defaultStartRestoredTop = first.fetchSemanticsNode().boundsInRoot.top
+            val rowCenter = first.fetchSemanticsNode().boundsInRoot.center
+            val viewport = list.fetchSemanticsNode().boundsInRoot
+            list.performTouchInput {
+                val start = androidx.compose.ui.geometry.Offset(rowCenter.x - viewport.left, rowCenter.y - viewport.top)
+                swipe(start, start.copy(y = (start.y + 300f).coerceAtMost(height - 1f)), durationMillis = 500)
+            }; frames()
+            val rowStartRestoredTop = first.fetchSemanticsNode().boundsInRoot.top
+            capture("miuix-short-notifications-$dark-row-area-restored")
+            assertEquals("An actual row-origin downward gesture restores the native title", initialTop, rowStartRestoredTop, 1.5f)
+            list.performTouchInput { swipeUp(durationMillis = 500) }; frames()
+            list.performTouchInput {
+                swipe(androidx.compose.ui.geometry.Offset(center.x, height * 0.5f),
+                    androidx.compose.ui.geometry.Offset(center.x, height * 0.85f), durationMillis = 500)
+            }; frames()
+            capture("miuix-short-notifications-$dark-blank-area-restored")
+            val restoredTop = first.fetchSemanticsNode().boundsInRoot.top
+            File(System.getProperty("ui.capture.output"), "config-native-lists/short-notifications-$dark.txt")
+                .writeText("first row top: expanded=$initialTop collapsed=$collapsedTop defaultStartDown=$defaultStartRestoredTop rowStartDown=$rowStartRestoredTop blankAreaDown=$restoredTop\n")
+            assertTrue("Upward body gesture must collapse native title", collapsedTop < initialTop)
+            assertEquals("Downward body gesture must restore native title", initialTop, restoredTop, 1.5f)
+        }
+    }
+
 }

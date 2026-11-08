@@ -7,6 +7,16 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.SemanticsProperties
+import hk.uwu.reareye.ui.FeatureGuideDemoState
+import hk.uwu.reareye.ui.FeatureGuideDemoContext
+import hk.uwu.reareye.ui.LocalFeatureGuideDemo
+import hk.uwu.reareye.ui.components.config.CardManagerScreen
+import hk.uwu.reareye.ui.components.config.BusinessManagerScreen
+import hk.uwu.reareye.ui.components.config.RearWallpaperManagerScreen
+import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.reareye.repository.rearwidget.RearWidgetConfigCodec
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -45,6 +55,8 @@ class ConfigDashboardTopBarTest {
     private var categoryClicks = 0
     private var favoriteClicks = 0
     private var scriptClicks = 0
+    private var cardPage: hk.uwu.reareye.ui.components.config.DashboardPage? = null
+    private var businessPage: hk.uwu.reareye.ui.components.config.DashboardPage? = null
     private var scrollPosition = 0 to 0
     private val selectedTab = mutableStateOf(3)
     private val categories = buildMoreCategories(REAREyeConfig)
@@ -60,12 +72,18 @@ class ConfigDashboardTopBarTest {
     private fun settle() {
         repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
     }
-    private fun open(backend: String, dark: Boolean) {
+    private fun open(backend: String, dark: Boolean, managers: Boolean = false) {
         compose.runOnUiThread {
             activity?.close()
             searchClicks = 0; storeClicks = 0; categoryClicks = 0
             favoriteClicks = 0; scriptClicks = 0; scrollPosition = 0 to 0
-            selectedTab.value = 3
+            selectedTab.value = if (managers) 0 else 3
+            val fixture = FeatureGuideDemoState("Fixture clock").apply {
+                cards = (1..16).map { cards.first().copy(id = "fixture-card-$it", title = "Fixture clock $it") }
+                businesses = (1..16).map { businesses.first().copy(id = "fixture-business-$it", business = "fixture_widget_$it") }
+            }
+            fixture.prefsManager.putString(ConfigKeys.REAR_WIDGET_CARD_DATA, RearWidgetConfigCodec.encodeCards(fixture.cards))
+            fixture.prefsManager.putString(ConfigKeys.REAR_WIDGET_BUSINESS_DATA, RearWidgetConfigCodec.encodeBusinesses(fixture.businesses))
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().setContent {
                 CaptureTheme(backend, dark) {
@@ -83,6 +101,32 @@ class ConfigDashboardTopBarTest {
                             onOpenStore = { storeClicks++ },
                             onOpenFavoriteCategory = { favoriteClicks++ },
                             favoriteNodeCount = 0,
+                            cardContent = { focus, handled, openBusiness, action, actionHandled ->
+                                val page = hk.uwu.reareye.ui.components.config.LocalDashboardPage.current
+                                androidx.compose.runtime.SideEffect { cardPage = page }
+                                if (managers) CardManagerScreen(
+                                    prefsManager = fixture.prefsManager, onBack = {}, embedded = true,
+                                    actionRequest = action, onActionHandled = actionHandled,
+                                )
+                            },
+                            componentContent = { focus, handled, openCard, action, actionHandled ->
+                                val page = hk.uwu.reareye.ui.components.config.LocalDashboardPage.current
+                                androidx.compose.runtime.SideEffect { businessPage = page }
+                                if (managers) BusinessManagerScreen(
+                                    prefsManager = fixture.prefsManager, onBack = {}, embedded = true,
+                                    actionRequest = action, onActionHandled = actionHandled,
+                                )
+                            },
+                            wallpaperContent = { action, actionHandled ->
+                                if (managers) CompositionLocalProvider(
+                                    LocalFeatureGuideDemo provides FeatureGuideDemoContext(fixture, null, {}, {}),
+                                ) {
+                                    RearWallpaperManagerScreen(
+                                        prefsManager = fixture.prefsManager, onBack = {}, embedded = true,
+                                        actionRequest = action, onActionHandled = actionHandled,
+                                    )
+                                }
+                            },
                             onMoreScrollChanged = { index, offset -> scrollPosition = index to offset },
                         )
                     }
@@ -149,4 +193,105 @@ class ConfigDashboardTopBarTest {
             )
         }
     }
+    @Test fun realManagersShareDashboardGlassAndPreserveIndependentScroll() {
+        val output = File(System.getProperty("ui.capture.output"), "dashboard-real-managers")
+        for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) {
+            open(backend, dark, managers = true)
+            val folder = File(output, "$backend/${if (dark) "dark" else "light"}")
+            fun list(tag: String) = compose.onNodeWithTag(tag)
+            fun position(tag: String) = list(tag).fetchSemanticsNode()
+                .config[SemanticsProperties.VerticalScrollAxisRange].value()
+            fun bodyUnderBar(tag: String) {
+                val bar = compose.onNodeWithContentDescription(text(R.string.store_navigation))
+                assertTrue("Real manager viewport must extend behind shared glass: $tag",
+                    list(tag).fetchSemanticsNode().boundsInRoot.top < bar.fetchSemanticsNode().boundsInRoot.bottom)
+            }
+            val cards = "CardManagerScreen-list"
+            val apps = "CardManagerScreen-app-list"
+            val business = "BusinessManagerScreen-list"
+            val wallpaper = "RearWallpaperManagerScreen-list"
+            bodyUnderBar(cards)
+            save(folder, "cards-top.png")
+            list(cards).performTouchInput { swipeUp() }; settle()
+            assertTrue(position(cards) > 0f)
+            // Pointer swipe launches a real native fling. A fixed animation delay
+            // is not its completion; do not compare a still-moving offset to a later frame.
+            val initialMoving = cardPage!!.listState!!.isScrollInProgress
+            compose.mainClock.advanceTimeUntil(timeoutMillis = 5000) { !cardPage!!.listState!!.isScrollInProgress }
+            compose.waitForIdle()
+            val cardsPosition = position(cards)
+            val cardState = cardPage!!.listState!!
+            val cardAnchor = cardState.firstVisibleItemIndex to cardState.firstVisibleItemScrollOffset
+            val timeline = mutableListOf("movingAfterFixedDelay=$initialMoving", "before=$cardAnchor")
+            fun recordCard(step: String) { timeline += "$step=${cardState.firstVisibleItemIndex to cardState.firstVisibleItemScrollOffset}" }
+            save(folder, "cards-scrolled.png")
+            tapText(R.string.rear_widget_card_tab_app)
+            bodyUnderBar(apps)
+            recordCard("selected-apps")
+            list(apps).performTouchInput { swipeUp() }; settle()
+            save(folder, "apps-up.png")
+            recordCard("apps-up")
+            list(apps).performTouchInput { swipeDown() }; settle()
+            save(folder, "apps-down.png")
+            recordCard("apps-down")
+            tapText(R.string.rear_widget_card_tab_normal)
+            save(folder, "cards-returned.png")
+            recordCard("selected-normal")
+            File(folder, "card-state-timeline.txt").writeText(timeline.joinToString("\n"))
+            File(folder, "card-return-metrics.txt").writeText(
+                "before=$cardAnchor semantic=$cardsPosition\nafter=${cardState.firstVisibleItemIndex to cardState.firstVisibleItemScrollOffset} semantic=${position(cards)}\n")
+            assertEquals("Normal/App switch preserves Normal list", cardsPosition, position(cards), 1f)
+            tapText(R.string.config_tab_components)
+            bodyUnderBar(business)
+            assertEquals(0f, position(business), 0f)
+            list(business).performTouchInput { swipeUp() }; settle()
+            assertTrue(position(business) > 0f)
+            compose.mainClock.advanceTimeUntil(timeoutMillis = 5000) { !businessPage!!.listState!!.isScrollInProgress }
+            compose.waitForIdle()
+            val businessPosition = position(business)
+            save(folder, "components-scrolled.png")
+            tapText(R.string.config_tab_wallpapers)
+            bodyUnderBar(wallpaper)
+            list(wallpaper).performTouchInput { swipeUp() }; settle()
+            // One real guide wallpaper is a boundary case, not a fabricated long list.
+            assertEquals(0f, position(wallpaper), 0f)
+            save(folder, "wallpaper-up-short.png")
+            list(wallpaper).performTouchInput { swipeDown() }; settle()
+            assertEquals(0f, position(wallpaper), 0f)
+            save(folder, "wallpaper-down-short.png")
+            tapText(R.string.config_tab_components)
+            assertEquals(businessPosition, position(business), 1f)
+            save(folder, "components-return.png")
+            repeat(12) {
+                if (position(business) > 0f) {
+                    list(business).performTouchInput {
+                        swipe(androidx.compose.ui.geometry.Offset(center.x, height * 0.4f),
+                            androidx.compose.ui.geometry.Offset(center.x, height * 0.9f), durationMillis = 350)
+                    }; settle()
+                }
+            }
+            assertEquals(0f, position(business), 0f)
+            save(folder, "components-restored-top.png")
+            tapText(R.string.config_tab_cards)
+            assertEquals(cardsPosition, position(cards), 1f)
+            save(folder, "cards-return.png")
+            repeat(12) {
+                if (position(cards) > 0f) {
+                    list(cards).performTouchInput {
+                        swipe(androidx.compose.ui.geometry.Offset(center.x, height * 0.4f),
+                            androidx.compose.ui.geometry.Offset(center.x, height * 0.9f), durationMillis = 350)
+                    }; settle()
+                }
+            }
+            assertEquals(0f, position(cards), 0f)
+            save(folder, "cards-restored-top.png")
+            File(folder, "evidence.txt").writeText(
+                "Production Dashboard and three actual managers. Card/business use ordinary memory prefs, no guide override.\n" +
+                "Wallpaper uses the single guide item; Apps uses its real empty/runtime-unavailable catalog.\n" +
+                "Pointer up/down, Normal/Apps and Cards/Components/Wallpapers switches, real list positions and viewport overlap.\n" +
+                "PNG inspection required for native glass appearance; not physical-device shader certification.\n",
+            )
+        }
+    }
+
 }

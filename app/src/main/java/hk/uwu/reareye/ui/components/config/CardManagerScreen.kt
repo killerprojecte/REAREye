@@ -133,6 +133,7 @@ fun CardManagerScreen(
     val layoutDirection = LocalLayoutDirection.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val dashboardPadding = if (embedded) LocalDashboardPadding.current else PaddingValues(0.dp)
     val appListState = rememberLazyListState()
     val cards = remember { mutableStateListOf<RearCardConfig>() }
     val businesses = remember { mutableStateListOf<RearBusinessConfig>() }
@@ -562,13 +563,13 @@ fun CardManagerScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(if (embedded) Modifier.background(MixTheme.colorScheme.surface) else Modifier)
                     .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
             )
         }
+        BindDashboardPage(embedded, if (selectedCardTab == 0) listState else appListState, pageTabs)
         val pageContent: @Composable (PaddingValues) -> Unit = { paddingValues ->
             val pageTopPadding = if (embedded) {
-                contentPadding.calculateTopPadding()
+                contentPadding.calculateTopPadding() + dashboardPadding.calculateTopPadding()
             } else {
                 paddingValues.calculateTopPadding() + contentPadding.calculateTopPadding()
             }
@@ -579,10 +580,9 @@ fun CardManagerScreen(
 
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = if (embedded) pageTopPadding else 0.dp),
+                    .fillMaxSize(),
             ) {
-                if (embedded) pageTabs()
+                if (embedded && LocalDashboardPage.current == null) pageTabs()
                 HorizontalPager(
                     state = cardPagerState,
                     beyondViewportPageCount = 1,
@@ -591,6 +591,13 @@ fun CardManagerScreen(
                         .graphicsLayer { clip = true },
                 ) { activeTab ->
                     if (demo != null && activeTab != 0) return@HorizontalPager
+                    // Kept-alive pager siblings must not be relaid out using the
+                    // newly selected sibling's expanded/collapsed header padding.
+                    val retainedTop = remember { mutableStateOf(pageTopPadding) }
+                    if (activeTab == selectedCardTab) androidx.compose.runtime.SideEffect {
+                        retainedTop.value = pageTopPadding
+                    }
+                    val listTopPadding = if (activeTab == selectedCardTab) pageTopPadding else retainedTop.value
                     if (activeTab == 0) {
                         LazyColumn(
                             state = listState,
@@ -600,7 +607,7 @@ fun CardManagerScreen(
                                 .pageScrollFeedback()
                                 .padding(horizontal = 12.dp),
                             contentPadding = PaddingValues(
-                                top = if (embedded) 0.dp else pageTopPadding,
+                                top = listTopPadding,
                                 bottom = pageBottomPadding,
                                 start = pageStartPadding,
                                 end = pageEndPadding,
@@ -883,10 +890,11 @@ fun CardManagerScreen(
                             onOpenStoreDetail = onOpenStoreDetail,
                             modifier = Modifier
                                 .fillMaxSize()
+                                .testTag("CardManagerScreen-app-list")
                                 .pageScrollFeedback()
                                 .padding(horizontal = 12.dp),
                             contentPadding = PaddingValues(
-                                top = if (embedded) 0.dp else pageTopPadding,
+                                top = listTopPadding,
                                 bottom = pageBottomPadding,
                                 start = pageStartPadding,
                                 end = pageEndPadding,
@@ -902,6 +910,7 @@ fun CardManagerScreen(
             Scaffold { pageContent(it) }
         } else {
             GlassTopBarScaffold(
+                contentListState = (if (selectedCardTab == 0) listState else appListState),
                 title = stringResource(R.string.rear_widget_card_manager),
                 isContentScrolled = (if (selectedCardTab == 0) listState else appListState).let {
                     it.firstVisibleItemIndex > 0 || it.firstVisibleItemScrollOffset > 0
