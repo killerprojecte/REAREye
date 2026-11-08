@@ -17,6 +17,19 @@ import ui.feice.mochi.nothing.nothingControlPalette
 import ui.feice.mochi.theme.defaultTextStyles
 
 class MochiAppearanceTest {
+    @Test fun compactInformationHeadingsNeverUsePageHeadlineScale() {
+        for (style in MixMochiStyle.entries) for (dark in listOf(false, true)) {
+            val native = mochiAppearance(style, mochiPalette(Color.Blue, dark)).textStyles
+            val mapped = MochiTextStyles(native)
+            assertEquals(native.navTitle, mapped.headline1)
+            assertEquals(17f, mapped.headline1.fontSize.value, 0f)
+            assertEquals(native.titleMedium, mapped.headline2)
+            assertEquals(16f, mapped.headline2.fontSize.value, 0f)
+            assertEquals(native.titleSmall, mapped.subtitle)
+            assertEquals(native.largeTitle, mapped.title1)
+        }
+    }
+
     @Test fun defaultPreservesTheExistingPaletteAndTypographyInBothModes() {
         for (dark in listOf(false, true)) {
             val original = mochiPalette(Color(0xFF26776B), dark)

@@ -26,12 +26,22 @@ fun BottomSheet(
     content: @Composable () -> Unit,
 ) {
     when (LocalMixUiBackend.current) {
-        MixUiBackend.Miuix -> top.yukonga.miuix.kmp.overlay.OverlayBottomSheet(
-            show = show, onDismissRequest = onDismissRequest, renderInRootScaffold = true,
+        // The scaffold overlay host executes its content in the app's composition context.
+        // A window sheet retains the caller's theme, including native title and actions,
+        // so a local preview can differ from the applied app theme without leaking out.
+        MixUiBackend.Miuix -> top.yukonga.miuix.kmp.window.WindowBottomSheet(
+            show = show, onDismissRequest = onDismissRequest,
             title = title, startAction = startAction, endAction = endAction,
             allowDismiss = allowDismiss,
-            content = content,
-        )
+        ) {
+            // MIUIX handles the top/IME insets, but leaves navigation/caption bars to
+            // its caller (as in its BottomSheetSection example). Reserve the visible
+            // content viewport rather than putting an unreachable spacer after it.
+            // Consumed IME insets are excluded by windowInsetsPadding automatically.
+            Box(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))) {
+                content()
+            }
+        }
         MixUiBackend.Mochi -> {
             val state = ui.feice.mochi.basic.rememberMochiSheetState(
                 detents = listOf(ui.feice.mochi.basic.MochiSheetDetent.Large),

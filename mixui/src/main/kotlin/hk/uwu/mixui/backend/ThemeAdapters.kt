@@ -140,9 +140,11 @@ internal class MochiTextStyles(private val source: ui.feice.mochi.theme.MochiTex
     override val button get() = source.labelLarge
     override val footnote1 get() = source.footnote
     override val footnote2 get() = source.labelSmall
-    override val headline1 get() = source.headlineLarge
-    override val headline2 get() = source.headlineMedium
-    override val subtitle get() = source.titleMedium
+    // These application roles are compact information labels (MIUIX 17/16sp),
+    // not MD3 page headlines (32/28sp). Preserve each native family without doubling size.
+    override val headline1 get() = source.navTitle
+    override val headline2 get() = source.titleMedium
+    override val subtitle get() = source.titleSmall
     override val title1 get() = source.largeTitle
     override val title2 get() = source.titleLarge
     override val title3 get() = source.titleMedium

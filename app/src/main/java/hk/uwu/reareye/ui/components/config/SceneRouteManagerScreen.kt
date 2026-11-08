@@ -5,6 +5,10 @@ import hk.uwu.mixui.icons.Icons as UiIcons
 import android.annotation.SuppressLint
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -200,6 +204,7 @@ fun SceneRouteManagerScreen(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = stringResource(R.string.scene_route_navigate_back),
+                    modifier = Modifier.size(24.dp),
                 )
             }
         },
@@ -208,6 +213,7 @@ fun SceneRouteManagerScreen(
                 Icon(
                     imageVector = Icons.Filled.Add,
                     contentDescription = stringResource(R.string.rear_widget_add_scene_route),
+                    modifier = Modifier.size(24.dp),
                 )
             }
         },
@@ -267,14 +273,16 @@ fun SceneRouteManagerScreen(
             }
         },
     ) { paddingValues ->
+        val direction = LocalLayoutDirection.current
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .scrollEndHaptic()
-                .overScrollVertical()
-                .padding(horizontal = 12.dp),
+                .overScrollVertical(),
             contentPadding = PaddingValues(
+                start = paddingValues.calculateStartPadding(direction) + 12.dp,
+                end = paddingValues.calculateEndPadding(direction) + 12.dp,
                 top = paddingValues.calculateTopPadding() + 12.dp,
                 bottom = paddingValues.calculateBottomPadding() + 12.dp,
             ),

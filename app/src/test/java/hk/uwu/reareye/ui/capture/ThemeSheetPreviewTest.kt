@@ -48,7 +48,9 @@ class ThemeSheetPreviewTest {
     }
     private fun capture(name: String) {
         val folder = File(System.getProperty("ui.capture.output"), "theme-sheet-preview").apply { mkdirs() }
-        val bitmap = compose.onNode(isRoot() and hasAnyDescendant(hasTestTag("theme-style-sheet")), useUnmergedTree = true)
+        val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }
+        val bitmap = if (dialog != null) compose.runOnUiThread { captureDialogWindowBitmap(dialog) }
+        else compose.onNode(isRoot() and hasAnyDescendant(hasTestTag("theme-style-sheet")), useUnmergedTree = true)
             .captureToImage().asAndroidBitmap()
         File(folder, "$name.png").outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
     }

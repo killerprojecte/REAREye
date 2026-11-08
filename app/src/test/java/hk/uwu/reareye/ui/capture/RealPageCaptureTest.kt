@@ -351,6 +351,47 @@ class RealPageCaptureTest {
         }
     }
 
+    @Test fun sceneSafeSideInsetsAndNativeGlassStates() {
+        val directory = File(System.getProperty("ui.capture.output"), "scene-feedback-glass")
+        for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) for (rtl in listOf(false, true)) {
+            compose.mainClock.autoAdvance = false
+            compose.runOnUiThread {
+                activity?.close()
+                activity = Robolectric.buildActivity(UiCaptureActivity::class.java,
+                    Intent().putExtra("page", "scene-routes-populated").putExtra("backend", backend)
+                        .putExtra("dark", dark).putExtra("rtl", rtl)).setup()
+            }
+            repeat(12) { compose.mainClock.advanceTimeBy(150); compose.waitForIdle() }
+            compose.runOnUiThread {
+                val bars = androidx.core.graphics.Insets.of(if (rtl) 0 else 48, 0, if (rtl) 48 else 0, 48)
+                androidx.core.view.ViewCompat.dispatchApplyWindowInsets(activity!!.get().window.decorView,
+                    androidx.core.view.WindowInsetsCompat.Builder()
+                        .setInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars(), androidx.core.graphics.Insets.of(0, 24, 0, 0))
+                        .setInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars(), bars)
+                        .setVisible(androidx.core.view.WindowInsetsCompat.Type.systemBars(), true).build())
+            }
+            repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+            val context = activity!!.get()
+            val label = compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_scene_route_hint_title))
+            label.assertIsDisplayed()
+            val bounds = label.fetchSemanticsNode().boundsInRoot
+            org.junit.Assert.assertTrue("Side inset must protect body content: $backend/$rtl $bounds",
+                if (rtl) bounds.right <= 352f else bounds.left >= 48f)
+            val folder = File(directory, "$backend/${if (dark) "dark" else "light"}/${if (rtl) "rtl" else "ltr"}").apply { mkdirs() }
+            save(folder, "rest.png")
+            compose.onRoot(useUnmergedTree = true).performTouchInput { swipeUp() }
+            repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+            save(folder, "scrolled.png")
+            val back = compose.onNodeWithContentDescription(context.getString(hk.uwu.reareye.R.string.scene_route_navigate_back))
+            back.assertIsDisplayed()
+            back.performTouchInput { down(center) }
+            repeat(8) { compose.mainClock.advanceTimeBy(16); compose.waitForIdle() }
+            save(folder, "pressed.png")
+            back.performTouchInput { up() }; compose.waitForIdle()
+            org.junit.Assert.assertEquals(1, context.backPressCount)
+        }
+    }
+
     private fun assertVisibleText(text: String) {
         val nodes = compose.onAllNodesWithText(text, useUnmergedTree = true)
         check(nodes.fetchSemanticsNodes().indices.any { nodes[it].isDisplayed() }) {

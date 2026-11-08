@@ -77,7 +77,9 @@ fun GlassTopBarScaffold(
                                 title = title,
                                 isContentScrolled = isContentScrolled,
                                 backdrop = backdrop,
-                                progressiveBlur = true,
+                                // Match the 799 GlassPage default: native band plus button
+                                // underlay. Progressive blur is an opt-in demo setting.
+                                progressiveBlur = false,
                                 scrollBehavior = scrollBehavior,
                                 navigationIcon = navigationIcon,
                                 actions = actions,

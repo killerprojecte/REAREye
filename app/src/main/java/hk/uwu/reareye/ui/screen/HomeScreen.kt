@@ -16,15 +16,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -46,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -74,10 +70,6 @@ import hk.uwu.reareye.ui.easteregg.EasterEggManager
 import hk.uwu.reareye.ui.easteregg.EasterEggType
 import hk.uwu.reareye.ui.featureGuideAnchor
 import hk.uwu.reareye.ui.theme.AppThemeMode
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import hk.uwu.reareye.utils.RootHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -96,16 +88,12 @@ import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.LargeTitleColumnScaffold
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.theme.MixTheme
 import hk.uwu.mixui.components.PressFeedbackType
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 private val updateInfoHttpClient = OkHttpClient()
 
@@ -289,10 +277,7 @@ fun HomeScreen(
     var activationState by remember(snapshot) { mutableStateOf(snapshot?.activationState ?: XposedModuleStatus.current()) }
     val isActivated = activationState == ModuleActivationState.ACTIVE
     val showTopMenu = remember(snapshot) { mutableStateOf(false) }
-    val scrollBehavior = MiuixScrollBehavior()
     val prefsManager = remember(snapshot) { if (snapshot == null) context.getPrefsManager() else null }
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
     val coroutineScope = rememberCoroutineScope()
     val easterEggToastHolder = remember { ToastHolder() }
     val presetPackHomeSnapshot = snapshot?.presetPack ?: rememberPresetPackHomeSnapshot(presetPackRefreshToken)
@@ -418,262 +403,239 @@ fun HomeScreen(
     }
     val versionCodename = AppProperties.PROJECT_APP_VERSION_CODENAME
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                color = Color.Transparent,
-                title = appTitle,
-                actions = {
-                    Box {
-                        IconButton(
-                            onClick = { if (snapshot == null) showTopMenu.value = true },
-                            holdDownState = showTopMenu.value,
-                        ) {
-                            Icon(
-                                imageVector = UiIcons.Regular.MoreCircle,
-                                contentDescription = null,
-                                tint = MixTheme.colorScheme.onBackground,
-                            )
-                        }
+    // The backend owns the title transition, scroll effects and safe-area spacing.
+    // Home already rendered all cards together in one lazy item, so one native
+    // scrolling column preserves the content and its remembered state.
+    LargeTitleColumnScaffold(
+        title = appTitle,
+        bottomObstruction = bottomInnerPadding,
+        contentSpacing = 12.dp,
+        actions = {
+            Box {
+                IconButton(
+                    onClick = { if (snapshot == null) showTopMenu.value = true },
+                    holdDownState = showTopMenu.value,
+                ) {
+                    Icon(
+                        imageVector = UiIcons.Regular.MoreCircle,
+                        contentDescription = null,
+                        tint = MixTheme.colorScheme.onBackground,
+                    )
+                }
 
-                        OverlayListPopup(
-                            show = showTopMenu.value,
-                            popupModifier = Modifier,
-                            popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                            alignment = PopupPositionProvider.Align.End,
-                            enableWindowDim = true,
-                            onDismissRequest = { showTopMenu.value = false },
-                            maxHeight = null,
-                            minWidth = 220.dp,
-                            renderInRootScaffold = true,
-                        ) {
-                            @SuppressLint("LocalContextGetResourceValueCall")
-                            ListPopupColumn {
-                                Spacer(modifier = Modifier.height(4.dp))
+                OverlayListPopup(
+                    show = showTopMenu.value,
+                    popupModifier = Modifier,
+                    popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
+                    alignment = PopupPositionProvider.Align.End,
+                    enableWindowDim = true,
+                    onDismissRequest = { showTopMenu.value = false },
+                    maxHeight = null,
+                    minWidth = 220.dp,
+                    renderInRootScaffold = true,
+                ) {
+                    @SuppressLint("LocalContextGetResourceValueCall")
+                    ListPopupColumn {
+                        Spacer(modifier = Modifier.height(4.dp))
 
-                                DropdownImpl(
-                                    item = DropdownItem(
-                                        title = androidx.compose.ui.res.stringResource(
-                                            R.string.quick_stop_subscreencenter,
-                                        ),
-                                    ),
-                                    optionSize = 4,
-                                    isSelected = false,
-                                    index = 0,
-                                    dropdownColors = DropdownDefaults.dropdownColors(),
-                                    onSelectedIndexChange = {
-                                        showTopMenu.value = false
+                        DropdownImpl(
+                            item = DropdownItem(
+                                title = androidx.compose.ui.res.stringResource(
+                                    R.string.quick_stop_subscreencenter,
+                                ),
+                            ),
+                            optionSize = 4,
+                            isSelected = false,
+                            index = 0,
+                            dropdownColors = DropdownDefaults.dropdownColors(),
+                            onSelectedIndexChange = {
+                                showTopMenu.value = false
 
-                                        coroutineScope.launch {
-                                            forceStopPackageByRoot(
-                                                context = context,
-                                                packageName = "com.xiaomi.subscreencenter",
-                                                appName = context.getString(R.string.category_subscreencenter),
-                                            )
-                                        }
-                                    },
-                                )
+                                coroutineScope.launch {
+                                    forceStopPackageByRoot(
+                                        context = context,
+                                        packageName = "com.xiaomi.subscreencenter",
+                                        appName = context.getString(R.string.category_subscreencenter),
+                                    )
+                                }
+                            },
+                        )
 
-                                DropdownImpl(
-                                    item = DropdownItem(
-                                        title = androidx.compose.ui.res.stringResource(
-                                            R.string.quick_stop_thememanager,
-                                        ),
-                                    ),
-                                    optionSize = 4,
-                                    isSelected = false,
-                                    index = 1,
-                                    dropdownColors = DropdownDefaults.dropdownColors(),
-                                    onSelectedIndexChange = {
-                                        showTopMenu.value = false
-                                        coroutineScope.launch {
-                                            forceStopPackageByRoot(
-                                                context = context,
-                                                packageName = "com.android.thememanager",
-                                                appName = context.getString(R.string.category_thememanager),
-                                            )
-                                        }
-                                    },
-                                )
+                        DropdownImpl(
+                            item = DropdownItem(
+                                title = androidx.compose.ui.res.stringResource(
+                                    R.string.quick_stop_thememanager,
+                                ),
+                            ),
+                            optionSize = 4,
+                            isSelected = false,
+                            index = 1,
+                            dropdownColors = DropdownDefaults.dropdownColors(),
+                            onSelectedIndexChange = {
+                                showTopMenu.value = false
+                                coroutineScope.launch {
+                                    forceStopPackageByRoot(
+                                        context = context,
+                                        packageName = "com.android.thememanager",
+                                        appName = context.getString(R.string.category_thememanager),
+                                    )
+                                }
+                            },
+                        )
 
-                                DropdownImpl(
-                                    item = DropdownItem(
-                                        title = androidx.compose.ui.res.stringResource(
-                                            R.string.quick_stop_personalassistant,
-                                        ),
-                                    ),
-                                    optionSize = 4,
-                                    isSelected = false,
-                                    index = 2,
-                                    dropdownColors = DropdownDefaults.dropdownColors(),
-                                    onSelectedIndexChange = {
-                                        showTopMenu.value = false
-                                        coroutineScope.launch {
-                                            forceStopPackageByRoot(
-                                                context = context,
-                                                packageName = "com.miui.personalassistant",
-                                                appName = context.getString(R.string.category_personalassistant),
-                                            )
-                                        }
-                                    },
-                                )
+                        DropdownImpl(
+                            item = DropdownItem(
+                                title = androidx.compose.ui.res.stringResource(
+                                    R.string.quick_stop_personalassistant,
+                                ),
+                            ),
+                            optionSize = 4,
+                            isSelected = false,
+                            index = 2,
+                            dropdownColors = DropdownDefaults.dropdownColors(),
+                            onSelectedIndexChange = {
+                                showTopMenu.value = false
+                                coroutineScope.launch {
+                                    forceStopPackageByRoot(
+                                        context = context,
+                                        packageName = "com.miui.personalassistant",
+                                        appName = context.getString(R.string.category_personalassistant),
+                                    )
+                                }
+                            },
+                        )
 
-                                DropdownImpl(
-                                    item = DropdownItem(
-                                        title = androidx.compose.ui.res.stringResource(
-                                            R.string.quick_stop_systemui,
-                                        ),
-                                    ),
-                                    optionSize = 4,
-                                    isSelected = false,
-                                    index = 3,
-                                    dropdownColors = DropdownDefaults.dropdownColors(),
-                                    onSelectedIndexChange = {
-                                        showTopMenu.value = false
-                                        coroutineScope.launch {
-                                            forceKillSystemUI(context)
-                                        }
-                                    },
-                                )
+                        DropdownImpl(
+                            item = DropdownItem(
+                                title = androidx.compose.ui.res.stringResource(
+                                    R.string.quick_stop_systemui,
+                                ),
+                            ),
+                            optionSize = 4,
+                            isSelected = false,
+                            index = 3,
+                            dropdownColors = DropdownDefaults.dropdownColors(),
+                            onSelectedIndexChange = {
+                                showTopMenu.value = false
+                                coroutineScope.launch {
+                                    forceKillSystemUI(context)
+                                }
+                            },
+                        )
 
-                                Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
 
-                            }
-                        }
                     }
-                },
-                scrollBehavior = scrollBehavior,
-            )
+                }
+            }
         },
-        contentWindowInsets = WindowInsets.systemBars,
-    ) { paddingValues ->
+    ) {
         var visible by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) { visible = true }
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .rearAcrylicSource(hazeState)
-                .padding(horizontal = 12.dp),
-            contentPadding = PaddingValues(
-                top = paddingValues.calculateTopPadding() + 12.dp,
-                bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding + 12.dp,
-            ),
-            overscrollEffect = null,
-        ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    RevealItem(visible = visible, delayMillis = 0) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            WorkingStatusCard(
-                                statusTitle = statusTitle,
-                                statusVersion = AppProperties.BUILD_NUMBER.toString(),
-                                activated = isActivated,
-                                easterEggType = easterEggType,
-                                useMonetColors = useMonetStatusColors,
-                                onLongPress = {
-                                    if (snapshot != null) return@WorkingStatusCard
-                                    val result =
-                                        EasterEggManager.toggleTodayEasterEggEnabled(context)
-                                    if (!result.matchedToday) {
-                                        showSingleToast(
-                                            context = context,
-                                            holder = easterEggToastHolder,
-                                            message = context.getString(R.string.home_easter_egg_no_today),
-                                        )
-                                        return@WorkingStatusCard
-                                    }
-
-                                    easterEggType =
-                                        EasterEggManager.getCurrentEasterEggType(context)
-                                    val eggName = context.getString(result.type.toTitleRes())
-                                    val messageRes = when {
-                                        result.isEnabled -> R.string.home_easter_egg_enabled
-                                        else -> R.string.home_easter_egg_disabled
-                                    }
-                                    showSingleToast(
-                                        context = context,
-                                        holder = easterEggToastHolder,
-                                        message = context.getString(messageRes, eggName),
-                                    )
-                                },
+        RevealItem(visible = visible, delayMillis = 0) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                WorkingStatusCard(
+                    statusTitle = statusTitle,
+                    statusVersion = AppProperties.BUILD_NUMBER.toString(),
+                    activated = isActivated,
+                    easterEggType = easterEggType,
+                    useMonetColors = useMonetStatusColors,
+                    onLongPress = {
+                        if (snapshot != null) return@WorkingStatusCard
+                        val result =
+                            EasterEggManager.toggleTodayEasterEggEnabled(context)
+                        if (!result.matchedToday) {
+                            showSingleToast(
+                                context = context,
+                                holder = easterEggToastHolder,
+                                message = context.getString(R.string.home_easter_egg_no_today),
                             )
-
-                            frameNotice?.let { notice ->
-                                FrameNoticeCard(
-                                    title = notice.title,
-                                    summary = notice.summary,
-                                    useMonetColors = useMonetStatusColors,
-                                )
-                            }
-
-                            if (showRootWarning) {
-                                RevealItem(visible = visible, delayMillis = rootWarningDelay) {
-                                    RootWarningCard(useMonetColors = useMonetStatusColors)
-                                }
-                            }
-
-                            if (showUpdateWarning) {
-                                UpdateWarningCard(
-                                    currentHash = AppProperties.GIT_HASH.take(7),
-                                    latestHash = latestCommitHash?.take(7).orEmpty(),
-                                    useMonetColors = useMonetStatusColors,
-                                    onOpenRelease = if (snapshot == null) null else ({ }),
-                                )
-                            }
-
-                            if (presetPackSnapshot.status == PresetPackLocalStatus.NOT_INSTALLED ||
-                                presetPackSnapshot.status == PresetPackLocalStatus.INVALID ||
-                                presetPackUpdateAvailable
-                            ) {
-                                PresetPackStatusCard(
-                                    snapshot = presetPackSnapshot,
-                                    updateAvailable = presetPackUpdateAvailable,
-                                    latestVersion = presetPackHomeSnapshot.latest?.version,
-                                    useMonetColors = useMonetStatusColors,
-                                    onClick = onOpenPresetPackDialog,
-                                )
-                            }
+                            return@WorkingStatusCard
                         }
-                    }
 
-                    RevealItem(visible = visible, delayMillis = 50) {
-                        ModuleInfoCard(
-                            activationState = activationState,
-                            moduleVersion = moduleVersion,
-                            versionCodename = versionCodename,
-                            releaseChannel = releaseChannel,
-                            easterEggType = easterEggType
+                        easterEggType =
+                            EasterEggManager.getCurrentEasterEggType(context)
+                        val eggName = context.getString(result.type.toTitleRes())
+                        val messageRes = when {
+                            result.isEnabled -> R.string.home_easter_egg_enabled
+                            else -> R.string.home_easter_egg_disabled
+                        }
+                        showSingleToast(
+                            context = context,
+                            holder = easterEggToastHolder,
+                            message = context.getString(messageRes, eggName),
                         )
-                    }
+                    },
+                )
 
-                    RevealItem(visible = visible, delayMillis = updateInfoDelay) {
-                        UpdateInfoCard(
-                            currentHash = when (easterEggType) {
-                                EasterEggType.APRIL_FOOLS -> "41f001u"
-                                EasterEggType.EASTER -> "holyegg"
-                                EasterEggType.MI_FANS -> "leijun"
-                                EasterEggType.HUAWEI_ULTIMATE_DESIGN -> "ultimate"
-                                else -> AppProperties.GIT_HASH
-                            },
-                            latestHash = when (easterEggType) {
-                                EasterEggType.APRIL_FOOLS if AppProperties.GIT_HASH == latestCommitHash -> "41f001u"
-                                EasterEggType.EASTER if AppProperties.GIT_HASH == latestCommitHash -> "candies"
-                                EasterEggType.MI_FANS if AppProperties.GIT_HASH == latestCommitHash -> "jinfan"
-                                EasterEggType.HUAWEI_ULTIMATE_DESIGN if AppProperties.GIT_HASH == latestCommitHash -> "design"
-                                else -> latestCommitHash
-                            },
-                            checking = isCheckingUpdate,
-                        )
+                frameNotice?.let { notice ->
+                    FrameNoticeCard(
+                        title = notice.title,
+                        summary = notice.summary,
+                        useMonetColors = useMonetStatusColors,
+                    )
+                }
+
+                if (showRootWarning) {
+                    RevealItem(visible = visible, delayMillis = rootWarningDelay) {
+                        RootWarningCard(useMonetColors = useMonetStatusColors)
                     }
+                }
+
+                if (showUpdateWarning) {
+                    UpdateWarningCard(
+                        currentHash = AppProperties.GIT_HASH.take(7),
+                        latestHash = latestCommitHash?.take(7).orEmpty(),
+                        useMonetColors = useMonetStatusColors,
+                        onOpenRelease = if (snapshot == null) null else ({ }),
+                    )
+                }
+
+                if (presetPackSnapshot.status == PresetPackLocalStatus.NOT_INSTALLED ||
+                    presetPackSnapshot.status == PresetPackLocalStatus.INVALID ||
+                    presetPackUpdateAvailable
+                ) {
+                    PresetPackStatusCard(
+                        snapshot = presetPackSnapshot,
+                        updateAvailable = presetPackUpdateAvailable,
+                        latestVersion = presetPackHomeSnapshot.latest?.version,
+                        useMonetColors = useMonetStatusColors,
+                        onClick = onOpenPresetPackDialog,
+                    )
                 }
             }
         }
 
+        RevealItem(visible = visible, delayMillis = 50) {
+            ModuleInfoCard(
+                activationState = activationState,
+                moduleVersion = moduleVersion,
+                versionCodename = versionCodename,
+                releaseChannel = releaseChannel,
+                easterEggType = easterEggType
+            )
+        }
+
+        RevealItem(visible = visible, delayMillis = updateInfoDelay) {
+            UpdateInfoCard(
+                currentHash = when (easterEggType) {
+                    EasterEggType.APRIL_FOOLS -> "41f001u"
+                    EasterEggType.EASTER -> "holyegg"
+                    EasterEggType.MI_FANS -> "leijun"
+                    EasterEggType.HUAWEI_ULTIMATE_DESIGN -> "ultimate"
+                    else -> AppProperties.GIT_HASH
+                },
+                latestHash = when (easterEggType) {
+                    EasterEggType.APRIL_FOOLS if AppProperties.GIT_HASH == latestCommitHash -> "41f001u"
+                    EasterEggType.EASTER if AppProperties.GIT_HASH == latestCommitHash -> "candies"
+                    EasterEggType.MI_FANS if AppProperties.GIT_HASH == latestCommitHash -> "jinfan"
+                    EasterEggType.HUAWEI_ULTIMATE_DESIGN if AppProperties.GIT_HASH == latestCommitHash -> "design"
+                    else -> latestCommitHash
+                },
+                checking = isCheckingUpdate,
+            )
+        }
     }
 }
 

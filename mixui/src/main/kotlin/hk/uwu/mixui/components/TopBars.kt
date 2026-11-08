@@ -1,5 +1,8 @@
 package hk.uwu.mixui.components
 
+import top.yukonga.miuix.kmp.utils.overScrollVertical
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -113,6 +116,8 @@ fun LargeTitleColumnScaffold(
             ) { padding ->
                 Column(
                     modifier = Modifier.fillMaxSize()
+                        .scrollEndHaptic()
+                        .overScrollVertical()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .imePadding()
                         .verticalScroll(scrollState)
