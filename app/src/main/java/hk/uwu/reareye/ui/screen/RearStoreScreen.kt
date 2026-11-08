@@ -158,6 +158,8 @@ import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.LargeTitleLazyScaffold
+import hk.uwu.mixui.components.TopBarIconButton
 import top.yukonga.miuix.kmp.basic.Surface
 import hk.uwu.mixui.components.Tabs
 import hk.uwu.mixui.components.Text
@@ -885,9 +887,6 @@ internal fun RearStoreRootContent(
 ) {
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val scrollBehavior = MiuixScrollBehavior()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
 
     var searchInput by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
@@ -944,169 +943,137 @@ internal fun RearStoreRootContent(
         )
     }
 
-    Scaffold(
-        topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .rearAcrylicEffect(hazeState, hazeStyle),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                TopAppBar(
-                    color = Color.Transparent,
-                    title = stringResource(R.string.store_navigation),
-                    navigationIconPadding = 12.dp,
-                    navigationIcon = {
-                        if (onBack != null) {
-                            IconButton(onClick = onBack) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = null,
-                                )
-                            }
-                        }
-                    },
-                    actionIconPadding = 12.dp,
-                    actions = {
-                        Box {
-                            IconButton(
-                                onClick = { showSortMenu.value = true },
-                                holdDownState = showSortMenu.value,
-                            ) {
-                                Icon(
-                                    imageVector = UiIcons.Regular.Sort,
-                                    contentDescription = stringResource(R.string.app_list_sort),
-                                    tint = MixTheme.colorScheme.onBackground,
-                                )
-                            }
-                            OverlayListPopup(
-                                show = showSortMenu.value,
-                                popupModifier = Modifier,
-                                popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                                alignment = PopupPositionProvider.Align.End,
-                                enableWindowDim = true,
-                                onDismissRequest = { showSortMenu.value = false },
-                                maxHeight = null,
-                                minWidth = 220.dp,
-                                renderInRootScaffold = true,
-                                content = {
-                                    ListPopupColumn {
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.rear_store_prioritize_updates)),
-                                            optionSize = 5,
-                                            isSelected = prioritizeUpdates,
-                                            index = 0,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                prioritizeUpdates = !prioritizeUpdates
-                                            },
-                                        )
-                                        HorizontalDivider(
-                                            thickness = 0.5.dp,
-                                            color = MixTheme.colorScheme.outline.copy(alpha = 0.35f),
-                                        )
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_updated_at)),
-                                            optionSize = 5,
-                                            isSelected = sortMode == RearStoreSortMode.UPDATED_AT,
-                                            index = 1,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                showSortMenu.value = false
-                                                sortMode = RearStoreSortMode.UPDATED_AT
-                                            },
-                                        )
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_installed_at)),
-                                            optionSize = 5,
-                                            isSelected = sortMode == RearStoreSortMode.INSTALLED_AT,
-                                            index = 2,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                showSortMenu.value = false
-                                                sortMode = RearStoreSortMode.INSTALLED_AT
-                                            },
-                                        )
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_name)),
-                                            optionSize = 5,
-                                            isSelected = sortMode == RearStoreSortMode.NAME,
-                                            index = 3,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                showSortMenu.value = false
-                                                sortMode = RearStoreSortMode.NAME
-                                            },
-                                        )
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_stars)),
-                                            optionSize = 5,
-                                            isSelected = sortMode == RearStoreSortMode.STARS,
-                                            index = 4,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                showSortMenu.value = false
-                                                sortMode = RearStoreSortMode.STARS
-                                            },
-                                        )
-                                    }
+    LargeTitleLazyScaffold(
+        title = stringResource(R.string.store_navigation),
+        bottomObstruction = bottomInnerPadding,
+        navigationIcon = {
+            if (onBack != null) {
+                TopBarIconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.scene_route_navigate_back),
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+        },
+        actions = {
+            Box {
+                TopBarIconButton(
+                    onClick = { showSortMenu.value = true },
+                ) {
+                    Icon(
+                        imageVector = UiIcons.Regular.Sort,
+                        contentDescription = stringResource(R.string.app_list_sort),
+                        tint = MixTheme.colorScheme.onBackground,
+                    )
+                }
+                OverlayListPopup(
+                    show = showSortMenu.value,
+                    popupModifier = Modifier,
+                    popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
+                    alignment = PopupPositionProvider.Align.End,
+                    enableWindowDim = true,
+                    onDismissRequest = { showSortMenu.value = false },
+                    maxHeight = null,
+                    minWidth = 220.dp,
+                    renderInRootScaffold = true,
+                    content = {
+                        ListPopupColumn {
+                            DropdownImpl(
+                                item = DropdownItem(title = stringResource(R.string.rear_store_prioritize_updates)),
+                                optionSize = 5,
+                                isSelected = prioritizeUpdates,
+                                index = 0,
+                                dropdownColors = DropdownDefaults.dropdownColors(),
+                                onSelectedIndexChange = {
+                                    prioritizeUpdates = !prioritizeUpdates
+                                },
+                            )
+                            HorizontalDivider(
+                                thickness = 0.5.dp,
+                                color = MixTheme.colorScheme.outline.copy(alpha = 0.35f),
+                            )
+                            DropdownImpl(
+                                item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_updated_at)),
+                                optionSize = 5,
+                                isSelected = sortMode == RearStoreSortMode.UPDATED_AT,
+                                index = 1,
+                                dropdownColors = DropdownDefaults.dropdownColors(),
+                                onSelectedIndexChange = {
+                                    showSortMenu.value = false
+                                    sortMode = RearStoreSortMode.UPDATED_AT
+                                },
+                            )
+                            DropdownImpl(
+                                item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_installed_at)),
+                                optionSize = 5,
+                                isSelected = sortMode == RearStoreSortMode.INSTALLED_AT,
+                                index = 2,
+                                dropdownColors = DropdownDefaults.dropdownColors(),
+                                onSelectedIndexChange = {
+                                    showSortMenu.value = false
+                                    sortMode = RearStoreSortMode.INSTALLED_AT
+                                },
+                            )
+                            DropdownImpl(
+                                item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_name)),
+                                optionSize = 5,
+                                isSelected = sortMode == RearStoreSortMode.NAME,
+                                index = 3,
+                                dropdownColors = DropdownDefaults.dropdownColors(),
+                                onSelectedIndexChange = {
+                                    showSortMenu.value = false
+                                    sortMode = RearStoreSortMode.NAME
+                                },
+                            )
+                            DropdownImpl(
+                                item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_stars)),
+                                optionSize = 5,
+                                isSelected = sortMode == RearStoreSortMode.STARS,
+                                index = 4,
+                                dropdownColors = DropdownDefaults.dropdownColors(),
+                                onSelectedIndexChange = {
+                                    showSortMenu.value = false
+                                    sortMode = RearStoreSortMode.STARS
                                 },
                             )
                         }
                     },
-                    scrollBehavior = scrollBehavior,
-                )
-                RearSearchBar(
-                    query = searchInput,
-                    hint = stringResource(R.string.rear_store_search_hint),
-                    prefsManager = prefsManager,
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp),
-                    onQueryChange = { searchInput = it },
-                    onSearchSubmit = { searchQuery = searchInput.trim() },
-                    onSearchFocusChange = { focused -> searchFocusedState.value = focused },
                 )
             }
         },
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets.systemBars,
-    ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .rearAcrylicSource(hazeState)
-                .padding(horizontal = 12.dp),
-            contentPadding = PaddingValues(
-                top = paddingValues.calculateTopPadding() + 12.dp,
-                bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
-            ),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            overscrollEffect = null,
-        ) {
-            if (loading) {
-                item {
-                    RearStoreLoadingCard()
-                }
-            } else if (loadFailed) {
-                item {
-                    RearStoreMessageCard(text = stringResource(R.string.rear_store_load_failed))
-                }
-            } else if (items.isEmpty()) {
-                item {
-                    RearStoreMessageCard(text = stringResource(R.string.rear_store_search_empty))
-                }
-            } else {
-                itemsIndexed(items, key = { _, item -> item.id }) { _, item ->
-                    RearStoreListCard(
-                        item = item,
-                        installedWidget = installedWidgets[item.id],
-                        updateAvailable = item.hasAvailableUpdate(installedWidgets),
-                        onClick = { onOpenDetail(item.id) },
-                    )
-                }
+        searchBar = {
+            RearSearchBar(
+                query = searchInput,
+                hint = stringResource(R.string.rear_store_search_hint),
+                prefsManager = prefsManager,
+                onQueryChange = { searchInput = it },
+                onSearchSubmit = { searchQuery = searchInput.trim() },
+                onSearchFocusChange = { focused -> searchFocusedState.value = focused },
+            )
+        },
+    ) {
+        if (loading) {
+            item {
+                RearStoreLoadingCard()
+            }
+        } else if (loadFailed) {
+            item {
+                RearStoreMessageCard(text = stringResource(R.string.rear_store_load_failed))
+            }
+        } else if (items.isEmpty()) {
+            item {
+                RearStoreMessageCard(text = stringResource(R.string.rear_store_search_empty))
+            }
+        } else {
+            itemsIndexed(items, key = { _, item -> item.id }) { _, item ->
+                RearStoreListCard(
+                    item = item,
+                    installedWidget = installedWidgets[item.id],
+                    updateAvailable = item.hasAvailableUpdate(installedWidgets),
+                    onClick = { onOpenDetail(item.id) },
+                )
             }
         }
     }
