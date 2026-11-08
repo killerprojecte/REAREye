@@ -32,5 +32,6 @@ dependencies {
     implementation(libs.miuix.blur)
     implementation(libs.miuix.shader)
     implementation(libs.mochi.compose)
+    implementation("com.materialkolor:material-color-utilities:6.0.0")
     testImplementation(libs.junit)
 }

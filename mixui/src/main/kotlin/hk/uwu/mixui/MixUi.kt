@@ -14,8 +14,7 @@ import hk.uwu.mixui.backend.MochiTextStyles
 import hk.uwu.mixui.theme.LocalMixColors
 import hk.uwu.mixui.theme.LocalMixTextStyles
 import ui.feice.mochi.theme.MochiTheme
-import ui.feice.mochi.theme.ThemeController
-import ui.feice.mochi.theme.ColorSchemeMode
+import hk.uwu.mixui.backend.rememberMochiPalette
 
 /** Stable application choices, independent of either vendor's theme classes. */
 enum class MixUiBackend { Miuix, Mochi }
@@ -37,8 +36,8 @@ fun MixUiHost(backend: MixUiBackend = MixUiBackend.Miuix, colorMode: MixColorSch
     top.yukonga.miuix.kmp.theme.MiuixTheme(miuixController) {
         CompositionLocalProvider(LocalMixUiBackend provides backend, LocalMixUiRenderer provides renderer) {
             if (backend == MixUiBackend.Mochi) {
-                val controller = remember(colorMode) { ThemeController(ColorSchemeMode.valueOf(colorMode.name)) }
-                MochiTheme(controller = controller, systemBarAppearance = false) {
+                val palette = rememberMochiPalette(colorMode)
+                MochiTheme(colors = ui.feice.mochi.theme.animateMochiColorScheme(palette), systemBarAppearance = false) {
                     val colors = MochiTheme.colorScheme
                     val styles = MochiTheme.textStyles
                     CompositionLocalProvider(

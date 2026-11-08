@@ -50,7 +50,7 @@ class RealPageCaptureTest {
                         activity = Robolectric.buildActivity(UiCaptureActivity::class.java,
                             Intent().putExtra("page", page).putExtra("backend", backend).putExtra("dark", dark)).setup()
                     }
-                    compose.mainClock.advanceTimeBy(48)
+                    compose.mainClock.advanceTimeBy(2500)
                     compose.waitForIdle()
                     val folder = File(directory, "$backend/${if (dark) "dark" else "light"}/$page").apply { mkdirs() }
                     save(folder, "initial.png")
