@@ -69,12 +69,13 @@ fun TextField(
             onValueChange = onValueChange,
             modifier = modifier,
             label = label,
-            // Retain the vendor's normal fill, shape and focus border. Glass can
-            // place a pale surface behind the default faint label, so only its
-            // text contrast is strengthened within editable glass forms.
+            // Keep ordinary native shape, focus border and interaction. A solid
+            // form-local neutral separates the field from the glass background.
             colors = if (LocalGlassFormControlContrast.current)
                 top.yukonga.miuix.kmp.basic.TextFieldDefaults.textFieldColors(
-                    labelColor = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                    backgroundColor = glassFormControlFill()
+                        ?: top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.secondaryContainer,
+                    labelColor = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.onSurface,
                 ) else top.yukonga.miuix.kmp.basic.TextFieldDefaults.textFieldColors(),
             enabled = enabled,
             readOnly = readOnly,

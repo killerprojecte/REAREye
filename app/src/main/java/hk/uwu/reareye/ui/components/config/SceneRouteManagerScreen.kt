@@ -42,6 +42,7 @@ import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.repository.rearwidget.RearWidgetSceneRouteConfig
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.DialogActions
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
@@ -251,24 +252,12 @@ fun SceneRouteManagerScreen(
                         label = stringResource(R.string.rear_widget_business_name),
                         singleLine = true,
                     )
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Button(
-                            onClick = { submitDialog() },
-                            colors = ButtonDefaults.buttonColorsPrimary(),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(R.string.rear_widget_confirm))
-                        }
-                        Button(
-                            onClick = { showDialog = false },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(R.string.rear_widget_cancel))
-                        }
-                    }
+                    DialogActions(
+                        cancelText = stringResource(R.string.rear_widget_cancel),
+                        confirmText = stringResource(R.string.rear_widget_confirm),
+                        onCancel = { showDialog = false },
+                        onConfirm = { submitDialog() },
+                    )
                 }
             }
         },

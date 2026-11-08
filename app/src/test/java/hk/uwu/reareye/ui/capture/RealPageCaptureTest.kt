@@ -12,6 +12,8 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.hasAnyDescendant
@@ -296,6 +298,18 @@ class RealPageCaptureTest {
         org.junit.Assert.assertTrue("$description: expected rendered #${rgb.toString(16)}, found $count pixels", count >= 3)
     }
 
+    private fun dominantOpaqueColor(bitmap: Bitmap): Int {
+        val counts = mutableMapOf<Int, Int>()
+        for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
+            val pixel = bitmap.getPixel(x, y)
+            if ((pixel ushr 24) >= 250) {
+                val rgb = pixel and 0xFFFFFF
+                counts[rgb] = (counts[rgb] ?: 0) + 1
+            }
+        }
+        return counts.maxByOrNull { it.value }?.key ?: error("No opaque native surface")
+    }
+
     /** Native palettes differ: inspect visible, repeated text pixels against the dominant fill.
      * Ignore transparent corners and isolated raster noise; do not mandate a custom outline. */
     private fun assertRenderedTextContrast(bitmap: Bitmap, description: String) {
@@ -328,7 +342,8 @@ class RealPageCaptureTest {
 
     @Test fun sceneRouteGlassButtonsOpenDismissAndNavigateInBothDirections() {
         val directory = File(System.getProperty("ui.capture.output"), "scene-route-controls")
-        for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) for (rtl in listOf(false, true)) {
+        val stableNativeFills = mutableMapOf<String, Int>()
+        for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) for (rtl in listOf(false, true)) for (scrolled in listOf(false, true)) {
             compose.mainClock.autoAdvance = false
             compose.runOnUiThread {
                 activity?.close()
@@ -351,7 +366,11 @@ class RealPageCaptureTest {
             }
             org.junit.Assert.assertEquals(backBounds.center.y, addBounds.center.y, 1f)
             org.junit.Assert.assertEquals(rtl, backBounds.center.x > addBounds.center.x)
-            val folder = File(directory, "$backend/${if (dark) "dark" else "light"}/${if (rtl) "rtl" else "ltr"}").apply { mkdirs() }
+            val folder = File(directory, "$backend/${if (dark) "dark" else "light"}/${if (rtl) "rtl" else "ltr"}/${if (scrolled) "scrolled" else "top"}").apply { mkdirs() }
+            if (scrolled) {
+                compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }
+                repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+            }
             save(folder, "initial.png")
             add.performClick()
             repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
@@ -366,14 +385,43 @@ class RealPageCaptureTest {
             compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().indices.forEach { index ->
                 val image = compose.onAllNodes(hasSetTextAction())[index].captureToImage().asAndroidBitmap()
                 assertRenderedTextContrast(image, "native field $index ($backend/$dark/$rtl)")
+                if (backend == "miuix") {
+                    val fill = dominantOpaqueColor(image)
+                    val key = "$dark/$rtl/field-$index"
+                    if (!scrolled) stableNativeFills[key] = fill
+                    else org.junit.Assert.assertEquals("Opaque ordinary field fill must not sample changing backdrop", stableNativeFills[key], fill)
+                    if (!dark) {
+                        val fieldBounds = compose.onAllNodes(hasSetTextAction())[index].fetchSemanticsNode().boundsInRoot
+                        val rootBounds = compose.onNode(isRoot() and hasAnyDescendant(hasSetTextAction()), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+                        val outside = dialogImage.getPixel((fieldBounds.center.x - rootBounds.left).toInt().coerceIn(0, dialogImage.width - 1),
+                            (fieldBounds.top - rootBounds.top - 4).toInt().coerceIn(0, dialogImage.height - 1)) and 0xFFFFFF
+                        org.junit.Assert.assertTrue("Light ordinary field must remain distinct from glass: fill=${fill.toString(16)} outside=${outside.toString(16)}",
+                            contrastRatio(fill, outside) >= 1.15)
+                        File(folder, "field-$index-colors.txt").writeText("opaque fill=#${fill.toString(16)}; adjacent glass=#${outside.toString(16)}; surface ratio=${contrastRatio(fill, outside)}")
+                    }
+                }
             }
             val cancel = compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_cancel))
+            val confirm = compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_confirm))
+            val cancelBounds = cancel.fetchSemanticsNode().boundsInRoot
+            val confirmBounds = confirm.fetchSemanticsNode().boundsInRoot
+            org.junit.Assert.assertEquals("System-style dialog actions share one row", cancelBounds.center.y, confirmBounds.center.y, 1f)
+            org.junit.Assert.assertEquals("Cancel precedes confirm in layout direction", !rtl, cancelBounds.center.x < confirmBounds.center.x)
+            org.junit.Assert.assertTrue("Actions must not overlap", if (rtl) confirmBounds.right <= cancelBounds.left else cancelBounds.right <= confirmBounds.left)
             assertRenderedTextContrast(cancel.captureToImage().asAndroidBitmap(),
                 "native cancel ($backend/$dark/$rtl)")
+            if (backend == "miuix") {
+                val fill = dominantOpaqueColor(cancel.captureToImage().asAndroidBitmap())
+                val key = "$dark/$rtl/cancel"
+                if (!scrolled) stableNativeFills[key] = fill
+                else org.junit.Assert.assertEquals("Ordinary cancel fill must be independent of backdrop", stableNativeFills[key], fill)
+            }
             // Blank submission must retain the form instead of the native action auto-dismiss.
             compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_confirm)).performClick()
             repeat(5) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             compose.onAllNodes(hasSetTextAction()).assertCountEquals(3)
+            compose.onAllNodes(hasSetTextAction())[0].performClick()
+            repeat(5) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             compose.onAllNodes(hasSetTextAction())[0].performTextReplacement("example.cancelled")
             repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             assertRenderedTextContrast(compose.onAllNodes(hasSetTextAction())[0].captureToImage().asAndroidBitmap(),
@@ -386,6 +434,10 @@ class RealPageCaptureTest {
             cancel.performClick()
             repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+            if (scrolled) {
+                compose.onNode(hasScrollAction()).performScrollToIndex(0)
+                repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+            }
             compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_badge_scene_route_count, 16)).assertIsDisplayed()
             add.performClick()
             repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }

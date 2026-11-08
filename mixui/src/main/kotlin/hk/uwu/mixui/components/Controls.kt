@@ -19,7 +19,7 @@ fun Button(
     cornerRadius: Dp = ButtonDefaults.CornerRadius,
     minWidth: Dp = ButtonDefaults.MinWidth,
     minHeight: Dp = ButtonDefaults.MinHeight,
-    colors: ButtonColors = ButtonDefaults.buttonColors(),
+    colors: ButtonColors = glassFormButtonColors(),
     insideMargin: PaddingValues = ButtonDefaults.InsideMargin,
     content: @Composable RowScope.() -> Unit,
 ) = LocalMixUiRenderer.current.Button(onClick, modifier, enabled, cornerRadius, minWidth, minHeight, colors, insideMargin, content)
