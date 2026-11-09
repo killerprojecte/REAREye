@@ -49,6 +49,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -66,6 +67,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -75,12 +77,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.stringResource
@@ -89,12 +89,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import hk.uwu.reareye.BuildConfig
+import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearstore.RearStoreAuthor
 import hk.uwu.reareye.repository.rearstore.RearStoreInstallConflict
@@ -107,6 +107,7 @@ import hk.uwu.reareye.repository.rearstore.RearStoreQuickInstallResult
 import hk.uwu.reareye.repository.rearstore.RearStoreRelease
 import hk.uwu.reareye.repository.rearstore.RearStoreReleaseAsset
 import hk.uwu.reareye.repository.rearstore.RearStoreRepository
+import hk.uwu.reareye.repository.rearstore.RearStoreReadme
 import hk.uwu.reareye.repository.rearstore.RearStoreWidgetDetail
 import hk.uwu.reareye.repository.rearstore.RearStoreWidgetInfoType
 import hk.uwu.reareye.repository.rearstore.RearStoreWidgetMetadataType
@@ -128,10 +129,6 @@ import hk.uwu.mixui.components.rememberAccentBadgePalette
 import hk.uwu.reareye.ui.components.webview.ScrollWebView
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -152,17 +149,15 @@ import hk.uwu.mixui.components.GlassAnchoredMenu
 import hk.uwu.mixui.components.GlassMenuOption
 import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.LargeTitleLazyScaffold
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.pageScrollFeedback
 import hk.uwu.mixui.components.TopBarIconButton
 import top.yukonga.miuix.kmp.basic.Surface
 import hk.uwu.mixui.components.Tabs
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import hk.uwu.mixui.theme.MixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.text.DecimalFormat
@@ -862,6 +857,7 @@ fun RearStoreScreen(
         } else {
             RearStoreDetailContent(
                 widgetId = currentWidgetId,
+                prefsManager = prefsManager,
                 bottomInnerPadding = bottomInnerPadding,
                 installedWidget = installedWidgets[currentWidgetId],
                 onBack = { selectedWidgetIdState.value = null },
@@ -1025,20 +1021,19 @@ internal fun RearStoreRootContent(
 
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
-private fun RearStoreDetailContent(
+internal fun RearStoreDetailContent(
     widgetId: String,
+    prefsManager: PrefsManager,
     bottomInnerPadding: Dp,
     installedWidget: RearStoreInstalledWidget?,
     onBack: () -> Unit,
     onInstalled: suspend () -> Unit,
+    loadDetail: suspend (PrefsManager, String, String?) -> RearStoreWidgetDetail? = RearStoreRepository::loadWidgetDetail,
+    loadReadme: suspend (PrefsManager, String) -> RearStoreReadme? = RearStoreRepository::loadWidgetReadme,
 ) {
     val context = LocalContext.current
-    val prefsManager = remember { context.getPrefsManager() }
-    val layoutDirection = LocalLayoutDirection.current
     val scope = rememberCoroutineScope()
-    val scrollBehavior = MiuixScrollBehavior()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
+    val listState = rememberLazyListState()
 
     var detail by remember(widgetId) { mutableStateOf<RearStoreWidgetDetail?>(null) }
     var loading by remember(widgetId) { mutableStateOf(true) }
@@ -1070,11 +1065,7 @@ private fun RearStoreDetailContent(
         loadFailed = false
         detail = withContext(Dispatchers.IO) {
             runCatching {
-                RearStoreRepository.loadWidgetDetail(
-                    prefsManager = prefsManager,
-                    widgetId = widgetId,
-                    widgetInfoVersion = installedWidget?.releaseTag,
-                )
+                loadDetail(prefsManager, widgetId, installedWidget?.releaseTag)
             }.getOrNull()
         }
         readmeLoading = false
@@ -1096,7 +1087,7 @@ private fun RearStoreDetailContent(
         }
         readmeLoading = true
         val loadedReadme = withContext(Dispatchers.IO) {
-            runCatching { RearStoreRepository.loadWidgetReadme(prefsManager, widgetId) }.getOrNull()
+            runCatching { loadReadme(prefsManager, widgetId) }.getOrNull()
         }
         detail = detail?.copy(readme = loadedReadme)
         readmeLoaded = true
@@ -1324,58 +1315,45 @@ private fun RearStoreDetailContent(
         }
     }
 
-    Scaffold(
-        topBar = {
-            val repositoryUrl = detail?.repository?.url?.normalizedOrNull()
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                color = Color.Transparent,
-                title = detail?.let { stringResource(R.string.rear_store_detail_header) }
-                    ?: stringResource(R.string.store_navigation),
-                navigationIconPadding = 12.dp,
-                actionIconPadding = 12.dp,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            modifier = Modifier.graphicsLayer {
-                                if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                            },
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
+    val repositoryUrl = detail?.repository?.url?.normalizedOrNull()
+    GlassTopBarScaffold(
+        title = detail?.let { stringResource(R.string.rear_store_detail_header) }
+            ?: stringResource(R.string.store_navigation),
+        isContentScrolled = listState.canScrollBackward,
+        contentListState = listState,
+        navigationIcon = {
+            TopBarIconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.scene_route_navigate_back))
+            }
+        },
+        actions = {
+            if (installedWidget != null) {
+                TopBarIconButton(onClick = { showUninstallDialog = true }) {
+                    Icon(
+                        imageVector = UiIcons.Delete,
+                        contentDescription = stringResource(R.string.rear_store_uninstall_action),
+                        tint = MixTheme.colorScheme.error,
+                    )
+                }
+            }
+            if (repositoryUrl != null) {
+                TopBarIconButton(
+                    onClick = {
+                        context.startActivity(
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                repositoryUrl.toUri()
+                            )
                         )
                     }
-                },
-                actions = {
-                    if (installedWidget != null) {
-                        IconButton(onClick = { showUninstallDialog = true }) {
-                            Icon(
-                                imageVector = UiIcons.Delete,
-                                contentDescription = stringResource(R.string.rear_store_uninstall_action),
-                                tint = MixTheme.colorScheme.error,
-                            )
-                        }
-                    }
-                    if (repositoryUrl != null) {
-                        IconButton(
-                            onClick = {
-                                context.startActivity(
-                                    Intent(
-                                        Intent.ACTION_VIEW,
-                                        repositoryUrl.toUri()
-                                    )
-                                )
-                            }
-                        ) {
-                            Icon(
-                                imageVector = UiIcons.Regular.Link,
-                                contentDescription = stringResource(R.string.rear_store_open_repository),
-                                tint = MixTheme.colorScheme.onBackground,
-                            )
-                        }
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-            )
+                ) {
+                    Icon(
+                        imageVector = UiIcons.Regular.Link,
+                        contentDescription = stringResource(R.string.rear_store_open_repository),
+                        tint = MixTheme.colorScheme.onBackground,
+                    )
+                }
+            }
         },
     ) { paddingValues ->
         if (loading) {
@@ -1387,7 +1365,7 @@ private fun RearStoreDetailContent(
             ) {
                 InfiniteProgressIndicator()
             }
-            return@Scaffold
+            return@GlassTopBarScaffold
         }
 
         val widgetDetail = detail
@@ -1401,7 +1379,7 @@ private fun RearStoreDetailContent(
             ) {
                 RearStoreMessageCard(text = stringResource(R.string.rear_store_detail_failed))
             }
-            return@Scaffold
+            return@GlassTopBarScaffold
         }
 
         val authorPlaceholderAlpha = rememberSkeletonPulseAlpha("rear-store-author-avatar")
@@ -1425,12 +1403,10 @@ private fun RearStoreDetailContent(
         )
 
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .rearAcrylicSource(hazeState)
+                .pageScrollFeedback()
                 .padding(horizontal = 12.dp),
             contentPadding = PaddingValues(
                 top = paddingValues.calculateTopPadding(),
@@ -2807,7 +2783,10 @@ private fun MarkdownCardBody(
             .fillMaxWidth()
             .height(webViewHeightDp),
         factory = { viewContext ->
-            webViewCache.getOrPut(webViewKey) {
+            // Equal markdown can appear in several simultaneously visible releases.
+            // A View cannot belong to two AndroidView holders at the same time.
+            val cached = webViewCache[webViewKey]
+            if (cached != null && cached.parent == null) cached else {
                 createGithubMarkdownWebView(
                     context = viewContext,
                     hardwareAccelerationEnabled = webViewHardwareAccelerationEnabled,
@@ -2816,6 +2795,7 @@ private fun MarkdownCardBody(
                     },
                     backgroundColor = webViewBackgroundColor.toArgb(),
                 ).apply {
+                    if (cached == null) webViewCache[webViewKey] = this
                     tag = htmlDocument
                     loadDataWithBaseURL(
                         normalizedBaseUrl ?: "about:blank",
@@ -2826,6 +2806,9 @@ private fun MarkdownCardBody(
                     )
                 }
             }
+        },
+        onRelease = { webView ->
+            if (webViewCache[webViewKey] !== webView) webView.destroy()
         },
         update = { webView ->
             webView.setLayerType(
