@@ -117,8 +117,13 @@ internal fun MochiPageScaffold(
         }
     }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-    LaunchedEffect(scrollState, listState) {
-        snapshotFlow { scrolling() }.collect { if (it) keyboard?.hide() }
+    val dragInteractions = scrollState?.interactionSource ?: listState!!.interactionSource
+    LaunchedEffect(dragInteractions, keyboard) {
+        // IME avoidance and bringIntoView are scrolls too. Only a real user drag
+        // dismisses the keyboard; automatic focus positioning must keep it open.
+        dragInteractions.interactions.collect { interaction ->
+            if (interaction is androidx.compose.foundation.interaction.DragInteraction.Start) keyboard?.hide()
+        }
     }
     val backdrop = rememberMochiBarBackdrop(background)
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + MochiTitleBarDefaults.Height

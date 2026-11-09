@@ -1,5 +1,21 @@
 package hk.uwu.reareye.ui.components
 
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.SoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import android.graphics.Bitmap
 import java.io.File
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -115,6 +131,146 @@ class MarySettingsFieldInteractionTest {
         compose.onNodeWithText(activity!!.get().getString(resource)).performClick()
         frames()
         compose.onNode(hasSetTextAction()).assertDoesNotExist()
+    }
+
+    private class RecordingKeyboard : SoftwareKeyboardController {
+        val calls = mutableListOf<String>()
+        override fun show() { calls += "show" }
+        override fun hide() { calls += "hide" }
+    }
+
+    /** Exercises the real public scaffold, native inline input and real pointer scroll.
+     * This observes app-issued IME commands, not an Android/device IME window.
+     * The actual Mary model card variant uses its production inline field, not its dialog.
+     */
+    private fun inlineKeyboardScrollPolicy(actualMaryCard: Boolean) {
+        val keyboard = RecordingKeyboard()
+        val scroll = ScrollState(0)
+        val bringIntoView = BringIntoViewRequester()
+        var relocationTargetBounds = Rect.Zero
+        lateinit var scope: CoroutineScope
+        var draft by mutableStateOf(ModelDraft())
+        var input by mutableStateOf("model-name")
+        compose.runOnUiThread {
+            activity?.close()
+            activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+            activity!!.get().setContent {
+                MixUiHost(MixUiBackend.Mochi, MixColorSchemeMode.Light) {
+                    CompositionLocalProvider(LocalSoftwareKeyboardController provides keyboard) {
+                        scope = rememberCoroutineScope()
+                        LargeTitleColumnScaffold(title = "Mary settings", scrollState = scroll) {
+                            if (actualMaryCard) {
+                                ModelConfigurationCard(R.string.mary_settings_provider, draft,
+                                    onChange = { draft = it }, unreadable = false)
+                            } else {
+                                hk.uwu.mixui.components.TextField(
+                                    value = input, onValueChange = { input = it },
+                                    label = "Model", singleLine = true,
+                                    modifier = Modifier.fillMaxWidth().testTag("inline-model"))
+                            }
+                            Spacer(Modifier.height(1000.dp))
+                            // A widthless Spacer has an empty relocation rectangle and
+                            // bringIntoView correctly ignores it. Give the target real area.
+                            Spacer(Modifier.fillMaxWidth().height(100.dp)
+                                .bringIntoViewRequester(bringIntoView)
+                                .onGloballyPositioned { coordinates ->
+                                    val position = coordinates.positionInRoot()
+                                    relocationTargetBounds = Rect(position.x, position.y,
+                                        position.x + coordinates.size.width,
+                                        position.y + coordinates.size.height)
+                                })
+                            Spacer(Modifier.height(800.dp))
+                        }
+                    }
+                }
+            }
+        }
+        frames()
+        val tag = if (actualMaryCard) "mary-model-input-${R.string.mary_settings_provider}" else "inline-model"
+        val field = compose.onNode(hasSetTextAction() and
+            (hasTestTag(tag) or hasAnyAncestor(hasTestTag(tag))), useUnmergedTree = true)
+        compose.mainClock.autoAdvance = true
+        field.performScrollTo()
+        compose.mainClock.autoAdvance = false
+        frames()
+        field.performTouchInput { click() }; frames()
+        field.assertIsFocused()
+        val nodeId = field.fetchSemanticsNode().id
+        // Simulate an already shown keyboard. Platform input sessions can bypass
+        // LocalSoftwareKeyboardController.show(), so do not infer device IME visibility.
+        compose.runOnUiThread { keyboard.calls.clear(); keyboard.show() }
+        val before = compose.runOnIdle { scroll.value }
+        compose.runOnUiThread { scope.launch { scroll.animateScrollTo(before + 80) } }
+        frames()
+        compose.runOnIdle {
+            assertTrue("Automatic scroll must actually move", scroll.value > before)
+            assertEquals("Automatic positioning must not dismiss the IME", listOf("show"), keyboard.calls)
+        }
+        field.assertIsFocused()
+        assertEquals(nodeId, field.fetchSemanticsNode().id)
+        field.performTextInput("x"); frames()
+        assertEquals(listOf("show"), keyboard.calls)
+        val beforeBringIntoView = compose.runOnIdle { scroll.value }
+        val viewportBounds = compose.onNode(hasScrollAction()).fetchSemanticsNode().boundsInRoot
+        compose.runOnIdle {
+            println("INLINE_IME_RELOCATION actualMaryCard=$actualMaryCard " +
+                "scroll=$beforeBringIntoView max=${scroll.maxValue} " +
+                "viewport=$viewportBounds target=$relocationTargetBounds")
+            assertTrue("Relocation target must have nonempty area",
+                relocationTargetBounds.width > 0f && relocationTargetBounds.height > 0f)
+            assertTrue("Relocation target must start below the visible viewport",
+                relocationTargetBounds.top >= viewportBounds.bottom)
+            assertTrue("Page must have remaining scroll range", scroll.maxValue > beforeBringIntoView)
+        }
+        compose.runOnUiThread { scope.launch { bringIntoView.bringIntoView() } }
+        frames()
+        compose.runOnIdle {
+            assertTrue("BringIntoView must actually reposition the page", scroll.value > beforeBringIntoView)
+            assertEquals("BringIntoView must not dismiss the IME", listOf("show"), keyboard.calls)
+        }
+        // A real pointer drag on the page, not emit(DragInteraction.Start).
+        compose.onNode(hasScrollAction()).performTouchInput {
+            swipe(Offset(width * 0.8f, height * 0.8f),
+                Offset(width * 0.8f, height * 0.45f), 420)
+        }
+        frames()
+        assertTrue("A user page drag must dismiss the keyboard", "hide" in keyboard.calls)
+        screenshot("Mochi-inline-${if (actualMaryCard) "actual-mary-card" else "public-scaffold"}-after-drag")
+        println("INLINE_IME_POLICY actualMaryCard=$actualMaryCard calls=${keyboard.calls}")
+    }
+
+    @Test fun inlineModelAutomaticScrollKeepsKeyboardButPointerDragDismisses() {
+        inlineKeyboardScrollPolicy(actualMaryCard = false)
+    }
+
+    @Test fun actualMaryModelAutomaticScrollKeepsKeyboardButPointerDragDismisses() {
+        inlineKeyboardScrollPolicy(actualMaryCard = true)
+    }
+
+    @Test fun nativeFieldKeepsFocusAndNodeDuringHorizontalSelectionAndTyping() {
+        for (backend in MixUiBackend.entries) {
+            host(backend, "https://example.invalid/v1/model-with-long-name")
+            open()
+            val field = compose.onNode(hasSetTextAction())
+            field.performTouchInput { click() }; frames()
+            field.assertIsFocused()
+            val identity = field.fetchSemanticsNode().id
+            repeat(4) {
+                field.performTouchInput {
+                    swipe(Offset(width * 0.8f, height / 2f), Offset(width * 0.2f, height / 2f), 420)
+                }
+                frames()
+                field.assertIsFocused()
+                assertEquals("Native field must not remount while moving cursor", identity, field.fetchSemanticsNode().id)
+            }
+            field.performTextInput("x"); frames()
+            field.assertIsFocused()
+            assertEquals(identity, field.fetchSemanticsNode().id)
+            assertEquals("Typing must not commit the draft", emptyList<String>(), writes)
+            screenshot("${backend.name}-horizontal-cursor-focus")
+            button(R.string.rear_widget_cancel)
+            assertEquals(emptyList<String>(), writes)
+        }
     }
 
     @Test fun cancelDiscardsAndReopeningCopiesTheLatestParentValue() {
