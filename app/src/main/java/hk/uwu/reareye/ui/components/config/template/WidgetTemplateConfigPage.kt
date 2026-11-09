@@ -43,6 +43,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -112,7 +113,6 @@ import hk.uwu.reareye.repository.rearwidget.textValue
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateConfigRepository
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateField
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateSchema
-import hk.uwu.mixui.components.OverlayDialog
 import hk.uwu.reareye.ui.components.rememberRearWidgetTemplatePreviewBitmap
 import hk.uwu.reareye.widgetapi.RearWidgetTemplateConfigState
 import kotlinx.coroutines.Dispatchers
@@ -1528,7 +1528,8 @@ internal fun ColorValueEditor(
         }
     }
 
-    OverlayDialog(
+    hk.uwu.mixui.components.GlassPreferenceFormDialog(
+        modifier = Modifier.testTag("template-advanced-color"),
         show = showAdvancedPicker,
         title = stringResource(R.string.rear_widget_card_template_color_advanced),
         onDismissRequest = { showAdvancedPicker = false },

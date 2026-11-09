@@ -61,7 +61,7 @@ class ColorEditorInteractionTest {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().setContent {
                 CaptureTheme(backend, dark) {
-                    CaptureDialogHost {
+                    hk.uwu.mixui.components.GlassPreferenceScene {
                         Column(Modifier.fillMaxWidth().padding(16.dp).testTag("color-fixture")) { content() }
                     }
                 }
@@ -70,7 +70,7 @@ class ColorEditorInteractionTest {
         settle()
     }
     private fun progress(labelRes: Int, value: Float, inDialog: Boolean = false) {
-        val scope = if (inDialog) hasAnyAncestor(isDialog()) else SemanticsMatcher("any window") { true }
+        val scope = if (inDialog) hasAnyAncestor(hasTestTag("template-advanced-color")) else SemanticsMatcher("any window") { true }
         compose.onNode(hasContentDescription(activity!!.get().getString(labelRes)) and scope and
             SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))
             .performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(value)) }
@@ -81,7 +81,7 @@ class ColorEditorInteractionTest {
             "color-editors/$backend/${if (dark) "dark" else "light"}").apply { mkdirs() }
         val bitmap = if (dialog) {
             compose.runOnUiThread {
-                captureDialogWindowBitmap(requireNotNull(org.robolectric.shadows.ShadowDialog.getLatestDialog()))
+                captureWindowBitmap(activity!!.get().window)
             }
         } else compose.onNodeWithTag("color-fixture").captureToImage().asAndroidBitmap()
         File(folder, "$name.png").outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
@@ -235,7 +235,7 @@ class ColorEditorInteractionTest {
             val beforeBack = value.value
             val beforeBackCount = writes.size
             compose.runOnUiThread {
-                org.robolectric.shadows.ShadowDialog.getLatestDialog().onBackPressed()
+                activity!!.get().onBackPressedDispatcher.onBackPressed()
             }
             settle()
             compose.onNodeWithText(confirm).assertDoesNotExist()
