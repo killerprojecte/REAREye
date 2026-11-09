@@ -1,4 +1,4 @@
-package hk.uwu.reareye.ui.components
+package hk.uwu.mixui.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
@@ -55,27 +55,35 @@ import androidx.core.view.WindowCompat
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.anim.DecelerateEasing
 import top.yukonga.miuix.kmp.anim.folmeSpring
-import hk.uwu.mixui.components.Scaffold
-import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.layout.DialogDefaults
 import hk.uwu.mixui.theme.MixTheme
 
-internal val LocalOverlayDialogBounds = staticCompositionLocalOf { IntRect.Zero }
+/**
+ * Panel bounds in the dialog window's coordinate space, before its animated layer transform.
+ * Anchored popup consumers must use window coordinates, not activity/root coordinates.
+ */
+val LocalOverlayDialogBounds = staticCompositionLocalOf { IntRect.Zero }
 
+/**
+ * Separate Android window with a single animated Compose scrim.
+ *
+ * This ordinary opaque host deliberately preserves its established geometry and motion for both
+ * backends. It is not a glass sheet or an in-tree form dialog. A null [onDismissRequest] vetoes
+ * back and outside dismissal; the owner controls [show], including the exit animation.
+ */
 @Composable
 fun OverlayDialog(
     show: Boolean,
     modifier: Modifier = Modifier,
     title: String? = null,
-    titleColor: Color = DialogDefaults.titleColor(),
+    titleColor: Color = OverlayDialogDefaults.titleColor(),
     summary: String? = null,
-    summaryColor: Color = DialogDefaults.summaryColor(),
-    backgroundColor: Color = DialogDefaults.backgroundColor(),
+    summaryColor: Color = OverlayDialogDefaults.summaryColor(),
+    backgroundColor: Color = OverlayDialogDefaults.backgroundColor(),
     enableWindowDim: Boolean = true,
     onDismissRequest: (() -> Unit)? = null,
     onDismissFinished: (() -> Unit)? = null,
-    outsideMargin: DpSize = DialogDefaults.outsideMargin,
-    insideMargin: DpSize = DialogDefaults.insideMargin,
+    outsideMargin: DpSize = OverlayDialogDefaults.outsideMargin,
+    insideMargin: DpSize = OverlayDialogDefaults.insideMargin,
     defaultWindowInsetsPadding: Boolean = true,
     content: @Composable () -> Unit,
 ) {

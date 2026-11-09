@@ -1,5 +1,6 @@
 package hk.uwu.reareye.ui.components
 
+import hk.uwu.mixui.components.OverlayDialog
 import hk.uwu.mixui.icons.Icons as UiIcons
 
 import android.Manifest

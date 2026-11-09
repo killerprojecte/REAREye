@@ -15,8 +15,8 @@ import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.reareye.ui.components.LocalOverlayDialogBounds
-import hk.uwu.reareye.ui.components.OverlayDialog
+import hk.uwu.mixui.components.LocalOverlayDialogBounds
+import hk.uwu.mixui.components.OverlayDialog
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Tabs

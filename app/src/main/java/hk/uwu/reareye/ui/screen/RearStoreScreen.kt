@@ -117,7 +117,7 @@ import hk.uwu.reareye.repository.rearstore.supportsModuleVersion
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperRepository
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.reareye.ui.components.OverlayDialog
+import hk.uwu.mixui.components.OverlayDialog
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.mixui.components.BadgePalette

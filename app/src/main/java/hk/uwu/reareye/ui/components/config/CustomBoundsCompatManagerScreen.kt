@@ -55,7 +55,7 @@ import hk.uwu.reareye.repository.bounds.CustomBoundsCompatConfigCodec
 import hk.uwu.reareye.repository.bounds.CustomBoundsFillMode
 import hk.uwu.reareye.repository.bounds.CustomBoundsMode
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.reareye.ui.components.OverlayDialog
+import hk.uwu.mixui.components.OverlayDialog
 import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction

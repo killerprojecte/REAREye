@@ -1,5 +1,6 @@
 package hk.uwu.reareye.ui.components
 
+import hk.uwu.mixui.components.OverlayDialog
 import android.content.ComponentName
 import android.content.Context
 import android.os.Process
@@ -30,7 +31,7 @@ import kotlinx.coroutines.withContext
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.layout.DialogDefaults
+import hk.uwu.mixui.components.OverlayDialogDefaults
 import hk.uwu.mixui.theme.MixTheme
 
 @Composable
@@ -55,10 +56,58 @@ internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
         show = state == SubscreenNotificationAccessState.MISSING
     }
 
-    OverlayDialog(
+    SubscreenNotificationAccessDialog(
         show = enabled && show,
+        granting = granting,
+        error = error,
+        onGrant = {
+            if (!granting) {
+                granting = true
+                error = null
+                scope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) {
+                            access.grant(userId, listenerAvailable(applicationContext))
+                        }
+                        if (result.granted) {
+                            show = false
+                            Toast.makeText(
+                                applicationContext,
+                                R.string.subscreen_notification_access_success,
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        } else {
+                            error = applicationContext.getString(
+                                R.string.subscreen_notification_access_failed,
+                            ) + result.detail.takeIf { it.isNotBlank() }
+                                ?.let { "\n$it" }.orEmpty()
+                        }
+                    } finally {
+                        granting = false
+                    }
+                }
+            }
+        },
+        onDismiss = { show = false },
+    )
+}
+
+/**
+ * Presentation only: tests and previews supply inert callbacks, never permission services.
+ * The owning prompt retains all checking/granting state and side effects.
+ */
+@Composable
+internal fun SubscreenNotificationAccessDialog(
+    show: Boolean,
+    granting: Boolean,
+    error: String?,
+    onGrant: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    OverlayDialog(
+        show = show,
         title = stringResource(R.string.subscreen_notification_access_title),
-        onDismissRequest = if (granting) null else ({ show = false }),
+        onDismissRequest = if (granting) null else onDismiss,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -77,7 +126,7 @@ internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
                             modifier = Modifier.fillMaxWidth(),
                             fontSize = MixTheme.textStyles.body1.fontSize,
                             textAlign = TextAlign.Start,
-                            color = DialogDefaults.summaryColor(),
+                            color = OverlayDialogDefaults.summaryColor(),
                         )
                     }
             }
@@ -90,34 +139,7 @@ internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
                 )
             }
             Button(
-                onClick = {
-                    if (!granting) {
-                        granting = true
-                        error = null
-                        scope.launch {
-                            try {
-                                val result = withContext(Dispatchers.IO) {
-                                    access.grant(userId, listenerAvailable(applicationContext))
-                                }
-                                if (result.granted) {
-                                    show = false
-                                    Toast.makeText(
-                                        applicationContext,
-                                        R.string.subscreen_notification_access_success,
-                                        Toast.LENGTH_LONG,
-                                    ).show()
-                                } else {
-                                    error = applicationContext.getString(
-                                        R.string.subscreen_notification_access_failed,
-                                    ) + result.detail.takeIf { it.isNotBlank() }
-                                        ?.let { "\n$it" }.orEmpty()
-                                }
-                            } finally {
-                                granting = false
-                            }
-                        }
-                    }
-                },
+                onClick = onGrant,
                 enabled = !granting,
                 colors = ButtonDefaults.buttonColorsPrimary(),
                 modifier = Modifier.fillMaxWidth(),
@@ -130,7 +152,7 @@ internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
                 )
             }
             Button(
-                onClick = { show = false },
+                onClick = onDismiss,
                 enabled = !granting,
                 modifier = Modifier.fillMaxWidth(),
             ) {

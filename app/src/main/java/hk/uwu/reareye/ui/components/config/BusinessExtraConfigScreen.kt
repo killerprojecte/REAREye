@@ -38,7 +38,7 @@ import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigEntry
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigFields
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigRepository
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.reareye.ui.components.OverlayDialog
+import hk.uwu.mixui.components.OverlayDialog
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard

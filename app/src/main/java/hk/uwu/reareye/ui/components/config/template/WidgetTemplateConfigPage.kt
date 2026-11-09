@@ -112,7 +112,7 @@ import hk.uwu.reareye.repository.rearwidget.textValue
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateConfigRepository
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateField
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateSchema
-import hk.uwu.reareye.ui.components.OverlayDialog
+import hk.uwu.mixui.components.OverlayDialog
 import hk.uwu.reareye.ui.components.rememberRearWidgetTemplatePreviewBitmap
 import hk.uwu.reareye.widgetapi.RearWidgetTemplateConfigState
 import kotlinx.coroutines.Dispatchers

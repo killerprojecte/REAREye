@@ -66,7 +66,7 @@ import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateConfigRepository
 import hk.uwu.reareye.ui.FeatureGuideAction
 import hk.uwu.reareye.ui.LocalFeatureGuideDemo
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.reareye.ui.components.OverlayDialog
+import hk.uwu.mixui.components.OverlayDialog
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction

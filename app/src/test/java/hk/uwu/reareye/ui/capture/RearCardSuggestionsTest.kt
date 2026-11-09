@@ -94,6 +94,8 @@ class RearCardSuggestionsTest {
     }
     private fun exercise(backend: MixUiBackend, dark: Boolean) {
         open(backend, dark)
+        assertEquals("Opening must not confirm", 0, confirms)
+        assertEquals("Opening must not dismiss", 0, dismisses)
         compose.onNode(hasText(label(R.string.rear_widget_confirm)) and hasClickAction()).assertIsNotEnabled()
         editor().reveal().performClick(); frames()
         editor().performTextReplacement("clock"); frames()
