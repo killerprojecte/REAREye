@@ -56,6 +56,24 @@ class ThemeSheetPreviewTest {
         return bitmap
     }
     @After fun close() { compose.mainClock.autoAdvance = true; compose.runOnUiThread { activity?.close(); activity = null } }
+    @Test fun mochiThemeHostKeepsDraftAcrossBackendSwitchAndDiscardsOnClose() {
+        compose.mainClock.autoAdvance = false
+        open("mochi", false)
+        compose.onNodeWithTag("mochi-glass-sheet-host").assertExists()
+        tab("theme-palette-tabs", "Nothing")
+        tab("theme-style-tabs", "MIUIX")
+        tab("theme-style-tabs", "Mochi")
+        compose.onNodeWithTag("mochi-glass-sheet-host").assertExists()
+        assertEquals(0, activity!!.get().themeSaveCount)
+        compose.onNodeWithContentDescription("关闭").performClick()
+        frames()
+        compose.onNodeWithTag("mochi-glass-sheet-host").assertDoesNotExist()
+        compose.runOnUiThread { activity!!.get().themeSheetVisible = true }
+        frames()
+        compose.onNodeWithTag("mochi-glass-sheet-host").assertExists()
+        assertEquals(0, activity!!.get().themeSaveCount)
+    }
+
     @Test fun renderDraftStylesAndKeepSaveCancelTransactional() {
         assumeTrue(java.lang.Boolean.getBoolean("ui.capture.enabled"))
         compose.mainClock.autoAdvance = false

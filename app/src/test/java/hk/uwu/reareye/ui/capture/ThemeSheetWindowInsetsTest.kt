@@ -134,6 +134,31 @@ class ThemeSheetWindowInsetsTest {
         compose.runOnUiThread { activity?.close(); activity = null }
     }
 
+    @Test fun mochiGlassBackgroundStaysFullHeightWhileSyntheticImeInsetsResizeContent() {
+        applied = AppThemeMode.MOCHI_LIGHT
+        open(expectNativeGlass = false)
+        injectInsets(48)
+        val background = compose.onNodeWithTag("mochi-glass-sheet")
+        val sheetBottom = background.fetchSemanticsNode().boundsInRoot.bottom
+        val content = compose.onNodeWithTag("theme-style-sheet")
+        val originalBottom = content.fetchSemanticsNode().boundsInRoot.bottom
+        val windowBottom = windowRoot().fetchSemanticsNode().boundsInRoot.bottom
+        capture("mochi-light-before-synthetic-ime")
+        injectInsets(48, imePx = 500)
+        assertEquals("IME must not shrink the sampled glass material", sheetBottom,
+            background.fetchSemanticsNode().boundsInRoot.bottom, 1f)
+        assertTrue("Scrollable foreground must remain above synthetic IME",
+            content.fetchSemanticsNode().boundsInRoot.bottom <= windowBottom - 500 + 1f)
+        capture("mochi-light-synthetic-ime")
+        injectInsets(48)
+        assertEquals(originalBottom, content.fetchSemanticsNode().boundsInRoot.bottom, 1f)
+        compose.onNodeWithContentDescription(label(R.string.theme_editor_save)).performClick(); frames()
+        assertEquals(1, saveCount)
+        assertEquals(AppThemeMode.MOCHI_LIGHT, saved!!.mode)
+        compose.onNodeWithContentDescription(label(R.string.theme_editor_close)).performClick(); frames()
+        assertFalse(visible)
+    }
+
     @Test fun gestureAndThreeButtonInsetsKeepLastTabsAboveNavigationBarWithoutDoublePadding() {
         open()
         injectInsets(0)

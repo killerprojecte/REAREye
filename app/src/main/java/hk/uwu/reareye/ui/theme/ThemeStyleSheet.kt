@@ -60,22 +60,32 @@ internal fun ThemeStyleSheet(
     onDismiss: () -> Unit,
     onSave: (ThemeStyleDraft) -> Unit,
 ) {
-    var draft by remember(show) { mutableStateOf(ThemeStyleDraft.from(appliedMode, appliedStyle, appliedNavigationStyle)) }
+    var draft by remember { mutableStateOf(ThemeStyleDraft.from(appliedMode, appliedStyle, appliedNavigationStyle)) }
+    var resetDraft by remember { mutableStateOf(false) }
+    var sheetSession by remember { mutableStateOf(0) }
+    LaunchedEffect(show, resetDraft) {
+        if (show) {
+            draft = ThemeStyleDraft.from(appliedMode, appliedStyle, appliedNavigationStyle)
+            if (resetDraft) sheetSession++
+            resetDraft = false
+        }
+    }
     var scrollGeneration by remember { mutableStateOf(0) }
     val sheetScroll = androidx.compose.runtime.key(show, scrollGeneration) { rememberScrollState() }
     // Cancel is a transaction boundary even when close/reopen is coalesced into
     // one frame. Do not depend only on observing an intermediate show=false.
     val discardDraft: () -> Unit = {
         if (!saving) {
-            draft = ThemeStyleDraft.from(appliedMode, appliedStyle, appliedNavigationStyle)
+            resetDraft = true
             scrollGeneration++
             onDismiss()
         }
     }
     MixUiHost(backend = draft.backend, colorMode = draft.mode.colorSchemeMode, mochiStyle = draft.mochiStyle.style) {
-    BottomSheet(
+    GlassBottomSheet(
         show = show, onDismissRequest = discardDraft, title = stringResource(R.string.theme_editor_title),
         allowDismiss = !saving,
+        sessionKey = sheetSession,
         isContentScrolled = sheetScroll.canScrollBackward,
         startAction = {
             BottomSheetActionButton(onClick = discardDraft, enabled = !saving) {

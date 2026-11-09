@@ -1,5 +1,6 @@
 package hk.uwu.mixui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import ui.feice.mochi.effect.glass.mochiBackdropSource
 import ui.feice.mochi.effect.glass.rememberMochiBackdrop
 import top.yukonga.miuix.kmp.blur.Backdrop
@@ -20,6 +22,8 @@ internal class GlassSheetScene(
     val mochiBackdrop: ui.feice.mochi.effect.glass.MochiBackdrop,
 ) {
     val entries = mutableStateMapOf<Any, @Composable () -> Unit>()
+    // Glass-sheet B contains the page plus scrim, never the sheet or controls.
+    val glassSheetScrims = mutableStateMapOf<Any, Float>()
 }
 
 internal val LocalGlassSheetScene = staticCompositionLocalOf<GlassSheetScene?> { null }
@@ -28,8 +32,9 @@ internal val LocalGlassSheetActionBackdrop = staticCompositionLocalOf<Backdrop?>
 
 /**
  * Put inside the full-window root Scaffold, around its page and bars. Only that
- * page is recorded. Native sheets and their scrims are sibling overlays, and the
- * root popup host is outside the recording. No cross-window backdrop is sampled.
+ * page is recorded, with the opt-in Mochi host scrim added before its material
+ * sampling. Sheet surfaces and controls remain sibling overlays outside that
+ * recording. No cross-window backdrop is sampled.
  *
  * The source exists for either applied backend: a Mochi page may preview a MIUIX
  * draft without switching the applied theme. This host consumes no system insets.
@@ -47,11 +52,16 @@ fun GlassBottomSheetScene(content: @Composable () -> Unit) {
     val scene = remember(backdrop, mochiBackdrop) { GlassSheetScene(backdrop, mochiBackdrop) }
     Box(Modifier.fillMaxSize()) {
         CompositionLocalProvider(LocalGlassSheetScene provides scene) {
-            // Native MochiSheet lives in a separate DecorView overlay. Its surface
-            // is never a descendant of this source, so it cannot sample itself.
-            Box(Modifier.fillMaxSize().mochiBackdropSource(mochiBackdrop)
+            // Both native overlays and our explicit glass-sheet entries are outside
+            // this page/scrim source, so neither can record itself.
+            Box(Modifier.fillMaxSize()
+                .then(if (scene.glassSheetScrims.isNotEmpty()) Modifier.clearAndSetSemantics {} else Modifier)
+                .mochiBackdropSource(mochiBackdrop)
                 .then(if (backdrop != null && scene.entries.isNotEmpty()) Modifier.layerBackdrop(backdrop) else Modifier)) {
                 content()
+                scene.glassSheetScrims.values.forEach { alpha ->
+                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = alpha)))
+                }
             }
         }
         scene.entries.forEach { (id, entry) -> key(id) { entry() } }
