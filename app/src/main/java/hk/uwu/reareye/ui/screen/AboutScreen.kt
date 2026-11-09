@@ -453,6 +453,7 @@ private fun AboutRootPage(
         title = stringResource(R.string.about_navigation),
         isContentScrolled = lazyListState.firstVisibleItemIndex > 0 ||
             lazyListState.firstVisibleItemScrollOffset > 0,
+        contentListState = lazyListState,
     ) { paddingValues ->
         AboutRootContent(
             bottomInnerPadding = bottomInnerPadding,
@@ -482,6 +483,7 @@ private fun AboutSecondaryPage(
         title = title,
         isContentScrolled = listState.firstVisibleItemIndex > 0 ||
             listState.firstVisibleItemScrollOffset > 0,
+        contentListState = listState,
         navigationIcon = {
             TopBarIconButton(onClick = onBack, modifier = Modifier.testTag("about-back")) {
                 Icon(

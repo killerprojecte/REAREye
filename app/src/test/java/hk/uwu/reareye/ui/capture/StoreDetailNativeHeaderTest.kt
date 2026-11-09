@@ -92,6 +92,23 @@ class StoreDetailNativeHeaderTest {
         frames()
     }
 
+    private fun assertHeaderIconsVisible(dark: Boolean) {
+        for (label in listOf(R.string.scene_route_navigate_back, R.string.rear_store_open_repository)) {
+            val node = compose.onNodeWithContentDescription(this.label(label)).assertIsDisplayed()
+            val bitmap = node.captureToImage().asAndroidBitmap()
+            var foreground = 0
+            for (y in bitmap.height / 4 until bitmap.height * 3 / 4) {
+                for (x in bitmap.width / 4 until bitmap.width * 3 / 4) {
+                    val color = bitmap.getPixel(x, y)
+                    val luminance = (android.graphics.Color.red(color) + android.graphics.Color.green(color) + android.graphics.Color.blue(color)) / 3
+                    if (android.graphics.Color.alpha(color) > 200 &&
+                        (if (dark) luminance > 180 else luminance < 100)) foreground++
+                }
+            }
+            assertTrue("Visible icon foreground for $label in dark=$dark", foreground >= 8)
+        }
+    }
+
     private fun detail() = RearStoreWidgetDetail(
         type = "card", widgetId = "fixture-detail", name = "Fixture detailed clock",
         description = "Description with no external data. ".repeat(12),
@@ -122,6 +139,9 @@ class StoreDetailNativeHeaderTest {
             awaitText("Fixture detailed clock")
             compose.waitUntil(10_000) { compose.mainClock.advanceTimeBy(100); readmeCalls.get() == 1 }; frames()
             assertEquals(1, detailCalls.get())
+            val initialHeroTop = compose.onNodeWithText("Fixture detailed clock").fetchSemanticsNode().boundsInRoot.top
+            assertHeaderIconsVisible(dark)
+            compose.onNodeWithTag(if (backend == MixUiBackend.Miuix) "glass-tabs-miuix" else "glass-tabs-mochi").assertIsDisplayed()
             capture("${backend.name}-$dark-top")
             compose.onNodeWithContentDescription(label(R.string.rear_store_open_repository)).performClick()
             val intent = org.robolectric.Shadows.shadowOf(activity!!.get()).nextStartedActivity
@@ -129,12 +149,24 @@ class StoreDetailNativeHeaderTest {
             compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(1); frames()
             compose.onNodeWithText(label(R.string.rear_store_tab_downloads)).performClick(); frames()
             compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performTouchInput { swipeUp() }; frames()
+            assertHeaderIconsVisible(dark)
             capture("${backend.name}-$dark-downloads")
             compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(1); frames()
             compose.onNodeWithText(label(R.string.rear_store_tab_info)).performClick(); frames()
             capture("${backend.name}-$dark-info")
             compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(1); frames()
             compose.onNodeWithText(label(R.string.rear_store_tab_downloads)).performClick(); frames()
+            compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performScrollToIndex(0)
+            repeat(2) {
+                compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)).performTouchInput {
+                    swipe(androidx.compose.ui.geometry.Offset(center.x, height * 0.5f),
+                        androidx.compose.ui.geometry.Offset(center.x, height * 0.85f), durationMillis = 500)
+                }; frames()
+            }
+            assertEquals("Body-origin pull restores the real detail header", initialHeroTop,
+                compose.onNodeWithText("Fixture detailed clock").fetchSemanticsNode().boundsInRoot.top, 1.5f)
+            assertHeaderIconsVisible(dark)
+            capture("${backend.name}-$dark-restored")
             compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back)).performClick()
             assertEquals(1, backs)
         }

@@ -407,6 +407,7 @@ fun CustomBoundsCompatManagerScreen(
     GlassTopBarScaffold(
         title = stringResource(R.string.custom_bounds_compat_manager),
         isContentScrolled = listState.canScrollBackward,
+        contentListState = listState,
         navigationIcon = {
             TopBarIconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack,

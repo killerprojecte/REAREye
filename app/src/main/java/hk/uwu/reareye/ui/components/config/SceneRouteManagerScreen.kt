@@ -200,6 +200,7 @@ fun SceneRouteManagerScreen(
     GlassTopBarScaffold(
         title = stringResource(R.string.rear_widget_scene_route_manager),
         isContentScrolled = listState.canScrollBackward,
+        contentListState = listState,
         navigationIcon = {
             TopBarIconButton(onClick = onBack) {
                 Icon(

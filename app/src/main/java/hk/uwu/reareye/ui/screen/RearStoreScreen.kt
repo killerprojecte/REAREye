@@ -154,7 +154,7 @@ import hk.uwu.mixui.components.GlassTopBarScaffold
 import hk.uwu.mixui.components.pageScrollFeedback
 import hk.uwu.mixui.components.TopBarIconButton
 import top.yukonga.miuix.kmp.basic.Surface
-import hk.uwu.mixui.components.Tabs
+import hk.uwu.mixui.components.GlassTabs
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 import java.io.ByteArrayInputStream
@@ -1320,6 +1320,20 @@ internal fun RearStoreDetailContent(
             ?: stringResource(R.string.store_navigation),
         isContentScrolled = listState.canScrollBackward,
         contentListState = listState,
+        pinnedHeader = {
+            if (!loading && !loadFailed && detail != null) {
+                GlassTabs(
+                    tabs = listOf(
+                        stringResource(R.string.rear_store_tab_readme),
+                        stringResource(R.string.rear_store_tab_downloads),
+                        stringResource(R.string.rear_store_tab_info),
+                    ),
+                    selectedTabIndex = selectedTab.ordinal,
+                    onTabSelected = { selectedTab = RearStoreDetailTab.entries[it] },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+        },
         navigationIcon = {
             TopBarIconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.scene_route_navigate_back))
@@ -1395,11 +1409,6 @@ internal fun RearStoreDetailContent(
         val updateAvailable = installedReleaseTag != null &&
                 latestReleaseTag != null &&
                 installedReleaseTag != latestReleaseTag
-        val tabs = listOf(
-            stringResource(R.string.rear_store_tab_readme),
-            stringResource(R.string.rear_store_tab_downloads),
-            stringResource(R.string.rear_store_tab_info),
-        )
 
         LazyColumn(
             state = listState,
@@ -1421,15 +1430,6 @@ internal fun RearStoreDetailContent(
                     latestReleaseTag = latestReleaseTag,
                     updateAvailable = updateAvailable,
                     metadataType = widgetDetail.displayMetadataType(),
-                )
-            }
-
-            item {
-                Tabs(
-                    tabs = tabs,
-                    selectedTabIndex = selectedTab.ordinal,
-                    onTabSelected = { selectedTab = RearStoreDetailTab.entries[it] },
-                    modifier = Modifier.fillMaxWidth(),
                 )
             }
 

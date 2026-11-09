@@ -79,7 +79,7 @@ fun LargeTitleLazyScaffold(
                         if (backdrop != null) {
                             top.yukonga.miuix.kmp.glass.GlassTopAppBar(
                                 title = title,
-                                isContentScrolled = listState.canScrollBackward,
+                                isContentScrolled = listState.canScrollBackward || scrollBehavior.state.heightOffset < 0f,
                                 backdrop = backdrop,
                                 progressiveBlur = false,
                                 scrollBehavior = scrollBehavior,

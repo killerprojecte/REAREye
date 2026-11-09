@@ -93,11 +93,14 @@ fun GlassTopBarScaffold(
                     nativeState.contentOffset = -1f
                 }
             }
+            // Native pre-scroll can collapse the bar before a short list moves.
+            // Material must follow that motion as well as the list's own offset.
+            val materialVisible = isContentScrolled || nativeState.heightOffset < 0f
             val supported = isRuntimeShaderSupported()
             val backdrop = if (supported) rememberLayerBackdrop() else null
             val formBackdrop = if (supported) rememberLayerBackdrop() else null
             val tabSurfaceAlpha = animateFloatAsState(
-                targetValue = if (isContentScrolled) 1f else 0f,
+                targetValue = if (materialVisible) 1f else 0f,
                 animationSpec = top.yukonga.miuix.kmp.glass.GlassMotion.topBarButtonFloat(),
                 label = "headerTabMaterial",
             )
@@ -120,7 +123,7 @@ fun GlassTopBarScaffold(
                                 top.yukonga.miuix.kmp.glass.GlassTopAppBar(
                                     title = title,
                                     modifier = topBarModifier,
-                                    isContentScrolled = isContentScrolled,
+                                    isContentScrolled = materialVisible,
                                     backdrop = backdrop,
                                     // Match the 799 GlassPage default: native band plus button
                                     // underlay. Progressive blur is an opt-in demo setting.
