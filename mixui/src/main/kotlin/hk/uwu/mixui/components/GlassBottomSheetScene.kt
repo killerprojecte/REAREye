@@ -69,6 +69,8 @@ internal fun NativeGlassSheet(
     endAction: (@Composable () -> Unit)?,
     allowDismiss: Boolean,
     isContentScrolled: Boolean,
+    onDismissFinished: () -> Unit,
+    horizontalPadding: androidx.compose.ui.unit.Dp,
     content: @Composable () -> Unit,
 ) {
     val actionAlpha by androidx.compose.animation.core.animateFloatAsState(
@@ -111,9 +113,14 @@ internal fun NativeGlassSheet(
                         endAction = endAction,
                         allowDismiss = allowDismiss,
                         backdrop = scene.backdrop,
+                        insideMargin = androidx.compose.ui.unit.DpSize(horizontalPadding, androidx.compose.ui.unit.Dp(0f)),
                         renderInRootScaffold = false,
                         onDismissFinished = {
-                            if (!currentShow) { rendered = false; retained = false }
+                            if (!currentShow) {
+                                rendered = false
+                                retained = false
+                                onDismissFinished()
+                            }
                         },
                         content = {
                             SideEffect { rendered = true }

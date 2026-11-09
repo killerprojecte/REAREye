@@ -12,6 +12,8 @@ import hk.uwu.mixui.theme.MixTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberUpdatedState
@@ -29,6 +31,8 @@ fun BottomSheet(
     endAction: (@Composable () -> Unit)? = null,
     allowDismiss: Boolean = true,
     isContentScrolled: Boolean = false,
+    onDismissFinished: () -> Unit = {},
+    horizontalPadding: Dp = 24.dp,
     content: @Composable () -> Unit,
 ) {
     when (LocalMixUiBackend.current) {
@@ -43,14 +47,16 @@ fun BottomSheet(
             }
             if (scene != null) {
                 NativeGlassSheet(scene, show, onDismissRequest, title, startAction,
-                    endAction, allowDismiss, isContentScrolled, insetContent)
+                    endAction, allowDismiss, isContentScrolled, onDismissFinished, horizontalPadding, insetContent)
             } else {
                 // Standalone/legacy callers without a page recording keep the
                 // ordinary native window. Never pretend a null source is glass.
                 top.yukonga.miuix.kmp.window.WindowBottomSheet(
                     show = show, onDismissRequest = onDismissRequest,
                     title = title, startAction = startAction, endAction = endAction,
-                    allowDismiss = allowDismiss, content = insetContent,
+                    allowDismiss = allowDismiss, onDismissFinished = onDismissFinished,
+                    insideMargin = DpSize(horizontalPadding, 0.dp),
+                    content = insetContent,
                 )
             }
         }
@@ -85,10 +91,19 @@ fun BottomSheet(
                     // solid fallback when no real page source or material is present.
                     color = if (glass) Color.Transparent else MochiDefaults.sheetBackground(),
                     onDismiss = {
-                        if (currentShow && !currentAllowDismiss) state.show() else onDismissRequest()
+                        if (currentShow && !currentAllowDismiss) {
+                            state.show()
+                        } else {
+                            // Mochi 0.2.0 invokes onDismiss after its hide animation
+                            // settles, including programmatic hides. Only native user
+                            // dismissal requests a state change; a parent-driven hide
+                            // must not clear a draft or cancel pending navigation.
+                            if (currentShow) onDismissRequest()
+                            onDismissFinished()
+                        }
                     },
                 ) {
-                    Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
+                    Column(Modifier.padding(horizontal = horizontalPadding, vertical = 16.dp)) {
                         if (title != null || startAction != null || endAction != null) {
                             Box(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                                 Box(Modifier.align(Alignment.CenterStart)) { startAction?.invoke() }
