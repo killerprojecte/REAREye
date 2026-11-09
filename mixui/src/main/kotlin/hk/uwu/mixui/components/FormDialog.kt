@@ -4,10 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
-import kotlinx.collections.immutable.persistentListOf
 
 /**
- * Native in-window editable form. Keep composed during exit; the backend owns
+ * In-window editable form. Mochi uses mixui’s stable compatibility host. Keep composed during exit; the backend owns
  * root placement, keyboard avoidance and dismissal. Unlike GlassFormDialog this
  * does not require a recorded glass scene. The caller owns submit/cancel actions.
  */
@@ -28,14 +27,11 @@ fun FormDialog(
             renderInRootScaffold = true,
             content = content,
         )
-        MixUiBackend.Mochi -> ui.feice.mochi.basic.MochiDialog(
-            visible = show,
+        MixUiBackend.Mochi -> StableMochiFormDialog(
+            show = show,
             title = title,
             onDismissRequest = onDismissRequest,
             modifier = modifier,
-            actions = persistentListOf(),
-            dismissOnOutsideTap = true,
-            dismissOnBack = true,
             content = { content() },
         )
     }

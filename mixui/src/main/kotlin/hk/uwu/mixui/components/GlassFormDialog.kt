@@ -7,7 +7,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import kotlinx.collections.immutable.persistentListOf
 import top.yukonga.miuix.kmp.blur.Backdrop
 import ui.feice.mochi.effect.glass.LocalMochiBackdrop
 import ui.feice.mochi.effect.glass.MochiBackdrop
@@ -21,8 +20,8 @@ internal sealed interface GlassFormBackdrop {
 internal val LocalGlassFormBackdrop = staticCompositionLocalOf<GlassFormBackdrop?> { null }
 
 /**
- * Native glass form presentation for [GlassTopBarScaffold] or [GlassPreferenceScene]'s overlayContent slot.
- * Keep this call composed when [show] becomes false: the vendor owns its exit
+ * Backend glass form presentation for [GlassTopBarScaffold] or [GlassPreferenceScene]'s overlayContent slot.
+ * Keep this call composed when [show] becomes false: the host owns its exit
  * animation, keyboard dismissal and overlay removal.
  *
  * The form owns its validation and explicit confirm/cancel buttons in [content].
@@ -72,17 +71,12 @@ fun GlassFormDialog(
         is GlassFormBackdrop.Mochi -> CompositionLocalProvider(
             LocalMochiBackdrop provides backdrop.value,
         ) {
-            ui.feice.mochi.basic.MochiDialog(
-                visible = show,
+            StableMochiFormDialog(
+                show = show,
                 title = title,
                 onDismissRequest = onDismissRequest,
                 modifier = modifier,
-                // Native action rows always dismiss after invoking their action.
-                // A validation failure must leave this editable form open.
-                actions = persistentListOf(),
-                dismissOnOutsideTap = true,
-                dismissOnBack = true,
-                content = { styledContent() },
+                content = styledContent,
             )
         }
     }
