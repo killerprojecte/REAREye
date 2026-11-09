@@ -193,6 +193,7 @@ internal fun ContextUsageButton(summary: MaryUsageSummary, topBar: Boolean = fal
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                     CompactTabs(
                         glass = true,
+                        glassSurfaceAlpha = 0f,
                         tabs = listOf(stringResource(R.string.mary_context_category_mode), stringResource(R.string.mary_context_sequence_mode)),
                         selectedTabIndex = if (sequence) 1 else 0,
                         onTabSelected = { index ->

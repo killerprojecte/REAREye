@@ -23,6 +23,7 @@ import hk.uwu.mixui.theme.MixTheme
  * [fillWidth] gives a dedicated, equal-width mode row; otherwise the group wraps its labels.
  * The visible track is compact; the surrounding row reserves room for minimum touch expansion.
  * [glass] opts MIUIX menus into the native joined glass track; Mochi is unchanged.
+ * [glassSurfaceAlpha] can remove the glass material while retaining the native pill track.
  * Labels are measured at the actual font scale instead of squeezed into a fixed maximum width.
  * Intrinsic-sizing parents (e.g. DropdownMenu) must supply their known width via [modifier].
  */
@@ -34,6 +35,7 @@ fun CompactTabs(
     modifier: Modifier = Modifier,
     fillWidth: Boolean = false,
     glass: Boolean = false,
+    glassSurfaceAlpha: Float = 1f,
 ) {
     if (tabs.isEmpty()) return
     val density = LocalDensity.current
@@ -75,6 +77,7 @@ fun CompactTabs(
             if (backdrop != null) top.yukonga.miuix.kmp.glass.GlassSegmentedTabRow(
                 tabs = tabs, selectedIndex = selectedTabIndex.coerceIn(tabs.indices),
                 onSelect = onTabSelected, backdrop = backdrop, height = trackHeight,
+                surfaceAlpha = glassSurfaceAlpha,
                 modifier = Modifier.fillMaxWidth().testTag("compact-glass-tabs-miuix"),
             ) else TabRowWithContour(
                 tabs = tabs,
