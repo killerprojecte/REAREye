@@ -102,12 +102,14 @@ internal fun NativeGlassSheet(
     val currentShow by rememberUpdatedState(show)
     val entry by rememberUpdatedState<@Composable () -> Unit>({
         CompositionLocalProvider(callerLocals) {
+            val sheetSource = rememberNativeSheetMaterialSource()
+            val sheetMaterial = rememberNativeSheetMaterialSurface(scene.backdrop, sheetSource)
             // A local popup owner preserves the caller's theme for MIUIX's native
             // header. Never route this entry back to the applied root theme.
             // Recalculate at full-window coordinates instead of inheriting a
             // scrolled page's consumed insets. Native sheet still owns top/IME.
             CompositionLocalProvider(
-                LocalGlassSheetActionBackdrop provides scene.backdrop,
+                LocalGlassSheetActionBackdrop provides sheetSource.backdrop,
                 LocalGlassSheetActionAlpha provides actionAlpha,
             ) {
                 Scaffold(
@@ -115,16 +117,21 @@ internal fun NativeGlassSheet(
                     containerColor = Color.Transparent,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 ) {
-                    top.yukonga.miuix.kmp.glass.GlassBottomSheet(
+                    top.yukonga.miuix.kmp.overlay.OverlayBottomSheet(
                         show = show,
                         modifier = Modifier.testTag("mixui-native-glass-sheet"),
                         onDismissRequest = onDismissRequest,
                         title = title,
-                        startAction = startAction,
+                        startAction = {
+                            NativeSheetMaterialRecorder(scene.backdrop, sheetSource)
+                            startAction?.invoke()
+                        },
                         endAction = endAction,
                         allowDismiss = allowDismiss,
                         enableNestedScroll = enableNestedScroll,
-                        backdrop = scene.backdrop,
+                        backgroundColor = top.yukonga.miuix.kmp.glass.GlassBottomSheetDefaults.containerColor(),
+                        dimColor = top.yukonga.miuix.kmp.glass.GlassBottomSheetDefaults.ScrimColor,
+                        surface = sheetMaterial,
                         insideMargin = androidx.compose.ui.unit.DpSize(horizontalPadding, androidx.compose.ui.unit.Dp(0f)),
                         renderInRootScaffold = false,
                         onDismissFinished = {
@@ -137,7 +144,7 @@ internal fun NativeGlassSheet(
                         content = {
                             SideEffect { rendered = true }
                             CompositionLocalProvider(
-                                LocalGlassTabsBackdrop provides scene.backdrop,
+                                LocalGlassTabsBackdrop provides sheetSource.backdrop,
                                 LocalGlassTabsSurfaceAlpha provides 1f,
                             ) { content() }
                         },
