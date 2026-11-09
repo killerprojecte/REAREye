@@ -15,7 +15,6 @@ object ConfigKeys {
     const val MODULE_NAVIGATION_BAR_STYLE = "module_navigation_bar_style"
     const val MODULE_THEME_MODE = "module_theme_mode"
     const val MODULE_NAVIGATION_BAR_MODE = "module_navigation_bar_mode"
-    const val MODULE_SEARCH_BAR_STYLE = "module_search_bar_style"
     const val MODULE_STORE_API_PROVIDER = "module_store_api_provider"
     const val MODULE_STORE_API_CUSTOM_DOMAIN = "module_store_api_custom_domain"
     const val MODULE_STORE_WEBVIEW_HARDWARE_ACCELERATION =
@@ -183,32 +182,6 @@ enum class ModuleNavigationBarMode(
     }
 }
 
-enum class ModuleSearchBarStyle(
-    val value: Int,
-    @param:StringRes val titleRes: Int,
-) {
-    DEFAULT(
-        value = 0,
-        titleRes = R.string.module_search_bar_style_default,
-    ),
-    MIUIX(
-        value = 1,
-        titleRes = R.string.module_search_bar_style_miuix,
-    );
-
-    companion object {
-        val default = DEFAULT
-        val selectableEntries = listOf(
-            DEFAULT,
-            MIUIX,
-        )
-
-        fun fromValue(value: Int): ModuleSearchBarStyle {
-            return entries.firstOrNull { it.value == value } ?: default
-        }
-    }
-}
-
 enum class LyricProvider(val value: Int, val titleRes: Int) {
     LYRICON(value = 0, titleRes = R.string.lyric_provider_lyricon),
     SUPER_LYRIC(value = 1, titleRes = R.string.lyric_provider_superlyric);
@@ -265,20 +238,6 @@ val REAREyeConfig = listOf(
                 type = ConfigType.EnumSingleSelect(
                     defaultValue = ModuleNavigationBarMode.default.value,
                     options = ModuleNavigationBarMode.selectableEntries.map {
-                        ConfigType.EnumOption(
-                            titleRes = it.titleRes,
-                            value = it.value,
-                        )
-                    },
-                ),
-            ),
-            ConfigItem(
-                key = ConfigKeys.MODULE_SEARCH_BAR_STYLE,
-                titleRes = R.string.module_search_bar_style,
-                descriptionRes = R.string.module_search_bar_style_desc,
-                type = ConfigType.EnumSingleSelect(
-                    defaultValue = ModuleSearchBarStyle.default.value,
-                    options = ModuleSearchBarStyle.selectableEntries.map {
                         ConfigType.EnumOption(
                             titleRes = it.titleRes,
                             value = it.value,

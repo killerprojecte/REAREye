@@ -59,7 +59,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
-import hk.uwu.reareye.ui.components.RearSearchBar
+import hk.uwu.mixui.components.SearchBar
 import hk.uwu.reareye.ui.components.rememberApplicationIconBitmap
 import hk.uwu.reareye.ui.config.ConfigItem
 import hk.uwu.reareye.ui.config.PrefsManager
@@ -498,16 +498,14 @@ private fun SelectionIndicator(selected: Boolean) {
 
 @Composable
 private fun AppSelectorHeader(
-    prefsManager: PrefsManager,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onSearchFocusChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    RearSearchBar(
+    SearchBar(
         query = searchQuery,
         hint = stringResource(R.string.search_apps),
-        prefsManager = prefsManager,
         modifier = modifier,
         onQueryChange = onSearchQueryChange,
         onSearchFocusChange = onSearchFocusChange,
@@ -699,7 +697,6 @@ fun AppListSelectorScreen(
         },
         pinnedHeader = {
             AppSelectorHeader(
-                prefsManager = prefsManager,
                 modifier = Modifier.padding(horizontal = 12.dp).padding(top = 12.dp, bottom = 12.dp),
                 searchQuery = searchInput,
                 onSearchQueryChange = { searchInput = it },

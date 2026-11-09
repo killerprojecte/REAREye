@@ -121,7 +121,7 @@ import hk.uwu.reareye.ui.components.OverlayDialog
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.mixui.components.BadgePalette
-import hk.uwu.reareye.ui.components.RearSearchBar
+import hk.uwu.mixui.components.SearchBar
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.mixui.components.ListItem
 import hk.uwu.reareye.ui.components.config.WallpaperMetadataFields
@@ -983,10 +983,9 @@ internal fun RearStoreRootContent(
             }
         },
         searchBar = {
-            RearSearchBar(
+            SearchBar(
                 query = searchInput,
                 hint = stringResource(R.string.rear_store_search_hint),
-                prefsManager = prefsManager,
                 onQueryChange = { searchInput = it },
                 onSearchSubmit = { searchQuery = searchInput.trim() },
                 onSearchFocusChange = { focused -> searchFocusedState.value = focused },

@@ -4,6 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,7 +24,6 @@ import hk.uwu.mixui.MixColorSchemeMode
 import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.MixUiHost
 import hk.uwu.mixui.components.SearchBar
-import hk.uwu.mixui.components.SearchBarStyle
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
@@ -69,7 +69,7 @@ class SearchBarContractTest {
         repeat(8) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
     }
 
-    private fun host(backend: MixUiBackend, style: SearchBarStyle, dark: Boolean) {
+    private fun host(backend: MixUiBackend, dark: Boolean) {
         compose.runOnUiThread {
             activity?.close()
             query = ""
@@ -81,8 +81,8 @@ class SearchBarContractTest {
                 MixUiHost(backend = backend,
                     colorMode = if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
                     CompositionLocalProvider(LocalSoftwareKeyboardController provides keyboard) {
-                        Column(Modifier.fillMaxWidth().padding(12.dp).testTag("search-scene")) {
-                            SearchBar(query = query, hint = "Find modules", style = style,
+                        Column(Modifier.fillMaxWidth().background(hk.uwu.mixui.theme.MixTheme.colorScheme.background).padding(12.dp).testTag("search-scene")) {
+                            SearchBar(query = query, hint = "Find modules",
                                 onQueryChange = { query = it },
                                 onSearchSubmit = { submits++ },
                                 onSearchFocusChange = { focusEvents += it })
@@ -107,11 +107,11 @@ class SearchBarContractTest {
         }
     }
 
-    @Test fun inputSubmitFocusClearAndRepeatedEntryAcrossBackendsStylesAndThemes() {
-        for (backend in MixUiBackend.entries) for (style in SearchBarStyle.entries)
+    @Test fun inputSubmitFocusClearAndRepeatedEntryAcrossBackendsAndThemes() {
+        for (backend in MixUiBackend.entries)
             for (dark in listOf(false, true)) {
-                host(backend, style, dark)
-                val name = "${backend.name}-${style.name}-${if (dark) "dark" else "light"}"
+                host(backend, dark)
+                val name = "${backend.name}-Native-${if (dark) "dark" else "light"}"
                 compose.onNodeWithText("Find modules", useUnmergedTree = true).assertIsDisplayed()
                 capture("$name-empty")
                 repeat(2) { entry ->
@@ -123,17 +123,13 @@ class SearchBarContractTest {
                     frames()
                     compose.runOnIdle { assertEquals("query-$entry", query) }
                     capture("$name-focused-$entry")
-                    if (style == SearchBarStyle.Native) {
+                    run {
                         val clear = if (backend == MixUiBackend.Miuix) "Search Cleanup" else "清除"
                         compose.onNodeWithContentDescription(clear, useUnmergedTree = true).performClick()
                         frames()
                         compose.runOnIdle { assertEquals("", query); assertEquals(0, submits) }
                         field().assertIsFocused()
                         field().performTextReplacement("submit-$entry")
-                    } else {
-                        // The acrylic style never had clear or cancel affordances.
-                        compose.onNodeWithContentDescription("Search Cleanup").assertDoesNotExist()
-                        compose.onNodeWithContentDescription("清除").assertDoesNotExist()
                     }
                     val beforeSubmits = submits
                     val beforeHides = hides
@@ -154,7 +150,7 @@ class SearchBarContractTest {
 
     @Test fun mochiNativeCancelClearsWithoutSubmittingAndCanReenter() {
         for (dark in listOf(false, true)) {
-            host(MixUiBackend.Mochi, SearchBarStyle.Native, dark)
+            host(MixUiBackend.Mochi, dark)
             repeat(2) {
                 field().performClick()
                 field().performTextReplacement("cancel me")

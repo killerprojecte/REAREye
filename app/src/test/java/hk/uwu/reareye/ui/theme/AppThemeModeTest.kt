@@ -59,6 +59,11 @@ class AppThemeModeTest {
         }
     }
 
+    @Test fun settingsHaveNoRetiredSearchStyleEntry() {
+        assertFalse(flattenMoreSourceItems(REAREyeConfig).any { it.key == "module_search_bar_style" })
+        assertFalse(MoreConfigGroups.any { "module_search_bar_style" in it.itemKeys })
+    }
+
     @Test fun settingsHaveNoSeparateBackendEntry() {
         val items = flattenMoreSourceItems(REAREyeConfig)
         assertFalse(items.any { it.key == AppThemePreferences.LEGACY_BACKEND_KEY })

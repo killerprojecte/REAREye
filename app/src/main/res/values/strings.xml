@@ -214,10 +214,6 @@
     <string name="module_navigation_bar_mode_normal">Standard</string>
     <string name="module_navigation_bar_mode_floating">Floating</string>
     <string name="module_navigation_bar_mode_floating_glass">Floating Liquid Glass</string>
-    <string name="module_search_bar_style">Search Bar Style</string>
-    <string name="module_search_bar_style_desc">Choose different search bar style</string>
-    <string name="module_search_bar_style_default">Default</string>
-    <string name="module_search_bar_style_miuix">Miuix</string>
     <string name="module_store_api">Store API</string>
     <string name="module_store_api_desc">Choose the widget repository API provider</string>
     <string name="module_store_webview_hardware_acceleration">WebView Hardware Acceleration</string>

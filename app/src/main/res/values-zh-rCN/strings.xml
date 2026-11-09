@@ -214,10 +214,6 @@
     <string name="module_navigation_bar_mode_normal">普通</string>
     <string name="module_navigation_bar_mode_floating">悬浮</string>
     <string name="module_navigation_bar_mode_floating_glass">悬浮液态玻璃</string>
-    <string name="module_search_bar_style">搜索栏样式</string>
-    <string name="module_search_bar_style_desc">选择不同的搜索栏风格</string>
-    <string name="module_search_bar_style_default">默认</string>
-    <string name="module_search_bar_style_miuix">Miuix</string>
     <string name="module_store_api">仓库 API</string>
     <string name="module_store_api_desc">选择组件仓库 API 提供方</string>
     <string name="module_store_webview_hardware_acceleration">WebView 硬件加速</string>

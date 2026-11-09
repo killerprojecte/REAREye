@@ -149,7 +149,6 @@ internal val MoreConfigGroups = listOf(
         itemKeys = listOf(
             ConfigKeys.MODULE_THEME_MODE,
             ConfigKeys.MODULE_NAVIGATION_BAR_MODE,
-            ConfigKeys.MODULE_SEARCH_BAR_STYLE,
             ConfigKeys.MODULE_STORE_API_PROVIDER,
             ConfigKeys.MODULE_STORE_WEBVIEW_HARDWARE_ACCELERATION,
             ConfigKeys.MODULE_HIDE_LAUNCHER_ENTRY,
