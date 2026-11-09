@@ -1,6 +1,6 @@
 package hk.uwu.reareye.ui.components
 
-import hk.uwu.mixui.components.OverlayDialog
+import hk.uwu.mixui.components.GlassOverlayDialog
 import android.content.ComponentName
 import android.content.Context
 import android.os.Process
@@ -88,7 +88,8 @@ internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
                 }
             }
         },
-        onDismiss = { show = false },
+        // Grant starts synchronously. Guard again if Back/Later arrives before recomposition.
+        onDismiss = { if (!granting) show = false },
     )
 }
 
@@ -104,7 +105,7 @@ internal fun SubscreenNotificationAccessDialog(
     onGrant: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    OverlayDialog(
+    GlassOverlayDialog(
         show = show,
         title = stringResource(R.string.subscreen_notification_access_title),
         onDismissRequest = if (granting) null else onDismiss,

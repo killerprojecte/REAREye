@@ -1,6 +1,6 @@
 package hk.uwu.reareye.ui.components
 
-import hk.uwu.mixui.components.OverlayDialog
+import hk.uwu.mixui.components.GlassOverlayDialog
 import hk.uwu.mixui.icons.Icons as UiIcons
 
 import android.Manifest
@@ -332,11 +332,13 @@ fun PresetPackDialog(
             }
         }
 
-    OverlayDialog(
+    GlassOverlayDialog(
         show = show,
         title = androidx.compose.ui.res.stringResource(R.string.preset_pack_title),
         summary = androidx.compose.ui.res.stringResource(R.string.preset_pack_dialog_summary),
-        onDismissRequest = { if (!localBusy) onDismissRequest() },
+        // Read localBusy again at invocation: another action can set it before
+        // this frame's recomposition refreshes the host's nullable callback.
+        onDismissRequest = if (localBusy) null else ({ if (!localBusy) onDismissRequest() }),
     ) {
         Column(
             modifier = Modifier.verticalScroll(rememberScrollState()),

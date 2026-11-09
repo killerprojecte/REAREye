@@ -16,6 +16,8 @@ import hk.uwu.mixui.MixUiHost
 import hk.uwu.mixui.components.LocalOverlayDialogBounds
 import hk.uwu.mixui.components.OverlayDialog
 import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.GlassBottomSheetScene
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.components.SubscreenNotificationAccessDialog
 import org.junit.After
@@ -33,7 +35,7 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
 import java.io.File
 
-/** Separate-window host and real permission-prompt UI; no permission services are constructed. */
+/** Legacy window-host regression and scene-backed production permission UI; no permission services. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], manifest = Config.NONE, application = Application::class,
     qualifiers = "en-rUS-w400dp-h800dp-mdpi")
@@ -54,7 +56,7 @@ class OverlayDialogContractTest {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().setContent {
                 MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
-                    content()
+                    Scaffold { GlassBottomSheetScene { content() } }
                 }
             }
         }
@@ -147,13 +149,18 @@ class OverlayDialogContractTest {
         fun label(id: Int) = activity!!.get().getString(id)
         compose.onNodeWithText(label(R.string.subscreen_notification_access_granting)).assertIsNotEnabled()
         compose.onNodeWithText(label(R.string.subscreen_notification_access_later)).assertIsNotEnabled()
-        outside(); back()
+        compose.onNode(isDialog()).performTouchInput { click(Offset(2f, 2f)) }
+        compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }
+        frames()
         assertEquals(0, grants)
         assertEquals(0, dismisses)
         compose.runOnUiThread { granting.value = false; error.value = "Inert failure fixture" }
         frames()
         compose.onNodeWithText("Inert failure fixture").assertIsDisplayed()
-        capture(backend, dark, "permission-error")
+        val directory = File(System.getProperty("ui.capture.output"), "overlay-dialog").apply { mkdirs() }
+        val bitmap = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }
+        File(directory, "${backend.name.lowercase()}-${if (dark) "dark" else "light"}-permission-error.png")
+            .outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
         assertEquals(0, grants)
         assertEquals(0, dismisses)
         // This is the production button with a deliberately inert callback, not access.grant().

@@ -48,8 +48,10 @@ internal fun StableMochiFormDialog(
     title: String,
     onDismissRequest: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    onDismissFinished: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
+    val currentOnDismissFinished by rememberUpdatedState(onDismissFinished)
     var retained by remember { mutableStateOf(show) }
     val presence = remember { Animatable(0f) }
     val hostFocus = LocalFocusManager.current
@@ -61,6 +63,7 @@ internal fun StableMochiFormDialog(
         } else if (retained) {
             presence.animateTo(0f, MochiMotions.responseSpring(0.22f, 1f))
             retained = false
+            currentOnDismissFinished?.invoke()
         }
     }
     if (!retained) return

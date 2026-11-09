@@ -1,6 +1,8 @@
 package hk.uwu.mixui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +24,7 @@ internal class GlassSheetScene(
     val mochiBackdrop: ui.feice.mochi.effect.glass.MochiBackdrop,
 ) {
     val entries = mutableStateMapOf<Any, @Composable () -> Unit>()
+    val modalDialogs = mutableStateMapOf<Any, Unit>()
     // Glass-sheet B contains the page plus scrim, never the sheet or controls.
     val glassSheetScrims = mutableStateMapOf<Any, Float>()
 }
@@ -55,7 +58,13 @@ fun GlassBottomSheetScene(content: @Composable () -> Unit) {
             // Both native overlays and our explicit glass-sheet entries are outside
             // this page/scrim source, so neither can record itself.
             Box(Modifier.fillMaxSize()
-                .then(if (scene.glassSheetScrims.isNotEmpty()) Modifier.clearAndSetSemantics {} else Modifier)
+                // Semantics masking alone does not block keyboard focus. Reject entry into
+                // page targets while a protected dialog (including its exit) is retained.
+                .focusProperties {
+                    onEnter = { if (scene.modalDialogs.isNotEmpty()) cancelFocusChange() }
+                }
+                .focusGroup()
+                .then(if (scene.glassSheetScrims.isNotEmpty() || scene.modalDialogs.isNotEmpty()) Modifier.clearAndSetSemantics {} else Modifier)
                 .mochiBackdropSource(mochiBackdrop)
                 .then(if (backdrop != null && scene.entries.isNotEmpty()) Modifier.layerBackdrop(backdrop) else Modifier)) {
                 content()
