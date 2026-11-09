@@ -18,6 +18,7 @@ internal class GlassSheetScene(val backdrop: Backdrop?) {
 }
 
 internal val LocalGlassSheetScene = staticCompositionLocalOf<GlassSheetScene?> { null }
+internal val LocalGlassSheetActionAlpha = staticCompositionLocalOf { 0f }
 internal val LocalGlassSheetActionBackdrop = staticCompositionLocalOf<Backdrop?> { null }
 
 /**
@@ -56,8 +57,13 @@ internal fun NativeGlassSheet(
     startAction: (@Composable () -> Unit)?,
     endAction: (@Composable () -> Unit)?,
     allowDismiss: Boolean,
+    isContentScrolled: Boolean,
     content: @Composable () -> Unit,
 ) {
+    val actionAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isContentScrolled) 1f else 0f,
+        label = "sheetActionMaterial",
+    )
     var retained by remember { mutableStateOf(show) }
     var rendered by remember { mutableStateOf(false) }
     LaunchedEffect(show) {
@@ -76,7 +82,10 @@ internal fun NativeGlassSheet(
             // header. Never route this entry back to the applied root theme.
             // Recalculate at full-window coordinates instead of inheriting a
             // scrolled page's consumed insets. Native sheet still owns top/IME.
-            CompositionLocalProvider(LocalGlassSheetActionBackdrop provides scene.backdrop) {
+            CompositionLocalProvider(
+                LocalGlassSheetActionBackdrop provides scene.backdrop,
+                LocalGlassSheetActionAlpha provides actionAlpha,
+            ) {
                 Scaffold(
                     modifier = Modifier.fillMaxSize().recalculateWindowInsets().testTag("mixui-native-glass-sheet-host"),
                     containerColor = Color.Transparent,
@@ -97,7 +106,10 @@ internal fun NativeGlassSheet(
                         },
                         content = {
                             SideEffect { rendered = true }
-                            content()
+                            CompositionLocalProvider(
+                                LocalGlassTabsBackdrop provides scene.backdrop,
+                                LocalGlassTabsSurfaceAlpha provides 1f,
+                            ) { content() }
                         },
                     )
                 }

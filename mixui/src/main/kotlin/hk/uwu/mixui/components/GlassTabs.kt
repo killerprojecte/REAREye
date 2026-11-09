@@ -14,14 +14,14 @@ import ui.feice.mochi.effect.glass.LocalMochiBackdrop
 import ui.feice.mochi.effect.glass.MochiGlassSurface
 import ui.feice.mochi.theme.MochiTheme
 
-/** Only the pinned header receives this context; page and sheet tabs stay ordinary. */
+/** Body-only backdrop supplied by glass headers and native MIUIX sheets. */
 internal val LocalGlassTabsBackdrop = staticCompositionLocalOf<Backdrop?> { null }
 
 internal val LocalGlassTabsSurfaceAlpha = staticCompositionLocalOf<Float?> { null }
 
 /**
  * Header tabs using each backend's native glass material over the host's body-only
- * recording. Outside [GlassTopBarScaffold]'s pinnedHeader, use ordinary native tabs.
+ * recording. Without an explicit glass host context, use ordinary native tabs.
  *
  * MIUIX uses the native GlassSegmentedTabRow joined track and its moving indicator. Mochi's native
  * segmented control has no glass API: its transparent track sits on the public

@@ -59,11 +59,14 @@ internal fun ThemeStyleSheet(
     onSave: (ThemeStyleDraft) -> Unit,
 ) {
     var draft by remember(show) { mutableStateOf(ThemeStyleDraft.from(appliedMode, appliedStyle, appliedNavigationStyle)) }
+    var scrollGeneration by remember { mutableStateOf(0) }
+    val sheetScroll = androidx.compose.runtime.key(show, scrollGeneration) { rememberScrollState() }
     // Cancel is a transaction boundary even when close/reopen is coalesced into
     // one frame. Do not depend only on observing an intermediate show=false.
     val discardDraft: () -> Unit = {
         if (!saving) {
             draft = ThemeStyleDraft.from(appliedMode, appliedStyle, appliedNavigationStyle)
+            scrollGeneration++
             onDismiss()
         }
     }
@@ -71,6 +74,7 @@ internal fun ThemeStyleSheet(
     BottomSheet(
         show = show, onDismissRequest = discardDraft, title = stringResource(R.string.theme_editor_title),
         allowDismiss = !saving,
+        isContentScrolled = sheetScroll.canScrollBackward,
         startAction = {
             BottomSheetActionButton(onClick = discardDraft, enabled = !saving) {
                 BottomSheetActionIcon(BottomSheetAction.Close, Icons.Outlined.Close, contentDescription = stringResource(R.string.theme_editor_close))
@@ -85,35 +89,35 @@ internal fun ThemeStyleSheet(
     ) {
         Column(
             Modifier.fillMaxWidth().testTag("theme-style-sheet")
-                .verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
+                .verticalScroll(sheetScroll).padding(vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Column(Modifier.testTag("theme-style-tabs"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(stringResource(R.string.theme_editor_style), style = MixTheme.textStyles.subtitle, fontWeight = FontWeight.SemiBold)
-                Tabs(listOf("MIUIX", "Mochi"), if (draft.backend == MixUiBackend.Miuix) 0 else 1,
+                GlassTabs(listOf("MIUIX", "Mochi"), if (draft.backend == MixUiBackend.Miuix) 0 else 1,
                     { if (!saving) draft = draft.copy(backend = if (it == 0) MixUiBackend.Miuix else MixUiBackend.Mochi) },
                     Modifier.fillMaxWidth())
             }
             Column(Modifier.testTag("theme-palette-tabs"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(stringResource(R.string.theme_editor_palette), style = MixTheme.textStyles.subtitle, fontWeight = FontWeight.SemiBold)
                 if (draft.backend == MixUiBackend.Miuix) {
-                    Tabs(listOf(stringResource(R.string.theme_editor_default), "Monet"), if (draft.monet) 1 else 0,
+                    GlassTabs(listOf(stringResource(R.string.theme_editor_default), "Monet"), if (draft.monet) 1 else 0,
                         { if (!saving) draft = draft.copy(monet = it == 1) }, Modifier.fillMaxWidth())
                 } else {
-                    Tabs(listOf(stringResource(R.string.theme_editor_default), "iOS", "Nothing"), draft.mochiStyle.value,
+                    GlassTabs(listOf(stringResource(R.string.theme_editor_default), "iOS", "Nothing"), draft.mochiStyle.value,
                         { if (!saving) draft = draft.copy(mochiStyle = AppMochiThemeStyle.fromValue(it)) },
                         Modifier.fillMaxWidth())
                 }
             }
             Column(Modifier.testTag("theme-brightness-tabs"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(stringResource(R.string.theme_editor_brightness), style = MixTheme.textStyles.subtitle, fontWeight = FontWeight.SemiBold)
-                Tabs(listOf(stringResource(R.string.theme_editor_system), stringResource(R.string.theme_editor_light), stringResource(R.string.theme_editor_dark)), draft.brightness,
+                GlassTabs(listOf(stringResource(R.string.theme_editor_system), stringResource(R.string.theme_editor_light), stringResource(R.string.theme_editor_dark)), draft.brightness,
                     { if (!saving) draft = draft.copy(brightness = it) }, Modifier.fillMaxWidth())
             }
             if (draft.backend == MixUiBackend.Miuix) {
                 Column(Modifier.testTag("theme-navigation-tabs"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(stringResource(R.string.theme_editor_navigation_style), style = MixTheme.textStyles.subtitle, fontWeight = FontWeight.SemiBold)
-                    Tabs(listOf("iOS", "HyperOS"), draft.navigationStyle.value,
+                    GlassTabs(listOf("iOS", "HyperOS"), draft.navigationStyle.value,
                         { if (!saving) draft = draft.copy(navigationStyle = AppNavigationBarStyle.fromValue(it)) },
                         Modifier.fillMaxWidth())
                 }

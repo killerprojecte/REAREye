@@ -23,6 +23,7 @@ fun BottomSheet(
     startAction: (@Composable () -> Unit)? = null,
     endAction: (@Composable () -> Unit)? = null,
     allowDismiss: Boolean = true,
+    isContentScrolled: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     when (LocalMixUiBackend.current) {
@@ -37,7 +38,7 @@ fun BottomSheet(
             }
             if (scene != null) {
                 NativeGlassSheet(scene, show, onDismissRequest, title, startAction,
-                    endAction, allowDismiss, insetContent)
+                    endAction, allowDismiss, isContentScrolled, insetContent)
             } else {
                 // Standalone/legacy callers without a page recording keep the
                 // ordinary native window. Never pretend a null source is glass.

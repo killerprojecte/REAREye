@@ -259,4 +259,49 @@ class ThemeSheetWindowInsetsTest {
         assertEquals(AppThemeMode.MOCHI_LIGHT, applied)
     }
 
+    @Test fun sheetActionsFollowRealScrollAndThemeUsesContinuousGlassTracks() {
+        for (mode in listOf(AppThemeMode.MIUIX_LIGHT, AppThemeMode.MIUIX_DARK)) {
+            applied = mode
+            visible = true
+            open()
+            injectInsets(48, imePx = 440)
+            compose.onAllNodesWithTag("glass-tabs-miuix").assertCountEquals(4)
+            compose.onAllNodesWithTag("mixui-sheet-plain-action").assertCountEquals(2)
+            compose.onAllNodesWithTag("mixui-sheet-glass-action").assertCountEquals(0)
+            capture("$mode-actions-at-top")
+            val body = compose.onNodeWithTag("theme-style-sheet")
+            val range = body.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange]
+            assertTrue("The short sheet viewport must actually overflow", range.maxValue() > 0f)
+            body.performTouchInput { swipeUp() }; frames()
+            compose.onAllNodesWithTag("mixui-sheet-glass-action").assertCountEquals(2)
+            capture("$mode-actions-scrolled")
+            body.performSemanticsAction(SemanticsActions.ScrollBy) { assertTrue(it(0f, -10000f)) }
+            frames()
+            compose.onAllNodesWithTag("mixui-sheet-plain-action").assertCountEquals(2)
+            compose.onAllNodesWithTag("mixui-sheet-glass-action").assertCountEquals(0)
+            val restored = captureSheet()
+            capture("$mode-actions-restored", restored)
+            for (action in listOf(R.string.theme_editor_close, R.string.theme_editor_save)) {
+                val bounds = compose.onNodeWithContentDescription(label(action), useUnmergedTree = true)
+                    .fetchSemanticsNode().boundsInWindow
+                var foreground = 0
+                for (y in bounds.top.toInt() until bounds.bottom.toInt()) for (x in bounds.left.toInt() until bounds.right.toInt()) {
+                    val pixel = restored.getPixel(x, y)
+                    val red = android.graphics.Color.red(pixel)
+                    if (android.graphics.Color.alpha(pixel) > 200 &&
+                        (if (mode == AppThemeMode.MIUIX_DARK) red > 180 else red < 80)) foreground++
+                }
+                assertTrue("Restored plain action must remain readable in $mode", foreground > 8)
+                val actionBounds = compose.onNodeWithContentDescription(label(action)).fetchSemanticsNode().boundsInWindow
+                val y = actionBounds.center.y.toInt()
+                val inside = restored.getPixel((actionBounds.left + 4).toInt(), y)
+                val outside = restored.getPixel((actionBounds.left - 4).toInt(), y)
+                assertTrue("At rest the material must not leave a sampled disc in $mode",
+                    kotlin.math.abs(android.graphics.Color.red(inside) - android.graphics.Color.red(outside)) < 16)
+            }
+            compose.onNodeWithContentDescription(label(R.string.theme_editor_close)).performClick(); frames()
+            assertFalse(visible)
+        }
+    }
+
 }

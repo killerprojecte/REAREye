@@ -3,6 +3,7 @@ package hk.uwu.mixui.components
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
@@ -28,6 +29,7 @@ fun BottomSheetActionButton(
 ) {
     val backdrop = LocalGlassSheetActionBackdrop.current
     val glass = LocalMixUiBackend.current == MixUiBackend.Miuix && backdrop != null
+    val surfaceAlpha = LocalGlassSheetActionAlpha.current
     val buttonModifier = modifier.semantics(mergeDescendants = true) {
         role = Role.Button
         if (!enabled) disabled()
@@ -47,9 +49,15 @@ fun BottomSheetActionButton(
     } else if (glass && enabled) {
         top.yukonga.miuix.kmp.glass.GlassIconButton(
             onClick = onClick,
-            modifier = buttonModifier,
-            backdrop = backdrop,
+            // Keep the native icon node stable while only its material fades. Replacing
+            // the whole button at zero can retire the icon's retained draw layer.
+            modifier = buttonModifier.testTag(if (surfaceAlpha > 0f) "mixui-sheet-glass-action" else "mixui-sheet-plain-action"),
+            // surfaceAlpha only controls the native colour/stroke layers. Detach
+            // the sampler at zero so the idle button cannot retain a blurred disc.
+            backdrop = backdrop.takeIf { surfaceAlpha > 0f },
+            fill = androidx.compose.ui.graphics.Color.Transparent,
             inheritTopBarMaterial = false,
+            surfaceAlpha = surfaceAlpha,
             size = 44.dp,
             content = content,
         )
@@ -58,7 +66,7 @@ fun BottomSheetActionButton(
         // native control, not a glass button with a live accessibility action.
         IconButton(
             onClick = onClick,
-            modifier = buttonModifier.alpha(if (enabled) 1f else 0.38f),
+            modifier = buttonModifier.testTag("mixui-sheet-plain-action").alpha(if (enabled) 1f else 0.38f),
             enabled = enabled,
             minWidth = 44.dp,
             minHeight = 44.dp,
@@ -81,6 +89,7 @@ fun BottomSheetActionIcon(
             BottomSheetAction.Save -> MiuixIcons.Glass.Save
         } else ordinaryIcon,
         contentDescription = contentDescription,
+        tint = hk.uwu.mixui.theme.MixTheme.colorScheme.onSurface,
         modifier = Modifier.size(if (glass) 28.dp else 24.dp),
     )
 }
