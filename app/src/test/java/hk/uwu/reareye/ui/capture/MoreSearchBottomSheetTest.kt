@@ -109,6 +109,11 @@ class MoreSearchBottomSheetTest {
         }
         frames()
         assertEquals("Initial hidden state must not complete a dismissal", 0, dismissFinished)
+        if (backend == MixUiBackend.Mochi && glass) {
+            compose.onNodeWithTag("mochi-glass-sheet").assertIsDisplayed()
+            assertFalse("Mochi scene must use the new in-scene host, not a dialog fallback",
+                ShadowDialog.getLatestDialog()?.isShowing == true)
+        }
     }
 
     private fun capture(name: String) {
@@ -207,4 +212,72 @@ class MoreSearchBottomSheetTest {
             assertNull(navigated)
         }
     }
+    @Test fun interruptedSelectionCannotNavigateAfterReopening() {
+        open(MixUiBackend.Mochi, glass = true, dark = false)
+        editor().performTextReplacement(text(item.titleRes)); frames()
+        result(text(item.titleRes)).performClick()
+        compose.mainClock.advanceTimeByFrame(); compose.waitForIdle()
+        compose.runOnUiThread {
+            assertSame(category.category, pending.value)
+            // A newer search supersedes the selected route before exit completes.
+            pending.value = null
+            session.value = true
+            query.value = "new-session-query"
+        }
+        frames()
+        compose.onNodeWithTag("mochi-glass-sheet").assertIsDisplayed()
+        editor().assertTextContains("new-session-query")
+        assertNull(navigated)
+        assertEquals(0, dismissFinished)
+        assertEquals(0, dismissRequests)
+    }
+
+    @Config(qualifiers = "en-rUS-w400dp-h480dp-mdpi")
+    @Test fun shortScreenSyntheticImeKeepsSearchAndLastResultReachable() {
+        open(MixUiBackend.Mochi, glass = true, dark = false)
+        editor().performTextReplacement(text(category.group.titleRes)); frames()
+        val list = compose.onNode(hasScrollToIndexAction())
+        val sheet = compose.onNodeWithTag("mochi-glass-sheet")
+        val sheetBottom = sheet.fetchSemanticsNode().boundsInRoot.bottom
+        val originalHeight = list.fetchSemanticsNode().boundsInRoot.height
+        val rootBottom = compose.onNode(isRoot() and hasAnyDescendant(hasSetTextAction()),
+            useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.bottom
+        fun ime(pixels: Int) {
+            compose.runOnUiThread {
+                val insets = androidx.core.view.WindowInsetsCompat.Builder()
+                    .setInsets(androidx.core.view.WindowInsetsCompat.Type.ime(),
+                        androidx.core.graphics.Insets.of(0, 0, 0, pixels))
+                    .setVisible(androidx.core.view.WindowInsetsCompat.Type.ime(), pixels > 0)
+                    .build()
+                androidx.core.view.ViewCompat.dispatchApplyWindowInsets(activity!!.get().window.decorView, insets)
+            }
+            frames()
+        }
+        ime(220)
+        editor().assertIsDisplayed()
+        assertEquals("IME must not shrink the glass material", sheetBottom,
+            sheet.fetchSemanticsNode().boundsInRoot.bottom, 1f)
+        val bounds = list.fetchSemanticsNode().boundsInRoot
+        assertTrue("IME fixture must actually reduce the results viewport", bounds.height < originalHeight)
+        assertTrue("Results remain above the keyboard", bounds.bottom <= rootBottom - 220 + 1f)
+        assertTrue("Results retain a usable viewport", bounds.height > 40f)
+        val last = category.category.children.filterIsInstance<ConfigItem>().last()
+        compose.mainClock.autoAdvance = true
+        try { list.performScrollToNode(hasText(text(last.titleRes))) }
+        finally { compose.mainClock.autoAdvance = false }
+        frames()
+        result(text(last.titleRes)).assertIsDisplayed()
+        capture("Mochi-short-screen-synthetic-ime")
+        ime(0)
+        assertEquals("Removing IME must restore the viewport", originalHeight,
+            list.fetchSemanticsNode().boundsInRoot.height, 1f)
+        compose.mainClock.autoAdvance = true
+        try { list.performScrollToNode(hasText(text(last.titleRes))) }
+        finally { compose.mainClock.autoAdvance = false }
+        result(text(last.titleRes)).performClick(); frames()
+        assertSame(category.category, navigated)
+        assertEquals(1, dismissFinished)
+        assertEquals(0, dismissRequests)
+    }
+
 }

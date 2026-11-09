@@ -36,7 +36,7 @@ import hk.uwu.reareye.ui.config.ConfigCategory
 import hk.uwu.reareye.ui.config.ConfigItem
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
-import hk.uwu.mixui.components.BottomSheet
+import hk.uwu.mixui.components.GlassBottomSheet
 import hk.uwu.mixui.components.ListItem
 import hk.uwu.mixui.theme.MixTheme
 
@@ -70,7 +70,7 @@ internal fun MoreSearchBottomSheet(
     }
     val results = searchMoreEntries(entries, query, context::getString)
 
-    BottomSheet(
+    GlassBottomSheet(
         show = show,
         title = null,
         startAction = {

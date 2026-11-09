@@ -77,7 +77,7 @@ import kotlinx.coroutines.launch
 import hk.uwu.mixui.components.BottomSheetAction
 import hk.uwu.mixui.components.BottomSheetActionButton
 import hk.uwu.mixui.components.BottomSheetActionIcon
-import hk.uwu.mixui.components.BottomSheet
+import hk.uwu.mixui.components.GlassBottomSheet
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
@@ -607,7 +607,10 @@ internal fun ScriptRenameDialog(
     onConfirm: (String) -> Unit,
 ) {
     var value by remember(show, initialName) { mutableStateOf(initialName) }
-    BottomSheet(
+    // The host retains its foreground during exit. Ignore repeated Save actions
+    // in that interval, and reset the guard for the next naming session.
+    var submitted by remember(show, initialName) { mutableStateOf(false) }
+    GlassBottomSheet(
         show = show,
         title = title,
         onDismissRequest = onDismiss,
@@ -618,8 +621,13 @@ internal fun ScriptRenameDialog(
         },
         endAction = {
             BottomSheetActionButton(
-                onClick = { if (value.isNotBlank()) onConfirm(value) },
-                enabled = value.isNotBlank(),
+                onClick = {
+                    if (show && !submitted && value.isNotBlank()) {
+                        submitted = true
+                        onConfirm(value)
+                    }
+                },
+                enabled = show && !submitted && value.isNotBlank(),
                 modifier = Modifier.testTag("script-name-save"),
             ) {
                 BottomSheetActionIcon(BottomSheetAction.Save, Icons.Outlined.Check, stringResource(R.string.script_save))

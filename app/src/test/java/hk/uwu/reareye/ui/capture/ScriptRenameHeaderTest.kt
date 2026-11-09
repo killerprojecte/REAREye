@@ -46,6 +46,7 @@ class ScriptRenameHeaderTest {
     private var visible by mutableStateOf(true)
     private var initial by mutableStateOf("demo_project")
     private val saved = mutableListOf<String>()
+    private var hideOnConfirm = true
     private fun frames() { repeat(16) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
     private fun input() = compose.onNode(hasSetTextAction())
     private fun save() = compose.onNodeWithTag("script-name-save")
@@ -65,7 +66,7 @@ class ScriptRenameHeaderTest {
                         Text("FIXTURE HOST · Production script naming sheet")
                         ScriptRenameDialog(visible, activity!!.get().getString(titleId), initial,
                             onDismiss = { visible = false },
-                            onConfirm = { saved += it; visible = false })
+                            onConfirm = { saved += it; if (hideOnConfirm) visible = false })
                         }
                     }
                 }
@@ -108,6 +109,9 @@ class ScriptRenameHeaderTest {
                             .assertWidthIsEqualTo(28.dp).assertHeightIsEqualTo(28.dp)
                     }
                 } else {
+                    compose.onNodeWithTag("mochi-glass-sheet").assertIsDisplayed()
+                    assertFalse("Mochi naming must not fall back to a dialog",
+                        ShadowDialog.getLatestDialog()?.isShowing == true)
                     for (id in listOf(R.string.script_cancel, R.string.script_save)) {
                         compose.onNodeWithContentDescription(activity!!.get().getString(id), useUnmergedTree = true)
                             .assertWidthIsEqualTo(24.dp).assertHeightIsEqualTo(24.dp)
@@ -156,4 +160,23 @@ class ScriptRenameHeaderTest {
             }
         }
     }
+    @Test fun repeatedSaveCommitsOnlyOnceAndNewSessionResetsGuard() {
+        assumeTrue(java.lang.Boolean.getBoolean("ui.capture.enabled"))
+        hideOnConfirm = false
+        open(AppThemeMode.MOCHI_LIGHT, R.string.script_rename_project)
+        compose.onNodeWithTag("mochi-glass-sheet").assertIsDisplayed()
+        input().performTextReplacement("saved_once"); frames()
+        save().performClick(); frames()
+        save().assertIsNotEnabled().performTouchInput { click() }
+        assertEquals(listOf("saved_once"), saved)
+        compose.runOnUiThread { visible = false }
+        compose.mainClock.advanceTimeByFrame(); compose.waitForIdle()
+        compose.runOnUiThread { initial = "next_target"; visible = true }
+        frames()
+        compose.onAllNodesWithTag("mochi-glass-sheet").assertCountEquals(1)
+        input().assertTextContains("next_target")
+        save().assertIsEnabled().performClick(); frames()
+        assertEquals(listOf("saved_once", "next_target"), saved)
+    }
+
 }
