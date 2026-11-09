@@ -3,6 +3,11 @@ package hk.uwu.mixui.components
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -101,39 +106,62 @@ fun LargeTitleColumnScaffold(
     GlassPreferenceScene(modifier = modifier) {
     when (LocalMixUiBackend.current) {
         MixUiBackend.Miuix -> {
-            val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior()
+            val nativeState = top.yukonga.miuix.kmp.basic.rememberTopAppBarState()
+            val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior(state = nativeState)
+            // A short column can collapse the native bar before its own offset moves.
+            // Give native toolbar buttons the bar context instead of standalone glass.
+            val materialVisible = scrollState.value > 0 || nativeState.heightOffset < 0f
+            val bodyBackdrop = if (isRuntimeShaderSupported()) rememberLayerBackdrop() else null
             Scaffold(
                 popupHost = {},
                 containerColor = background,
                 contentWindowInsets = WindowInsets.systemBars,
                 topBar = {
-                    top.yukonga.miuix.kmp.basic.TopAppBar(
-                        title = title,
-                        color = background,
-                        scrollBehavior = scrollBehavior,
-                        navigationIcon = navigationIcon,
-                        actions = actions,
-                    )
+                    if (bodyBackdrop != null) {
+                        top.yukonga.miuix.kmp.glass.GlassTopAppBar(
+                            title = title,
+                            isContentScrolled = materialVisible,
+                            backdrop = bodyBackdrop,
+                            progressiveBlur = false,
+                            scrollBehavior = scrollBehavior,
+                            navigationIcon = navigationIcon,
+                            actions = actions,
+                        )
+                    } else {
+                        top.yukonga.miuix.kmp.basic.TopAppBar(
+                            title = title,
+                            color = background,
+                            scrollBehavior = scrollBehavior,
+                            navigationIcon = navigationIcon,
+                            actions = actions,
+                        )
+                    }
                 },
             ) { padding ->
-                Column(
-                    modifier = Modifier.fillMaxSize()
-                        .scrollEndHaptic()
-                        .overScrollVertical()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
-                        .imePadding()
-                        .verticalScroll(scrollState)
-                        .padding(
-                            start = 12.dp,
-                            end = 12.dp,
-                            top = padding.calculateTopPadding() + 12.dp,
-                            bottom = 24.dp + if (imeVisible) 0.dp else maxOf(
-                                padding.calculateBottomPadding(), bottomObstruction,
+                // Record only the body for the bar. The existing outer preference
+                // scene still records body + bar for its sibling popup host.
+                Box(Modifier.fillMaxSize()
+                    .then(if (bodyBackdrop != null) Modifier.layerBackdrop(bodyBackdrop) else Modifier)
+                    .background(background)) {
+                    Column(
+                        modifier = Modifier.fillMaxSize()
+                            .scrollEndHaptic()
+                            .overScrollVertical()
+                            .nestedScroll(scrollBehavior.nestedScrollConnection)
+                            .imePadding()
+                            .verticalScroll(scrollState)
+                            .padding(
+                                start = 12.dp,
+                                end = 12.dp,
+                                top = padding.calculateTopPadding() + 12.dp,
+                                bottom = 24.dp + if (imeVisible) 0.dp else maxOf(
+                                    padding.calculateBottomPadding(), bottomObstruction,
+                                ),
                             ),
-                        ),
-                    verticalArrangement = Arrangement.spacedBy(contentSpacing),
-                    content = content,
-                )
+                        verticalArrangement = Arrangement.spacedBy(contentSpacing),
+                        content = content,
+                    )
+                }
             }
         }
         MixUiBackend.Mochi -> {

@@ -300,87 +300,103 @@ class HomeNativeTitleTest {
         }
     }
 
-    @Test fun actualHomeMochiToolbarMaterialOnlyAppearsAfterPointerScrolling() {
-        for (style in MixMochiStyle.entries) for (dark in listOf(false, true)) {
-            open(MixUiBackend.Mochi, dark, 24, quickMenu = true, mochiStyle = style)
-            val name = "toolbar-material-${style.name}-${if (dark) "dark" else "light"}"
-            fun assertStatusInset() {
-                assertEquals("$name must retain the fixture's real 24px status inset", 24, observedStatusBarInset)
-            }
-            assertStatusInset()
-            val button = compose.onNodeWithTag("home-quick-actions")
-            val initialBounds = button.fetchSemanticsNode().boundsInRoot
-            assertEquals("Keep the native 44dp toolbar hit target", 44f, initialBounds.width, 1f)
-            assertEquals("Keep the native 44dp toolbar hit target", 44f, initialBounds.height, 1f)
-            fun image() = compose.onRoot(useUnmergedTree = true).captureToImage().asAndroidBitmap()
-            fun contrast(bitmap: Bitmap, inner: Float, outer: Float): Double {
-                val b = button.fetchSemanticsNode().boundsInRoot
-                val radius = minOf(b.width, b.height) / 2f
-                var sum = 0.0
-                var count = 0
-                for (y in b.top.toInt() until b.bottom.toInt()) {
-                    // Compare at the same y, outside the button's native glass footprint.
-                    val background = bitmap.getPixel((b.left - 6f).toInt(), y)
-                    for (x in b.left.toInt() until b.right.toInt()) {
-                        val dx = (x + 0.5f - b.center.x) / radius
-                        val dy = (y + 0.5f - b.center.y) / radius
-                        val r2 = dx * dx + dy * dy
-                        if (r2 < inner * inner || r2 > outer * outer) continue
-                        val pixel = bitmap.getPixel(x, y)
-                        sum += maxOf(
-                            kotlin.math.abs(android.graphics.Color.red(pixel) - android.graphics.Color.red(background)),
-                            kotlin.math.abs(android.graphics.Color.green(pixel) - android.graphics.Color.green(background)),
-                            kotlin.math.abs(android.graphics.Color.blue(pixel) - android.graphics.Color.blue(background)),
-                        )
-                        count++
-                    }
+    @Test fun actualHomeToolbarMaterialOnlyAppearsAfterPointerScrolling() {
+        verifyHomeToolbarMaterial("long")
+    }
+
+    @Test @Config(qualifiers = "zh-rCN-w400dp-h1200dp-mdpi")
+    fun shortActualHomeToolbarMaterialFollowsNativeCollapseAndReturn() {
+        verifyHomeToolbarMaterial("short")
+    }
+
+    private fun verifyHomeToolbarMaterial(contentSize: String) {
+        for (backend in MixUiBackend.entries) {
+            val styles = if (backend == MixUiBackend.Mochi) MixMochiStyle.entries.toList()
+                else listOf(MixMochiStyle.Default)
+            for (style in styles) for (dark in listOf(false, true)) {
+                open(backend, dark, 24, quickMenu = true, mochiStyle = style)
+                val name = "toolbar-material-$contentSize-${backend.name}-${style.name}-${if (dark) "dark" else "light"}"
+                fun assertStatusInset() {
+                    assertEquals("$name must retain the fixture's real 24px status inset", 24, observedStatusBarInset)
                 }
-                assertTrue("The tested pixel region must be nonempty", count > 0)
-                return sum / count
+                assertStatusInset()
+                val button = compose.onNodeWithTag("home-quick-actions")
+                val initialBounds = button.fetchSemanticsNode().boundsInRoot
+                // Both native contracts are 44dp; assert the public geometry
+                // without leaking vendor dependencies into the app module.
+                val buttonSize = 44f
+                assertEquals("Keep the native toolbar hit target", buttonSize, initialBounds.width, 1f)
+                assertEquals("Keep the native toolbar hit target", buttonSize, initialBounds.height, 1f)
+                fun image() = compose.onRoot(useUnmergedTree = true).captureToImage().asAndroidBitmap()
+                fun contrast(bitmap: Bitmap, inner: Float, outer: Float): Double {
+                    val b = button.fetchSemanticsNode().boundsInRoot
+                    val radius = minOf(b.width, b.height) / 2f
+                    var sum = 0.0
+                    var count = 0
+                    for (y in b.top.toInt() until b.bottom.toInt()) {
+                        // Compare at the same y, outside the button's native glass footprint.
+                        val background = bitmap.getPixel((b.left - 6f).toInt(), y)
+                        for (x in b.left.toInt() until b.right.toInt()) {
+                            val dx = (x + 0.5f - b.center.x) / radius
+                            val dy = (y + 0.5f - b.center.y) / radius
+                            val r2 = dx * dx + dy * dy
+                            if (r2 < inner * inner || r2 > outer * outer) continue
+                            val pixel = bitmap.getPixel(x, y)
+                            sum += maxOf(
+                                kotlin.math.abs(android.graphics.Color.red(pixel) - android.graphics.Color.red(background)),
+                                kotlin.math.abs(android.graphics.Color.green(pixel) - android.graphics.Color.green(background)),
+                                kotlin.math.abs(android.graphics.Color.blue(pixel) - android.graphics.Color.blue(background)),
+                            )
+                            count++
+                        }
+                    }
+                    assertTrue("The tested pixel region must be nonempty", count > 0)
+                    return sum / count
+                }
+                fun assertNoMaterial(bitmap: Bitmap) {
+                    // The 24dp icon stays inside this annulus. Transparent material
+                    // must show the untouched page background, not a faint glass disc.
+                    assertTrue("$name material must be absent at top: ${contrast(bitmap, .65f, .9f)}",
+                        contrast(bitmap, .65f, .9f) < .75)
+                    assertTrue("$name icon must stay visible with no material", contrast(bitmap, 0f, .55f) > 2.0)
+                }
+                val initial = image()
+                assertNoMaterial(initial)
+                capture("$name-initial")
+                val list = compose.onNode(hasScrollAction())
+                // Real pointer drag followed by a fling, not a semantics-only scroll.
+                list.performTouchInput { swipeUp(durationMillis = 800) }; frames()
+                assertTrue("$name drag must reveal native glass", contrast(image(), .65f, .9f) > .75)
+                capture("$name-dragged")
+                list.performTouchInput { swipeUp(durationMillis = 120) }; frames()
+                assertTrue("$name fling must retain native glass", contrast(image(), .65f, .9f) > .75)
+                capture("$name-flung")
+                assertStatusInset()
+                assertEquals("Toolbar bounds cannot move during collapse", initialBounds,
+                    button.fetchSemanticsNode().boundsInRoot)
+                // Exercise the real native click after the glass/plain transition.
+                button.performTouchInput { click() }; frames()
+                compose.onNodeWithText(label(R.string.quick_stop_subscreencenter)).assertIsDisplayed()
+                assertStatusInset()
+                compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }; frames()
+                assertStatusInset()
+                assertEquals("Menu dismissal cannot move the toolbar", initialBounds,
+                    button.fetchSemanticsNode().boundsInRoot)
+                assertTrue("Dismissing the menu must not invoke a quick action", quickActions.isEmpty())
+                repeat(5) { list.performTouchInput { swipeDown(durationMillis = 120) }; frames() }
+                val range = list.fetchSemanticsNode()
+                    .config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange]
+                assertEquals("Pointer recovery must reach the true top", 0f, range.value(), 0f)
+                assertNoMaterial(image())
+                assertStatusInset()
+                assertEquals(initialBounds, button.fetchSemanticsNode().boundsInRoot)
+                capture("$name-restored")
+                // The native control is still actionable with its material hidden.
+                button.performTouchInput { click() }; frames()
+                compose.onNodeWithText(label(R.string.quick_stop_subscreencenter)).assertIsDisplayed()
+                assertStatusInset()
+                compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }; frames()
             }
-            fun assertNoMaterial(bitmap: Bitmap) {
-                // The 24dp icon stays inside this annulus. Transparent material
-                // must show the untouched page background, not a faint glass disc.
-                assertTrue("$name material must be absent at top: ${contrast(bitmap, .65f, .9f)}",
-                    contrast(bitmap, .65f, .9f) < .75)
-                assertTrue("$name icon must stay visible with no material", contrast(bitmap, 0f, .55f) > 2.0)
-            }
-            val initial = image()
-            assertNoMaterial(initial)
-            capture("$name-initial")
-            val list = compose.onNode(hasScrollAction())
-            // Real pointer drag followed by a fling, not a semantics-only scroll.
-            list.performTouchInput { swipeUp(durationMillis = 800) }; frames()
-            assertTrue("$name drag must reveal native glass", contrast(image(), .65f, .9f) > .75)
-            capture("$name-dragged")
-            list.performTouchInput { swipeUp(durationMillis = 120) }; frames()
-            assertTrue("$name fling must retain native glass", contrast(image(), .65f, .9f) > .75)
-            capture("$name-flung")
-            assertStatusInset()
-            assertEquals("Toolbar bounds cannot move during collapse", initialBounds,
-                button.fetchSemanticsNode().boundsInRoot)
-            // Exercise the real native click after the glass/plain transition.
-            button.performTouchInput { click() }; frames()
-            compose.onNodeWithText(label(R.string.quick_stop_subscreencenter)).assertIsDisplayed()
-            assertStatusInset()
-            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }; frames()
-            assertStatusInset()
-            assertEquals("Menu dismissal cannot move the toolbar", initialBounds,
-                button.fetchSemanticsNode().boundsInRoot)
-            assertTrue("Dismissing the menu must not invoke a quick action", quickActions.isEmpty())
-            repeat(5) { list.performTouchInput { swipeDown(durationMillis = 120) }; frames() }
-            val range = list.fetchSemanticsNode()
-                .config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange]
-            assertEquals("Pointer recovery must reach the true top", 0f, range.value(), 0f)
-            assertNoMaterial(image())
-            assertStatusInset()
-            assertEquals(initialBounds, button.fetchSemanticsNode().boundsInRoot)
-            capture("$name-restored")
-            // The native control is still actionable with its material hidden.
-            button.performTouchInput { click() }; frames()
-            compose.onNodeWithText(label(R.string.quick_stop_subscreencenter)).assertIsDisplayed()
-            assertStatusInset()
-            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }; frames()
         }
     }
 
