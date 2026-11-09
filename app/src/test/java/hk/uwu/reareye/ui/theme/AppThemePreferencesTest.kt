@@ -122,7 +122,8 @@ class AppThemePreferencesTest {
         assertEquals(0, prefs.applyCalls)
         assertEquals(listOf("putInt:$modeKey=0",
             "putInt:${ConfigKeys.MODULE_MOCHI_THEME_STYLE}=2",
-            "putInt:${ConfigKeys.MODULE_NAVIGATION_BAR_STYLE}=0", "remove:$backendKey"), prefs.lastOperations)
+            "putInt:${ConfigKeys.MODULE_NAVIGATION_BAR_STYLE}=0",
+            "remove:${ConfigKeys.MODULE_NAVIGATION_BAR_MODE}", "remove:$backendKey"), prefs.lastOperations)
         assertEquals("unchanged", prefs.getString("business", ""))
         assertEquals(AppThemeMode.MIUIX_LIGHT, AppThemePreferences.loadAndMigrate(prefs).mode)
     }
@@ -162,7 +163,7 @@ class AppThemePreferencesTest {
         assertEquals(AppNavigationBarStyle.HyperOS, AppThemePreferences.readNavigationStyle(prefs))
         assertTrue(AppThemePreferences.saveTheme(prefs, AppThemeMode.MIUIX_LIGHT, AppMochiThemeStyle.Ios))
         assertEquals(AppNavigationBarStyle.HyperOS, AppThemePreferences.readNavigationStyle(prefs))
-        assertEquals(2, prefs.getInt(ConfigKeys.MODULE_NAVIGATION_BAR_MODE, -1))
+        assertFalse(prefs.contains(ConfigKeys.MODULE_NAVIGATION_BAR_MODE))
         assertTrue(prefs.getBoolean("business", false))
     }
 
@@ -177,6 +178,22 @@ class AppThemePreferencesTest {
         assertEquals(5, prefs.getInt(modeKey, -1))
         assertEquals(AppNavigationBarStyle.HyperOS, AppThemePreferences.readNavigationStyle(prefs))
         assertEquals(2, prefs.commitCalls)
+    }
+
+    @Test fun oldNormalPlacementMigratesOnlyWithoutExplicitStyleAndSaveRetiresKey() {
+        val old = ConfigKeys.MODULE_NAVIGATION_BAR_MODE
+        val style = ConfigKeys.MODULE_NAVIGATION_BAR_STYLE
+        for (value in 0..3) {
+            val prefs = MemoryPrefs(mapOf(old to value))
+            val expected = if (value == 0) AppNavigationBarStyle.Legacy else AppNavigationBarStyle.IOS
+            assertEquals(expected, AppThemePreferences.readNavigationStyle(prefs))
+            assertEquals(0, prefs.editCalls)
+            assertTrue(AppThemePreferences.saveTheme(prefs, AppThemeMode.MIUIX_LIGHT, AppMochiThemeStyle.default))
+            assertFalse(prefs.contains(old))
+            assertEquals(expected, AppThemePreferences.readNavigationStyle(prefs))
+        }
+        assertEquals(AppNavigationBarStyle.IOS, AppThemePreferences.readNavigationStyle(MemoryPrefs(mapOf(old to 0, style to 0))))
+        assertEquals(AppNavigationBarStyle.HyperOS, AppThemePreferences.readNavigationStyle(MemoryPrefs(mapOf(old to 0, style to 1))))
     }
 
     private class MemoryPrefs(initial: Map<String, Any?> = emptyMap()) : HookPrefs {

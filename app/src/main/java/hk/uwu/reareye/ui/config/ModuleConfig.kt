@@ -232,20 +232,6 @@ val REAREyeConfig = listOf(
                 ),
             ),
             ConfigItem(
-                key = ConfigKeys.MODULE_NAVIGATION_BAR_MODE,
-                titleRes = R.string.module_navigation_bar_mode,
-                descriptionRes = R.string.module_navigation_bar_mode_desc,
-                type = ConfigType.EnumSingleSelect(
-                    defaultValue = ModuleNavigationBarMode.default.value,
-                    options = ModuleNavigationBarMode.selectableEntries.map {
-                        ConfigType.EnumOption(
-                            titleRes = it.titleRes,
-                            value = it.value,
-                        )
-                    },
-                ),
-            ),
-            ConfigItem(
                 key = ConfigKeys.MODULE_STORE_API_PROVIDER,
                 titleRes = R.string.module_store_api,
                 descriptionRes = R.string.module_store_api_desc,

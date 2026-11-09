@@ -68,7 +68,6 @@ import hk.uwu.reareye.ui.config.ConfigItem
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.ConfigNode
 import hk.uwu.reareye.ui.config.ConfigType
-import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
 import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import hk.uwu.reareye.ui.config.REAREyeConfig
@@ -147,7 +146,6 @@ fun ConfigScreen(
     onThemeModeChange: (Int) -> Unit = {},
     onMochiThemeStyleChange: (Int) -> Unit = {},
     onNavigationBarStyleChange: (Int) -> Unit = {},
-    onNavigationBarModeChange: (Int) -> Unit = {},
     onOpenRearStore: () -> Unit = {},
     onOpenRearStoreDetail: (String) -> Unit = {},
 ) {
@@ -237,7 +235,6 @@ fun ConfigScreen(
         onThemeModeChange,
         onMochiThemeStyleChange,
         onNavigationBarStyleChange,
-        onNavigationBarModeChange,
     ) {
         { item: ConfigItem ->
             when (item.key) {
@@ -257,14 +254,7 @@ fun ConfigScreen(
                     ))
                 }
 
-                ConfigKeys.MODULE_NAVIGATION_BAR_MODE -> {
-                    onNavigationBarModeChange(
-                        prefsManager.getInt(
-                            ConfigKeys.MODULE_NAVIGATION_BAR_MODE,
-                            ModuleNavigationBarMode.default.value,
-                        )
-                    )
-                }
+
             }
         }
     }

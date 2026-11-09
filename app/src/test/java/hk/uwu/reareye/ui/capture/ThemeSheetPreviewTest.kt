@@ -74,6 +74,26 @@ class ThemeSheetPreviewTest {
         assertEquals(0, activity!!.get().themeSaveCount)
     }
 
+    @Test fun miuixNavigationLegacyDraftIsExclusiveAndOnlySavedExplicitly() {
+        compose.mainClock.autoAdvance = false
+        open("miuix", false)
+        val host = activity!!.get()
+        compose.onNodeWithText("Legacy").performScrollTo(); frames()
+        tab("theme-navigation-tabs", "Legacy")
+        capture("miuix-legacy-navigation-draft")
+        assertEquals(0, host.themeSaveCount)
+        compose.onNodeWithContentDescription("关闭").performClick(); frames()
+        assertFalse(host.themeSheetPrefs.prefs.contains(ConfigKeys.MODULE_NAVIGATION_BAR_STYLE))
+        compose.runOnUiThread { host.themeSheetVisible = true }; frames()
+        compose.onNodeWithText("Legacy").performScrollTo(); frames()
+        tab("theme-navigation-tabs", "Legacy")
+        compose.onNodeWithContentDescription("保存").performClick(); frames()
+        assertEquals(2, host.themeSheetPrefs.getInt(ConfigKeys.MODULE_NAVIGATION_BAR_STYLE, -1))
+        assertFalse(host.themeSheetPrefs.prefs.contains(ConfigKeys.MODULE_NAVIGATION_BAR_MODE))
+        open("mochi", false)
+        compose.onNodeWithTag("theme-navigation-tabs").assertDoesNotExist()
+    }
+
     @Test fun renderDraftStylesAndKeepSaveCancelTransactional() {
         assumeTrue(java.lang.Boolean.getBoolean("ui.capture.enabled"))
         compose.mainClock.autoAdvance = false

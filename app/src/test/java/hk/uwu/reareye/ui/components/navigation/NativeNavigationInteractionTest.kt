@@ -106,7 +106,13 @@ class NativeNavigationInteractionTest {
                                     AppNavigationBar(
                                         modifier = Modifier.align(Alignment.BottomCenter).testTag("navigation"),
                                         currentScreen = selected,
-                                        navigationBarMode = ModuleNavigationBarMode.FLOATING_GLASS,
+                                        navigationBarMode = when (currentMode) {
+                                            NavigationBarMode.Normal -> ModuleNavigationBarMode.NORMAL
+                                            NavigationBarMode.Floating -> ModuleNavigationBarMode.FLOATING
+                                            NavigationBarMode.Translucent -> ModuleNavigationBarMode.SEMI_TRANSPARENT
+                                            NavigationBarMode.FloatingGlass -> ModuleNavigationBarMode.FLOATING_GLASS
+                                        },
+                                        navigationBarStyle = if (currentMode == NavigationBarMode.Normal) hk.uwu.reareye.ui.theme.AppNavigationBarStyle.Legacy else if (currentNavigationStyle == NavigationBarStyle.IOS) hk.uwu.reareye.ui.theme.AppNavigationBarStyle.IOS else hk.uwu.reareye.ui.theme.AppNavigationBarStyle.HyperOS,
                                         backdrop = backdrop,
                                         // Empty configuration must still offer direct accessible editing.
                                         quickActionIds = quickActions,
@@ -350,6 +356,35 @@ class NativeNavigationInteractionTest {
             val count = selections.size
             cell("About").performClick(); settle()
             compose.runOnIdle { assertEquals(count + 1, selections.size); assertEquals("about", selected) }
+        }
+    }
+
+    @Test fun actualFourDestinationIosBarCommitsDragFromSelectedAndUnselectedCells() {
+        for (rtl in listOf(false, true)) {
+            host(MixUiBackend.Miuix, NavigationBarMode.FloatingGlass, rtl, app = true,
+                navigationStyle = NavigationBarStyle.IOS,
+                quickActions = listOf(NavigationQuickActionComponentManagerId))
+            fun location(id: Int) = point(activity!!.get().getString(id))
+            val home = location(hk.uwu.reareye.R.string.home_navigation)
+            val about = location(hk.uwu.reareye.R.string.about_navigation)
+            val config = location(hk.uwu.reareye.R.string.configuration_navigation)
+            fun drag(from: Offset, to: Offset) {
+                scene().performTouchInput { down(from) }
+                repeat(10) { step ->
+                    scene().performTouchInput { moveTo(from + (to - from) * ((step + 1) / 10f), delayMillis = 16) }
+                    compose.mainClock.advanceTimeBy(16); compose.waitForIdle()
+                }
+                scene().performTouchInput { up() }; settle()
+            }
+            drag(home, about)
+            compose.runOnIdle { assertEquals("about", selected) }
+            drag(config, home)
+            compose.runOnIdle { assertEquals("home", selected) }
+            drag(home, config)
+            compose.runOnIdle { assertEquals("config", selected); assertEquals(listOf("about", "home", "config"), selections) }
+            picture("Miuix-IOS-app-four-$rtl-after-drags")
+            scene().performTouchInput { down(config); moveTo(home, delayMillis = 40); cancel() }; settle()
+            compose.runOnIdle { assertEquals("config", selected); assertEquals(3, selections.size) }
         }
     }
 

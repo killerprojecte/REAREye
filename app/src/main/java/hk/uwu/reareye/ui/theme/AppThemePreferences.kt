@@ -2,6 +2,7 @@ package hk.uwu.reareye.ui.theme
 
 import hk.uwu.reareye.hook.support.HookPrefs
 import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -34,10 +35,15 @@ internal object AppThemePreferences {
         if (prefs.contains(LEGACY_BACKEND_KEY)) prefs.getInt(LEGACY_BACKEND_KEY, 0) else null,
     )
 
-    /** Missing keys keep the original iOS appearance without writing during reads or migration. */
-    fun readNavigationStyle(prefs: HookPrefs): AppNavigationBarStyle = AppNavigationBarStyle.fromValue(
-        prefs.getInt(ConfigKeys.MODULE_NAVIGATION_BAR_STYLE, AppNavigationBarStyle.default.value),
-    )
+    /** Explicit style wins. Only an actually stored old Normal choice migrates to Legacy. */
+    fun readNavigationStyle(prefs: HookPrefs): AppNavigationBarStyle {
+        if (prefs.contains(ConfigKeys.MODULE_NAVIGATION_BAR_STYLE)) return AppNavigationBarStyle.fromValue(
+            prefs.getInt(ConfigKeys.MODULE_NAVIGATION_BAR_STYLE, AppNavigationBarStyle.default.value),
+        )
+        return if (prefs.contains(ConfigKeys.MODULE_NAVIGATION_BAR_MODE) &&
+            prefs.getInt(ConfigKeys.MODULE_NAVIGATION_BAR_MODE, -1) == ModuleNavigationBarMode.NORMAL.value
+        ) AppNavigationBarStyle.Legacy else AppNavigationBarStyle.default
+    }
 
     /** Run off the main thread. Removal is the migration marker, in the same commit as the new mode. */
     fun loadAndMigrate(prefs: HookPrefs): AppThemeLoadResult {
@@ -60,6 +66,7 @@ internal object AppThemePreferences {
         val saved = prefs.edit().putInt(ConfigKeys.MODULE_THEME_MODE, mode.selectionValue)
             .putInt(ConfigKeys.MODULE_MOCHI_THEME_STYLE, style.value)
             .putInt(ConfigKeys.MODULE_NAVIGATION_BAR_STYLE, navigationStyle.value)
+            .remove(ConfigKeys.MODULE_NAVIGATION_BAR_MODE)
             .remove(LEGACY_BACKEND_KEY).commit()
         if (saved) completedSaves.update { it + 1 }
         saved

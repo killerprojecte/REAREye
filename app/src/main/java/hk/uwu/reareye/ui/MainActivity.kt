@@ -91,7 +91,6 @@ private data class RemoteUiSettings(
     val themeModeValue: Int,
     val themeMigrationPending: Boolean,
     val navigationBarStyleValue: Int,
-    val navigationBarModeValue: Int,
     val navigationQuickActionIds: List<String>,
     val launcherHidden: Boolean,
 )
@@ -223,10 +222,6 @@ class MainActivity : ComponentActivity() {
                             themeModeValue = theme.mode.value,
                             themeMigrationPending = theme.migrationPending,
                             navigationBarStyleValue = AppThemePreferences.readNavigationStyle(remotePrefsManager.prefs).value,
-                            navigationBarModeValue = remotePrefsManager.getInt(
-                                ConfigKeys.MODULE_NAVIGATION_BAR_MODE,
-                                ModuleNavigationBarMode.default.value,
-                            ),
                             navigationQuickActionIds = normalizedQuickActionIds,
                             launcherHidden = remotePrefsManager.getBoolean(
                                 ConfigKeys.MODULE_HIDE_LAUNCHER_ENTRY,
@@ -267,9 +262,6 @@ class MainActivity : ComponentActivity() {
             }
             var navigationBarStyleValue by remember(settings.navigationBarStyleValue) {
                 mutableIntStateOf(settings.navigationBarStyleValue)
-            }
-            var navigationBarModeValue by remember {
-                mutableIntStateOf(settings.navigationBarModeValue)
             }
             var currentScreen by remember { mutableStateOf("home") }
             // The Rear Store is a configuration-level destination, so the system back gesture
@@ -319,7 +311,8 @@ class MainActivity : ComponentActivity() {
                 themeMode = AppThemeMode.fromValue(themeModeValue),
                 mochiStyle = AppMochiThemeStyle.fromValue(mochiThemeStyleValue).style,
             ) {
-                val navigationBarMode = ModuleNavigationBarMode.fromValue(navigationBarModeValue)
+                val navigationBarMode = AppNavigationBarStyle.fromValue(navigationBarStyleValue)
+                    .mode(AppThemeMode.fromValue(themeModeValue).backend)
                 val enableNavigationGlass =
                     navigationBarMode == ModuleNavigationBarMode.FLOATING_GLASS ||
                         navigationBarMode == ModuleNavigationBarMode.SEMI_TRANSPARENT
@@ -478,9 +471,6 @@ class MainActivity : ComponentActivity() {
                                                 onThemeModeChange = { themeModeValue = it },
                                                 onMochiThemeStyleChange = { mochiThemeStyleValue = it },
                                                 onNavigationBarStyleChange = { navigationBarStyleValue = it },
-                                                onNavigationBarModeChange = {
-                                                    navigationBarModeValue = it
-                                                },
                                                 onOpenRearStore = {
                                                     configInAppListMode = false
                                                     currentScreen = "store"

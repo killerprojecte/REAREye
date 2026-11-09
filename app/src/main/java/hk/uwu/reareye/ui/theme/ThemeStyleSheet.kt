@@ -139,7 +139,7 @@ internal fun ThemeStyleSheet(
             if (draft.backend == MixUiBackend.Miuix) {
                 Column(Modifier.testTag("theme-navigation-tabs"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(stringResource(R.string.theme_editor_navigation_style), style = MixTheme.textStyles.subtitle, fontWeight = FontWeight.SemiBold)
-                    GlassTabs(listOf("iOS", "HyperOS"), draft.navigationStyle.value,
+                    GlassTabs(listOf("iOS", "HyperOS", "Legacy"), draft.navigationStyle.value,
                         { if (!saving) draft = draft.copy(navigationStyle = AppNavigationBarStyle.fromValue(it)) },
                         Modifier.fillMaxWidth())
                 }
