@@ -45,7 +45,7 @@ import kotlinx.serialization.json.Json
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonColors
 import hk.uwu.mixui.components.Card
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import hk.uwu.mixui.components.HorizontalDivider
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet

@@ -142,7 +142,7 @@ import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.CardDefaults
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import hk.uwu.mixui.components.HorizontalDivider
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.GlassAnchoredMenu
 import hk.uwu.mixui.components.GlassMenuOption
@@ -153,7 +153,7 @@ import hk.uwu.mixui.components.LargeTitleLazyScaffold
 import hk.uwu.mixui.components.GlassTopBarScaffold
 import hk.uwu.mixui.components.pageScrollFeedback
 import hk.uwu.mixui.components.TopBarIconButton
-import top.yukonga.miuix.kmp.basic.Surface
+import hk.uwu.mixui.components.Surface
 import hk.uwu.mixui.components.GlassTabs
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
@@ -2164,7 +2164,7 @@ private fun rememberMetadataBadgePalette(metadataType: RearStoreWidgetMetadataTy
 }
 
 @Composable
-private fun RearStoreDownloadBadge(
+internal fun RearStoreDownloadBadge(
     text: String,
     onClick: () -> Unit,
 ) {

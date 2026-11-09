@@ -26,7 +26,7 @@ import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.CardDefaults
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import hk.uwu.mixui.components.HorizontalDivider
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.Text
