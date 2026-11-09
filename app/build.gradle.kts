@@ -312,6 +312,10 @@ tasks.withType<Test>().configureEach {
     if (uiCapture) maxHeapSize = "2g"
     systemProperty("ui.capture.enabled", uiCapture.toString())
     systemProperty("ui.capture.backends", providers.gradleProperty("uiCaptureBackends").getOrElse("miuix,mochi"))
+    // Opt-in static matrix. Empty variants skips it during ordinary capture suites.
+    systemProperty("ui.capture.pages", providers.gradleProperty("uiCapturePages").getOrElse(""))
+    systemProperty("ui.capture.variants", providers.gradleProperty("uiCaptureVariants").getOrElse(""))
+    systemProperty("ui.capture.modes", providers.gradleProperty("uiCaptureModes").getOrElse("light,dark"))
     systemProperty("ui.capture.output", rootProject.layout.buildDirectory.dir("reports/ui-capture").get().asFile.absolutePath)
     systemProperty("mary.ui.resources", maryUiResources.toString())
     systemProperty(

@@ -2,6 +2,7 @@ package hk.uwu.reareye.ui.components
 
 import android.app.Application
 import android.graphics.Bitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -1120,13 +1121,16 @@ class MarySidebarLayoutTest {
         compose.waitForIdle()
     }
 
-    private fun host(mode: MixColorSchemeMode = MixColorSchemeMode.Light, locked: Boolean = false, hasSession: Boolean = true, loader: () -> List<AgentSessionSummary> = { sessions }, delete: (String) -> Unit = {}, direction: LayoutDirection = LayoutDirection.Ltr, transcriptMode: String = "fixture", backend: MixUiBackend = MixUiBackend.Miuix) {
+    private var renderedDark = false
+    private fun host(mode: MixColorSchemeMode = MixColorSchemeMode.Light, locked: Boolean = false, hasSession: Boolean = true, loader: () -> List<AgentSessionSummary> = { sessions }, delete: (String) -> Unit = {}, direction: LayoutDirection = LayoutDirection.Ltr, transcriptMode: String = "fixture", backend: MixUiBackend = MixUiBackend.Miuix, style: hk.uwu.mixui.MixMochiStyle = hk.uwu.mixui.MixMochiStyle.Default) {
         compose.runOnUiThread {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().also { controller ->
                 controller.get().enableEdgeToEdge()
                 controller.get().setContent {
                     CompositionLocalProvider(LocalLayoutDirection provides direction) {
-                    MixUiHost(backend = backend, colorMode = mode) {
+                    MixUiHost(backend = backend, colorMode = mode, mochiStyle = style) {
+                    val isDark = MixTheme.colorScheme.background.luminance() < 0.5f
+                    SideEffect { renderedDark = isDark }
                     hk.uwu.mixui.components.GlassPreferenceScene {
                         val menuFocus = remember { FocusRequester() }
                         val focusManager = LocalFocusManager.current
@@ -1218,6 +1222,88 @@ class MarySidebarLayoutTest {
             }
         }
         compose.waitForIdle()
+    }
+
+
+    /** Production conversation/sidebar component host, local 30-session fixture, no MainActivity/network. */
+    @Test fun renderFullStyleMarySidebarMatrix() = fullStyleMatrix { _, _, backend, colors, style, folder ->
+        compose.runOnUiThread { showing.value = false; maryActive.value = true; draft.value = "" }
+        host(mode = colors, backend = backend, style = style, transcriptMode = "conversation")
+        node("production-row-0").assertIsDisplayed()
+        compose.onNodeWithText("對話內容 0").assertIsDisplayed()
+        open()
+        node("mary-sidebar-session-session-0").assertIsDisplayed()
+        compose.onNodeWithText(sessions.first().title).assertExists()
+        node("mary-sidebar-new-chat").assertIsDisplayed()
+        fun snapshot(state: String) {
+            repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+            val bitmap = node("sidebar-fixture").captureToImage().asAndroidBitmap()
+            File(folder, "$state.png").outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        }
+        snapshot("open")
+        node("mary-sidebar-history").performScrollToNode(hasTestTag("mary-sidebar-session-session-29"))
+        node("mary-sidebar-session-session-29").assertIsDisplayed()
+        compose.onNodeWithText(sessions.last().title).assertExists()
+        node("mary-sidebar-new-chat").assertIsDisplayed()
+        snapshot("history-scrolled")
+        compose.runOnIdle { assertNull(selected); assertEquals(0, sentMessages); assertEquals(0, navigationClicks) }
+    }
+
+    private fun captureSelection(property: String, allowed: Set<String>): List<String> {
+        val raw = System.getProperty(property, "").trim()
+        Assume.assumeTrue("Opt in with $property", raw.isNotEmpty())
+        val values = raw.split(',').map(String::trim)
+        require(values.all { it in allowed } && values.distinct().size == values.size) {
+            "Invalid $property=$raw; allowed: $allowed"
+        }
+        return values
+    }
+
+    private fun fullStyleMatrix(capture: (String, String, MixUiBackend, MixColorSchemeMode, hk.uwu.mixui.MixMochiStyle, File) -> Unit) {
+        val variants = captureSelection("ui.capture.variants", setOf("miuix-default", "miuix-monet", "mochi-default", "mochi-ios", "mochi-nothing"))
+        val modes = captureSelection("ui.capture.modes", setOf("light", "dark", "system-day", "system-night"))
+        val output = requireNotNull(System.getProperty("ui.capture.output"))
+        val qualifiers = org.robolectric.RuntimeEnvironment.getQualifiers()
+        try {
+            for (variant in variants) for (mode in modes) {
+                compose.runOnUiThread { activity?.close(); activity = null }
+                val night = mode == "system-night"
+                org.robolectric.RuntimeEnvironment.setQualifiers("zh-rCN-w400dp-h800dp-${if (night) "night" else "notnight"}-mdpi")
+                val dark = mode == "dark" || night
+                val system = mode.startsWith("system-")
+                val backend = if (variant.startsWith("mochi-")) MixUiBackend.Mochi else MixUiBackend.Miuix
+                val colors = if (variant == "miuix-monet") {
+                    if (system) MixColorSchemeMode.MonetSystem else if (dark) MixColorSchemeMode.MonetDark else MixColorSchemeMode.MonetLight
+                } else {
+                    if (system) MixColorSchemeMode.System else if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light
+                }
+                val style = when (variant) {
+                    "mochi-ios" -> hk.uwu.mixui.MixMochiStyle.Ios
+                    "mochi-nothing" -> hk.uwu.mixui.MixMochiStyle.Nothing
+                    else -> hk.uwu.mixui.MixMochiStyle.Default
+                }
+                val folder = File(output, "full-style-mary-sidebar/$variant/$mode").apply { mkdirs() }
+                File(folder, "manifest.json").delete()
+                listOf("open", "history-scrolled").forEach { File(folder, "$it.png").delete() }
+                capture(variant, mode, backend, colors, style, folder)
+                val actualNight = activity!!.get().resources.configuration.uiMode and
+                    android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+                assertEquals(night, actualNight)
+                assertEquals(dark, renderedDark)
+                val manifest = org.json.JSONObject()
+                    .put("variant", variant).put("mode", mode).put("backend", backend.name)
+                    .put("colorMode", colors.name).put("mochiStyle", style.name)
+                    .put("systemDark", actualNight).put("renderedDark", renderedDark)
+                    .put("qualifiers", org.robolectric.RuntimeEnvironment.getQualifiers())
+                    .put("states", org.json.JSONArray(listOf("open", "history-scrolled")))
+                    .put("host", "MaryConversationList + MaryConversationSidebar + production header/composer/navigation; 30 local sessions")
+                    .put("capture", "Native Robolectric production component fixture; not MainActivity network flow or device capture")
+                File(folder, "manifest.json").writeText(manifest.toString(2) + "\n")
+            }
+        } finally {
+            compose.runOnUiThread { activity?.close(); activity = null }
+            org.robolectric.RuntimeEnvironment.setQualifiers(qualifiers)
+        }
     }
 
     private fun unhandledKeyListenerCount(): Int {

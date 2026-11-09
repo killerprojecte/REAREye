@@ -1,5 +1,6 @@
 package hk.uwu.reareye.ui.capture
 
+import androidx.compose.ui.semantics.getOrNull
 import android.app.Application
 import android.content.Intent
 import android.graphics.Bitmap
@@ -63,6 +64,169 @@ class RealPageCaptureTest {
     @Test fun renderImplementedPagesAndSamplePressFrames() = renderPages(UiCaptureActivity.PAGES)
 
     @Test fun renderHomeAndStoreProductionFixtures() = renderPages(setOf("home-offline", "store-catalog"))
+
+    /** Static, independently selectable matrix. No press/scroll animation loops are added here. */
+    @Test fun renderFullStylePageMatrix() {
+        assumeTrue("Full-style capture is not supported on the MIUIX-only baseline",
+            !java.lang.Boolean.getBoolean("ui.capture.baseline"))
+        val requestedVariants = System.getProperty("ui.capture.variants", "")
+        assumeTrue("Select one batch with -PuiCaptureVariants=<variant>", requestedVariants.isNotBlank())
+        fun selection(property: String, fallback: Set<String>, allowed: Set<String>): List<String> {
+            val raw = System.getProperty(property, "").trim()
+            val values = if (raw.isEmpty()) fallback.toList() else raw.split(',').map(String::trim)
+            require(values.isNotEmpty() && values.none(String::isEmpty) && values.distinct().size == values.size) {
+                "Empty or duplicate selector: $property=$raw"
+            }
+            require(values.all { it in allowed }) { "Invalid $property=$raw; allowed: $allowed" }
+            return values
+        }
+        val styles = linkedMapOf(
+            "miuix-default" to hk.uwu.mixui.MixMochiStyle.Default,
+            "miuix-monet" to hk.uwu.mixui.MixMochiStyle.Default,
+            "mochi-default" to hk.uwu.mixui.MixMochiStyle.Default,
+            "mochi-ios" to hk.uwu.mixui.MixMochiStyle.Ios,
+            "mochi-nothing" to hk.uwu.mixui.MixMochiStyle.Nothing,
+        )
+        val variants = selection("ui.capture.variants", emptySet(), styles.keys)
+        val pages = selection("ui.capture.pages", UiCaptureActivity.PAGES, UiCaptureActivity.PAGES)
+        val modes = selection("ui.capture.modes", setOf("light", "dark"),
+            setOf("light", "dark", "system-day", "system-night"))
+        val output = File(System.getProperty("ui.capture.output"), "full-style-pages")
+        val originalQualifiers = org.robolectric.RuntimeEnvironment.getQualifiers()
+        try {
+            for (variant in variants) for (mode in modes) for (page in pages) {
+                val systemDark = mode == "system-night"
+                val system = mode.startsWith("system-")
+                val dark = mode == "dark" || systemDark
+                val backend = if (variant.startsWith("mochi-")) "mochi" else "miuix"
+                val modeValue = when {
+                    backend == "mochi" -> if (system) 6 else if (dark) 8 else 7
+                    variant == "miuix-monet" -> if (system) 2 else if (dark) 5 else 4
+                    else -> if (system) 3 else if (dark) 1 else 0
+                }
+                val expectedMode = hk.uwu.reareye.ui.theme.AppThemeMode.fromValue(modeValue)
+                val expectedStyle = styles.getValue(variant)
+                val folder = File(output, "$variant/$mode/$page").apply { mkdirs() }
+                // Never leave stale successful evidence at this selected target after a failure.
+                File(folder, "initial.png").delete()
+                File(folder, "manifest.json").delete()
+                compose.mainClock.autoAdvance = false
+                compose.runOnUiThread {
+                    activity?.close()
+                    activity = null
+                    // Change the actual Android night qualifier before creating the Activity.
+                    // This tests System/MonetSystem, not explicit light/dark masquerading as System.
+                    org.robolectric.RuntimeEnvironment.setQualifiers(
+                        "w400dp-h800dp-${if (systemDark) "night" else "notnight"}-mdpi")
+                    activity = Robolectric.buildActivity(UiCaptureActivity::class.java,
+                        Intent().putExtra("page", page).putExtra("backend", backend)
+                            .putExtra("mode", modeValue).putExtra("style", expectedStyle.name)).setup()
+                }
+                repeat(12) { compose.mainClock.advanceTimeBy(250); compose.waitForIdle() }
+                val host = activity!!.get()
+                org.junit.Assert.assertEquals(expectedMode, host.renderedMode)
+                org.junit.Assert.assertEquals(expectedMode.backend, host.renderedBackend)
+                org.junit.Assert.assertEquals(expectedStyle, host.renderedStyle)
+                org.junit.Assert.assertEquals(systemDark, host.renderedSystemDark)
+                org.junit.Assert.assertEquals(dark, host.renderedDark)
+                org.junit.Assert.assertEquals(expectedMode,
+                    hk.uwu.reareye.ui.theme.AppThemePreferences.readMode(host.themeSheetPrefs.prefs))
+                val savedStyle = hk.uwu.reareye.ui.theme.AppMochiThemeStyle.fromValue(
+                    host.themeSheetPrefs.prefs.getInt(hk.uwu.reareye.ui.config.ConfigKeys.MODULE_MOCHI_THEME_STYLE, -1))
+                org.junit.Assert.assertEquals(expectedStyle, savedStyle.style)
+                val visibleTexts = assertFullStylePageContent(page)
+                val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }
+                if (page == "version-dialog") check(dialog != null) { "Version dialog window is missing" }
+                val image = compose.runOnUiThread {
+                    val background = captureWindowBitmap(host.window)
+                    if (dialog == null) background else {
+                        val window = requireNotNull(dialog.window)
+                        val overlay = captureDialogWindowBitmap(dialog)
+                        val activityLocation = IntArray(2)
+                        val dialogLocation = IntArray(2)
+                        host.window.decorView.getLocationOnScreen(activityLocation)
+                        window.decorView.getLocationOnScreen(dialogLocation)
+                        val combined = background.copy(Bitmap.Config.ARGB_8888, true)
+                        val canvas = android.graphics.Canvas(combined)
+                        // Platform dim is separate from the dialog bitmap. Respect its actual flag.
+                        if (window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND != 0) {
+                            canvas.drawColor(android.graphics.Color.argb(
+                                (window.attributes.dimAmount.coerceIn(0f, 1f) * 255).toInt(), 0, 0, 0))
+                        }
+                        canvas.drawBitmap(overlay,
+                            (dialogLocation[0] - activityLocation[0]).toFloat(),
+                            (dialogLocation[1] - activityLocation[1]).toFloat(), null)
+                        combined
+                    }
+                }
+                check(image.width > 0 && image.height > 64)
+                val bodyColors = mutableSetOf<Int>()
+                for (y in 64 until image.height step 4) for (x in 0 until image.width step 4) {
+                    bodyColors.add(image.getPixel(x, y))
+                }
+                check(bodyColors.size > 3) { "Blank production content: $variant/$mode/$page" }
+                File(folder, "initial.png").outputStream().use {
+                    check(image.compress(Bitmap.CompressFormat.PNG, 100, it))
+                }
+                val manifest = org.json.JSONObject()
+                    .put("variant", variant).put("mode", mode).put("page", page)
+                    .put("requestedModeValue", modeValue).put("renderedMode", host.renderedMode.name)
+                    .put("renderedBackend", host.renderedBackend.name)
+                    .put("renderedStyle", host.renderedStyle.name)
+                    .put("systemDark", host.renderedSystemDark).put("renderedDark", host.renderedDark)
+                    .put("qualifiers", org.robolectric.RuntimeEnvironment.getQualifiers())
+                    .put("themeSignature", org.json.JSONArray(host.themeSignature))
+                    .put("visibleProductionTexts", org.json.JSONArray(visibleTexts))
+                    .put("dialogWindowComposited", dialog != null)
+                    .put("width", image.width).put("height", image.height)
+                    .put("paletteSource", if (variant == "miuix-monet") "Robolectric Android system dynamic-color resources; not the user device wallpaper palette" else "Production theme defaults")
+                    .put("capture", "Robolectric native WindowCapture; not physical-device GPU evidence")
+                    .put("scope", "18 production-page fixtures, not all interfaces: Mary conversation, Store detail and main navigation require separate suites")
+                File(folder, "manifest.json").writeText(manifest.toString(2) + "\n")
+            }
+        } finally {
+            compose.runOnUiThread {
+                activity?.close()
+                activity = null
+                org.robolectric.RuntimeEnvironment.setQualifiers(originalQualifiers)
+            }
+        }
+    }
+
+    /** Host banner alone must never qualify as a rendered production page. */
+    private fun assertFullStylePageContent(page: String): List<String> {
+        val textNodes = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("production text") { node ->
+            node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)
+                ?.any { it.text.isNotBlank() && !it.text.startsWith("FIXTURE HOST") } == true
+        }, useUnmergedTree = true)
+        val visibleTexts = textNodes.fetchSemanticsNodes().indices.filter { textNodes[it].isDisplayed() }
+            .flatMap { textNodes[it].fetchSemanticsNode().config[
+                androidx.compose.ui.semantics.SemanticsProperties.Text].map { text -> text.text } }
+        check(visibleTexts.isNotEmpty()) { "No visible production content for $page" }
+        val title = when (page) {
+            "card-editor" -> hk.uwu.reareye.R.string.rear_widget_edit_card
+            "component-editor" -> hk.uwu.reareye.R.string.rear_widget_edit_business
+            "scene-routes", "scene-routes-populated" -> hk.uwu.reareye.R.string.rear_widget_scene_route_hint_title
+            "business-extras" -> hk.uwu.reareye.R.string.rear_widget_business_extra_manager
+            "business-extra-editor" -> hk.uwu.reareye.R.string.rear_widget_business_extra_settings
+            "custom-bounds" -> hk.uwu.reareye.R.string.custom_bounds_hint_title
+            "wallpapers" -> hk.uwu.reareye.R.string.guide_demo_wallpaper_name
+            "more" -> hk.uwu.reareye.R.string.config_favorites_title
+            "scripts" -> hk.uwu.reareye.R.string.script_management_title
+            "mary-settings-unconfigured" -> hk.uwu.reareye.R.string.mary_settings_not_ready
+            "onboarding" -> hk.uwu.reareye.R.string.oobe_welcome_title
+            else -> null
+        }
+        title?.let { assertVisibleText(activity!!.get().getString(it)) }
+        when (page) {
+            "cards" -> assertVisibleText("Fixture clock")
+            "components" -> assertVisibleText("demo_clock")
+            "version-dialog" -> assertVisibleText("Fixture target app")
+            "home-offline", "about" -> assertVisibleText("REAREye")
+            "store-catalog" -> assertVisibleText("Fixture Aurora Clock")
+        }
+        return visibleTexts.distinct()
+    }
 
     private fun renderPages(pages: Set<String>) {
         val directory = File(System.getProperty("ui.capture.output"))

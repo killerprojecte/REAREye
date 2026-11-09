@@ -21,6 +21,8 @@ import hk.uwu.reareye.ui.screen.RearStoreDetailContent
 import androidx.compose.ui.semantics.SemanticsActions
 import hk.uwu.reareye.ui.GuideMemoryPrefs
 import hk.uwu.reareye.ui.config.PrefsManager
+import org.junit.Assume
+import androidx.compose.ui.graphics.luminance
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
@@ -45,13 +47,20 @@ class StoreDetailNativeHeaderTest {
     private var activity: ActivityController<ComponentActivity>? = null
     private fun frames() { repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
     private fun label(id: Int) = activity!!.get().getString(id)
-    private fun open(backend: MixUiBackend, dark: Boolean = false, content: @Composable () -> Unit) {
+    private var renderedDark = false
+    private fun open(backend: MixUiBackend, dark: Boolean = false,
+        colorMode: MixColorSchemeMode = if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light,
+        style: hk.uwu.mixui.MixMochiStyle = hk.uwu.mixui.MixMochiStyle.Default, content: @Composable () -> Unit) {
         compose.mainClock.autoAdvance = false
         compose.runOnUiThread {
             activity?.close()
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().setContent {
-                MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light, content = content)
+                MixUiHost(backend, colorMode, style) {
+                    val isDark = hk.uwu.mixui.theme.MixTheme.colorScheme.background.luminance() < 0.5f
+                    SideEffect { renderedDark = isDark }
+                    content()
+                }
             }
         }
         frames()
@@ -82,6 +91,110 @@ class StoreDetailNativeHeaderTest {
     @After fun close() {
         compose.mainClock.autoAdvance = true
         compose.runOnUiThread { activity?.close(); activity = null }
+    }
+
+
+    /** Opt-in production detail fixture. README is local Markdown, without external images. */
+    @Test fun renderFullStyleDetailMatrix() = fullStyleMatrix { _, _, backend, colors, style, folder ->
+        val prefs = PrefsManager(GuideMemoryPrefs())
+        val readmeCalls = java.util.concurrent.atomic.AtomicInteger()
+        open(backend, colorMode = colors, style = style) {
+            RearStoreDetailContent(
+                widgetId = "fixture-detail", prefsManager = prefs, bottomInnerPadding = 96.dp,
+                installedWidget = null, onBack = {}, onInstalled = { error("Capture must not install") },
+                loadDetail = { _, _, _ -> detail() },
+                loadReadme = { _, _ ->
+                    readmeCalls.incrementAndGet()
+                    RearStoreReadme(name = "README.md", htmlUrl = "https://example.invalid/project/README.md",
+                        content = "# Fixture local README\n\nA deterministic clock widget.\n\n" +
+                            (1..12).joinToString("\n\n") { "## Local section $it\nConfigure the clock locally. No network resources are required." })
+                },
+            )
+        }
+        awaitText("Fixture detailed clock")
+        compose.waitUntil(10_000) { compose.mainClock.advanceTimeBy(100); readmeCalls.get() == 1 }
+        frames()
+        compose.onNodeWithText("Fixture detailed clock").assertIsDisplayed()
+        compose.onNodeWithText(label(R.string.rear_store_readme_empty)).assertDoesNotExist()
+        fun snapshot(state: String) {
+            val bitmap = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }
+            File(folder, "$state.png").outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        }
+        snapshot("top")
+        // Robolectric does not lay out Chromium content: verify the real HTML handoff,
+        // without claiming README pixels or manufacturing a scrollable WebView height.
+        compose.runOnUiThread {
+            fun containsLocalReadme(view: android.view.View): Boolean {
+                if (view is android.webkit.WebView && view.tag.toString().contains("Fixture local README")) return true
+                return view is android.view.ViewGroup && (0 until view.childCount).any { containsLocalReadme(view.getChildAt(it)) }
+            }
+            assertTrue("Production WebView received local README HTML", containsLocalReadme(activity!!.get().window.decorView))
+        }
+        compose.onNodeWithText(label(R.string.rear_store_tab_downloads)).performClick(); frames()
+        compose.onNodeWithText("Fixture release 1").assertExists()
+        snapshot("versions")
+        compose.onNodeWithText(label(R.string.rear_store_tab_info)).performClick(); frames()
+        compose.onAllNodesWithText("fixture/project", substring = true).onFirst().assertExists()
+        snapshot("info")
+        assertEquals(1, readmeCalls.get())
+    }
+
+    private fun captureSelection(property: String, allowed: Set<String>): List<String> {
+        val raw = System.getProperty(property, "").trim()
+        Assume.assumeTrue("Opt in with $property", raw.isNotEmpty())
+        val values = raw.split(',').map(String::trim)
+        require(values.all { it in allowed } && values.distinct().size == values.size) {
+            "Invalid $property=$raw; allowed: $allowed"
+        }
+        return values
+    }
+
+    private fun fullStyleMatrix(capture: (String, String, MixUiBackend, MixColorSchemeMode, hk.uwu.mixui.MixMochiStyle, File) -> Unit) {
+        val variants = captureSelection("ui.capture.variants", setOf("miuix-default", "miuix-monet", "mochi-default", "mochi-ios", "mochi-nothing"))
+        val modes = captureSelection("ui.capture.modes", setOf("light", "dark", "system-day", "system-night"))
+        val output = requireNotNull(System.getProperty("ui.capture.output"))
+        val qualifiers = org.robolectric.RuntimeEnvironment.getQualifiers()
+        try {
+            for (variant in variants) for (mode in modes) {
+                compose.runOnUiThread { activity?.close(); activity = null }
+                val night = mode == "system-night"
+                org.robolectric.RuntimeEnvironment.setQualifiers("zh-rCN-w400dp-h800dp-${if (night) "night" else "notnight"}-mdpi")
+                val dark = mode == "dark" || night
+                val system = mode.startsWith("system-")
+                val backend = if (variant.startsWith("mochi-")) MixUiBackend.Mochi else MixUiBackend.Miuix
+                val colors = if (variant == "miuix-monet") {
+                    if (system) MixColorSchemeMode.MonetSystem else if (dark) MixColorSchemeMode.MonetDark else MixColorSchemeMode.MonetLight
+                } else {
+                    if (system) MixColorSchemeMode.System else if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light
+                }
+                val style = when (variant) {
+                    "mochi-ios" -> hk.uwu.mixui.MixMochiStyle.Ios
+                    "mochi-nothing" -> hk.uwu.mixui.MixMochiStyle.Nothing
+                    else -> hk.uwu.mixui.MixMochiStyle.Default
+                }
+                val folder = File(output, "full-style-details/$variant/$mode").apply { mkdirs() }
+                File(folder, "manifest.json").delete()
+                listOf("top", "readme-scrolled", "versions", "info").forEach { File(folder, "$it.png").delete() }
+                capture(variant, mode, backend, colors, style, folder)
+                val actualNight = activity!!.get().resources.configuration.uiMode and
+                    android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+                assertEquals(night, actualNight)
+                assertEquals(dark, renderedDark)
+                val manifest = org.json.JSONObject()
+                    .put("variant", variant).put("mode", mode).put("backend", backend.name)
+                    .put("colorMode", colors.name).put("mochiStyle", style.name)
+                    .put("systemDark", actualNight).put("renderedDark", renderedDark)
+                    .put("qualifiers", org.robolectric.RuntimeEnvironment.getQualifiers())
+                    .put("states", org.json.JSONArray(listOf("top", "versions", "info")))
+                    .put("readmeEvidence", "Production WebView HTML handoff asserted; Chromium正文 pixels and README scrolling not verified")
+                    .put("host", "RearStoreDetailContent with local detail/readme loaders")
+                    .put("capture", "Native Robolectric production component fixture; not MainActivity network flow or device capture")
+                File(folder, "manifest.json").writeText(manifest.toString(2) + "\n")
+            }
+        } finally {
+            compose.runOnUiThread { activity?.close(); activity = null }
+            org.robolectric.RuntimeEnvironment.setQualifiers(qualifiers)
+        }
     }
 
     private fun awaitText(value: String) {

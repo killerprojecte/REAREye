@@ -64,6 +64,14 @@ class UiCaptureActivity : ComponentActivity() {
     var renderedBackend = hk.uwu.mixui.MixUiBackend.Miuix
         private set
     var mochiStyle by mutableStateOf(MixMochiStyle.Default)
+    var renderedMode = hk.uwu.reareye.ui.theme.AppThemeMode.MIUIX_LIGHT
+        private set
+    var renderedStyle = MixMochiStyle.Default
+        private set
+    var renderedSystemDark = false
+        private set
+    var renderedDark = false
+        private set
     var aboutPresetOpenCount = 0
     var backPressCount = 0
         private set
@@ -76,23 +84,43 @@ class UiCaptureActivity : ComponentActivity() {
         require(backend in setOf("miuix", "mochi")) { "Unknown capture backend: $backend" }
         require(page in PAGES) { "Unknown fixture page: $page. Available: $PAGES" }
         val dark = intent.getBooleanExtra("dark", false)
-        mochiStyle = MixMochiStyle.entries.firstOrNull { it.name == intent.getStringExtra("style") } ?: MixMochiStyle.Default
+        val requestedStyle = intent.getStringExtra("style")
+        mochiStyle = if (requestedStyle == null) MixMochiStyle.Default else
+            requireNotNull(MixMochiStyle.entries.firstOrNull { it.name == requestedStyle }) {
+                "Unknown capture Mochi style: $requestedStyle"
+            }
         themeSheetVisible = intent.getBooleanExtra("themeSheet", false)
-        val initialMode = hk.uwu.reareye.ui.theme.AppThemeMode.fromValue(
+        // Exact mode is optional: legacy backend/dark callers and baseline keep their defaults.
+        val initialMode = if (intent.hasExtra("mode")) {
+            requireNotNull(hk.uwu.reareye.ui.theme.AppThemeMode.selectableEntries.firstOrNull {
+                it.value == intent.getIntExtra("mode", -1)
+            }) { "Unknown capture mode: ${intent.getIntExtra("mode", -1)}" }
+        } else hk.uwu.reareye.ui.theme.AppThemeMode.fromValue(
             if (backend == "mochi") { if (dark) 8 else 7 } else { if (dark) 1 else 0 })
+        if (intent.hasExtra("backend")) require(initialMode.backend.name.equals(backend, ignoreCase = true)) {
+            "Capture backend $backend conflicts with mode $initialMode"
+        }
         themeSheetPrefs.putInt(hk.uwu.reareye.ui.config.ConfigKeys.MODULE_THEME_MODE, initialMode.value)
-        themeSheetPrefs.putInt(hk.uwu.reareye.ui.config.ConfigKeys.MODULE_MOCHI_THEME_STYLE, mochiStyle.ordinal)
+        themeSheetPrefs.putInt(hk.uwu.reareye.ui.config.ConfigKeys.MODULE_MOCHI_THEME_STYLE, hk.uwu.reareye.ui.theme.AppMochiThemeStyle.entries.single { it.style == mochiStyle }.value)
         val rtl = intent.getBooleanExtra("rtl", false)
         enableEdgeToEdge()
         setContent {
-            CaptureTheme(backend, dark, mochiStyle, themeModeOverride = themeModeOverride) {
+            CaptureTheme(backend, dark, mochiStyle, themeModeOverride = themeModeOverride ?: initialMode) {
                 val colors = MixTheme.colorScheme
                 val actualBackend = hk.uwu.mixui.LocalMixUiBackend.current
-                SideEffect { renderedBackend = actualBackend }
+                val effectiveMode = themeModeOverride ?: initialMode
+                val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+                SideEffect {
+                    renderedBackend = actualBackend
+                    renderedMode = effectiveMode
+                    renderedStyle = mochiStyle
+                    renderedSystemDark = systemDark
+                    renderedDark = effectiveMode.isDark(systemDark)
+                }
                 SideEffect { themeSignature = listOf(colors.primary.value.toLong(), colors.surface.value.toLong(), colors.onSurface.value.toLong()) }
                 Column(Modifier.fillMaxSize().safeDrawingPadding().testTag("fixture-root")) {
                     BasicText(
-                        "FIXTURE HOST · $page · ${actualBackend.name.lowercase()} · ${themeModeOverride?.name ?: if (dark) "dark" else "light"}",
+                        "FIXTURE HOST · $page · ${actualBackend.name.lowercase()} · ${effectiveMode.name} · ${mochiStyle.name}",
                         modifier = Modifier.fillMaxWidth().background(Color(0xFFFFE082)).padding(6.dp),
                         style = TextStyle(color = Color.Black, fontSize = 11.sp),
                     )
@@ -104,7 +132,7 @@ class UiCaptureActivity : ComponentActivity() {
                             hk.uwu.reareye.ui.theme.ThemeStyleSheet(
                                 show = themeSheetVisible,
                                 appliedMode = themeModeOverride ?: initialMode,
-                                appliedStyle = hk.uwu.reareye.ui.theme.AppMochiThemeStyle.fromValue(mochiStyle.ordinal),
+                                appliedStyle = hk.uwu.reareye.ui.theme.AppMochiThemeStyle.fromValue(hk.uwu.reareye.ui.theme.AppMochiThemeStyle.entries.single { it.style == mochiStyle }.value),
                                 appliedNavigationStyle = hk.uwu.reareye.ui.theme.AppThemePreferences.readNavigationStyle(themeSheetPrefs.prefs),
                                 onDismiss = { themeSheetVisible = false },
                                 onSave = { draft ->

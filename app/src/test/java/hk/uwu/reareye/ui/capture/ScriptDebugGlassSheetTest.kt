@@ -21,6 +21,7 @@ import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import hk.uwu.mixui.MixColorSchemeMode
+import hk.uwu.mixui.MixMochiStyle
 import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.MixUiHost
 import hk.uwu.mixui.components.GlassBottomSheetScene
@@ -48,6 +49,7 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ScriptDebugGlassSheetTest {
     @get:Rule val compose = createEmptyComposeRule()
+    private var fullStyleFolder: File? = null
     private var activity: ActivityController<ComponentActivity>? = null
     private var visible by mutableStateOf(true)
     private var provider by mutableStateOf("hello")
@@ -77,18 +79,20 @@ class ScriptDebugGlassSheetTest {
         settle()
     }
     private fun capture(name: String) {
-        val output = File(System.getProperty("ui.capture.output"), "script-debug").apply { mkdirs() }
+        val output = (fullStyleFolder ?: File(System.getProperty("ui.capture.output"), "script-debug")).apply { mkdirs() }
         compose.runOnUiThread {
             val bitmap = captureWindowBitmap(activity!!.get().window)
             File(output, "$name.png").outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
         }
     }
-    private fun exercise(backend: MixUiBackend, dark: Boolean) {
+    private fun exercise(backend: MixUiBackend, dark: Boolean,
+        colorMode: MixColorSchemeMode = if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light,
+        mochiStyle: MixMochiStyle = MixMochiStyle.Default) {
         compose.runOnUiThread {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().enableEdgeToEdge()
             activity!!.get().setContent {
-                MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
+                MixUiHost(backend, colorMode, mochiStyle) {
                     Scaffold {
                         GlassBottomSheetScene {
                             Box(Modifier.fillMaxSize().background(Color(0xFF3B7A8E)))
@@ -158,6 +162,15 @@ class ScriptDebugGlassSheetTest {
         assertEquals(2, dismissals)
         assertEquals("Dismissals do not execute", 2, runs.size)
     }
+    @Test fun renderFullStyleScriptDebugMatrix() = majorSheetStyleMatrix(
+        directory = "full-style-script-debug", language = "en", fixture = "ScriptDebugBottomSheet production sheet over solid teal fixture background; synthetic 60-line results and synthetic IME/nav insets; no script execution; not a full application page",
+        close = { compose.runOnUiThread { activity?.close(); activity = null } },
+    ) { _, _, backend, dark, colors, style, folder ->
+        compose.runOnIdle { visible = true; provider = "hello"; params = "{}"; result = ""; runs.clear(); dismissals = 0 }
+        fullStyleFolder = folder
+        try { exercise(backend, dark, colors, style) } finally { fullStyleFolder = null }
+    }
+
     @Test fun miuixLight() = exercise(MixUiBackend.Miuix, false)
     @Test fun miuixDark() = exercise(MixUiBackend.Miuix, true)
     @Test fun mochiLight() = exercise(MixUiBackend.Mochi, false)

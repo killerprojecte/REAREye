@@ -6,8 +6,8 @@
 existing production page composables, not lookalike components. The yellow
 `FIXTURE HOST` label is intentional and must remain visible in delivered evidence.
 This does **not** constitute full-app integration coverage or satisfy the request
-for all screens by itself. No screenshot or video has been produced by adding this
-host; successful compilation and capture still have to be verified.
+for all screens by itself. Actual local capture coverage and limitations are recorded in
+`FULL-STYLE-MATRIX.md`. Captures are simulated native graphics, not device videos.
 
 There is no release manifest entry or production startup change. MainActivity's
 version gate, onboarding, remote-preferences readiness gate, and real navigation
@@ -46,7 +46,7 @@ retain their production dismissal handlers.
 
 Build `:app:assembleDebug` with the repository's normal SDK, signing and dependency
 setup. The configured application ID is `hk.uwu.reareye` (no debug suffix),
-version name is `2.0.0` before build-channel decoration, and minSdk is **36**.
+version name is `2.0.1` before build-channel decoration, and minSdk is **36**.
 Use an API 36+ emulator. Baseline and candidate occupy the same package: use a
 fresh emulator/data reset per build and retain the APK hash, since version codes
 are derived from commit count. Do not assume a downgrade install preserves a fair

@@ -1,12 +1,12 @@
 # Evidence capture status and procedure
 
-No screenshots or animation recordings have yet been produced. Source inventory is not a route coverage claim.
+Current local evidence includes 360 page images (18 routes × five palettes × explicit light/dark and actual simulated system day/night) and 100 images of three production sheet components. These are Robolectric native-graphics captures, not physical-device screenshots or full MainActivity integration. See `tools/ui-capture/FULL-STYLE-MATRIX.md` for the exact scope. Still images are not animation recordings.
 
 ## Execution prerequisites
 
 The ordinary MainActivity checks AppVersionGate before rendering, then onboarding, then `remotePrefsManager.isRemoteReady()`. If remote settings are unavailable it renders an empty Box (MainActivity.kt, startup block). A clean emulator is not sufficient to prove all app routes. Use either a provisioned compatible test device or a clearly labeled fixture host rendering the real screen composables with deterministic repositories. Fixture-host images must never be labeled full application integration tests.
 
-Capture the baseline commit and candidate on identical device density, resolution, font scale, locale and light/dark mode. A restored test-data snapshot is needed for reproducible before/after comparisons. Do not use private user conversations or credentials as fixtures. Capture MIUIX and Mochi separately after backend selection is wired through all startup branches. Currently backend selection is only an AppTheme parameter, not a complete selectable production setting.
+Capture the baseline commit and candidate on identical device density, resolution, font scale, locale and light/dark mode. A restored test-data snapshot is needed for reproducible before/after comparisons. Do not use private user conversations or credentials as fixtures. Capture MIUIX and Mochi separately after backend selection is wired through all startup branches. Production theme selection is persisted through the theme-style sheet; capture fixtures set the matching mode and palette explicitly.
 
 ## Recorder
 

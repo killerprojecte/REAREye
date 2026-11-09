@@ -17,6 +17,7 @@ import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.GlassBottomSheetScene
 import androidx.compose.ui.unit.dp
 import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.MixMochiStyle
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.components.script.ScriptRenameDialog
 import hk.uwu.reareye.ui.theme.AppTheme
@@ -42,6 +43,7 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ScriptRenameHeaderTest {
     @get:Rule val compose = createEmptyComposeRule()
+    private var fullStyleFolder: File? = null
     private var activity: ActivityController<ComponentActivity>? = null
     private var visible by mutableStateOf(true)
     private var initial by mutableStateOf("demo_project")
@@ -51,7 +53,7 @@ class ScriptRenameHeaderTest {
     private fun input() = compose.onNode(hasSetTextAction())
     private fun save() = compose.onNodeWithTag("script-name-save")
     private fun cancel() = compose.onNodeWithTag("script-name-cancel")
-    private fun open(mode: AppThemeMode, titleId: Int) {
+    private fun open(mode: AppThemeMode, titleId: Int, mochiStyle: MixMochiStyle = MixMochiStyle.Default) {
         compose.mainClock.autoAdvance = false
         compose.runOnUiThread {
             activity?.close()
@@ -60,7 +62,7 @@ class ScriptRenameHeaderTest {
             saved.clear()
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().setContent {
-                AppTheme(themeMode = mode) {
+                AppTheme(themeMode = mode, mochiStyle = mochiStyle) {
                     Scaffold(Modifier.fillMaxSize().testTag("script-naming-host")) {
                         GlassBottomSheetScene {
                         Text("FIXTURE HOST · Production script naming sheet")
@@ -75,7 +77,7 @@ class ScriptRenameHeaderTest {
         frames()
     }
     private fun capture(name: String) {
-        val folder = File(System.getProperty("ui.capture.output"), "script-rename-header").apply { mkdirs() }
+        val folder = (fullStyleFolder ?: File(System.getProperty("ui.capture.output"), "script-rename-header")).apply { mkdirs() }
         val dialog = ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }
         val bitmap = if (dialog != null) {
             val overlay = compose.runOnUiThread { captureDialogWindowBitmap(dialog) }
@@ -93,6 +95,32 @@ class ScriptRenameHeaderTest {
         compose.mainClock.autoAdvance = true
         compose.runOnUiThread { activity?.close(); activity = null }
     }
+    @Test fun renderFullStyleScriptRenameMatrix() = majorSheetStyleMatrix(
+        directory = "full-style-script-rename", language = "zh-rCN",
+        fixture = "ScriptRenameDialog production naming sheet over labeled Scaffold fixture background; project/file/import titles; not a full application page",
+        close = { compose.runOnUiThread { activity?.close(); activity = null } },
+    ) { _, _, backend, _, colors, style, folder ->
+        val theme = AppThemeMode.entries.single { it.backend == backend && it.colorSchemeMode == colors }
+        fullStyleFolder = folder
+        try {
+            for ((titleId, state) in listOf(
+                R.string.script_rename_project to "project",
+                R.string.script_rename_file to "file",
+                R.string.script_import_project to "import",
+            )) {
+                open(theme, titleId, style)
+                input().assertTextContains(initial)
+                save().assertIsDisplayed().assertIsEnabled()
+                cancel().assertIsDisplayed()
+                capture("$state-header")
+                input().performTextReplacement("   "); frames()
+                save().assertIsNotEnabled()
+                capture("$state-empty-validation")
+                cancel().performClick(); frames()
+            }
+        } finally { fullStyleFolder = null }
+    }
+
     @Test fun headerSaveValidationCancelBackAndReopen() {
         assumeTrue(java.lang.Boolean.getBoolean("ui.capture.enabled"))
         for (mode in listOf(AppThemeMode.MIUIX_LIGHT, AppThemeMode.MIUIX_DARK,
