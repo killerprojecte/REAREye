@@ -17,13 +17,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -60,7 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -101,10 +98,11 @@ import hk.uwu.reareye.ui.theme.AppNavigationBarStyle
 import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.GlassBottomSheet
+import hk.uwu.mixui.components.GlassBottomSheetSize
+import androidx.compose.ui.platform.testTag
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import hk.uwu.mixui.components.NavigationBar
 import hk.uwu.mixui.components.NavigationBarMode
 import hk.uwu.mixui.components.NavigationBackdrop
@@ -118,7 +116,7 @@ sealed interface NavigationQuickTarget {
 }
 
 @Immutable
-private data class NavigationQuickAction(
+internal data class NavigationQuickAction(
     val id: String,
     val label: String,
     val icon: ImageVector,
@@ -876,7 +874,7 @@ private class NavigationQuickMenuController {
 }
 
 @Composable
-private fun NavigationQuickActionEditor(
+internal fun NavigationQuickActionEditor(
     show: Boolean,
     selectedIds: List<String>,
     allActions: List<NavigationQuickAction>,
@@ -898,10 +896,15 @@ private fun NavigationQuickActionEditor(
         .filterNot { it.id in selectedLookup }
         .sortedBy { it.label }
     val maxHint = stringResource(R.string.navigation_quick_max_hint, MaxNavigationQuickActions)
-    val bottomPadding = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+    val scrollState = rememberScrollState()
+    LaunchedEffect(show) { if (show) scrollState.scrollTo(0) }
 
-    OverlayBottomSheet(
+    GlassBottomSheet(
         show = show,
+        size = GlassBottomSheetSize.Content,
+        // Reorder handles own vertical drags, including at the scroll boundary.
+        enableNestedScroll = false,
+        isContentScrolled = scrollState.value > 0,
         title = stringResource(R.string.navigation_quick_edit_title),
         onDismissRequest = onDismissRequest,
     ) {
@@ -909,8 +912,10 @@ private fun NavigationQuickActionEditor(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 560.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = bottomPadding + 8.dp),
+                .testTag("quick-editor-body")
+                .verticalScroll(scrollState)
+                // The sheet host consumes safe drawing/IME insets once.
+                .padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
@@ -932,14 +937,15 @@ private fun NavigationQuickActionEditor(
                     .padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                TextButton(
-                    text = stringResource(R.string.navigation_quick_cancel),
-                    modifier = Modifier.weight(1f),
+                Button(
+                    modifier = Modifier.weight(1f).testTag("quick-editor-cancel"),
                     onClick = onDismissRequest,
-                )
+                ) {
+                    Text(text = stringResource(R.string.navigation_quick_cancel))
+                }
                 Button(
                     onClick = { onSave(selectedState.toList()) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("quick-editor-save"),
                     colors = ButtonDefaults.buttonColorsPrimary(),
                 ) {
                     Text(text = stringResource(R.string.navigation_quick_save))
@@ -1276,6 +1282,7 @@ private fun NavigationQuickEditorActionRow(
             modifier = Modifier.weight(1f),
         )
         NavigationQuickDragHandle(
+            id = action.id,
             enabled = dragEnabled,
             onDragStart = onDragStart,
             onDrag = onDrag,
@@ -1287,6 +1294,7 @@ private fun NavigationQuickEditorActionRow(
 
 @Composable
 private fun NavigationQuickDragHandle(
+    id: String,
     enabled: Boolean,
     onDragStart: (Float) -> Unit,
     onDrag: (Float) -> Unit,
@@ -1297,6 +1305,7 @@ private fun NavigationQuickDragHandle(
     Box(
         modifier = Modifier
             .size(width = 36.dp, height = 40.dp)
+            .then(if (enabled) Modifier.testTag("quick-editor-drag-$id") else Modifier)
             .onGloballyPositioned { coordinates ->
                 handleTopInRoot = coordinates.positionInRoot().y
             }
@@ -1308,23 +1317,27 @@ private fun NavigationQuickDragHandle(
                             val downRootY = handleTopInRoot + down.position.y
                             onDragStart(downRootY)
                             onDrag(downRootY)
-                            var cancelled = false
-                            var dragging = true
-                            while (dragging) {
-                                val event = awaitPointerEvent()
-                                event.changes.forEach { change ->
-                                    if (change.changedToUpIgnoreConsumed()) {
-                                        dragging = false
-                                    } else if (change.pressed) {
-                                        onDrag(handleTopInRoot + change.position.y)
-                                        change.consume()
-                                    } else {
-                                        cancelled = true
-                                        dragging = false
+                            var cancelled = true
+                            try {
+                                var dragging = true
+                                while (dragging) {
+                                    val event = awaitPointerEvent()
+                                    event.changes.forEach { change ->
+                                        if (change.changedToUp()) {
+                                            cancelled = false
+                                            dragging = false
+                                        } else if (change.pressed) {
+                                            onDrag(handleTopInRoot + change.position.y)
+                                            change.consume()
+                                        } else {
+                                            cancelled = true
+                                            dragging = false
+                                        }
                                     }
                                 }
+                            } finally {
+                                if (cancelled) onDragCancel() else onDragEnd()
                             }
-                            if (cancelled) onDragCancel() else onDragEnd()
                         }
                     }
                 } else {
