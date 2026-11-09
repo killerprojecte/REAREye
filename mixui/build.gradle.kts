@@ -35,6 +35,7 @@ val isolateMochiMaterialKolor = tasks.register<RelocateMaterialKolor>("isolateMo
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.androidx.compose.foundation)
+    implementation("androidx.compose.material:material-icons-core")
     implementation(libs.androidx.compose.ui)
     implementation("androidx.compose.animation:animation")
     implementation(libs.kotlinx.coroutines.core)
