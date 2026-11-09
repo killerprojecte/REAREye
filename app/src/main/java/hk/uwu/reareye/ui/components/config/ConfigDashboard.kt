@@ -53,7 +53,7 @@ import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.GlassTopBarScaffold
 import hk.uwu.mixui.components.pageScrollFeedback
 import hk.uwu.mixui.components.GlassTabs
-import top.yukonga.miuix.kmp.preference.ArrowPreference as MiuixArrowPreference
+import hk.uwu.mixui.components.PreferenceRow
 import hk.uwu.mixui.components.ArrowPreference
 import hk.uwu.mixui.theme.MixTheme
 
@@ -372,7 +372,7 @@ private fun MoreTab(
         }
         items(categories, key = { it.group.id }) { entry ->
             MoreSurface {
-                MiuixArrowPreference(
+                PreferenceRow(
                     title = stringResource(entry.group.titleRes),
                     summary = stringResource(entry.group.descriptionRes),
                     startAction = {
