@@ -123,8 +123,8 @@ import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Checkbox
-import top.yukonga.miuix.kmp.basic.ColorPalette
-import top.yukonga.miuix.kmp.basic.ColorPicker
+import hk.uwu.mixui.components.ColorPalette
+import hk.uwu.mixui.components.ColorPicker
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.Slider
 import hk.uwu.mixui.components.Tabs
@@ -1399,7 +1399,7 @@ private fun CustomEditLinkFieldEditor(field: RearWidgetCustomEditLinkField) {
 }
 
 @Composable
-private fun ColorValueEditor(
+internal fun ColorValueEditor(
     title: String,
     palette: List<String>,
     currentValue: String,

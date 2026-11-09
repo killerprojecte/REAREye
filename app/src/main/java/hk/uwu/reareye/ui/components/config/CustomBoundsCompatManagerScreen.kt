@@ -74,7 +74,7 @@ import kotlinx.coroutines.withContext
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
-import top.yukonga.miuix.kmp.basic.ColorPalette
+import hk.uwu.mixui.components.ColorPalette
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.GlassTopBarScaffold
 import hk.uwu.mixui.components.TopBarIconButton
@@ -827,7 +827,7 @@ private fun CustomBoundsInfoText(text: String) {
 }
 
 @Composable
-private fun CustomBoundsColorEditor(
+internal fun CustomBoundsColorEditor(
     value: String,
     onValueChange: (String) -> Unit,
     error: Boolean,

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mixui_color_hue">Hue</string>
+    <string name="mixui_color_saturation">Saturation</string>
+    <string name="mixui_color_brightness">Brightness</string>
+    <string name="mixui_color_alpha">Opacity</string>
+</resources>
