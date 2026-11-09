@@ -126,6 +126,9 @@ internal fun ConfigDashboard(
         modifier = modifier.fillMaxSize(),
         isContentScrolled = activeList?.canScrollBackward == true,
         contentListState = activeList,
+        // Use the controls' native material directly over the page backdrop.
+        // The bar still owns collapse, material visibility and button motion.
+        inheritMiuixBarMaterial = false,
         attachNestedScrollToContent = false,
         topBarModifier = Modifier.featureGuideAnchor("config_header_${selectedTab.ordinal}"),
         title = stringResource(

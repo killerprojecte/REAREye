@@ -2,6 +2,7 @@ package hk.uwu.mixui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.Role
@@ -44,6 +46,9 @@ import ui.feice.mochi.effect.glass.rememberMochiBackdrop
 /** Allows a keep-alive page host to attach native scroll only to its selected page. */
 val LocalPageTopBarScrollConnection = staticCompositionLocalOf<NestedScrollConnection?> { null }
 
+// Controls inside the bar keep its native motion even when using their own material.
+private val LocalInheritMiuixBarMaterial = staticCompositionLocalOf { true }
+
 /**
  * Page host with a vendor-native top bar and a page-only backdrop.
  *
@@ -55,6 +60,12 @@ val LocalPageTopBarScrollConnection = staticCompositionLocalOf<NestedScrollConne
  * No backdrop or vendor scroll state escapes. [pinnedHeader] sits below the bar
  * and contributes to the returned content padding, for tabs or filters.
  *
+ * [inheritMiuixBarMaterial] keeps the native action-bar underlay by default. When
+ * false, buttons use their own native glass material and [pinnedHeader] is hosted
+ * outside the bar's material context. Both still sample the page-only backdrop
+ * and follow the same scroll visibility. [topBarModifier] covers the complete
+ * bar and pinned header in this mode. Mochi and solid fallbacks are unchanged.
+ *
  * MIUIX uses its collapsing glass bar when runtime shaders are supported and its
  * ordinary solid bar otherwise. Mochi uses its own title bar and root-theme
  * materials, including the library's solid fallback when glass is disabled.
@@ -65,6 +76,7 @@ fun GlassTopBarScaffold(
     isContentScrolled: Boolean,
     modifier: Modifier = Modifier,
     contentListState: LazyListState? = null,
+    inheritMiuixBarMaterial: Boolean = true,
     attachNestedScrollToContent: Boolean = true,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
@@ -99,6 +111,7 @@ fun GlassTopBarScaffold(
             val supported = isRuntimeShaderSupported()
             val backdrop = if (supported) rememberLayerBackdrop() else null
             val formBackdrop = if (supported) rememberLayerBackdrop() else null
+            val headerOutsideBar = backdrop != null && !inheritMiuixBarMaterial
             val tabSurfaceAlpha = animateFloatAsState(
                 targetValue = if (materialVisible) 1f else 0f,
                 animationSpec = top.yukonga.miuix.kmp.glass.GlassMotion.topBarButtonFloat(),
@@ -118,28 +131,56 @@ fun GlassTopBarScaffold(
                     // feed the form and its scrim back into its own glass.
                     popupHost = {},
                     topBar = {
-                        Column {
+                        // A detached header still belongs to the same measured toolbar/guide
+                        // region. Apply the caller modifier once, around both native pieces.
+                        Column(modifier = if (headerOutsideBar) topBarModifier else Modifier) {
                             if (backdrop != null) {
                                 top.yukonga.miuix.kmp.glass.GlassTopAppBar(
                                     title = title,
-                                    modifier = topBarModifier,
+                                    modifier = if (headerOutsideBar) Modifier else topBarModifier,
                                     isContentScrolled = materialVisible,
                                     backdrop = backdrop,
-                                    // Match the 799 GlassPage default: native band plus button
-                                    // underlay. Progressive blur is an opt-in demo setting.
+                                    // Keep the native background band. Controls may select their
+                                    // own native material while retaining the bar's scroll motion.
                                     progressiveBlur = false,
                                     scrollBehavior = scrollBehavior,
-                                    navigationIcon = navigationIcon,
-                                    actions = actions,
-                                    // Native bottomContent inherits the bar's material/underlay.
-                                    // It is outside the body-only backdrop recording.
+                                    navigationIcon = {
+                                        CompositionLocalProvider(LocalInheritMiuixBarMaterial provides inheritMiuixBarMaterial) {
+                                            navigationIcon()
+                                        }
+                                    },
+                                    actions = {
+                                        val rowScope = this
+                                        CompositionLocalProvider(LocalInheritMiuixBarMaterial provides inheritMiuixBarMaterial) {
+                                            actions(rowScope)
+                                        }
+                                    },
+                                    // The native joined track has no public inheritance opt-out.
+                                    // Keep it here only when bar material inheritance is requested.
                                     bottomContent = {
-                                        CompositionLocalProvider(
+                                        if (!headerOutsideBar) CompositionLocalProvider(
                                             LocalGlassTabsSurfaceAlpha provides tabSurfaceAlpha.value,
                                             LocalGlassTabsBackdrop provides backdrop,
                                         ) { pinnedHeader() }
                                     },
                                 )
+                                if (headerOutsideBar) {
+                                    // Leave the vendor's internal context through public composition,
+                                    // retaining the original native joined track and horizontal insets.
+                                    Box(
+                                        Modifier.windowInsetsPadding(horizontalBarInsets())
+                                            .pointerInput(Unit) {
+                                                // Preserve the native bar's blank-area click shield
+                                                // without replacing its child controls' gestures.
+                                                detectTapGestures { }
+                                            },
+                                    ) {
+                                        CompositionLocalProvider(
+                                            LocalGlassTabsSurfaceAlpha provides tabSurfaceAlpha.value,
+                                            LocalGlassTabsBackdrop provides backdrop,
+                                        ) { pinnedHeader() }
+                                    }
+                                }
                             } else {
                                 top.yukonga.miuix.kmp.basic.TopAppBar(
                                     title = title,
@@ -245,7 +286,7 @@ private fun GlassFormOverlayHost(
  * MIUIX 799 GlassIconButton has no disabled API. Disabled controls therefore use
  * its non-clickable basic IconButton at the same footprint, visibly dimmed and
  * marked disabled for accessibility. Enabled controls keep the native glass
- * material inherited from the bar; no duplicate backdrop is passed here.
+ * material policy supplied by the bar; no duplicate backdrop is passed here.
  */
 @Composable
 fun TopBarIconButton(
@@ -264,7 +305,9 @@ fun TopBarIconButton(
         MixUiBackend.Miuix -> {
             if (enabled && isRuntimeShaderSupported()) {
                 top.yukonga.miuix.kmp.glass.GlassIconButton(
-                    onClick = onClick, modifier = buttonModifier, content = content,
+                    onClick = onClick, modifier = buttonModifier,
+                    inheritTopBarMaterial = LocalInheritMiuixBarMaterial.current,
+                    content = content,
                 )
             } else {
                 top.yukonga.miuix.kmp.basic.IconButton(
