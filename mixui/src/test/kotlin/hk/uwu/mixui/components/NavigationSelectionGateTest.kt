@@ -67,6 +67,21 @@ class NavigationSelectionGateTest {
         assertEquals(NavigationSelectionGate.Result(null, true), gate.finish())
     }
 
+    @Test fun onlyAnActiveSecondaryCanReturnToNavigation() {
+        val gate = NavigationSelectionGate()
+        assertFalse(gate.resumeNavigationDrag())
+        gate.begin()
+        assertFalse(gate.resumeNavigationDrag())
+        gate.openSecondary()
+        assertTrue(gate.resumeNavigationDrag())
+        gate.select(1)
+        assertEquals(NavigationSelectionGate.Result(1, false), gate.finish())
+        gate.begin(); gate.openSecondary(); gate.cancel()
+        assertFalse(gate.resumeNavigationDrag())
+        gate.select(1)
+        assertEquals(NavigationSelectionGate.Result(null, true), gate.finish())
+    }
+
     @Test fun multitouchCancelsSecondaryAndSuppressesLateRelease() {
         val gate = NavigationSelectionGate()
         gate.begin()

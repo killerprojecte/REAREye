@@ -33,6 +33,15 @@ internal class NavigationSelectionGate {
         true
     } else false
 
+    /** Only the adapter may reclaim a held menu for an in-bar, other-tab drag.
+     * Hard cancellation is terminal; this never revives Cancelled or Idle.
+     */
+    fun resumeNavigationDrag(): Boolean = if (intent == Intent.Secondary) {
+        intent = Intent.Drag
+        pending = null
+        true
+    } else false
+
     fun cancel() {
         if (intent != Intent.Idle) intent = Intent.Cancelled
         pending = null

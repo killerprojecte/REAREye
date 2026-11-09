@@ -110,6 +110,12 @@ fun RowScope.FloatingBottomBarItem(
     }
 }
 
+// Keep the gesture adapter's continuation bounds aligned with this renderer's
+// actual expanded indicator, without changing its layout or initial hit target.
+internal val FloatingBottomBarHeight = 64.dp
+internal val FloatingBottomBarIndicatorHeight = 56.dp
+internal val FloatingBottomBarPressedIndicatorHeight = 78.dp
+
 @Composable
 fun FloatingBottomBar(
     modifier: Modifier = Modifier,
@@ -166,7 +172,7 @@ fun FloatingBottomBar(
             valueRange = 0f..(tabsCount - 1).toFloat(),
             visibilityThreshold = 0.001f,
             initialScale = 1f,
-            pressedScale = 78f / 56f,
+            pressedScale = FloatingBottomBarPressedIndicatorHeight.value / FloatingBottomBarIndicatorHeight.value,
             canDrag = { offset ->
                 val anim = holder.instance ?: return@DampedDragAnimation true
                 if (tabWidthPx == 0f) return@DampedDragAnimation false
@@ -282,7 +288,7 @@ fun FloatingBottomBar(
                     onDrawSurface = { drawRect(containerColor) },
                 )
                 .then(interactiveHighlight?.modifier ?: Modifier)
-                .height(64.dp)
+                .height(FloatingBottomBarHeight)
                 .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
             content = content,
@@ -316,7 +322,7 @@ fun FloatingBottomBar(
                             onDrawSurface = { drawRect(containerColor) },
                         )
                         .then(interactiveHighlight!!.modifier)
-                        .height(56.dp)
+                        .height(FloatingBottomBarIndicatorHeight)
                         .padding(horizontal = 4.dp)
                         .graphicsLayer(colorFilter = ColorFilter.tint(accentColor)),
                     verticalAlignment = Alignment.CenterVertically,
@@ -399,7 +405,7 @@ fun FloatingBottomBar(
                             drawRect(Color.Black.copy(alpha = 0.03f * progress))
                         },
                     )
-                    .height(56.dp)
+                    .height(FloatingBottomBarIndicatorHeight)
                     .width(with(density) { ((totalWidthPx - 8.dp.toPx()) / tabsCount).toDp() })
             )
         }

@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kyant.backdrop.backdrops.layerBackdrop as iosLayerBackdrop
+import hk.uwu.mixui.components.iosnavigation.FloatingBottomBarHeight
+import hk.uwu.mixui.components.iosnavigation.FloatingBottomBarPressedIndicatorHeight
 import hk.uwu.mixui.components.iosnavigation.FloatingBottomBar
 import hk.uwu.mixui.components.iosnavigation.FloatingBottomBarItem
 import hk.uwu.mixui.LocalMixUiBackend
@@ -199,6 +201,13 @@ fun NavigationBar(
             }
         }
         .pointerInput(bridge, renderedItems, horizontalInset, direction) {
+            // The IOS glass lens grows beyond its layout while pressed. A sequence that
+            // began on the bar may continue inside that visible lens; it must not be
+            // cancelled by the smaller unscaled layout. HyperOS shrinks its indicator,
+            // and non-glass/normal bars do not render this expansion.
+            val verticalOverflow = if (backend == MixUiBackend.Miuix &&
+                style == NavigationBarStyle.IOS && glass
+            ) ((FloatingBottomBarPressedIndicatorHeight - FloatingBottomBarHeight) / 2).toPx() else 0f
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 bridge.selection.begin()
@@ -208,6 +217,7 @@ fun NavigationBar(
                 if (ancestorOwnsGesture) bridge.selection.cancel()
                 var secondaryStarted = false
                 var secondaryFinished = false
+                var secondaryLeftBar = false
                 var pointerEnded = false
                 var pointersRemain = true
                 var completed = false
@@ -236,7 +246,7 @@ fun NavigationBar(
                                     beyondSlop = (change.position - down.position).getDistance() > viewConfiguration.touchSlop,
                                     horizontalDrag = kotlin.math.abs(change.position.x - down.position.x) > kotlin.math.abs(change.position.y - down.position.y),
                                     outside = change.position.x !in 0f..size.width.toFloat() ||
-                                        change.position.y !in 0f..size.height.toFloat(),
+                                        change.position.y !in -verticalOverflow..(size.height + verticalOverflow),
                                     multiplePointers = event.changes.count { it.pressed } > 1,
                                 )
                                 val releaseX = if (direction == LayoutDirection.Rtl) size.width - change.position.x else change.position.x
@@ -279,21 +289,37 @@ fun NavigationBar(
                                 beyondSlop = (change.position - down.position).getDistance() > viewConfiguration.touchSlop,
                                     horizontalDrag = kotlin.math.abs(change.position.x - down.position.x) > kotlin.math.abs(change.position.y - down.position.y),
                                 outside = change.position.x !in 0f..size.width.toFloat() ||
-                                    change.position.y !in 0f..size.height.toFloat(),
+                                    change.position.y !in -verticalOverflow..(size.height + verticalOverflow),
                                 multiplePointers = event.changes.count { it.pressed } > 1,
                             )
-                            if (bridge.selection.intent == NavigationSelectionGate.Intent.Secondary) {
-                                drag(bridge.origin + change.position)
-                            }
-                            if (!ancestorOwnsGesture && (bridge.selection.intent == NavigationSelectionGate.Intent.Secondary || bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled)) change.consume()
                             val releaseX = if (direction == LayoutDirection.Rtl) size.width - change.position.x else change.position.x
                             releaseIndex = if (span > 0f) ((releaseX - horizontalInset) / span).toInt().coerceIn(renderedItems.indices) else index
+                            if (bridge.selection.intent == NavigationSelectionGate.Intent.Secondary) {
+                                val insideBar = change.position.x in 0f..size.width.toFloat() &&
+                                    change.position.y in -verticalOverflow..(size.height + verticalOverflow)
+                                if (!insideBar) secondaryLeftBar = true
+                                val delta = change.position - down.position
+                                // A horizontal move to another tab means navigation, even after
+                                // holding Config. Once the finger leaves for the menu, retain
+                                // secondary ownership so its upward selection contract survives.
+                                if (!secondaryLeftBar && releaseIndex != index &&
+                                    kotlin.math.abs(delta.x) > viewConfiguration.touchSlop &&
+                                    kotlin.math.abs(delta.x) > kotlin.math.abs(delta.y) &&
+                                    bridge.selection.resumeNavigationDrag()
+                                ) {
+                                    secondaryFinished = true
+                                    end(true)
+                                } else {
+                                    drag(bridge.origin + change.position)
+                                }
+                            }
+                            if (!ancestorOwnsGesture && (bridge.selection.intent == NavigationSelectionGate.Intent.Secondary || bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled)) change.consume()
                             pointerEnded = !change.pressed
                         }
                         awaitPointerEvent(PointerEventPass.Final)
                     }
                     val cancelled = bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled
-                    if (secondaryStarted) {
+                    if (secondaryStarted && !secondaryFinished) {
                         secondaryFinished = true
                         end(cancelled)
                     }
