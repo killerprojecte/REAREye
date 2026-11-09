@@ -20,6 +20,7 @@ import hk.uwu.reareye.ui.components.script.ScriptList
 import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,7 +41,7 @@ class ScriptListNativeTitleTest {
     private val events = mutableListOf<String>()
     private fun settle() { repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
     private fun label(id: Int) = activity!!.get().getString(id)
-    private fun open(backend: MixUiBackend, dark: Boolean, projects: List<ScriptProject>) {
+    private fun open(backend: MixUiBackend, dark: Boolean, projects: List<ScriptProject>, fontScale: Float = 1f) {
         compose.mainClock.autoAdvance = false
         events.clear()
         compose.runOnUiThread {
@@ -48,12 +49,14 @@ class ScriptListNativeTitleTest {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().enableEdgeToEdge()
             activity!!.get().setContent {
+                NativeTitleTestEnvironment(androidx.compose.ui.unit.LayoutDirection.Ltr, fontScale) {
                 MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
                     ScriptList(projects, 80.dp, onBack = { events += "back" },
                         onRefresh = { events += "refresh" }, onImport = { events += "import" },
                         onExport = { events += "export:${it.id}" }, onOpen = { events += "open:${it.id}" },
                         onRename = { events += "rename:${it.id}" }, onDelete = { events += "delete:${it.id}" },
                         onNew = { events += "new" }, onNewProject = { events += "project" })
+                }
                 }
             }
         }
@@ -105,4 +108,68 @@ class ScriptListNativeTitleTest {
             capture("${backend.name}-${if (dark) "dark" else "light"}-last")
         }
     }
+    @Test fun productionScriptCompactTitleNeverOverlapsFourActions() {
+        val projects = List(24) { index -> ScriptProject("id-$index", "Script $index", File("/fixture"),
+            File("/fixture/script-$index.lua"), ScriptProjectKind.STANDALONE) }
+        for (dark in listOf(false, true)) for (fontScale in listOf(1f, 1.3f)) {
+            open(MixUiBackend.Mochi, dark, projects, fontScale)
+            compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }; settle()
+            val title = compose.nativeTitleGeometry(label(R.string.script_management_title))
+                .first { it.layout.layoutInput.style.fontSize.value == 17f }
+            val actions = listOf(R.string.script_new, R.string.script_new_project, R.string.script_import, R.string.script_refresh)
+            actions.forEach { id ->
+                val action = compose.onNodeWithContentDescription(label(id)).fetchSemanticsNode().boundsInRoot
+                assertTrue("Compact title overlaps action ${label(id)}", !title.bounds.overlaps(action))
+                compose.onNodeWithContentDescription(label(id)).performTouchInput { click() }; settle()
+            }
+            assertEquals(listOf("new", "project", "import", "refresh"), events)
+            capture("Mochi-$dark-$fontScale-bounded-compact-title")
+        }
+    }
+
+    @Test @Config(qualifiers = "zh-rCN-w360dp-h640dp-xhdpi")
+    fun denseShrunkProductionScriptHeaderKeepsDisjointActions() {
+        productionScriptCompactTitleNeverOverlapsFourActions()
+    }
+
+    @Test fun productionShortAndLongListsRespondToDragFlingAndEdgeReversal() {
+        for (backend in MixUiBackend.entries) for (count in listOf(1, 40)) {
+            val projects = List(count) { index -> ScriptProject("id-$index", "Script $index", File("/fixture"),
+                File("/fixture/script-$index.lua"), ScriptProjectKind.STANDALONE) }
+            open(backend, false, projects)
+            val scroller = compose.onNode(hasScrollAction())
+            fun position() = scroller.fetchSemanticsNode().config[
+                androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].value()
+            val start = position()
+            // Slow pointer drag and high-velocity fling both use production content.
+            scroller.performTouchInput { swipeUp(durationMillis = 1000) }; settle()
+            if (count > 1) assertTrue("$backend long list must move upward", position() > start)
+            scroller.performTouchInput { swipeUp(durationMillis = 120) }; settle()
+            capture("$backend-$count-after-fling")
+            // Reach a real end, pull beyond it, then reverse. Elastic feedback must
+            // settle without retaining a translated list or swallowing the next drag.
+            scroller.performScrollToKey(projects.last().mainFile.absolutePath); settle()
+            scroller.performTouchInput { swipeUp(durationMillis = 120) }; settle()
+            val last = compose.onNodeWithText("Script ${count - 1}")
+            last.assertIsDisplayed()
+            val bottomPosition = position()
+            // The list extends behind its pinned bar. Start on visible content,
+            // not swipeDown's default 10% point underneath that overlay.
+            scroller.performTouchInput {
+                swipe(start = center, end = androidx.compose.ui.geometry.Offset(center.x, height * 0.9f), durationMillis = 250)
+            }; settle()
+            if (count > 1) assertTrue("$backend must reverse after bottom edge: before=$bottomPosition after=${position()}", position() < bottomPosition)
+            // ScrollToKey is only setup for the top-edge pointer test, not its oracle.
+            scroller.performScrollToKey(projects.first().mainFile.absolutePath); settle()
+            repeat(2) { scroller.performTouchInput { swipeDown(durationMillis = 120) }; settle() }
+            val first = compose.onNodeWithText("Script 0")
+            first.assertIsDisplayed()
+            val topBounds = first.fetchSemanticsNode().boundsInRoot
+            scroller.performTouchInput { swipeDown(durationMillis = 250) }; settle()
+            val settledBounds = first.fetchSemanticsNode().boundsInRoot
+            assertEquals("$backend top overscroll must spring back", topBounds.top, settledBounds.top, 1f)
+            capture("$backend-$count-top-edge-restored")
+        }
+    }
+
 }

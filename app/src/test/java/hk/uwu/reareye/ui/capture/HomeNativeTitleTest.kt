@@ -149,9 +149,9 @@ class HomeNativeTitleTest {
             open(backend, dark, bottomInset = 24)
             compose.onNodeWithText(label(R.string.home_status_working), useUnmergedTree = true).assertIsDisplayed()
             if (backend == MixUiBackend.Mochi) {
-                assertTrue("Home must render Mochi's 34sp bold native title, not MIUIX TopAppBar",
+                assertTrue("Home must render Mochi's 32sp normal native title, not MIUIX TopAppBar",
                     layouts("REAREye").any {
-                        it.layoutInput.style.fontSize == 34.sp && it.layoutInput.style.fontWeight == FontWeight.Bold
+                        it.layoutInput.style.fontSize == 32.sp && it.layoutInput.style.fontWeight == FontWeight.Normal
                     })
                 assertEquals("Chinese info labels are row headlines, not large page titles",
                     17.sp, layouts(label(R.string.status_card)).single().layoutInput.style.fontSize)
@@ -251,6 +251,37 @@ class HomeNativeTitleTest {
             }
             // All callbacks are inert injected spies, never a root/system operation.
             compose.onNodeWithText(label(R.string.home_status_working), useUnmergedTree = true).assertIsDisplayed()
+        }
+    }
+
+    @Test @Config(qualifiers = "zh-rCN-w400dp-h1200dp-mdpi")
+    fun shortProductionHomeCanFinishCollapseAndReturnToSharpTitle() {
+        for (fontScale in listOf(1f, 1.3f)) {
+            open(MixUiBackend.Mochi, false, 24, fontScale = fontScale)
+            val before = compose.onRoot(useUnmergedTree = true).captureToImage().asAndroidBitmap()
+            val initial = compose.nativeTitleGeometry("REAREye").maxBy { it.layout.layoutInput.style.fontSize.value }
+            val range = compose.onNode(hasScrollAction()).fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange]
+            assertTrue("Short Home needs enough scroll extent to finish the title transition", range.maxValue() >= initial.bounds.height)
+            repeat(2) { compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }; frames() }
+            val collapsed = compose.nativeTitleGeometry("REAREye").first { it.layout.layoutInput.style.fontSize == 17.sp }
+            assertTrue("Compact title stays below the status inset", collapsed.bounds.top >= 24f)
+            capture("short-home-$fontScale-collapsed")
+            repeat(3) { compose.onNode(hasScrollAction()).performTouchInput { swipeDown() }; frames() }
+            val after = compose.onRoot(useUnmergedTree = true).captureToImage().asAndroidBitmap()
+            val restored = compose.nativeTitleGeometry("REAREye").maxBy { it.layout.layoutInput.style.fontSize.value }
+            assertEquals(initial.bounds.top, restored.bounds.top, 1f)
+            // Inspect rendered pixels, not merely Text semantics (which survive alpha=0).
+            var changed = 0
+            var total = 0
+            for (y in initial.bounds.top.toInt().coerceAtLeast(0) until initial.bounds.bottom.toInt().coerceAtMost(before.height)) {
+                for (x in initial.bounds.left.toInt().coerceAtLeast(0) until initial.bounds.right.toInt().coerceAtMost(before.width)) {
+                    total++
+                    if (before.getPixel(x, y) != after.getPixel(x, y)) changed++
+                }
+            }
+            assertTrue("Expanded title pixels must recover after pointer scrolling: $changed/$total", changed < total * 0.05f)
+            capture("short-home-$fontScale-restored")
         }
     }
 

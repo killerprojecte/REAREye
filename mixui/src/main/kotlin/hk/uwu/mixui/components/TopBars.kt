@@ -156,7 +156,7 @@ fun LargeTitleColumnScaffold(
                     ui.feice.mochi.navigation.LocalMochiBottomBarInset provides bottomBarInset,
                 ) {
                     MochiLargeTitleAlignment(title) { callerStyle ->
-                        ui.feice.mochi.navigation.MochiLargeTitleScaffold(
+                        MochiPageScaffold(
                             title = title,
                             modifier = Modifier.imePadding().windowInsetsPadding(horizontalBarInsets()),
                             scrollState = scrollState,
@@ -167,7 +167,7 @@ fun LargeTitleColumnScaffold(
                                 val rowScope = this
                                 callerStyle.Restore { actions(rowScope) }
                             },
-                            content = {
+                            columnContent = {
                                 val columnScope = this
                                 callerStyle.Restore { content(columnScope) }
                             },

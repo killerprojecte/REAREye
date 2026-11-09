@@ -86,6 +86,7 @@ import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.GlassAnchoredMenu
 import hk.uwu.mixui.components.GlassMenuOption
 import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.LargeTitleColumnScaffold
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
@@ -434,10 +435,9 @@ fun HomeScreen(
                 },
                 enabled = snapshot == null || quickActionOverride != null,
             ) {
-                IconButton(
+                TopBarIconButton(
                     modifier = Modifier.testTag("home-quick-actions"),
                     onClick = { if (snapshot == null || quickActionOverride != null) showTopMenu.value = true },
-                    holdDownState = showTopMenu.value,
                 ) {
                     Icon(
                         imageVector = UiIcons.Regular.MoreCircle,

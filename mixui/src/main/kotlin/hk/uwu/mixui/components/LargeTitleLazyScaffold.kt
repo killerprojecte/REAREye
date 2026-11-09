@@ -140,7 +140,7 @@ fun LargeTitleLazyScaffold(
                     ui.feice.mochi.navigation.LocalMochiBottomBarInset provides bottomBarInset,
                 ) {
                     MochiLargeTitleAlignment(title) { callerStyle ->
-                        ui.feice.mochi.navigation.MochiLazyLargeTitleScaffold(
+                        MochiPageScaffold(
                             title = title,
                             modifier = Modifier.imePadding().windowInsetsPadding(horizontalInsets),
                             listState = listState,
@@ -152,7 +152,7 @@ fun LargeTitleLazyScaffold(
                                 callerStyle.Restore { actions(rowScope) }
                             },
                             searchBar = searchBar?.let { search -> { callerStyle.Restore { search() } } },
-                            content = { content(callerStyle.lazyScope(this)) },
+                            lazyContent = { content(callerStyle.lazyScope(this)) },
                         )
                     }
                 }

@@ -183,7 +183,7 @@ fun GlassTopBarScaffold(
                     popupHost = {},
                     topBar = {
                         Column {
-                            ui.feice.mochi.navigation.MochiTitleBar(
+                            BoundedMochiTitleBar(
                                 title = title,
                                 modifier = topBarModifier.windowInsetsPadding(horizontalBarInsets()),
                                 background = background,
@@ -283,9 +283,10 @@ fun TopBarIconButton(
     }
 }
 
-/** Apply native edge feedback to the page's sole scroll container. */
+/** Shared vertical gesture contract, independent of the selected visual backend.
+ * Apply once to the page's sole scroll container. Lazy containers use Compose's
+ * default fling and overscrollEffect=null: this modifier supplies the elastic
+ * edge response and end haptic instead of stacking a second overscroll effect.
+ */
 @Composable
-fun Modifier.pageScrollFeedback(): Modifier = when (LocalMixUiBackend.current) {
-    MixUiBackend.Miuix -> this.scrollEndHaptic().overScrollVertical()
-    MixUiBackend.Mochi -> this
-}
+fun Modifier.pageScrollFeedback(): Modifier = this.scrollEndHaptic().overScrollVertical()
