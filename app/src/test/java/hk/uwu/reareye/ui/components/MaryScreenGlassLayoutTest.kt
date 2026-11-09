@@ -65,6 +65,7 @@ class MaryScreenGlassLayoutTest {
     private lateinit var controller: MaryController
     private lateinit var store: AgentSessionStore
     private lateinit var backend: MixUiBackend
+    private var darkMode = false
     private val height = mutableStateOf(420.dp)
     private lateinit var evidence: File
 
@@ -84,10 +85,91 @@ class MaryScreenGlassLayoutTest {
     @Test fun miuixRealEmptyConversationTransitionsKeepTheirOwnScrollSource() = transitions(MixUiBackend.Miuix)
     @Test fun mochiRealEmptyConversationTransitionsKeepTheirOwnScrollSource() = transitions(MixUiBackend.Mochi)
 
+    @Test fun miuixShortConversationElasticMotionDrivesMaterial() = shortConversationOverscroll(MixUiBackend.Miuix)
+    @Test fun mochiShortConversationElasticMotionDrivesMaterial() = shortConversationOverscroll(MixUiBackend.Mochi)
+
+    @Test fun miuixDarkShortConversationElasticMotionDrivesMaterial() {
+        darkMode = true
+        shortConversationOverscroll(MixUiBackend.Miuix)
+    }
+    @Test fun mochiDarkShortConversationElasticMotionDrivesMaterial() {
+        darkMode = true
+        shortConversationOverscroll(MixUiBackend.Mochi)
+    }
+
+    private fun shortConversationOverscroll(value: MixUiBackend) {
+        height.value = 980.dp
+        host(value)
+        val fixture = store.create("Short actual conversation").copy(messages = listOf(
+            ChatMessage(MessageRole.USER, "你好"),
+            ChatMessage(MessageRole.ASSISTANT,
+                "你好！我是 Mary，REAREye 的内置助手。我可以帮你管理：\n\n" +
+                    "• 卡片：查看、启用/停用、调整顺序\n" +
+                    "• 应用卡片：启用应用后停、重命名、排序\n" +
+                    "• 插件：切换、轮换、删除\n" +
+                    "• 组件：创建与修改、场景路由\n" +
+                    "• 脚本：查看、编辑 Lua 脚本\n\n请问需要我做什么？"),
+        ))
+        store.save(fixture)
+        compose.runOnUiThread { controller.loadSession(fixture.id) }
+        awaitSettled(entries = 2)
+        assertEquals("The video's two-message transcript must fit, not be a long-list substitute", 0f, maximum(), 0f)
+        assertEquals(0f, offset(), 0f)
+        assertNativeMaterial(false)
+        val first = compose.onNodeWithText("你好", useUnmergedTree = true)
+        val restTop = first.fetchSemanticsNode().boundsInRoot.top
+        val controls = controlGeometry()
+        val headerBottom = node("mary-open-sidebar").fetchSemanticsNode().boundsInRoot.bottom
+        val viewport = scrollNode().fetchSemanticsNode().boundsInRoot
+        val composerTop = node("mary-composer").fetchSemanticsNode().boundsInRoot.top
+        val root = compose.onRoot(useUnmergedTree = true)
+        val start = Offset(viewport.left + viewport.width * 0.15f,
+            minOf(viewport.bottom - 16f, composerTop - 32f))
+        val end = Offset(start.x, headerBottom + 12f)
+        save("short-transcript-before-elastic")
+        root.performTouchInput { down(start) }
+        var sawRealOverlap = false
+        repeat(18) { step ->
+            val point = start + (end - start) * ((step + 1f) / 18f)
+            root.performTouchInput { moveTo(point, delayMillis = 32) }
+            repeat(3) { compose.mainClock.advanceTimeBy(16); compose.waitForIdle() }
+            assertEquals("Elastic motion must not be mistaken for real list scroll", 0f, offset(), 0f)
+            val actualTop = first.fetchSemanticsNode().boundsInRoot.top
+            if (actualTop < headerBottom - 2f) {
+                sawRealOverlap = true
+                assertNativeMaterial(true)
+            }
+            assertEquals("The pinned controls must not move with elastic content", controls, controlGeometry())
+            if (step % 3 == 2) save("short-transcript-held-up-$step")
+        }
+        assertTrue("The pointer sequence must visibly move actual text behind the bar before UP", sawRealOverlap)
+        root.performTouchInput { up() }
+        frames()
+        assertEquals("Native elastic spring must restore content", restTop,
+            first.fetchSemanticsNode().boundsInRoot.top, 1.1f)
+        assertNativeMaterial(false)
+        save("short-transcript-elastic-restored")
+        // A downward pull moves content away from the bar and must not enable its material.
+        val downStart = Offset(start.x, headerBottom + 32f)
+        root.performTouchInput { down(downStart) }
+        repeat(8) { step ->
+            root.performTouchInput { moveTo(downStart + Offset(0f, (step + 1f) * 25f), delayMillis = 32) }
+            repeat(2) { compose.mainClock.advanceTimeBy(16); compose.waitForIdle() }
+            assertEquals(0f, offset(), 0f)
+            assertNativeMaterial(false)
+        }
+        root.performTouchInput { up() }
+        frames()
+        assertNativeMaterial(false)
+        compose.runOnUiThread { controller.newSession() }
+        awaitSettled(entries = 0)
+        assertNativeMaterial(false)
+    }
+
     private fun host(value: MixUiBackend) {
         backend = value
         evidence = File(requireNotNull(System.getProperty("mary.ui.screenshotDir")),
-            "actual-mary-scroll/${backend.name}").apply { mkdirs() }
+            "actual-mary-scroll/${backend.name}${if (darkMode) "-dark" else ""}").apply { mkdirs() }
         compose.runOnUiThread {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             val owner = activity!!.get()
@@ -102,7 +184,7 @@ class MaryScreenGlassLayoutTest {
             controller = ViewModelProvider(owner,
                 ViewModelProvider.AndroidViewModelFactory(owner.application))[MaryViewModel::class.java].controller
             owner.setContent {
-                MixUiHost(backend = backend, colorMode = MixColorSchemeMode.Light,
+                MixUiHost(backend = backend, colorMode = if (darkMode) MixColorSchemeMode.Dark else MixColorSchemeMode.Light,
                     // The vendor's iOS style supplies real control glass and edge blur.
                     mochiStyle = MixMochiStyle.Ios) {
                     Box(Modifier.fillMaxWidth().height(height.value)) {

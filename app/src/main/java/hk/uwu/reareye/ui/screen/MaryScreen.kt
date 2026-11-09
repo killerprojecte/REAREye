@@ -113,6 +113,7 @@ import hk.uwu.mixui.components.CompactGlassTopBar
 import hk.uwu.mixui.components.CompactTopBarIconButton
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
+import hk.uwu.mixui.components.rememberHeaderContentOverlapState
 import hk.uwu.mixui.components.pageScrollFeedback
 
 /**
@@ -142,6 +143,7 @@ fun MaryScreen(
     // bar keeps that padding constant.
     LaunchedEffect(controller) { controller.refreshConfiguration() }
     val listState = rememberLazyListState()
+    val transcriptOverlap = rememberHeaderContentOverlapState(controller.sessionId)
     // The landing page has its own scroll container. Keep its state in the empty
     // branch's lifetime, but share it with the pinned bar rather than observing
     // the unmounted conversation list (which cannot report landing scrolls).
@@ -194,7 +196,8 @@ fun MaryScreen(
     )
 
     CompactGlassTopBarScene(
-        isContentScrolled = landingScrollState?.canScrollBackward ?: listState.canScrollBackward,
+        isContentScrolled = landingScrollState?.canScrollBackward
+            ?: (listState.canScrollBackward || transcriptOverlap.overlapsHeader),
     ) { bodyModifier ->
     Scaffold(
         popupHost = {},
@@ -213,6 +216,7 @@ fun MaryScreen(
                 ),
                 onOpenMenu = { showSidebar = true },
                 menuFocusRequester = menuFocus,
+                modifier = transcriptOverlap.headerModifier(),
             )
         },
         contentWindowInsets = WindowInsets.systemBars,
@@ -244,7 +248,7 @@ fun MaryScreen(
                         itemsIndexed(
                             uiState.entries,
                             key = { _, entry -> entry.id }) { index, entry ->
-                            Column {
+                            Column(modifier = if (index == 0) transcriptOverlap.leadingContentModifier() else Modifier) {
                                 // A new speaker gets a wider gap than a continuation, which is what
                                 // makes a turn boundary readable without any extra decoration.
                                 val previous = uiState.entries.getOrNull(index - 1)
@@ -401,12 +405,14 @@ internal fun MaryTopBar(
     onOpenMenu: () -> Unit,
     menuModifier: Modifier = Modifier,
     menuFocusRequester: androidx.compose.ui.focus.FocusRequester? = null,
+    modifier: Modifier = Modifier,
 ) {
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val menuFocus = menuFocusRequester ?: remember { androidx.compose.ui.focus.FocusRequester() }
     CompactGlassTopBar(
         title = stringResource(R.string.mary_title),
+        modifier = modifier,
         navigationIcon = {
             CompactTopBarIconButton(onClick = {
                 focusManager.clearFocus(force = true)
