@@ -82,13 +82,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -100,6 +100,8 @@ import hk.uwu.reareye.repository.rearstore.RearStoreAuthor
 import hk.uwu.reareye.repository.rearstore.RearStoreInstallConflict
 import hk.uwu.reareye.repository.rearstore.RearStoreInstallConflictSource
 import hk.uwu.reareye.repository.rearstore.RearStoreInstallProgressStage
+import hk.uwu.reareye.repository.rearstore.RearStoreInstallProgress
+import hk.uwu.reareye.repository.rearstore.RearStoreUninstallResult
 import hk.uwu.reareye.repository.rearstore.RearStoreInstalledWidget
 import hk.uwu.reareye.repository.rearstore.RearStoreListItem
 import hk.uwu.reareye.repository.rearstore.RearStorePreparedInstallAsset
@@ -117,7 +119,8 @@ import hk.uwu.reareye.repository.rearstore.supportsModuleVersion
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperRepository
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.mixui.components.OverlayDialog
+import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.DialogActions
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.mixui.components.BadgePalette
@@ -1017,6 +1020,23 @@ internal fun RearStoreRootContent(
     }
 }
 
+/** Production delegates unchanged; local page tests can replace every store side effect. */
+internal class RearStoreDetailOperations(
+    val loadInstallDetail: suspend (PrefsManager, RearStoreWidgetDetail, String?) -> RearStoreWidgetDetail =
+        RearStoreRepository::loadWidgetDetailForRelease,
+    val resolveInstallConflict: (PrefsManager, RearStoreWidgetDetail) -> RearStoreInstallConflict? =
+        RearStoreRepository::resolveInstallConflict,
+    val prepareInstallAsset: suspend (PrefsManager, RearStoreWidgetDetail, String?, String?,
+        (RearStoreInstallProgress) -> Unit) -> RearStorePreparedInstallAsset = RearStoreRepository::prepareInstallAsset,
+    val quickInstallWidget: suspend (Context, PrefsManager, RearStoreWidgetDetail, String?, String?, Boolean,
+        RearStorePreparedInstallAsset?, RearWallpaperMetadataOptions?,
+        (RearStoreInstallProgress) -> Unit) -> RearStoreQuickInstallResult = RearStoreRepository::quickInstallWidget,
+    val uninstallWidget: suspend (Context, PrefsManager, String) -> RearStoreUninstallResult =
+        RearStoreRepository::uninstallWidget,
+)
+
+private val defaultRearStoreDetailOperations = RearStoreDetailOperations()
+
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
 internal fun RearStoreDetailContent(
@@ -1028,6 +1048,7 @@ internal fun RearStoreDetailContent(
     onInstalled: suspend () -> Unit,
     loadDetail: suspend (PrefsManager, String, String?) -> RearStoreWidgetDetail? = RearStoreRepository::loadWidgetDetail,
     loadReadme: suspend (PrefsManager, String) -> RearStoreReadme? = RearStoreRepository::loadWidgetReadme,
+    operations: RearStoreDetailOperations = defaultRearStoreDetailOperations,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1100,11 +1121,7 @@ internal fun RearStoreDetailContent(
         val widgetDetail = detail ?: return null
         return withContext(Dispatchers.IO) {
             runCatching {
-                RearStoreRepository.loadWidgetDetailForRelease(
-                    prefsManager = prefsManager,
-                    detail = widgetDetail,
-                    releaseTag = release.tagName,
-                )
+                operations.loadInstallDetail(prefsManager, widgetDetail, release.tagName)
             }.getOrDefault(widgetDetail)
         }
     }
@@ -1121,16 +1138,10 @@ internal fun RearStoreDetailContent(
         val assetKey = installAssetKey(release, asset)
         activeInstall = RearStoreActiveInstall(assetKey = assetKey)
         val result = runCatching {
-            RearStoreRepository.quickInstallWidget(
-                context = context,
-                prefsManager = prefsManager,
-                detail = widgetDetail,
-                releaseTag = release.tagName,
-                assetName = asset.name,
-                forceOverwrite = forceOverwrite,
-                preparedAsset = preparedAsset,
-                wallpaperMetadataOptions = wallpaperMetadataOptions,
-                onProgress = { progress ->
+            operations.quickInstallWidget(
+                context, prefsManager, widgetDetail, release.tagName, asset.name,
+                forceOverwrite, preparedAsset, wallpaperMetadataOptions,
+                { progress ->
                     if (activeInstall?.assetKey == assetKey) {
                         activeInstall = activeInstall?.copy(
                             phase = progress.stage,
@@ -1195,12 +1206,9 @@ internal fun RearStoreDetailContent(
         val assetKey = installAssetKey(release, asset)
         activeInstall = RearStoreActiveInstall(assetKey = assetKey)
         val preparedResult = runCatching {
-            RearStoreRepository.prepareInstallAsset(
-                prefsManager = prefsManager,
-                detail = widgetDetail,
-                releaseTag = release.tagName,
-                assetName = asset.name,
-                onProgress = { progress ->
+            operations.prepareInstallAsset(
+                prefsManager, widgetDetail, release.tagName, asset.name,
+                { progress ->
                     if (activeInstall?.assetKey == assetKey) {
                         activeInstall = activeInstall?.copy(
                             phase = progress.stage,
@@ -1255,7 +1263,7 @@ internal fun RearStoreDetailContent(
             return
         }
         val conflict = withContext(Dispatchers.IO) {
-            RearStoreRepository.resolveInstallConflict(prefsManager, widgetDetail)
+            operations.resolveInstallConflict(prefsManager, widgetDetail)
         }
         if (conflict != null && !forceOverwrite) {
             installConflict = RearStorePendingInstallConflict(
@@ -1279,11 +1287,7 @@ internal fun RearStoreDetailContent(
 
     suspend fun performUninstall(targetWidgetId: String) {
         val result = runCatching {
-            RearStoreRepository.uninstallWidget(
-                context = context,
-                prefsManager = prefsManager,
-                widgetId = targetWidgetId,
-            )
+            operations.uninstallWidget(context, prefsManager, targetWidgetId)
         }
         val uninstallResult = result.getOrNull()
         if (uninstallResult != null) {
@@ -1331,6 +1335,234 @@ internal fun RearStoreDetailContent(
                     onTabSelected = { selectedTab = RearStoreDetailTab.entries[it] },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                 )
+            }
+        },
+        overlayContent = {
+            GlassFormDialog(
+                modifier = Modifier.testTag("store-uninstall-dialog"),
+                show = showUninstallDialog && installedWidget != null,
+                title = stringResource(R.string.rear_store_uninstall_dialog_title),
+                onDismissRequest = { showUninstallDialog = false },
+            ) {
+                DialogFormColumn {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        RearStoreDialogMessageCard(
+                            message = stringResource(
+                                R.string.rear_store_uninstall_dialog_message,
+                                installedWidget?.widgetName ?: widgetId,
+                            ),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().testTag("store-uninstall-actions"),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Button(onClick = { showUninstallDialog = false }, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.rear_widget_cancel))
+                        }
+                        Button(
+                            onClick = {
+                                showUninstallDialog = false
+                                scope.launch { performUninstall(widgetId) }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                color = MixTheme.colorScheme.error,
+                                contentColor = MixTheme.colorScheme.onPrimary,
+                            ),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(stringResource(R.string.rear_store_uninstall_action))
+                        }
+                    }
+                }
+            }
+
+            GlassFormDialog(
+                modifier = Modifier.testTag("store-blocked-dialog"),
+                show = blockedInstallMessage != null,
+                title = stringResource(R.string.rear_store_install_blocked_title),
+                onDismissRequest = { blockedInstallMessage = null },
+            ) {
+                DialogFormColumn {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        RearStoreDialogMessageCard(message = blockedInstallMessage.orEmpty())
+                    }
+                    Button(
+                        onClick = { blockedInstallMessage = null },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.rear_widget_cancel))
+                    }
+                }
+            }
+
+            val postInstallBrowser = postInstallBrowserState
+            GlassFormDialog(
+                modifier = Modifier.testTag("store-browser-dialog"),
+                show = postInstallBrowser != null,
+                title = postInstallBrowser?.title
+                    ?: stringResource(R.string.rear_store_postinstall_browser_title),
+                onDismissRequest = { postInstallBrowserState = null },
+            ) {
+                // Native panels own their margins. Bound the browser and action region together
+                // so the WebView cannot consume all height in a short/IME-constrained window.
+                DialogFormColumn {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        RearStorePostInstallBrowser(
+                            url = postInstallBrowser?.url.orEmpty(),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().testTag("store-browser-actions"),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Button(onClick = { postInstallBrowserState = null }, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.rear_widget_cancel))
+                        }
+                        Button(
+                            onClick = {
+                                val targetUrl = postInstallBrowser?.url ?: return@Button
+                                context.startActivity(Intent(Intent.ACTION_VIEW, targetUrl.toUri()))
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(stringResource(R.string.rear_store_postinstall_open_in_browser))
+                        }
+                    }
+                }
+            }
+
+            val conflictDialog = installConflict
+            GlassFormDialog(
+                modifier = Modifier.testTag("store-conflict-dialog"),
+                show = conflictDialog != null,
+                title = stringResource(R.string.rear_store_install_conflict_title),
+                onDismissRequest = { installConflict = null },
+            ) {
+                val conflict = conflictDialog?.conflict ?: return@GlassFormDialog
+                DialogFormColumn {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        RearStoreDialogMessageCard(
+                            message = buildInstallConflictMessage(context, conflict),
+                        )
+                    }
+                    if (conflict.source == RearStoreInstallConflictSource.OTHER_STORE_WIDGET &&
+                        conflict.existingWidgetId != null
+                    ) {
+                        Button(
+                            onClick = {
+                                val targetWidgetId = conflict.existingWidgetId
+                                installConflict = null
+                                scope.launch { performUninstall(targetWidgetId) }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.rear_store_uninstall_conflicting_widget))
+                        }
+                    }
+                    DialogActions(
+                        modifier = Modifier.testTag("store-conflict-actions"),
+                        cancelText = stringResource(R.string.rear_widget_cancel),
+                        confirmText = stringResource(R.string.rear_store_force_overwrite),
+                        onCancel = { installConflict = null },
+                        onConfirm = {
+                            installConflict = null
+                            scope.launch {
+                                startInstallFlow(
+                                    release = conflictDialog.release,
+                                    asset = conflictDialog.asset,
+                                    forceOverwrite = true,
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+
+            val wallpaperDraft = wallpaperMetadataDraft
+            val pendingWallpaper = pendingWallpaperInstall
+            GlassFormDialog(
+                modifier = Modifier.testTag("store-wallpaper-dialog"),
+                show = pendingWallpaper != null && wallpaperDraft != null,
+                title = stringResource(R.string.rear_store_wallpaper_metadata_title),
+                onDismissRequest = {
+                    pendingWallpaperInstall = null
+                    wallpaperMetadataDraft = null
+                },
+            ) {
+                DialogFormColumn(maxHeight = 620.dp) {
+                    WallpaperMetadataFields(
+                        titleFallback = wallpaperDraft?.titleFallback.orEmpty(),
+                        titleZhCn = wallpaperDraft?.titleZhCn.orEmpty(),
+                        descriptionFallback = wallpaperDraft?.descriptionFallback.orEmpty(),
+                        descriptionZhCn = wallpaperDraft?.descriptionZhCn.orEmpty(),
+                        author = wallpaperDraft?.author.orEmpty(),
+                        designer = wallpaperDraft?.designer.orEmpty(),
+                        category = wallpaperDraft?.category.orEmpty(),
+                        resSubType = wallpaperDraft?.resSubType.orEmpty(),
+                        editable = wallpaperDraft?.editable ?: false,
+                        thirdParties = wallpaperDraft?.thirdParties ?: true,
+                        supportAon = wallpaperDraft?.supportAon ?: false,
+                        onTitleFallbackChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(titleFallback = it)
+                        },
+                        onTitleZhCnChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(titleZhCn = it)
+                        },
+                        onDescriptionFallbackChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(descriptionFallback = it)
+                        },
+                        onDescriptionZhCnChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(descriptionZhCn = it)
+                        },
+                        onAuthorChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(author = it)
+                        },
+                        onDesignerChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(designer = it)
+                        },
+                        onCategoryChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(category = it)
+                        },
+                        onResSubTypeChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(resSubType = it)
+                        },
+                        onEditableChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(editable = it)
+                        },
+                        onThirdPartiesChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(thirdParties = it)
+                        },
+                        onSupportAonChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(supportAon = it)
+                        },
+                    )
+                    DialogActions(
+                        modifier = Modifier.testTag("store-wallpaper-actions"),
+                        cancelText = stringResource(R.string.rear_widget_cancel),
+                        confirmText = stringResource(R.string.rear_widget_confirm),
+                        onCancel = {
+                            pendingWallpaperInstall = null
+                            wallpaperMetadataDraft = null
+                        },
+                        onConfirm = confirm@{
+                            val currentDraft = wallpaperMetadataDraft ?: return@confirm
+                            val prepared = pendingWallpaperInstall?.preparedAsset ?: return@confirm
+                            val release = prepared.release
+                            val asset = prepared.asset
+                            pendingWallpaperInstall = null
+                            wallpaperMetadataDraft = null
+                            scope.launch {
+                                performInstall(
+                                    release = release,
+                                    asset = asset,
+                                    preparedAsset = prepared,
+                                    wallpaperMetadataOptions = currentDraft,
+                                )
+                            }
+                        },
+                    )
+                }
             }
         },
         navigationIcon = {
@@ -1413,6 +1645,7 @@ internal fun RearStoreDetailContent(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
+                .testTag("store-detail-list")
                 .pageScrollFeedback()
                 .padding(horizontal = 12.dp),
             contentPadding = PaddingValues(
@@ -1451,235 +1684,6 @@ internal fun RearStoreDetailContent(
                         scope.launch { startInstallFlow(release, asset) }
                     },
                 )
-            }
-        }
-    }
-
-    OverlayDialog(
-        show = showUninstallDialog && installedWidget != null,
-        title = stringResource(R.string.rear_store_uninstall_dialog_title),
-        onDismissRequest = { showUninstallDialog = false },
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                RearStoreDialogMessageCard(
-                    message = stringResource(
-                        R.string.rear_store_uninstall_dialog_message,
-                        installedWidget?.widgetName ?: widgetId,
-                    ),
-                )
-            }
-            Button(
-                onClick = {
-                    showUninstallDialog = false
-                    scope.launch { performUninstall(widgetId) }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    color = MixTheme.colorScheme.error,
-                    contentColor = MixTheme.colorScheme.onPrimary,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_store_uninstall_action))
-            }
-            Button(
-                onClick = { showUninstallDialog = false },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
-            }
-        }
-    }
-
-    OverlayDialog(
-        show = blockedInstallMessage != null,
-        title = stringResource(R.string.rear_store_install_blocked_title),
-        onDismissRequest = { blockedInstallMessage = null },
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                RearStoreDialogMessageCard(message = blockedInstallMessage.orEmpty())
-            }
-            Button(
-                onClick = { blockedInstallMessage = null },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
-            }
-        }
-    }
-
-    val postInstallBrowser = postInstallBrowserState
-    OverlayDialog(
-        show = postInstallBrowser != null,
-        title = postInstallBrowser?.title
-            ?: stringResource(R.string.rear_store_postinstall_browser_title),
-        onDismissRequest = { postInstallBrowserState = null },
-        outsideMargin = DpSize(width = 10.dp, height = 10.dp),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                RearStorePostInstallBrowser(
-                    url = postInstallBrowser?.url.orEmpty(),
-                )
-            }
-            Button(
-                onClick = {
-                    val targetUrl = postInstallBrowser?.url ?: return@Button
-                    context.startActivity(Intent(Intent.ACTION_VIEW, targetUrl.toUri()))
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_store_postinstall_open_in_browser))
-            }
-            Button(
-                onClick = { postInstallBrowserState = null },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
-            }
-        }
-    }
-
-    val conflictDialog = installConflict
-    OverlayDialog(
-        show = conflictDialog != null,
-        title = stringResource(R.string.rear_store_install_conflict_title),
-        onDismissRequest = { installConflict = null },
-    ) {
-        val conflict = conflictDialog?.conflict ?: return@OverlayDialog
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                RearStoreDialogMessageCard(
-                    message = buildInstallConflictMessage(context, conflict),
-                )
-            }
-            if (conflict.source == RearStoreInstallConflictSource.OTHER_STORE_WIDGET &&
-                conflict.existingWidgetId != null
-            ) {
-                Button(
-                    onClick = {
-                        val targetWidgetId = conflict.existingWidgetId
-                        installConflict = null
-                        scope.launch { performUninstall(targetWidgetId) }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.rear_store_uninstall_conflicting_widget))
-                }
-            }
-            Button(
-                onClick = {
-                    installConflict = null
-                    scope.launch {
-                        startInstallFlow(
-                            release = conflictDialog.release,
-                            asset = conflictDialog.asset,
-                            forceOverwrite = true,
-                        )
-                    }
-                },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_store_force_overwrite))
-            }
-            Button(
-                onClick = { installConflict = null },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
-            }
-        }
-    }
-
-    val wallpaperDraft = wallpaperMetadataDraft
-    val pendingWallpaper = pendingWallpaperInstall
-    OverlayDialog(
-        show = pendingWallpaper != null && wallpaperDraft != null,
-        title = stringResource(R.string.rear_store_wallpaper_metadata_title),
-        onDismissRequest = {
-            pendingWallpaperInstall = null
-            wallpaperMetadataDraft = null
-        },
-    ) {
-        DialogFormColumn(maxHeight = 620.dp) {
-            WallpaperMetadataFields(
-                titleFallback = wallpaperDraft?.titleFallback.orEmpty(),
-                titleZhCn = wallpaperDraft?.titleZhCn.orEmpty(),
-                descriptionFallback = wallpaperDraft?.descriptionFallback.orEmpty(),
-                descriptionZhCn = wallpaperDraft?.descriptionZhCn.orEmpty(),
-                author = wallpaperDraft?.author.orEmpty(),
-                designer = wallpaperDraft?.designer.orEmpty(),
-                category = wallpaperDraft?.category.orEmpty(),
-                resSubType = wallpaperDraft?.resSubType.orEmpty(),
-                editable = wallpaperDraft?.editable ?: false,
-                thirdParties = wallpaperDraft?.thirdParties ?: true,
-                supportAon = wallpaperDraft?.supportAon ?: false,
-                onTitleFallbackChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(titleFallback = it)
-                },
-                onTitleZhCnChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(titleZhCn = it)
-                },
-                onDescriptionFallbackChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(descriptionFallback = it)
-                },
-                onDescriptionZhCnChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(descriptionZhCn = it)
-                },
-                onAuthorChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(author = it)
-                },
-                onDesignerChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(designer = it)
-                },
-                onCategoryChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(category = it)
-                },
-                onResSubTypeChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(resSubType = it)
-                },
-                onEditableChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(editable = it)
-                },
-                onThirdPartiesChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(thirdParties = it)
-                },
-                onSupportAonChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(supportAon = it)
-                },
-            )
-            Button(
-                onClick = {
-                    val currentDraft = wallpaperMetadataDraft ?: return@Button
-                    val prepared = pendingWallpaperInstall?.preparedAsset ?: return@Button
-                    val release = prepared.release
-                    val asset = prepared.asset
-                    pendingWallpaperInstall = null
-                    wallpaperMetadataDraft = null
-                    scope.launch {
-                        performInstall(
-                            release = release,
-                            asset = asset,
-                            preparedAsset = prepared,
-                            wallpaperMetadataOptions = currentDraft,
-                        )
-                    }
-                },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_confirm))
-            }
-            Button(
-                onClick = {
-                    pendingWallpaperInstall = null
-                    wallpaperMetadataDraft = null
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
             }
         }
     }
