@@ -48,7 +48,8 @@ import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.HorizontalDivider
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import hk.uwu.mixui.components.GlassBottomSheet
+import androidx.compose.ui.platform.testTag
 import hk.uwu.mixui.theme.MixTheme
 
 @Serializable
@@ -106,10 +107,13 @@ fun loadLibraries(context: Context): AboutLibraries {
 }
 
 @Composable
-fun LibraryItem(lib: Library, licenses: Map<String, License>) {
+fun LibraryItem(
+    lib: Library,
+    licenses: Map<String, License>,
+    onLicenseClick: (License) -> Unit,
+) {
     val context = LocalContext.current
     val hasLink = lib.website != null
-    var showLicenses by remember { mutableStateOf<List<License>>(emptyList()) }
     var expandLicensesInline by remember { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -164,7 +168,7 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
                             text = licenseBadgeText(licenseId, license),
                             emphasized = false,
                             onClick = license?.let { targetLicense ->
-                                { showLicenses = listOf(targetLicense) }
+                                { onLicenseClick(targetLicense) }
                             },
                         )
                     },
@@ -172,61 +176,77 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
                     onExpand = { expandLicensesInline = true },
                     onCollapse = { expandLicensesInline = false },
                 )
-                if (showLicenses.isNotEmpty()) {
-                    val primaryColor = MixTheme.colorScheme.primary
-                    val dialogTitle = remember(showLicenses) {
-                        showLicenses.joinToString(" / ") { it.name }
-                    }
-                    OverlayBottomSheet(
-                        show = true,
-                        title = dialogTitle,
-                        onDismissRequest = { showLicenses = emptyList() }
-                    ) {
-                        val rawText = remember(showLicenses) {
-                            showLicenses.joinToString("\n\n") { license ->
-                                buildString {
-                                    append(license.name)
-                                    append("\n\n")
-                                    append(license.content ?: license.url)
-                                }
-                            }
-                        }
-
-                        val annotatedText = remember(rawText) {
-                            buildAnnotatedString {
-                                append(rawText)
-                                val urlPattern = Regex("(https?://[\\w-]+(\\.[\\w-]+)+(/\\S*)?)")
-                                urlPattern.findAll(rawText).forEach { match ->
-                                    addLink(
-                                        LinkAnnotation.Url(
-                                            url = match.value,
-                                            styles = TextLinkStyles(
-                                                SpanStyle(
-                                                    color = primaryColor,
-                                                    fontWeight = FontWeight.Bold,
-                                                )
-                                            )
-                                        ),
-                                        start = match.range.first,
-                                        end = match.range.last + 1
-                                    )
-                                }
-                            }
-                        }
-
-                        Text(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 560.dp)
-                                .padding(top = 8.dp)
-                                .verticalScroll(rememberScrollState()),
-                            text = annotatedText,
-                            color = MixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
-                }
-
             },
+        )
+    }
+}
+
+/** Owned by the license page, never by a recyclable LazyColumn row. */
+internal class LibraryLicenseSheetState {
+    var selected by mutableStateOf<License?>(null)
+        private set
+    var visible by mutableStateOf(false)
+        private set
+    var session by mutableStateOf(0L)
+        private set
+
+    fun open(license: License) {
+        session++
+        selected = license
+        visible = true
+    }
+
+    fun dismiss(expectedSession: Long) {
+        if (session == expectedSession) visible = false
+    }
+
+    fun finishDismiss(expectedSession: Long) {
+        if (session == expectedSession && !visible) selected = null
+    }
+}
+
+@Composable
+internal fun LibraryLicenseSheet(state: LibraryLicenseSheetState) {
+    val license = state.selected ?: return
+    val session = state.session
+    GlassBottomSheet(
+        show = state.visible,
+        title = license.name,
+        sessionKey = session,
+        onDismissRequest = { state.dismiss(session) },
+        onDismissFinished = { state.finishDismiss(session) },
+    ) {
+        val primaryColor = MixTheme.colorScheme.primary
+        val rawText = remember(license) {
+            "${license.name}\n\n${license.content ?: license.url}"
+        }
+        val annotatedText = remember(rawText, primaryColor) {
+            buildAnnotatedString {
+                append(rawText)
+                val urlPattern = Regex("(https?://[\\w-]+(\\.[\\w-]+)+(/\\S*)?)")
+                urlPattern.findAll(rawText).forEach { match ->
+                    addLink(
+                        LinkAnnotation.Url(
+                            url = match.value,
+                            styles = TextLinkStyles(
+                                SpanStyle(color = primaryColor, fontWeight = FontWeight.Bold)
+                            ),
+                        ),
+                        start = match.range.first,
+                        end = match.range.last + 1,
+                    )
+                }
+            }
+        }
+        Text(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 560.dp)
+                .padding(top = 8.dp)
+                .testTag("about-license-body")
+                .verticalScroll(rememberScrollState()),
+            text = annotatedText,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
         )
     }
 }

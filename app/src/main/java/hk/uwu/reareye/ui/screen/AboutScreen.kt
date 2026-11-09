@@ -94,6 +94,9 @@ import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
 import hk.uwu.reareye.utils.blend.ColorBlendToken
 import hk.uwu.reareye.utils.effect.BgEffectBackground
 import hk.uwu.reareye.utils.other.DeviceConfigTools
+import hk.uwu.reareye.utils.other.AboutLibraries
+import hk.uwu.reareye.utils.other.LibraryLicenseSheet
+import hk.uwu.reareye.utils.other.LibraryLicenseSheetState
 import hk.uwu.reareye.utils.other.LibraryItem
 import hk.uwu.reareye.utils.other.OSVersionTools
 import hk.uwu.reareye.utils.other.loadLibraries
@@ -1141,15 +1144,17 @@ private fun ContributorListContent(
 }
 
 @Composable
-private fun LicenseContent(
+internal fun LicenseContent(
     bottomInnerPadding: Dp,
     paddingValues: PaddingValues,
     lazyListState: LazyListState,
     hazeState: HazeState,
+    libraries: AboutLibraries? = null,
+    licenseSheetState: LibraryLicenseSheetState = remember { LibraryLicenseSheetState() },
 ) {
     val context = LocalContext.current
     val layoutDirection = LocalLayoutDirection.current
-    val data = remember {
+    val data = libraries ?: remember(context) {
         loadLibraries(context)
     }
 
@@ -1170,11 +1175,13 @@ private fun LicenseContent(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         overscrollEffect = null,
     ) {
-        items(data.libraries) {
-            LibraryItem(it, data.licenses)
+        items(data.libraries, key = { it.uniqueId }) {
+            LibraryItem(it, data.licenses, onLicenseClick = licenseSheetState::open)
         }
     }
 
+    // Keep the sheet alive when its source row leaves the lazy viewport, including exit.
+    LibraryLicenseSheet(licenseSheetState)
 }
 
 @Composable
