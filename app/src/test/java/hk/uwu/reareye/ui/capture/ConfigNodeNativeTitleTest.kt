@@ -65,10 +65,13 @@ class ConfigNodeNativeTitleTest {
         direction: LayoutDirection = LayoutDirection.Ltr,
         fontScale: Float = 1f,
         pageTitle: String = if (favorites) "Fixture Favorites" else "Fixture Category",
+        mochiStyle: hk.uwu.mixui.MixMochiStyle = hk.uwu.mixui.MixMochiStyle.Default,
+        preparePreferences: (PrefsManager) -> Unit = {},
     ) {
         compose.mainClock.autoAdvance = false
         opened.clear(); backs = 0; favoriteIds = emptySet()
         val prefs = PrefsManager(GuideMemoryPrefs())
+        preparePreferences(prefs)
         pagePrefs = prefs; changed.clear()
         compose.runOnUiThread {
             activity?.close()
@@ -76,7 +79,7 @@ class ConfigNodeNativeTitleTest {
             activity!!.get().enableEdgeToEdge()
             activity!!.get().setContent {
                 NativeTitleTestEnvironment(direction, fontScale) {
-                MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
+                MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light, mochiStyle = mochiStyle) {
                     Box(Modifier.fillMaxSize()) {
                         ConfigNodePage(
                             title = pageTitle,
@@ -119,6 +122,40 @@ class ConfigNodeNativeTitleTest {
         compose.mainClock.autoAdvance = true
         compose.runOnUiThread { activity?.close(); activity = null }
     }
+    @Test fun actualMusicLyricsCategoryUsesNativeMochiPreferences() {
+        val category = hk.uwu.reareye.ui.components.config.buildMoreCategories(REAREyeConfig)
+            .single { it.group.id == "music_lyrics" }.category
+        for (style in hk.uwu.mixui.MixMochiStyle.entries) for (dark in listOf(false, true)) {
+            open(MixUiBackend.Mochi, category.children, dark = dark, mochiStyle = style,
+                pageTitle = "音乐与歌词", preparePreferences = { prefs ->
+                    prefs.putBoolean(ConfigKeys.HOOK_MUSIC_CONTROLS_WHITELIST, true)
+                })
+            val prefix = "native-music-${style.name}-${if (dark) "dark" else "light"}"
+            capture("$prefix-initial")
+            val mode = compose.onNodeWithText(label(R.string.lyric_display_mode))
+            mode.performScrollTo(); frames()
+            mode.performTouchInput { click() }; frames()
+            compose.onNodeWithText(label(R.string.lyric_display_mode_translation)).assertIsDisplayed()
+            val output = File(System.getProperty("ui.capture.output"), "config-native-lists").apply { mkdirs() }
+            fun wholeWindow(name: String) {
+                val image = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }
+                File(output, "$prefix-$name.png").outputStream().use {
+                    check(image.compress(Bitmap.CompressFormat.PNG, 100, it))
+                }
+            }
+            wholeWindow("multi-open")
+            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }
+            repeat(12) { index ->
+                compose.mainClock.advanceTimeByFrame(); compose.waitForIdle()
+                wholeWindow("multi-close-${index.toString().padStart(2, '0')}")
+            }
+            frames()
+            compose.onNodeWithText(label(R.string.lyric_display_mode_translation)).assertDoesNotExist()
+            assertTrue("Opening and cancelling never changes stored preferences", changed.isEmpty())
+            assertEquals(0, backs)
+        }
+    }
+
     @Test fun productionSingleAndMaskMenusPersistInBothBackendsAndThemes() {
         val single = ConfigItem("capture_single", R.string.config_tab_cards,
             type = ConfigType.EnumSingleSelect(1, listOf(

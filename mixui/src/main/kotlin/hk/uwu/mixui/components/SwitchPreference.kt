@@ -1,22 +1,17 @@
 package hk.uwu.mixui.components
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
-import hk.uwu.mixui.theme.MixTheme
 
 /** A labelled switch row whose public contract is independent of either UI library. */
 @Composable
@@ -40,42 +35,24 @@ fun SwitchPreference(
             insideMargin = insideMargin,
         )
     } else {
-        val colors = MixTheme.colorScheme
-        Row(
-            modifier = modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .toggleable(
-                    value = checked,
-                    enabled = enabled,
-                    role = Role.Switch,
-                    onValueChange = onCheckedChange,
-                )
-                .padding(insideMargin),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = title,
-                    style = MixTheme.textStyles.body1,
-                    color = if (enabled) colors.onSurface else colors.disabledOnSurface,
-                )
-                if (summary != null) {
-                    Text(
-                        text = summary,
-                        style = MixTheme.textStyles.body2,
-                        color = if (enabled) colors.onSurfaceVariantSummary else colors.disabledOnSurface,
-                    )
-                }
-            }
-            // The row exposes one labelled accessibility toggle. Keep the native control's
-            // pointer callback so Mochi's dragging and haptics still work on the thumb.
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
+        MochiPreferenceContent(summary = summary, modifier = modifier, enabled = enabled,
+            onClick = { onCheckedChange(!checked) }) {
+            ui.feice.mochi.list.MochiListRow(
+                title = title,
                 enabled = enabled,
-                modifier = Modifier.clearAndSetSemantics {},
+                onClick = { if (enabled) onCheckedChange(!checked) },
+                modifier = Modifier.semantics {
+                    role = Role.Switch
+                    toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+                },
+                trailing = {
+                    ui.feice.mochi.basic.MochiSwitch(
+                        checked = checked,
+                        onCheckedChange = onCheckedChange,
+                        enabled = enabled,
+                        modifier = Modifier.clearAndSetSemantics {},
+                    )
+                },
             )
         }
     }

@@ -15,7 +15,18 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ui.feice.mochi.basic.MochiAlign
+import ui.feice.mochi.basic.MochiDropdownDefaults
+import ui.feice.mochi.basic.MochiPopoverButton
+import ui.feice.mochi.basic.MochiTrigger
+import ui.feice.mochi.list.MochiListRow
+import ui.feice.mochi.theme.MochiTheme
 import hk.uwu.mixui.icons.Icons
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.glass.GlassDropdownPopup
@@ -44,9 +55,9 @@ internal fun GlassPreferenceOverlayHost(backdrop: GlassFormBackdrop, page: @Comp
 }
 
 /**
- * Rich/multiple choice menu. Uses native glass popup surfaces, never a flattened
- * single-selection dropdown. Neither native menu-item contract can display full
- * option descriptions, so the content is a lossless neutral selectable row.
+ * Rich/multiple choice menu. Both renderers retain independent option state and
+ * full descriptions. Mochi uses its native list rows and popover button, anchored
+ * only to the trailing control rather than morphing the entire preference row.
  */
 @Composable
 fun GlassChoicePreference(
@@ -101,20 +112,63 @@ fun GlassChoicePreference(
             }
         }
         is GlassFormBackdrop.Mochi -> CompositionLocalProvider(LocalMochiBackdrop provides backdrop.value) {
-            // A settings row is not a capsule button. The native button variant opens
-            // on press and owns press/slide selection, stealing a parent's scroll gesture.
-            // Box keeps the vendor glass panel but leaves activation to a scroll-aware row.
-            ui.feice.mochi.basic.MochiPopoverBox(
-                expanded = expanded && active,
-                onExpandedChange = { onExpandedChange(it && active) },
-                popover = rows,
-                modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {
-                    if (!active) disabled()
-                },
-                contentPadding = PaddingValues(vertical = 8.dp),
-            ) {
-                PreferenceRow(title = title, summary = summary, enabled = active,
-                    holdDownState = expanded && active, onClick = { onExpandedChange(true) })
+            val (anchorModifier, changeExpanded) = rememberMochiMenuActivation(
+                Modifier.widthIn(min = 34.dp, max = 120.dp), active, expanded,
+            ) { next ->
+                val requested = next && active
+                if (requested != expanded) onExpandedChange(requested)
+            }
+            MochiPreferenceContent(summary = summary, modifier = modifier, enabled = active,
+                onClick = { onExpandedChange(true) }) {
+                MochiListRow(
+                    title = title,
+                    enabled = active,
+                    onClick = { if (active) onExpandedChange(true) },
+                    trailing = {
+                        MochiPopoverButton(
+                            expanded = expanded && active,
+                            onExpandedChange = changeExpanded,
+                            enabled = active,
+                            // LongPress also opens on an ordinary release; a drag beyond
+                            // touch slop returns control to the parent scroll container.
+                            behavior = MochiDropdownDefaults.behavior(
+                                trigger = MochiTrigger.LongPress,
+                                align = MochiAlign.End,
+                            ),
+                            modifier = anchorModifier,
+                            buttonMinHeight = 34.dp,
+                            buttonPadding = PaddingValues(horizontal = 12.dp),
+                            contentPadding = PaddingValues(vertical = 8.dp),
+                            popover = {
+                                options.forEachIndexed { index, option ->
+                                    MochiPreferenceContent(summary = option.summary, enabled = active, onClick = { select(index) }) {
+                                        MochiListRow(
+                                            title = option.title,
+                                            checked = option.selected,
+                                            onClick = { select(index) },
+                                            modifier = Modifier.semantics {
+                                                if (multiple) {
+                                                    role = Role.Checkbox
+                                                    toggleableState = if (option.selected) ToggleableState.On else ToggleableState.Off
+                                                } else {
+                                                    role = Role.RadioButton
+                                                    selected = option.selected
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
+                            },
+                        ) {
+                            ui.feice.mochi.basic.Text(
+                                text = options.filter { it.selected }.joinToString(" / ") { it.title }.ifEmpty { "⌄" },
+                                style = MochiTheme.textStyles.body,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    },
+                )
             }
         }
     }

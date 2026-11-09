@@ -7,7 +7,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.toImmutableList
+import ui.feice.mochi.basic.MochiAlign
+import ui.feice.mochi.basic.MochiDropdown
+import ui.feice.mochi.basic.MochiDropdownDefaults
+import ui.feice.mochi.basic.MochiItem
+import ui.feice.mochi.basic.MochiTrigger
+import ui.feice.mochi.effect.glass.LocalMochiBackdrop
+import ui.feice.mochi.list.MochiListRow
+import ui.feice.mochi.theme.MochiTheme
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.disabled
 
@@ -43,21 +57,50 @@ fun GlassSelectPreference(
             modifier = rowModifier, summary = summary, enabled = actualEnabled,
             showValue = false, backdrop = backdrop.value, renderInRootScaffold = true,
         )
-        is GlassFormBackdrop.Mochi -> {
+        is GlassFormBackdrop.Mochi -> CompositionLocalProvider(LocalMochiBackdrop provides backdrop.value) {
             var expanded by remember { mutableStateOf(false) }
             LaunchedEffect(actualEnabled) { if (!actualEnabled) expanded = false }
-            GlassChoicePreference(
-                title = title,
-                summary = summary,
-                modifier = modifier,
-                enabled = actualEnabled,
-                expanded = expanded,
-                onExpandedChange = { expanded = it && actualEnabled },
-                options = items.mapIndexed { index, label ->
-                    ChoiceOption(title = label, selected = index == selectedIndex)
-                },
-                onOptionClick = onSelectedIndexChange,
-            )
+            val nativeItems = remember(items) { items.map { MochiItem(label = it) }.toImmutableList() }
+            val (anchorModifier, changeExpanded) = rememberMochiMenuActivation(
+                Modifier.widthIn(min = 34.dp, max = 120.dp), actualEnabled, expanded,
+            ) { expanded = it && actualEnabled }
+            MochiPreferenceContent(summary = summary, modifier = rowModifier, enabled = actualEnabled,
+                onClick = { expanded = true }) {
+                MochiListRow(
+                    title = title,
+                    enabled = actualEnabled,
+                    onClick = { if (actualEnabled) expanded = true },
+                    trailing = {
+                        MochiDropdown(
+                            expanded = expanded && actualEnabled,
+                            onExpandedChange = changeExpanded,
+                            items = nativeItems,
+                            selectedIndex = selectedIndex,
+                            enabled = actualEnabled,
+                            onItemClick = { index ->
+                                if (actualEnabled && index in items.indices) {
+                                    expanded = false
+                                    onSelectedIndexChange(index)
+                                }
+                            },
+                            modifier = anchorModifier,
+                            behavior = MochiDropdownDefaults.behavior(
+                                trigger = MochiTrigger.LongPress,
+                                align = MochiAlign.End,
+                            ),
+                            buttonMinHeight = 34.dp,
+                            buttonPadding = PaddingValues(horizontal = 12.dp),
+                        ) {
+                            ui.feice.mochi.basic.Text(
+                                text = items.getOrElse(selectedIndex) { "" },
+                                style = MochiTheme.textStyles.body,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    },
+                )
+            }
         }
     }
 }
