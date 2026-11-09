@@ -88,11 +88,10 @@ import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.CompactTopBar
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TextButton
+import hk.uwu.mixui.components.FormDialog
 import hk.uwu.mixui.components.TextField
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.window.WindowBottomSheet
-import top.yukonga.miuix.kmp.window.WindowDialog
 
 private sealed interface ScriptRoute {
     data object List : ScriptRoute
@@ -103,7 +102,7 @@ private sealed interface ScriptImportRequest {
     data class Project(val uri: Uri, val suggestedName: String) : ScriptImportRequest
 }
 
-private data class ScriptOverwriteRequest(
+private class ScriptOverwriteRequest(
     val title: String,
     val message: String,
     val confirm: () -> Unit,
@@ -238,7 +237,10 @@ fun ScriptManagementScreen(onBack: () -> Unit, bottomInnerPadding: Dp = 0.dp) {
         },
     )
     ScriptOverwriteDialog(
-        request = overwriteRequest,
+        show = overwriteRequest != null,
+        sessionKey = overwriteRequest,
+        title = overwriteRequest?.title.orEmpty(),
+        message = overwriteRequest?.message.orEmpty(),
         onDismiss = { overwriteRequest = null },
         onConfirm = {
             overwriteRequest?.confirm?.invoke()
@@ -644,28 +646,72 @@ internal fun ScriptRenameDialog(
     }
 }
 
+/** Native in-window confirmation; kept composed while the backend animates dismissal. */
 @Composable
-private fun ScriptOverwriteDialog(
-    request: ScriptOverwriteRequest?,
+internal fun ScriptOverwriteDialog(
+    show: Boolean,
+    title: String,
+    message: String,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
+    sessionKey: Any? = Unit,
 ) {
-    if (request == null) return
-    WindowDialog(show = true, title = request.title, onDismissRequest = onDismiss) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text(request.message, color = MixTheme.colorScheme.onSurfaceVariantSummary)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                TextButton(
-                    text = stringResource(R.string.script_cancel),
-                    modifier = Modifier.weight(1f),
-                    onClick = onDismiss,
+    var handled by remember(show, sessionKey) { mutableStateOf(false) }
+    val currentSession = remember {
+        mutableStateOf(sessionKey, androidx.compose.runtime.referentialEqualityPolicy())
+    }
+    currentSession.value = sessionKey
+    val currentShow by androidx.compose.runtime.rememberUpdatedState(show)
+    // The request is cleared immediately on dismissal, but its text must survive exit.
+    var lastTitle by remember { mutableStateOf(title) }
+    var lastMessage by remember { mutableStateOf(message) }
+    androidx.compose.runtime.SideEffect {
+        if (show) {
+            lastTitle = title
+            lastMessage = message
+        }
+    }
+    val dismiss = {
+        if (show && currentShow && currentSession.value === sessionKey && !handled) {
+            handled = true
+            onDismiss()
+        }
+    }
+    FormDialog(
+        show = show,
+        title = if (show) title else lastTitle,
+        onDismissRequest = dismiss,
+    ) {
+        // Do not reuse native clickable nodes across request generations: their
+        // retained semantics actions otherwise forward to the newest callback.
+        androidx.compose.runtime.key(sessionKey) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    if (show) message else lastMessage,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.testTag("script-overwrite-message"),
                 )
-                Button(
-                    onClick = onConfirm,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                ) {
-                    Text(stringResource(R.string.script_overwrite))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        modifier = Modifier.weight(1f).testTag("script-overwrite-cancel"),
+                        enabled = show && !handled,
+                        onClick = dismiss,
+                    ) {
+                        Text(stringResource(R.string.script_cancel))
+                    }
+                    Button(
+                        onClick = {
+                            if (show && currentShow && currentSession.value === sessionKey && !handled) {
+                                handled = true
+                                onConfirm()
+                            }
+                        },
+                        enabled = show && !handled,
+                        modifier = Modifier.weight(1f).testTag("script-overwrite-confirm"),
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                    ) {
+                        Text(stringResource(R.string.script_overwrite))
+                    }
                 }
             }
         }
