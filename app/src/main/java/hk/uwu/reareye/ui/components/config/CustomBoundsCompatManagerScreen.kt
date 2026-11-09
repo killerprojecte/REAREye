@@ -55,6 +55,7 @@ import hk.uwu.reareye.repository.bounds.CustomBoundsCompatConfigCodec
 import hk.uwu.reareye.repository.bounds.CustomBoundsFillMode
 import hk.uwu.reareye.repository.bounds.CustomBoundsMode
 import hk.uwu.reareye.ui.components.DialogFormColumn
+import hk.uwu.mixui.components.GlassFormDialog
 import hk.uwu.mixui.components.OverlayDialog
 import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
@@ -414,6 +415,22 @@ fun CustomBoundsCompatManagerScreen(
                     contentDescription = stringResource(R.string.scene_route_navigate_back))
             }
         },
+        overlayContent = {
+            CustomBoundsImportNotice(
+                title = stringResource(R.string.custom_bounds_rule_import_rejected_title),
+                message = rejectedImportPackage?.let {
+                    stringResource(R.string.custom_bounds_rule_import_app_missing, it)
+                },
+                tag = "bounds-import-rejected",
+                onDismiss = { rejectedImportPackage = null },
+            )
+            CustomBoundsImportNotice(
+                title = stringResource(R.string.custom_bounds_rule_import_failed_title),
+                message = importErrorMessage,
+                tag = "bounds-import-failed",
+                onDismiss = { importErrorMessage = null },
+            )
+        },
         actions = {
             TopBarIconButton(enabled = loaded, onClick = {
                 importLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*"))
@@ -701,30 +718,6 @@ fun CustomBoundsCompatManagerScreen(
     }
 
     OverlayDialog(
-        show = rejectedImportPackage != null,
-        title = stringResource(R.string.custom_bounds_rule_import_rejected_title),
-        onDismissRequest = { rejectedImportPackage = null },
-    ) {
-        DialogFormColumn {
-            Text(
-                text = stringResource(
-                    R.string.custom_bounds_rule_import_app_missing,
-                    rejectedImportPackage.orEmpty(),
-                ),
-                style = MixTheme.textStyles.body2,
-                color = MixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-            Button(
-                onClick = { rejectedImportPackage = null },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_confirm))
-            }
-        }
-    }
-
-    OverlayDialog(
         show = pendingOverwriteConfig != null,
         title = stringResource(R.string.custom_bounds_rule_import_overwrite_title),
         onDismissRequest = { pendingOverwriteConfig = null },
@@ -757,23 +750,48 @@ fun CustomBoundsCompatManagerScreen(
         }
     }
 
-    OverlayDialog(
-        show = importErrorMessage != null,
-        title = stringResource(R.string.custom_bounds_rule_import_failed_title),
-        onDismissRequest = { importErrorMessage = null },
-    ) {
-        DialogFormColumn {
-            Text(
-                text = importErrorMessage.orEmpty(),
-                style = MixTheme.textStyles.body2,
-                color = MixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-            Button(
-                onClick = { importErrorMessage = null },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_confirm))
+
+}
+
+/** Informational only: no editable field, anchored popup, or independent-window dependency. */
+@Composable
+private fun CustomBoundsImportNotice(
+    title: String,
+    message: String?,
+    tag: String,
+    onDismiss: () -> Unit,
+) {
+    // Keep the old text through native exit, but never allow its retained action
+    // to dismiss a newer import result, even when both messages are identical.
+    val token = remember(message) { Any() }
+    val currentToken by androidx.compose.runtime.rememberUpdatedState(token)
+    val currentMessage by androidx.compose.runtime.rememberUpdatedState(message)
+    var handled by remember(token) { mutableStateOf(false) }
+    var lastMessage by remember { mutableStateOf(message.orEmpty()) }
+    androidx.compose.runtime.SideEffect { if (message != null) lastMessage = message }
+    val dismiss = {
+        if (message != null && currentMessage != null && currentToken === token && !handled) {
+            handled = true
+            onDismiss()
+        }
+    }
+    GlassFormDialog(show = message != null, title = title, onDismissRequest = dismiss) {
+        androidx.compose.runtime.key(token) {
+            DialogFormColumn {
+                Text(
+                    text = message ?: lastMessage,
+                    style = MixTheme.textStyles.body2,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.testTag("$tag-message"),
+                )
+                Button(
+                    onClick = dismiss,
+                    enabled = message != null && !handled,
+                    colors = ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.fillMaxWidth().testTag("$tag-confirm"),
+                ) {
+                    Text(stringResource(R.string.rear_widget_confirm))
+                }
             }
         }
     }

@@ -37,9 +37,14 @@ internal object MochiBackend : MixUiRenderer {
         // Legacy children still read MIUIX's content color during staged migration.
         CompositionLocalProvider(top.yukonga.miuix.kmp.theme.LocalContentColor provides
             if (enabled) colors.contentColor else colors.disabledContentColor) {
-            ui.feice.mochi.basic.MochiButton(onClick = onClick,
+            val (buttonModifier, releaseClick) = rememberMochiButtonActivation(
                 modifier = modifier.semantics(mergeDescendants = true) {}
-                    .defaultMinSize(minWidth = minWidth), enabled = enabled,
+                    .defaultMinSize(minWidth = minWidth),
+                enabled = enabled,
+                onClick = onClick,
+            )
+            ui.feice.mochi.basic.MochiButton(onClick = releaseClick,
+                modifier = buttonModifier, enabled = enabled,
                 cornerRadius = cornerRadius, minHeight = minHeight, colors = vendorColors,
                 contentPadding = insideMargin, content = content)
         }

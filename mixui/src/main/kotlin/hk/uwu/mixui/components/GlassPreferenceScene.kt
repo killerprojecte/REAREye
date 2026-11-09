@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -22,11 +23,14 @@ import ui.feice.mochi.effect.glass.rememberMochiBackdrop
  * editors. Content is recorded; popup hosts are siblings outside that recording.
  * Any Scaffold in [content] must disable its popupHost. This host owns no title,
  * list, insets or scroll behavior and does not change its caller's page layout.
+ * Forms belong in [overlayContent], a sibling outside the recorded page. Keep
+ * them composed during exit so the native host owns dismissal and IME behavior.
  */
 @Composable
 fun GlassPreferenceScene(
     modifier: Modifier = Modifier,
     backgroundColor: Color = MixTheme.colorScheme.surface,
+    overlayContent: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     when (LocalMixUiBackend.current) {
@@ -35,14 +39,14 @@ fun GlassPreferenceScene(
             PreferenceScene(
                 modifier = modifier, backgroundColor = backgroundColor,
                 sourceModifier = if (source != null) Modifier.layerBackdrop(source) else Modifier,
-                backdrop = remember(source) { GlassFormBackdrop.Miuix(source) }, content = content,
+                backdrop = remember(source) { GlassFormBackdrop.Miuix(source) }, overlayContent = overlayContent, content = content,
             )
         }
         MixUiBackend.Mochi -> {
             val source = rememberMochiBackdrop(backgroundColor)
             PreferenceScene(
                 modifier = modifier, backgroundColor = backgroundColor, sourceModifier = Modifier.mochiBackdropSource(source),
-                backdrop = remember(source) { GlassFormBackdrop.Mochi(source) }, content = content,
+                backdrop = remember(source) { GlassFormBackdrop.Mochi(source) }, overlayContent = overlayContent, content = content,
             )
         }
     }
@@ -54,12 +58,18 @@ private fun PreferenceScene(
     backgroundColor: Color,
     sourceModifier: Modifier,
     backdrop: GlassFormBackdrop,
+    overlayContent: @Composable () -> Unit,
     content: @Composable () -> Unit,
 ) {
     Scaffold(modifier = modifier, containerColor = backgroundColor,
         contentWindowInsets = WindowInsets(0, 0, 0, 0)) {
-        GlassPreferenceOverlayHost(backdrop) {
-            Box(Modifier.fillMaxSize().then(sourceModifier).background(backgroundColor)) { content() }
+        Box(Modifier.fillMaxSize()) {
+            GlassPreferenceOverlayHost(backdrop) {
+                Box(Modifier.fillMaxSize().then(sourceModifier).background(backgroundColor)) { content() }
+            }
+            CompositionLocalProvider(LocalGlassFormBackdrop provides backdrop) {
+                overlayContent()
+            }
         }
     }
 }

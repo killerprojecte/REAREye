@@ -21,7 +21,7 @@ internal sealed interface GlassFormBackdrop {
 internal val LocalGlassFormBackdrop = staticCompositionLocalOf<GlassFormBackdrop?> { null }
 
 /**
- * Native glass form presentation for [GlassTopBarScaffold]'s overlayContent slot.
+ * Native glass form presentation for [GlassTopBarScaffold] or [GlassPreferenceScene]'s overlayContent slot.
  * Keep this call composed when [show] becomes false: the vendor owns its exit
  * animation, keyboard dismissal and overlay removal.
  *
@@ -41,7 +41,7 @@ fun GlassFormDialog(
 ) {
     val backdrop = LocalGlassFormBackdrop.current
     if (backdrop == null) {
-        check(!show) { "GlassFormDialog must be inside GlassTopBarScaffold.overlayContent" }
+        check(!show) { "GlassFormDialog must be inside GlassTopBarScaffold.overlayContent or GlassPreferenceScene.overlayContent" }
         return
     }
     val direction = LocalLayoutDirection.current

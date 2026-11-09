@@ -17,7 +17,12 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import hk.uwu.mixui.MixColorSchemeMode
 import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.MixUiHost
+import hk.uwu.mixui.components.GlassPreferenceScene
 import hk.uwu.mixui.components.Scaffold
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
 import hk.uwu.mixui.components.Text
 import hk.uwu.reareye.ui.components.script.ScriptOverwriteDialog
 import java.io.File
@@ -73,17 +78,33 @@ class ScriptOverwriteDialogTest {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().setContent {
                 MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
-                    Scaffold {
-                        Box(Modifier.fillMaxSize()) { Text("Offline script confirmation fixture") }
-                        BackHandler { pageBacks++ }
-                        ScriptOverwriteDialog(
-                            show = shown,
-                            sessionKey = session,
-                            title = if (shown) "Overwrite script?" else "",
-                            message = if (shown) message else "",
-                            onDismiss = { dismisses++; shown = false },
-                            onConfirm = { confirms++; shown = false },
-                        )
+                    GlassPreferenceScene(
+                        overlayContent = {
+                            ScriptOverwriteDialog(
+                                show = shown,
+                                sessionKey = session,
+                                title = if (shown) "Overwrite script?" else "",
+                                message = if (shown) message else "",
+                                onDismiss = { dismisses++; shown = false },
+                                onConfirm = { confirms++; shown = false },
+                            )
+                        },
+                    ) {
+                        Scaffold(popupHost = {}) {
+                            // Contrasting source bands make an accidentally empty/tinted-only
+                            // backdrop visible in the light/dark capture matrix.
+                            Box(Modifier.fillMaxSize().drawBehind {
+                                val bandHeight = size.height / 12f
+                                repeat(12) { index ->
+                                    drawRect(
+                                        color = if (index % 2 == 0) Color(0xFF426C91) else Color(0xFFC89262),
+                                        topLeft = Offset(0f, index * bandHeight),
+                                        size = Size(size.width, bandHeight),
+                                    )
+                                }
+                            }) { Text("Offline script confirmation fixture") }
+                            BackHandler { pageBacks++ }
+                        }
                     }
                 }
             }
@@ -155,6 +176,21 @@ class ScriptOverwriteDialogTest {
             compose.onNodeWithTag("script-overwrite-confirm").performClick()
             assertClosed()
             compose.runOnIdle { assertEquals(1, confirms) }
+        }
+    }
+
+    @Test fun outsideTapCancelsWithoutOverwritingAndCanReopen() {
+        for (backend in MixUiBackend.entries) for (dark in listOf(false, true)) {
+            host(backend, dark)
+            open("Outside tap must not overwrite this script.")
+            compose.onNode(isRoot() and hasAnyDescendant(hasTestTag("script-overwrite-confirm")), useUnmergedTree = true)
+                .performTouchInput { click(Offset(2f, 2f)) }
+            assertClosed()
+            compose.runOnIdle { assertEquals(1, dismisses); assertEquals(0, confirms) }
+            open("Reopened after outside cancellation.")
+            compose.onNodeWithTag("script-overwrite-cancel").performClick()
+            assertClosed()
+            compose.runOnIdle { assertEquals(2, dismisses); assertEquals(0, confirms) }
         }
     }
 

@@ -60,6 +60,12 @@ class CustomBoundsNativeTitleTest {
             }
             val back = compose.onNodeWithContentDescription(text(R.string.scene_route_navigate_back))
             val importButton = compose.onNodeWithContentDescription(text(R.string.script_import))
+            // Package/rule loading uses Dispatchers.IO; advancing Compose's clock
+            // alone is not completion of that real background load.
+            compose.waitUntil(10_000) {
+                compose.mainClock.advanceTimeBy(100)
+                !importButton.fetchSemanticsNode().config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled)
+            }
             val add = compose.onNodeWithContentDescription(text(R.string.custom_bounds_pick_apps))
             back.assertIsDisplayed(); importButton.assertIsEnabled(); add.assertIsEnabled()
             picture("initial")

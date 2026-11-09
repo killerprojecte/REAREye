@@ -85,7 +85,8 @@ import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.CompactTopBar
 import hk.uwu.mixui.components.Text
-import hk.uwu.mixui.components.FormDialog
+import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.GlassPreferenceScene
 import hk.uwu.mixui.components.TextField
 import hk.uwu.mixui.theme.MixTheme
 
@@ -159,90 +160,97 @@ fun ScriptManagementScreen(onBack: () -> Unit, bottomInnerPadding: Dp = 0.dp) {
     }
     LaunchedEffect(Unit) { refresh() }
     BackHandler(enabled = route !is ScriptRoute.List) { route = ScriptRoute.List }
-    when (val current = route) {
-        ScriptRoute.List -> ScriptList(
-            projects = projects,
-            bottomInnerPadding = bottomInnerPadding,
-            onBack = onBack,
-            onRefresh = ::refresh,
-            onImport = { importer.launch(arrayOf("*/*")) },
-            onExport = { project ->
-                pendingExport = project
-                pendingExportIsProject = project.kind != ScriptProjectKind.STANDALONE
-                exportLauncher.launch(if (pendingExportIsProject) "${project.name}.zip" else "${project.name}.lua")
-            },
-            onOpen = { route = ScriptRoute.Editor(it) },
-            onRename = { renameProject = it },
-            onDelete = { store.delete(it); refresh() },
-            onNew = {
-                val project =
-                    store.createStandalone("script_${System.currentTimeMillis()}", DEFAULT_SCRIPT)
+    // Record the script page, never the confirmation or its scrim. The native
+    // dialog stays in this window; editable naming/debug sheets keep their hosts.
+    GlassPreferenceScene(
+        overlayContent = {
+            ScriptOverwriteDialog(
+                show = overwriteRequest != null,
+                sessionKey = overwriteRequest,
+                title = overwriteRequest?.title.orEmpty(),
+                message = overwriteRequest?.message.orEmpty(),
+                onDismiss = { overwriteRequest = null },
+                onConfirm = {
+                    overwriteRequest?.confirm?.invoke()
+                    overwriteRequest = null
+                },
+            )
+        },
+    ) {
+        when (val current = route) {
+            ScriptRoute.List -> ScriptList(
+                projects = projects,
+                bottomInnerPadding = bottomInnerPadding,
+                onBack = onBack,
+                onRefresh = ::refresh,
+                onImport = { importer.launch(arrayOf("*/*")) },
+                onExport = { project ->
+                    pendingExport = project
+                    pendingExportIsProject = project.kind != ScriptProjectKind.STANDALONE
+                    exportLauncher.launch(if (pendingExportIsProject) "${project.name}.zip" else "${project.name}.lua")
+                },
+                onOpen = { route = ScriptRoute.Editor(it) },
+                onRename = { renameProject = it },
+                onDelete = { store.delete(it); refresh() },
+                onNew = {
+                    val project =
+                        store.createStandalone("script_${System.currentTimeMillis()}", DEFAULT_SCRIPT)
+                    refresh()
+                    route = ScriptRoute.Editor(project)
+                },
+                onNewProject = {
+                    val project =
+                        store.createProject("project_${System.currentTimeMillis()}", DEFAULT_PROJECT)
+                    refresh()
+                    route = ScriptRoute.Editor(project)
+                },
+            )
+
+            is ScriptRoute.Editor -> ScriptEditor(
+                project = current.project,
+                store = store,
+                bottomInnerPadding = bottomInnerPadding,
+                onBack = { route = ScriptRoute.List },
+                onSaved = { refresh() },
+            )
+        }
+        ScriptRenameDialog(
+            show = renameProject != null,
+            title = stringResource(R.string.script_rename_project),
+            initialName = renameProject?.name.orEmpty(),
+            onDismiss = { renameProject = null },
+            onConfirm = { name ->
+                renameProject?.let { store.renameProject(it, name) }
+                renameProject = null
                 refresh()
-                route = ScriptRoute.Editor(project)
-            },
-            onNewProject = {
-                val project =
-                    store.createProject("project_${System.currentTimeMillis()}", DEFAULT_PROJECT)
-                refresh()
-                route = ScriptRoute.Editor(project)
             },
         )
-
-        is ScriptRoute.Editor -> ScriptEditor(
-            project = current.project,
-            store = store,
-            bottomInnerPadding = bottomInnerPadding,
-            onBack = { route = ScriptRoute.List },
-            onSaved = { refresh() },
+        val projectImport = importRequest as? ScriptImportRequest.Project
+        ScriptRenameDialog(
+            show = projectImport != null,
+            title = stringResource(R.string.script_import_project),
+            initialName = projectImport?.suggestedName.orEmpty(),
+            onDismiss = { importRequest = null },
+            onConfirm = { name ->
+                projectImport?.let { request ->
+                    importRequest = null
+                    if (store.hasProject(name)) {
+                        overwriteRequest = ScriptOverwriteRequest(
+                            title = context.getString(R.string.script_overwrite_title),
+                            message = context.getString(R.string.script_overwrite_project, name),
+                            confirm = {
+                                store.importProject(request.uri, name, overwrite = true)
+                                refresh()
+                            },
+                        )
+                    } else {
+                        store.importProject(request.uri, name, overwrite = false)
+                        refresh()
+                    }
+                }
+            },
         )
     }
-    ScriptRenameDialog(
-        show = renameProject != null,
-        title = stringResource(R.string.script_rename_project),
-        initialName = renameProject?.name.orEmpty(),
-        onDismiss = { renameProject = null },
-        onConfirm = { name ->
-            renameProject?.let { store.renameProject(it, name) }
-            renameProject = null
-            refresh()
-        },
-    )
-    val projectImport = importRequest as? ScriptImportRequest.Project
-    ScriptRenameDialog(
-        show = projectImport != null,
-        title = stringResource(R.string.script_import_project),
-        initialName = projectImport?.suggestedName.orEmpty(),
-        onDismiss = { importRequest = null },
-        onConfirm = { name ->
-            projectImport?.let { request ->
-                importRequest = null
-                if (store.hasProject(name)) {
-                    overwriteRequest = ScriptOverwriteRequest(
-                        title = context.getString(R.string.script_overwrite_title),
-                        message = context.getString(R.string.script_overwrite_project, name),
-                        confirm = {
-                            store.importProject(request.uri, name, overwrite = true)
-                            refresh()
-                        },
-                    )
-                } else {
-                    store.importProject(request.uri, name, overwrite = false)
-                    refresh()
-                }
-            }
-        },
-    )
-    ScriptOverwriteDialog(
-        show = overwriteRequest != null,
-        sessionKey = overwriteRequest,
-        title = overwriteRequest?.title.orEmpty(),
-        message = overwriteRequest?.message.orEmpty(),
-        onDismiss = { overwriteRequest = null },
-        onConfirm = {
-            overwriteRequest?.confirm?.invoke()
-            overwriteRequest = null
-        },
-    )
 }
 
 @Composable
@@ -673,7 +681,7 @@ internal fun ScriptOverwriteDialog(
             onDismiss()
         }
     }
-    FormDialog(
+    GlassFormDialog(
         show = show,
         title = if (show) title else lastTitle,
         onDismissRequest = dismiss,
