@@ -12,8 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import hk.uwu.mixui.*
@@ -66,7 +68,6 @@ class SurfacePrimitivesContractTest {
     @Test fun solidSurfaceClipsPropagatesColorAndRespectsEnabledClicks() {
         for (backend in MixUiBackend.entries) for (dark in listOf(false, true)) {
             var clicks = 0
-            var observed = Color.Unspecified
             open(backend, dark) {
                 Column(Modifier.background(Color.White)) {
                     Surface(Modifier.size(100.dp, 60.dp).testTag("plain"),
@@ -76,9 +77,6 @@ class SurfacePrimitivesContractTest {
                     }
                     Surface(Modifier.size(100.dp, 40.dp).testTag("content"), color = Color.Red,
                         contentColor = Color.Green) {
-                        val local = if (backend == MixUiBackend.Mochi) ui.feice.mochi.theme.LocalContentColor.current
-                            else top.yukonga.miuix.kmp.theme.LocalContentColor.current
-                        SideEffect { observed = local }
                         Text("CONTENT", style = TextStyle.Default)
                     }
                     Surface(Modifier.size(100.dp, 40.dp).testTag("click"), onClick = { clicks++ }) { Text("Click") }
@@ -91,7 +89,13 @@ class SurfacePrimitivesContractTest {
             val plain = compose.onNodeWithTag("plain").captureToImage().asAndroidBitmap()
             assertEquals(android.graphics.Color.BLUE, plain.getPixel(50, 30))
             assertNotEquals("Rounded surface clips overflowing children", android.graphics.Color.BLUE, plain.getPixel(0, 0))
-            assertEquals(Color.Green, observed)
+            // Inspect the native text's resolved color through Compose semantics. Supplying
+            // onTextLayout would switch Mochi to the rich-text fallback instead of its native Text.
+            val textLayouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText("CONTENT", useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action -> action(textLayouts) }
+            assertEquals("Expected one native text layout", 1, textLayouts.size)
+            assertEquals(Color.Green, textLayouts.single().layoutInput.style.color)
             val content = compose.onNodeWithTag("content").captureToImage().asAndroidBitmap()
             assertEquals(android.graphics.Color.RED, content.getPixel(98, 38))
             assertTrue("Default text consumes contentColor", (0 until content.height).any { y ->

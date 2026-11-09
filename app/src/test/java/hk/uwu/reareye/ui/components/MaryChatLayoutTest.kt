@@ -135,9 +135,10 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 import hk.uwu.mixui.components.Scaffold
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
+import hk.uwu.mixui.MixColorSchemeMode
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.MixUiHost
+import hk.uwu.mixui.theme.MixTheme
 import java.io.File
 
 /** Real page layout and controls, measured and drawn by Compose on the JVM. */
@@ -592,7 +593,7 @@ class MaryChatLayoutTest {
 
     @Test
     fun errorsUseLegibleRedForNoticesAndToolResults() {
-        host(ColorSchemeMode.Dark) {
+        host(MixColorSchemeMode.Dark) {
             Column(
                 Modifier
                     .requiredSize(360.dp, 640.dp)
@@ -1014,12 +1015,12 @@ class MaryChatLayoutTest {
                 AskOption("water", "Water")
             )
         )
-        host(ColorSchemeMode.Dark) {
+        host(MixColorSchemeMode.Dark) {
             val expansion = remember { ToolCardExpansion() }
             Box(
                 Modifier
                     .requiredSize(360.dp, 760.dp)
-                    .background(MiuixTheme.colorScheme.background)
+                    .background(MixTheme.colorScheme.background)
                     .testTag("layout-container")
             ) {
                 Column(Modifier
@@ -1084,12 +1085,12 @@ class MaryChatLayoutTest {
             ),
             CompletableDeferred(), "reference-approval"
         )
-        host(ColorSchemeMode.Dark) {
+        host(MixColorSchemeMode.Dark) {
             val expansion = remember { ToolCardExpansion() }
             Column(
                 Modifier
                     .requiredSize(360.dp, 760.dp)
-                    .background(MiuixTheme.colorScheme.background)
+                    .background(MixTheme.colorScheme.background)
                     .padding(8.dp)
                     .testTag("layout-container"),
                 verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
@@ -1204,30 +1205,30 @@ class MaryChatLayoutTest {
 
     @Test
     fun approvalComposerIconsMatchSelectedMenuAccentAndKeepDisabledHueInBothThemes() {
-        val theme = mutableStateOf(ColorSchemeMode.Light)
+        val theme = mutableStateOf(MixColorSchemeMode.Light)
         var themePrimary = Color.Unspecified
         var selections = 0
         host {
-            MiuixTheme(ThemeController(theme.value)) {
-                val currentPrimary = MiuixTheme.colorScheme.primary
+            MixUiHost(backend = MixUiBackend.Miuix, colorMode = theme.value) {
+                val currentPrimary = MixTheme.colorScheme.primary
                 SideEffect { themePrimary = currentPrimary }
                 Scaffold(popupHost = {}) {
                     Column(
                         Modifier
                             .fillMaxSize()
-                            .background(MiuixTheme.colorScheme.background)
+                            .background(MixTheme.colorScheme.background)
                             .padding(24.dp)
                             .testTag("layout-container")
                     ) {
                         BasicText(
                             "${theme.value.name}: enabled / disabled",
-                            style = MiuixTheme.textStyles.body2.copy(color = MiuixTheme.colorScheme.onSurfaceContainer)
+                            style = MixTheme.textStyles.body2.copy(color = MixTheme.colorScheme.onSurfaceContainer)
                         )
                         ApprovalMode.entries.forEach { mode ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 BasicText(
                                     mode.name, modifier = Modifier.weight(1f),
-                                    style = MiuixTheme.textStyles.body2.copy(color = MiuixTheme.colorScheme.onSurfaceContainer)
+                                    style = MixTheme.textStyles.body2.copy(color = MixTheme.colorScheme.onSurfaceContainer)
                                 )
                                 listOf(true, false).forEach { enabled ->
                                     ApprovalModeButton(mode, enabled, {}, { selections++ })
@@ -1238,7 +1239,7 @@ class MaryChatLayoutTest {
                 }
             }
         }
-        listOf(ColorSchemeMode.Light, ColorSchemeMode.Dark).forEach { scheme ->
+        listOf(MixColorSchemeMode.Light, MixColorSchemeMode.Dark).forEach { scheme ->
             compose.runOnIdle { theme.value = scheme }
             compose.waitForIdle()
             ApprovalMode.entries.forEachIndexed { index, mode ->
@@ -1999,7 +2000,7 @@ class MaryChatLayoutTest {
     }
 
     private fun host(
-        mode: ColorSchemeMode = ColorSchemeMode.Light,
+        mode: MixColorSchemeMode = MixColorSchemeMode.Light,
         glassSheets: Boolean = false,
         content: @Composable () -> Unit
     ) {
@@ -2007,8 +2008,8 @@ class MaryChatLayoutTest {
             val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity = controller
             controller.get().setContent {
-                MiuixTheme(ThemeController(mode)) {
-                    val scheme = MiuixTheme.colorScheme
+                MixUiHost(backend = MixUiBackend.Miuix, colorMode = mode) {
+                    val scheme = MixTheme.colorScheme
                     SideEffect {
                         primary = scheme.primary
                         surfaceContainer = scheme.surfaceContainer

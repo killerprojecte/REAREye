@@ -170,6 +170,80 @@ internal fun Modifier.marySidebarOpenGesture(
         )
 }
 
+/** The native navigation bar owns ordinary tab drags. Only Mary's opening-direction
+ * gesture takes priority here; unlike arbitrary page children it is not scrollable content. */
+@Composable
+internal fun Modifier.marySidebarNavigationOpenGesture(
+    state: MarySidebarGestureState,
+    enabled: () -> Boolean,
+    beforeOpen: () -> Unit,
+    onOpen: () -> Unit,
+): Modifier {
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val density = LocalDensity.current
+    val distance = with(density) { 64.dp.toPx() }
+    val flingDistance = with(density) { 32.dp.toPx() }
+    val minimumFling = with(density) { 900.dp.toPx() }
+    val maxPanelWidth = with(density) { 360.dp.toPx() }
+    val enabledNow by rememberUpdatedState(enabled)
+    val before by rememberUpdatedState(beforeOpen)
+    val open by rememberUpdatedState(onOpen)
+    return pointerInput(state, rtl, distance, flingDistance, minimumFling, maxPanelWidth) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            if (down.isConsumed || !enabledNow()) return@awaitEachGesture
+            val sign = if (rtl) -1f else 1f
+            val panelWidth = minOf(size.width * 0.82f, maxPanelWidth).coerceAtLeast(1f)
+            val tracker = VelocityTracker()
+            tracker.addPosition(down.uptimeMillis, down.position)
+            // Navigation opens its hold-to-select menu at half the platform long-press delay.
+            val holdTimeout = maxOf(180L, viewConfiguration.longPressTimeoutMillis / 2)
+            var token: Int? = null
+            var finished = false
+            try {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (event.changes.count { it.pressed } > 1) {
+                        if (token != null) event.changes.forEach { it.consume() }
+                        break
+                    }
+                    // A consumed release is cancellation, never an opening commitment.
+                    if (change.isConsumed || !enabledNow()) break
+                    tracker.addPosition(change.uptimeMillis, change.position)
+                    val dx = (change.position.x - down.position.x) * sign
+                    val dy = change.position.y - down.position.y
+                    if (token == null) {
+                        if (!change.pressed || change.uptimeMillis - down.uptimeMillis >= holdTimeout) break
+                        if (abs(dx) <= viewConfiguration.touchSlop && abs(dy) <= viewConfiguration.touchSlop) continue
+                        if (dx <= abs(dy)) break
+                        token = state.begin(0f, opening = true)
+                    }
+                    val active = token ?: break
+                    if (!state.active(active)) break
+                    if (!change.pressed) {
+                        val velocity = tracker.calculateVelocity().x * sign
+                        val accepted = when {
+                            velocity <= -minimumFling -> false
+                            velocity >= minimumFling -> dx >= flingDistance
+                            else -> dx >= distance
+                        }
+                        state.finishOpening(active, accepted)
+                        finished = true
+                        change.consume()
+                        if (accepted) { before(); open() }
+                        break
+                    }
+                    state.update(active, dx / panelWidth)
+                    change.consume()
+                }
+            } finally {
+                token?.let { if (!finished && state.active(it)) state.finishOpening(it, false) }
+            }
+        }
+    }
+}
+
 private class MaryOpenObservation(val panelWidth: Float) {
     var dx = 0f
     var intent = 0

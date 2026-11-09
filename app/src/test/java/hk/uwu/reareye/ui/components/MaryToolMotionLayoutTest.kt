@@ -53,9 +53,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
+import hk.uwu.mixui.MixColorSchemeMode
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.MixUiHost
 import java.io.File
 import kotlin.math.abs
 
@@ -381,7 +381,7 @@ class MaryToolMotionLayoutTest {
             val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity = controller
             controller.get().setContent {
-                MiuixTheme(ThemeController(ColorSchemeMode.Light)) { content() }
+                MixUiHost(backend = MixUiBackend.Miuix, colorMode = MixColorSchemeMode.Light) { content() }
             }
         }
         compose.waitForIdle()

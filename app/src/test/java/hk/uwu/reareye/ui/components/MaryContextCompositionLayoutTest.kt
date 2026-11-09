@@ -42,9 +42,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
+import hk.uwu.mixui.MixColorSchemeMode
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.MixUiHost
+import hk.uwu.mixui.theme.MixTheme
 import java.io.File
 
 /** Production header/composer/navigation/sidebar with deterministic local composition snapshots. */
@@ -215,7 +216,7 @@ class MaryContextCompositionLayoutTest {
     @Test @Config(qualifiers = "zh-rCN-w320dp-h568dp-mdpi")
     fun narrowDarkPopupKeepsSelectedDetailInsideViewport() {
         useComposition()
-        host(ColorSchemeMode.Dark)
+        host(MixColorSchemeMode.Dark)
         openPopup()
         selectItem("mary-context-legend-TOOL_RESULTS")
         assertPopupWithinViewport()
@@ -314,12 +315,12 @@ class MaryContextCompositionLayoutTest {
         node("mary-context-popup").assertDoesNotExist()
     }
 
-    @Test fun compactLegendPressedLightKeepsFullTouchArea() { capturePressedLegend(ColorSchemeMode.Light, "refined-pressed-light") }
+    @Test fun compactLegendPressedLightKeepsFullTouchArea() { capturePressedLegend(MixColorSchemeMode.Light, "refined-pressed-light") }
 
     @Test @Config(qualifiers = "zh-rCN-w320dp-h568dp-mdpi")
-    fun compactLegendPressedDarkKeepsFullTouchArea() { capturePressedLegend(ColorSchemeMode.Dark, "refined-pressed-dark") }
+    fun compactLegendPressedDarkKeepsFullTouchArea() { capturePressedLegend(MixColorSchemeMode.Dark, "refined-pressed-dark") }
 
-    private fun capturePressedLegend(mode: ColorSchemeMode, name: String) {
+    private fun capturePressedLegend(mode: MixColorSchemeMode, name: String) {
         useComposition(); host(mode); openPopup()
         val tag = "mary-context-legend-USER"
         node("mary-context-legend-list").performScrollToNode(hasTestTag(tag))
@@ -402,7 +403,7 @@ class MaryContextCompositionLayoutTest {
         compose.runOnUiThread {
             activity = Robolectric.buildActivity(ContextPreviewActivity::class.java).setup().also {
                 it.get().setContent {
-                    MiuixTheme(ThemeController(ColorSchemeMode.Light)) {
+                    MixUiHost(backend = MixUiBackend.Miuix, colorMode = MixColorSchemeMode.Light) {
                         CompactTabs(labels.value, index.value, { chosen -> index.value = chosen }, Modifier.testTag("direct-tabs"))
                     }
                 }
@@ -528,13 +529,13 @@ class MaryContextCompositionLayoutTest {
         assertTrue("Popup must remain compact", popup.size.width <= 340)
     }
 
-    private fun host(mode: ColorSchemeMode = ColorSchemeMode.Light, fontScale: Float = 1f) {
+    private fun host(mode: MixColorSchemeMode = MixColorSchemeMode.Light, fontScale: Float = 1f) {
         compose.runOnUiThread {
             ContextPreviewActivity.testFontScale = fontScale
             activity = Robolectric.buildActivity(ContextPreviewActivity::class.java).setup().also { controller ->
                 controller.get().enableEdgeToEdge()
                 controller.get().setContent {
-                    MiuixTheme(ThemeController(mode)) {
+                    MixUiHost(backend = MixUiBackend.Miuix, colorMode = mode) {
                     hk.uwu.mixui.components.GlassPreferenceScene {
                         inputModes = androidx.compose.ui.platform.LocalInputModeManager.current
                         val pageHost = remember { MarySidebarPageGestureHost() }
@@ -546,7 +547,7 @@ class MaryContextCompositionLayoutTest {
                             beforeOpen = { focus.clearFocus(force = true); keyboard?.hide(); menuFocus.requestFocus() },
                             onOpen = { sidebar.value = true })
                         CompositionLocalProvider(LocalMarySidebarPageGestureHost provides pageHost) {
-                            Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.background)
+                            Box(Modifier.fillMaxSize().background(MixTheme.colorScheme.background)
                                 .marySidebarPageGesture(pageHost, true).testTag("context-host")) {
                                 Box(Modifier.fillMaxSize().marySidebarBackground(pageHost)) {
                                     MaryFloatingChatLayout(bottomInset = 80.dp, modifier = Modifier.fillMaxSize(),

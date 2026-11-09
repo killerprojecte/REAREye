@@ -95,6 +95,8 @@ import com.kyant.capsule.ContinuousCapsule
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.config.ConfigType
 import hk.uwu.reareye.ui.theme.AppNavigationBarStyle
+import hk.uwu.reareye.ui.screen.LocalMarySidebarPageGestureHost
+import hk.uwu.reareye.ui.screen.marySidebarNavigationGesture
 import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
@@ -260,7 +262,8 @@ fun AppNavigationBar(
         },
     )
 
-    Box(modifier.onGloballyPositioned { navigationHostPosition = it.positionInRoot() }) {
+    Box(modifier.marySidebarNavigationGesture(LocalMarySidebarPageGestureHost.current)
+        .onGloballyPositioned { navigationHostPosition = it.positionInRoot() }) {
         NavigationBar(
             items = items.map { item ->
                 NavigationItem(

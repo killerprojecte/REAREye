@@ -26,9 +26,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
+import hk.uwu.mixui.MixColorSchemeMode
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.MixUiHost
+import hk.uwu.mixui.theme.MixTheme
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -61,12 +62,12 @@ class MaryContextRingRenderingTest {
     }
 
     @Test
-    fun lightThemeRingStartsAtTopAndFillsClockwise() = assertRingPixels(ColorSchemeMode.Light)
+    fun lightThemeRingStartsAtTopAndFillsClockwise() = assertRingPixels(MixColorSchemeMode.Light)
 
     @Test
-    fun darkThemeRingStartsAtTopAndFillsClockwise() = assertRingPixels(ColorSchemeMode.Dark)
+    fun darkThemeRingStartsAtTopAndFillsClockwise() = assertRingPixels(MixColorSchemeMode.Dark)
 
-    private fun assertRingPixels(mode: ColorSchemeMode) {
+    private fun assertRingPixels(mode: MixColorSchemeMode) {
         // Quadrants are ordered clockwise from twelve o'clock: NE, SE, SW, NW.
         val cases = listOf(
             RingCase("unknown", MaryUsageSummary(null, 100, null), 0),
@@ -85,10 +86,10 @@ class MaryContextRingRenderingTest {
             val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity = controller
             controller.get().setContent {
-                MiuixTheme(ThemeController(mode)) {
-                    primary = MiuixTheme.colorScheme.primary
-                    track = MiuixTheme.colorScheme.outline
-                    Column(Modifier.background(MiuixTheme.colorScheme.background)) {
+                MixUiHost(backend = MixUiBackend.Miuix, colorMode = mode) {
+                    primary = MixTheme.colorScheme.primary
+                    track = MixTheme.colorScheme.outline
+                    Column(Modifier.background(MixTheme.colorScheme.background)) {
                         cases.forEach { ContextUsageButton(it.summary) }
                     }
                 }

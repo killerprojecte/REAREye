@@ -47,9 +47,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
+import hk.uwu.mixui.MixColorSchemeMode
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.MixUiHost
+import hk.uwu.mixui.theme.MixTheme
 
 /**
  * Render contracts, not a second parser or an AST snapshot. Every fixture contains a transformation
@@ -426,10 +427,10 @@ class MarkdownSyntaxRenderTest {
             val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity = controller
             controller.get().setContent {
-                MiuixTheme(ThemeController(ColorSchemeMode.Light)) {
+                MixUiHost(backend = MixUiBackend.Miuix, colorMode = MixColorSchemeMode.Light) {
                     Box(
                         Modifier
-                            .background(MiuixTheme.colorScheme.background)
+                            .background(MixTheme.colorScheme.background)
                             .width(320.dp)
                             .verticalScroll(rememberScrollState())
                     ) { content() }

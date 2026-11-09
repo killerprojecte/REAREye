@@ -94,6 +94,7 @@ class NativeNavigationInteractionTest {
                     ) {
                         val backdrop = rememberNavigationBackdrop()
                         Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0)) {
+                            hk.uwu.mixui.components.GlassBottomSheetScene {
                             Box(Modifier.fillMaxSize().testTag("scene")) {
                                 Column(Modifier.fillMaxSize().navigationBackdrop(backdrop)) {
                                     repeat(20) { row ->
@@ -125,6 +126,7 @@ class NativeNavigationInteractionTest {
                                     onSecondaryEnd = { ends += it },
                                     onEditAction = { edits += it },
                                 )
+                            }
                             }
                         }
                     }

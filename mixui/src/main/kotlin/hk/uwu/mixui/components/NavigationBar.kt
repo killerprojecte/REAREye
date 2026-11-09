@@ -202,6 +202,10 @@ fun NavigationBar(
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 bridge.selection.begin()
+                // Ancestors may own an opening/page drag while the native bar still receives
+                // the hit path. Reject its callbacks, but never consume the owner's next event.
+                var ancestorOwnsGesture = down.isConsumed
+                if (ancestorOwnsGesture) bridge.selection.cancel()
                 var secondaryStarted = false
                 var secondaryFinished = false
                 var pointerEnded = false
@@ -212,7 +216,7 @@ fun NavigationBar(
                     val span = (size.width - horizontalInset * 2) / renderedItems.size
                     val index = if (span > 0f) ((x - horizontalInset) / span).toInt().coerceIn(renderedItems.indices) else 0
                     var releaseIndex = index
-                    val canOpen = renderedItems[index].secondaryActionLabel != null
+                    val canOpen = !ancestorOwnsGesture && renderedItems[index].secondaryActionLabel != null
                     val timeout = maxOf(180L, viewConfiguration.longPressTimeoutMillis / 2)
                     val held = canOpen && withTimeoutOrNull(timeout) {
                         while (true) {
@@ -223,8 +227,9 @@ fun NavigationBar(
                                 bridge.selection.cancel()
                                 pointerEnded = true
                             } else {
-                                // Compose CANCEL is a consumed release dispatched through normal passes.
-                                if (change.previousPressed && !change.pressed && change.isConsumed) {
+                                // Initial-pass consumption belongs to an ancestor (or system CANCEL).
+                                if (change.isConsumed) {
+                                    ancestorOwnsGesture = true
                                     bridge.selection.cancel()
                                 }
                                 bridge.selection.move(
@@ -237,7 +242,7 @@ fun NavigationBar(
                                 val releaseX = if (direction == LayoutDirection.Rtl) size.width - change.position.x else change.position.x
                                 releaseIndex = if (span > 0f) ((releaseX - horizontalInset) / span).toInt().coerceIn(renderedItems.indices) else index
                                 pointerEnded = !change.pressed
-                                if (bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled) change.consume()
+                                if (!ancestorOwnsGesture && bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled) change.consume()
                             }
                             awaitPointerEvent(PointerEventPass.Final)
                             if (pointerEnded || bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled || bridge.selection.intent == NavigationSelectionGate.Intent.Drag) {
@@ -265,8 +270,9 @@ fun NavigationBar(
                             bridge.selection.cancel()
                             pointerEnded = true
                         } else {
-                            // Compose CANCEL is a consumed release dispatched through normal passes.
-                            if (change.previousPressed && !change.pressed && change.isConsumed) {
+                            // Initial-pass consumption belongs to an ancestor (or system CANCEL).
+                            if (change.isConsumed) {
+                                ancestorOwnsGesture = true
                                 bridge.selection.cancel()
                             }
                             bridge.selection.move(
@@ -279,7 +285,7 @@ fun NavigationBar(
                             if (bridge.selection.intent == NavigationSelectionGate.Intent.Secondary) {
                                 drag(bridge.origin + change.position)
                             }
-                            if (bridge.selection.intent == NavigationSelectionGate.Intent.Secondary || bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled) change.consume()
+                            if (!ancestorOwnsGesture && (bridge.selection.intent == NavigationSelectionGate.Intent.Secondary || bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled)) change.consume()
                             val releaseX = if (direction == LayoutDirection.Rtl) size.width - change.position.x else change.position.x
                             releaseIndex = if (span > 0f) ((releaseX - horizontalInset) / span).toInt().coerceIn(renderedItems.indices) else index
                             pointerEnded = !change.pressed

@@ -82,6 +82,23 @@ internal fun Modifier.marySidebarPageGesture(host: MarySidebarPageGestureHost, e
     )
 }
 
+/** Let only an active Mary's opening drag take precedence over native navigation dragging. */
+@Composable
+internal fun Modifier.marySidebarNavigationGesture(host: MarySidebarPageGestureHost?): Modifier {
+    val activeHost = host ?: return this
+    val registration = activeHost.registration ?: return this
+    val enabled by rememberUpdatedState(activeHost.pageEnabled?.value != false)
+    fun current() = enabled && activeHost.registration === registration && registration.enabled() &&
+        (!activeHost.overlayVisible || registration.state.isOpening)
+    if (!current()) return this
+    return marySidebarNavigationOpenGesture(
+        registration.state,
+        enabled = { current() },
+        beforeOpen = { if (current()) registration.beforeOpen() },
+        onOpen = { if (current()) registration.open() },
+    )
+}
+
 internal class MarySidebarPreviewRegistration(val dismiss: () -> Unit, val modal: () -> Boolean, val content: @Composable () -> Unit)
 
 /** Portal into the Activity's last layer, above the sibling navigation without a new Window. */
