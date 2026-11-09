@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
@@ -18,27 +18,19 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
+import androidx.compose.ui.res.stringResource
+import hk.uwu.reareye.R
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Icon
-import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.GlassPreferenceScene
+import hk.uwu.mixui.components.pageScrollFeedback
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import hk.uwu.mixui.theme.MixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 @Composable
 fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
@@ -59,26 +51,7 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
     onReset: () -> Unit,
     editorItems: LazyListScope.(TSchema, TConfig) -> Unit,
 ) {
-    // The scrolling list only shares this behavior with a top bar when this scaffold renders one.
-    // The embedded variant has no bar of its own, and a MiuixScrollBehavior without a bar keeps
-    // its default -Float.MAX_VALUE height offset limit, which lets the nested scroll connection
-    // claim every upward drag and makes the list look unscrollable. Pin the limit to zero so a
-    // bar-less behavior is a no-op, and let the real bar write its own limit while it lays out.
-    val scrollBehavior = MiuixScrollBehavior(
-        state = rememberTopAppBarState(initialHeightOffsetLimit = 0f),
-    )
-    val contentScrollModifier = if (embedded) {
-        Modifier
-    } else {
-        Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
-    }
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
-    val contentSourceModifier = if (embedded) {
-        modifier
-    } else {
-        modifier.rearAcrylicSource(hazeState)
-    }
+    val listState = rememberLazyListState()
 
     BackHandler(onBack = onBack)
 
@@ -88,7 +61,7 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .then(contentSourceModifier)
+                        .then(modifier)
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -106,7 +79,7 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .then(contentSourceModifier)
+                        .then(modifier)
                         .padding(paddingValues)
                         .padding(16.dp),
                     contentAlignment = Alignment.Center,
@@ -120,13 +93,12 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
 
             else -> {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .then(contentSourceModifier)
+                        .then(modifier)
                         .imePadding()
-                        .then(contentScrollModifier)
-                        .scrollEndHaptic()
-                        .overScrollVertical()
+                        .pageScrollFeedback()
                         .padding(horizontal = 12.dp),
                     contentPadding = PaddingValues(
                         top = paddingValues.calculateTopPadding() + 12.dp,
@@ -165,31 +137,20 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
         }
     }
 
-    GlassPreferenceScene {
     if (embedded) {
-        screenContent(contentPadding)
+        // No independent bar/nested-scroll consumer in an embedded editor.
+        GlassPreferenceScene { screenContent(contentPadding) }
     } else {
-        Scaffold(
-            popupHost = {},
-            topBar = {
-                TopAppBar(
-                    modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                    color = Color.Transparent,
-                    title = title,
-                    scrollBehavior = scrollBehavior,
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = null,
-                            )
-                        }
-                    },
-                )
+        GlassTopBarScaffold(
+            title = title,
+            isContentScrolled = listState.canScrollBackward,
+            contentListState = listState,
+            navigationIcon = {
+                TopBarIconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.scene_route_navigate_back))
+                }
             },
-            contentWindowInsets = androidx.compose.foundation.layout.WindowInsets.systemBars,
             content = screenContent,
         )
-    }
     }
 }
