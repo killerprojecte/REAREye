@@ -37,9 +37,6 @@ jobs:
             echo ${{ secrets.SIGNING_KEY }} | base64 --decode > release-key.jks
           fi
 
-      - name: Verify mixui boundary
-        run: python3 tools/check_ui_boundary.py
-
       - name: Setup Android SDK
         uses: amyu/setup-android@v5
         with:

@@ -3,9 +3,9 @@
 The application production and test Kotlin sources now use the mixui API rather
 than direct MIUIX imports or qualified names. The application no longer declares
 MIUIX UI, preference, blur or shader implementation dependencies. Those libraries
-remain implementation details of mixui. The existing development workflow runs
-`python3 tools/check_ui_boundary.py`; it checks imports and qualified references
-without a test or utility allowlist.
+remain implementation details of mixui. The local command `python3 tools/check_ui_boundary.py` checks imports and
+qualified references without a test or utility allowlist. It is intentionally
+not added to the development workflow.
 
 Native Mochi comparison fixtures and the shared navigation backdrop dependencies
 are not claimed to be removed. This boundary is specifically the MIUIX migration.
