@@ -15,6 +15,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -141,6 +142,10 @@ fun MaryScreen(
     // bar keeps that padding constant.
     LaunchedEffect(controller) { controller.refreshConfiguration() }
     val listState = rememberLazyListState()
+    // The landing page has its own scroll container. Keep its state in the empty
+    // branch's lifetime, but share it with the pinned bar rather than observing
+    // the unmounted conversation list (which cannot report landing scrolls).
+    val landingScrollState = if (uiState.entries.isEmpty()) rememberScrollState() else null
     var input by remember { mutableStateOf("") }
     val voice = rememberMaryVoiceInput()
     LaunchedEffect(voice.error) {
@@ -188,7 +193,9 @@ fun MaryScreen(
         canFollow = { tailFollow.following },
     )
 
-    CompactGlassTopBarScene(isContentScrolled = listState.canScrollBackward) { bodyModifier ->
+    CompactGlassTopBarScene(
+        isContentScrolled = landingScrollState?.canScrollBackward ?: listState.canScrollBackward,
+    ) { bodyModifier ->
     Scaffold(
         popupHost = {},
         modifier = if (pageGestureHost == null && !showSidebar) Modifier.marySidebarOpenGesture(
@@ -221,6 +228,7 @@ fun MaryScreen(
                     MaryLandingTranscript(
                         contentPaddingBottom = contentPaddingBottom,
                         appBarInset = paddingValues.calculateTopPadding(),
+                        scrollState = checkNotNull(landingScrollState),
                         onPick = { controller.send(it) },
                     )
                 } else {
@@ -420,13 +428,14 @@ internal fun MaryLandingTranscript(
     contentPaddingBottom: Dp,
     appBarInset: Dp,
     gestureModifier: Modifier = Modifier,
+    scrollState: ScrollState = rememberScrollState(),
     onPick: (String) -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().then(gestureModifier)
             .padding(horizontal = 16.dp).padding(bottom = contentPaddingBottom),
     ) {
-        LandingState(appBarInset = appBarInset, onPick = onPick)
+        LandingState(appBarInset = appBarInset, scrollState = scrollState, onPick = onPick)
     }
 }
 
@@ -509,12 +518,13 @@ internal fun MaryFloatingChatLayout(
 /**
  * Empty-chat state: brand mark, greeting and rotating suggestions.
  *
- * A real scroll container drives the same collapsing title as the conversation and remains
- * usable when the IME leaves too little space for the centred suggestions.
+ * Its real scroll state drives the pinned bar's glass independently of the conversation list
+ * and remains usable when the IME leaves too little space for the centred suggestions.
  */
 @Composable
 private fun ColumnScope.LandingState(
     appBarInset: Dp,
+    scrollState: ScrollState,
     onPick: (String) -> Unit,
 ) {
     val suggestionPages = rememberMarySuggestionPages()
@@ -534,7 +544,7 @@ private fun ColumnScope.LandingState(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(top = appBarInset, bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
