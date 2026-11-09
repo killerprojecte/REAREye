@@ -74,10 +74,8 @@ import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import hk.uwu.reareye.ui.config.REAREyeConfig
 import hk.uwu.reareye.ui.theme.AppMochiThemeStyle
 import hk.uwu.reareye.ui.theme.AppThemePreferences
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import hk.uwu.mixui.components.Card
@@ -85,12 +83,10 @@ import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.GlassAnchoredMenu
 import hk.uwu.mixui.components.GlassMenuOption
 import hk.uwu.mixui.components.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.LargeTitleLazyScaffold
 import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import hk.uwu.mixui.components.ArrowPreference
 import hk.uwu.mixui.theme.MixTheme
 import java.util.IdentityHashMap
@@ -191,7 +187,6 @@ fun ConfigScreen(
         )
     }
     val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
     val routeScope = rememberCoroutineScope()
 
     val favoriteNodeIndex = remember(REAREyeConfig) {
@@ -568,24 +563,16 @@ fun ConfigScreen(
                     },
                 )
 
-                is ConfigRoute.WallpaperTemplate -> ConfigSubpageLayout(
-                    title = stringResource(R.string.rear_wallpaper_template_title),
+                is ConfigRoute.WallpaperTemplate -> RearWallpaperTemplateConfigScreen(
+                    wallpaper = route.wallpaper,
+                    allowContentPresentation = !routeTransition.isRunning ||
+                            routeTransition.targetState.route !is ConfigRoute.WallpaperTemplate,
+                    contentPadding = PaddingValues(
+                        bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
+                    ),
                     onBack = ::navigateBack,
-                    topBarModifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                ) {
-                    RearWallpaperTemplateConfigScreen(
-                        wallpaper = route.wallpaper,
-                        embedded = true,
-                        allowContentPresentation = !routeTransition.isRunning ||
-                                routeTransition.targetState.route !is ConfigRoute.WallpaperTemplate,
-                        contentPadding = PaddingValues(
-                            bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
-                        ),
-                        modifier = Modifier.rearAcrylicSource(hazeState),
-                        onBack = ::navigateBack,
-                        onSaved = ::navigateBack,
-                    )
-                }
+                    onSaved = ::navigateBack,
+                )
 
                 is ConfigRoute.AppList -> AppListSelectorScreen(
                     configItem = route.item,
@@ -662,41 +649,6 @@ fun ConfigScreen(
         },
         onResultSelected = { pendingMoreSearchCategory = it },
     )
-}
-
-@Composable
-private fun ConfigSubpageLayout(
-    title: String,
-    onBack: () -> Unit,
-    topBarModifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    // Template editor still owns its embedded scroll container. Keep its legacy state local.
-    val scrollBehavior = MiuixScrollBehavior()
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            modifier = topBarModifier,
-            color = Color.Transparent,
-            title = title,
-            navigationIconPadding = 12.dp,
-            navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = null,
-                    )
-                }
-            },
-            scrollBehavior = scrollBehavior,
-        )
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-        ) {
-            content()
-        }
-    }
 }
 
 private fun findConfigCategoryByTitleRes(

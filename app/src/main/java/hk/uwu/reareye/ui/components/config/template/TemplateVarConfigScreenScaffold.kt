@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -52,6 +55,7 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
     editorItems: LazyListScope.(TSchema, TConfig) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    val direction = LocalLayoutDirection.current
 
     BackHandler(onBack = onBack)
 
@@ -99,7 +103,10 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
                         .then(modifier)
                         .imePadding()
                         .pageScrollFeedback()
-                        .padding(horizontal = 12.dp),
+                        .padding(
+                            start = paddingValues.calculateStartPadding(direction) + 12.dp,
+                            end = paddingValues.calculateEndPadding(direction) + 12.dp,
+                        ),
                     contentPadding = PaddingValues(
                         top = paddingValues.calculateTopPadding() + 12.dp,
                         bottom = paddingValues.calculateBottomPadding() + 28.dp,
@@ -150,7 +157,14 @@ fun <TSchema, TConfig> TemplateVarConfigScreenScaffold(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.scene_route_navigate_back))
                 }
             },
-            content = screenContent,
+            content = { hostPadding ->
+                screenContent(PaddingValues(
+                    start = maxOf(hostPadding.calculateStartPadding(direction), contentPadding.calculateStartPadding(direction)),
+                    top = maxOf(hostPadding.calculateTopPadding(), contentPadding.calculateTopPadding()),
+                    end = maxOf(hostPadding.calculateEndPadding(direction), contentPadding.calculateEndPadding(direction)),
+                    bottom = maxOf(hostPadding.calculateBottomPadding(), contentPadding.calculateBottomPadding()),
+                ))
+            },
         )
     }
 }

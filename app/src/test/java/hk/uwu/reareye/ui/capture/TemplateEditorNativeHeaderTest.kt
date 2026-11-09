@@ -129,4 +129,25 @@ class TemplateEditorNativeHeaderTest {
             assertEquals(1, backs)
         }
     }
+    @Test(timeout = 60_000) fun standaloneEditorCombinesExternalBottomObstructionWithoutASecondHeader() {
+        for (backend in MixUiBackend.entries) {
+            open(backend) {
+                hk.uwu.reareye.ui.components.config.template.TemplateVarConfigScreenScaffold(
+                    title = "Wallpaper template", loading = false, schema = 30, config = 1,
+                    contentPadding = PaddingValues(bottom = 96.dp), hasEditableItems = true,
+                    loadingText = "Loading fixture", unavailableText = "Unavailable fixture",
+                    confirmText = "Save fixture", resetText = "Reset fixture",
+                    onBack = {}, onConfirm = {}, onReset = {},
+                    editorItems = { count, _ -> items(count) { index -> Text("Editor row $index", Modifier.height(64.dp)) } },
+                )
+            }
+            compose.onNode(hasScrollAction()).performScrollToIndex(30); frames()
+            val reset = compose.onNodeWithText("Reset fixture").fetchSemanticsNode().boundsInRoot
+            val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+            assertTrue("Bottom action must stay above the external navigation obstruction", reset.bottom <= root.bottom - 96f)
+            compose.onAllNodesWithContentDescription(label(R.string.scene_route_navigate_back)).assertCountEquals(1)
+            capture("${backend.name}-external-obstruction")
+        }
+    }
+
 }
