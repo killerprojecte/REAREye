@@ -90,23 +90,52 @@ fun GlassAnchoredMenu(
                 )
             }
         }
-        is GlassFormBackdrop.Mochi -> CompositionLocalProvider(LocalMochiBackdrop provides backdrop.value) {
-            // Maven Mochi 0.2.0 hosts this in its own DecorView sibling and preserves
-            // window/local context. It samples the page, never its own popup/scrim.
-            ui.feice.mochi.basic.MochiPopoverBox(
-                expanded = expanded && active,
-                onExpandedChange = { onExpandedChange(it && active) },
-                popover = {
-                    if (maxHeight != null) {
-                        Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()), content = rows)
-                    } else rows()
-                },
-                modifier = modifier,
-                width = width,
-                align = ui.feice.mochi.basic.MochiAlign.End,
-                contentPadding = PaddingValues(vertical = 8.dp),
-                anchor = anchor,
-            )
+        is GlassFormBackdrop.Mochi -> {
+            val materials = ui.feice.mochi.theme.MochiTheme.materials
+            val menuGlass = materials.menuGlass
+            // Native overlays prefer their inherited window chain over LocalMochiBackdrop.
+            // Bind the surface explicitly to our body recording instead. Keep the native
+            // popover for placement, outside touch, Back and open/close motion.
+            val shellMaterials = if (menuGlass != null) materials.copy(bar = null, menu = null) else materials
+            CompositionLocalProvider(
+                LocalMochiBackdrop provides backdrop.value,
+                ui.feice.mochi.theme.LocalMochiMaterials provides shellMaterials,
+            ) {
+                ui.feice.mochi.basic.MochiPopoverBox(
+                    expanded = expanded && active,
+                    onExpandedChange = { onExpandedChange(it && active) },
+                    popover = {
+                        CompositionLocalProvider(ui.feice.mochi.theme.LocalMochiMaterials provides materials) {
+                            val panelContent: @Composable () -> Unit = {
+                                Column(Modifier.padding(vertical = 8.dp)) {
+                                    if (maxHeight != null) {
+                                        Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()), content = rows)
+                                    } else rows()
+                                }
+                            }
+                            if (menuGlass != null) {
+                                ui.feice.mochi.effect.glass.MochiGlassSurface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    material = menuGlass,
+                                    backdrop = backdrop.value,
+                                    cornerRadius = ui.feice.mochi.basic.MochiPopoverDefaults.CornerRadius,
+                                ) { panelContent() }
+                            } else panelContent()
+                        }
+                    },
+                    modifier = modifier,
+                    width = width,
+                    align = ui.feice.mochi.basic.MochiAlign.End,
+                    contentPadding = PaddingValues(0.dp),
+                    colors = if (menuGlass != null) ui.feice.mochi.basic.MochiPopoverDefaults.colors(
+                        panel = androidx.compose.ui.graphics.Color.Transparent,
+                        shadow = androidx.compose.ui.graphics.Color.Transparent,
+                    ) else ui.feice.mochi.basic.MochiPopoverDefaults.colors(),
+                    anchor = {
+                        CompositionLocalProvider(ui.feice.mochi.theme.LocalMochiMaterials provides materials) { anchor() }
+                    },
+                )
+            }
         }
     }
 }

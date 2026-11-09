@@ -106,9 +106,9 @@ import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.CardDefaults
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
-import hk.uwu.mixui.components.GlassPreferenceScene
+import hk.uwu.mixui.components.CompactGlassTopBarScene
 import hk.uwu.mixui.components.Scaffold
-import hk.uwu.mixui.components.CompactTopBar
+import hk.uwu.mixui.components.CompactGlassTopBar
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 import hk.uwu.mixui.components.pageScrollFeedback
@@ -187,7 +187,7 @@ fun MaryScreen(
         canFollow = { tailFollow.following },
     )
 
-    GlassPreferenceScene {
+    CompactGlassTopBarScene(isContentScrolled = listState.canScrollBackward) { bodyModifier ->
     Scaffold(
         popupHost = {},
         modifier = if (pageGestureHost == null && !showSidebar) Modifier.marySidebarOpenGesture(
@@ -213,6 +213,7 @@ fun MaryScreen(
             bottomInset = maxOf(bottomInnerPadding, paddingValues.calculateBottomPadding()),
             modifier = Modifier
                 .fillMaxSize()
+                .then(bodyModifier)
                 .nestedScroll(tailFollow.connection),
             content = { contentPaddingBottom ->
                 if (uiState.entries.isEmpty()) {
@@ -395,7 +396,7 @@ internal fun MaryTopBar(
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val menuFocus = menuFocusRequester ?: remember { androidx.compose.ui.focus.FocusRequester() }
-    CompactTopBar(
+    CompactGlassTopBar(
         title = stringResource(R.string.mary_title),
         navigationIcon = {
             IconButton(onClick = {

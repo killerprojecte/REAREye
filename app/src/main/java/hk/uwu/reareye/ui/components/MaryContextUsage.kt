@@ -11,11 +11,19 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material3.DropdownMenu
+import hk.uwu.mixui.components.GlassAnchoredMenu
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,10 +41,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.PopupProperties
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.context.ContextCategory
 import hk.uwu.reareye.agent.context.ContextSegment
@@ -148,35 +154,27 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
     val screen = LocalConfiguration.current
     val popupWidth = (screen.screenWidthDp - 24).coerceIn(160, 320).dp
     val popupHeight = (screen.screenHeightDp - 88).coerceIn(144, 360).dp
-    Box {
-        // Preserve the existing compact topbar ring; detailed composition lives only in the popup.
-        IconButton(
-            onClick = { expanded = !expanded },
-            modifier = Modifier.testTag("mary-context-usage").semantics(mergeDescendants = true) {
-                contentDescription = description
-                ratio?.let { progressBarRangeInfo = ProgressBarRangeInfo(it.toFloat().coerceIn(0f, 1f), 0f..1f) }
-            },
-        ) {
-            Canvas(Modifier.size(20.dp).testTag("mary-context-ring")) {
-                val stroke = 2.dp.toPx()
-                drawCircle(colors.outline, radius = (size.minDimension - stroke) / 2, style = Stroke(stroke))
-                val sweep = contextProgressSweep(ratio)
-                if (sweep != 0f) drawArc(
-                    colors.primary, startAngle = -90f, sweepAngle = sweep, useCenter = false,
-                    topLeft = Offset(stroke / 2, stroke / 2),
-                    size = Size(size.width - stroke, size.height - stroke),
-                    style = Stroke(stroke, cap = StrokeCap.Butt),
-                )
-            }
-        }
-        DropdownMenu(
-            expanded = expanded, onDismissRequest = { expanded = false },
-            modifier = Modifier.width(popupWidth).heightIn(max = popupHeight).testTag("mary-context-popup"),
-            offset = DpOffset(0.dp, 2.dp), properties = PopupProperties(focusable = true),
-            shape = RoundedCornerShape(18.dp), containerColor = colors.surface,
-            tonalElevation = 0.dp, shadowElevation = 6.dp,
-        ) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+    GlassAnchoredMenu(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        options = emptyList(),
+        onOptionClick = {},
+        width = popupWidth,
+        maxHeight = popupHeight,
+        menuContent = {
+            // Native in-tree glass popups have no separate Android Window to
+            // request keyboard focus or turn Escape into dismissal for us.
+            val popupFocus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { popupFocus.requestFocus() }
+            Column(Modifier.fillMaxWidth().testTag("mary-context-popup")
+                .onPreviewKeyEvent {
+                    if (it.key == Key.Escape) {
+                        if (it.type == KeyEventType.KeyUp) expanded = false
+                        true
+                    } else false
+                }
+                .focusRequester(popupFocus).focusable()
+                .padding(horizontal = 12.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.mary_context_short_title), style = MixTheme.textStyles.body2,
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).testTag("mary-context-title"),
@@ -290,8 +288,30 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
                         modifier = Modifier.padding(top = 4.dp, bottom = 4.dp))
                 }
             }
-        }
-    }
+        },
+        anchor = {
+            // Preserve the existing compact topbar ring; detailed composition lives only in the popup.
+            IconButton(
+                onClick = { expanded = !expanded },
+                modifier = Modifier.testTag("mary-context-usage").semantics(mergeDescendants = true) {
+                    contentDescription = description
+                    ratio?.let { progressBarRangeInfo = ProgressBarRangeInfo(it.toFloat().coerceIn(0f, 1f), 0f..1f) }
+                },
+            ) {
+                Canvas(Modifier.size(20.dp).testTag("mary-context-ring")) {
+                    val stroke = 2.dp.toPx()
+                    drawCircle(colors.outline, radius = (size.minDimension - stroke) / 2, style = Stroke(stroke))
+                    val sweep = contextProgressSweep(ratio)
+                    if (sweep != 0f) drawArc(
+                        colors.primary, startAngle = -90f, sweepAngle = sweep, useCenter = false,
+                        topLeft = Offset(stroke / 2, stroke / 2),
+                        size = Size(size.width - stroke, size.height - stroke),
+                        style = Stroke(stroke, cap = StrokeCap.Butt),
+                    )
+                }
+            }
+        },
+    )
 }
 
 @Composable

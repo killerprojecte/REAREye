@@ -89,8 +89,10 @@ class MaryContextRingRenderingTest {
                 MixUiHost(backend = MixUiBackend.Miuix, colorMode = mode) {
                     primary = MixTheme.colorScheme.primary
                     track = MixTheme.colorScheme.outline
-                    Column(Modifier.background(MixTheme.colorScheme.background)) {
-                        cases.forEach { ContextUsageButton(it.summary) }
+                    hk.uwu.mixui.components.GlassPreferenceScene {
+                        Column(Modifier.background(MixTheme.colorScheme.background)) {
+                            cases.forEach { ContextUsageButton(it.summary) }
+                        }
                     }
                 }
             }

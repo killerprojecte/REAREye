@@ -926,9 +926,11 @@ class MaryChatLayoutTest {
     fun topBarUsesLeadingMenuAndOnlyContextAction() {
         var opens = 0
         host {
-            Scaffold(popupHost = {}, topBar = {
-                MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { opens++ })
-            }) { }
+            hk.uwu.mixui.components.CompactGlassTopBarScene { bodyModifier ->
+                Scaffold(popupHost = {}, topBar = {
+                    MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { opens++ })
+                }) { Box(Modifier.fillMaxSize().then(bodyModifier)) }
+            }
         }
         node("mary-open-sidebar").assertIsEnabled()
         assertTrue(bounds("mary-open-sidebar").center.x < 72.dp)
@@ -952,9 +954,11 @@ class MaryChatLayoutTest {
                 activity = controller
                 controller.get().setContent {
                     hk.uwu.mixui.MixUiHost(backend = backend, colorMode = hk.uwu.mixui.MixColorSchemeMode.Light) {
-                        Scaffold(popupHost = {}, topBar = {
-                            MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { opens++ })
-                        }) { }
+                        hk.uwu.mixui.components.CompactGlassTopBarScene { bodyModifier ->
+                            Scaffold(popupHost = {}, topBar = {
+                                MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { opens++ })
+                            }) { Box(Modifier.fillMaxSize().then(bodyModifier)) }
+                        }
                     }
                 }
             }

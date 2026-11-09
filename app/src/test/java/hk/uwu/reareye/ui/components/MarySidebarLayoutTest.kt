@@ -1131,7 +1131,7 @@ class MarySidebarLayoutTest {
                     MixUiHost(backend = backend, colorMode = mode, mochiStyle = style) {
                     val isDark = MixTheme.colorScheme.background.luminance() < 0.5f
                     SideEffect { renderedDark = isDark }
-                    hk.uwu.mixui.components.GlassPreferenceScene {
+                    hk.uwu.mixui.components.CompactGlassTopBarScene { bodyModifier ->
                         val menuFocus = remember { FocusRequester() }
                         val focusManager = LocalFocusManager.current
                         val keyboard = LocalSoftwareKeyboardController.current
@@ -1149,7 +1149,7 @@ class MarySidebarLayoutTest {
                         Box(Modifier.fillMaxSize().background(MixTheme.colorScheme.background)
                             .marySidebarPageGesture(pageHost, enabled = maryActive.value).testTag("sidebar-fixture")) {
                             Box(Modifier.fillMaxSize().marySidebarBackground(pageHost).testTag("sidebar-underlay")) {
-                            MaryFloatingChatLayout(bottomInset = 80.dp, modifier = Modifier.fillMaxSize(),
+                            MaryFloatingChatLayout(bottomInset = 80.dp, modifier = Modifier.fillMaxSize().then(bodyModifier),
                                 content = { padding ->
                                     val edge = Modifier.testTag("sidebar-transcript")
                                         .then(if (transcriptMode == "fixture") Modifier else Modifier.pointerInput(transcriptMode) {

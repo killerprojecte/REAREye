@@ -78,6 +78,39 @@ class MaryContextCompositionLayoutTest {
     }
     @After fun cleanup() { compose.runOnUiThread { try { activity?.close() } finally { ContextPreviewActivity.testFontScale = 1f } } }
 
+    @Test fun glassContextPreservesSelectionTabsCloseAndReopenAcrossBackends() {
+        for (backend in MixUiBackend.entries) for (mode in listOf(MixColorSchemeMode.Light, MixColorSchemeMode.Dark)) {
+            compose.runOnUiThread { activity?.close(); activity = null }
+            useComposition()
+            host(mode = mode, backend = backend)
+            val headerBefore = node("mary-open-sidebar").getUnclippedBoundsInRoot()
+            openPopup()
+            selectItem("mary-context-legend-TOOL_RESULTS")
+            assertTrue(hasPercent(semanticText("mary-context-detail"), 35))
+            assertTrue(hasPercent(semanticText("mary-context-capacity"), 25))
+            modeTab(true).performClick()
+            modeTab(true).assertIsSelected()
+            modeTab(false).performClick()
+            modeTab(false).assertIsSelected()
+            assertPopupWithinViewport()
+            screenshot("glass-context-${backend.name}-${mode.name}", "mary-context-popup")
+            closePopup()
+            assertEquals(headerBefore, node("mary-open-sidebar").getUnclippedBoundsInRoot())
+            openPopup()
+            closePopup()
+            node("mary-composer-input").assertIsDisplayed()
+        }
+    }
+
+    @Test fun freshMochiDarkWindowShowsActualContextPanel() {
+        useComposition()
+        host(mode = MixColorSchemeMode.Dark, backend = MixUiBackend.Mochi)
+        openPopup()
+        selectItem("mary-context-legend-TOOL_RESULTS")
+        screenshot("fresh-mochi-dark", "mary-context-popup")
+        closePopup()
+    }
+
     @Test fun collapsedContextKeepsOriginalRingAndDoesNotAddAChatRow() {
         useComposition()
         host()
@@ -250,10 +283,10 @@ class MaryContextCompositionLayoutTest {
         useComposition()
         host()
         openPopup()
-        val popupView = popupView()
-        compose.runOnUiThread {
-            val event = android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_OUTSIDE, -1f, -1f, 0)
-            try { popupView.dispatchTouchEvent(event) } finally { event.recycle() }
+        // The native glass popup is in-tree, not a separate Window receiving
+        // ACTION_OUTSIDE. Send an actual down/up to its full-page outside layer.
+        node("context-host").performTouchInput {
+            click(androidx.compose.ui.geometry.Offset(width / 2f, height - 2f))
         }
         compose.waitForIdle()
         node("mary-context-popup").assertDoesNotExist()
@@ -499,6 +532,10 @@ class MaryContextCompositionLayoutTest {
 
     private fun popupView(): android.view.View = (node("mary-context-popup").fetchSemanticsNode().root as ViewRootForTest).view.rootView
     private fun dismissPopupWithKey(code: Int) {
+        if (code == android.view.KeyEvent.KEYCODE_BACK) {
+            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }
+            return
+        }
         val view = popupView()
         compose.runOnUiThread {
             view.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code))
@@ -529,14 +566,14 @@ class MaryContextCompositionLayoutTest {
         assertTrue("Popup must remain compact", popup.size.width <= 340)
     }
 
-    private fun host(mode: MixColorSchemeMode = MixColorSchemeMode.Light, fontScale: Float = 1f) {
+    private fun host(mode: MixColorSchemeMode = MixColorSchemeMode.Light, fontScale: Float = 1f, backend: MixUiBackend = MixUiBackend.Miuix) {
         compose.runOnUiThread {
             ContextPreviewActivity.testFontScale = fontScale
             activity = Robolectric.buildActivity(ContextPreviewActivity::class.java).setup().also { controller ->
                 controller.get().enableEdgeToEdge()
                 controller.get().setContent {
-                    MixUiHost(backend = MixUiBackend.Miuix, colorMode = mode) {
-                    hk.uwu.mixui.components.GlassPreferenceScene {
+                    MixUiHost(backend = backend, colorMode = mode) {
+                    hk.uwu.mixui.components.CompactGlassTopBarScene { bodyModifier ->
                         inputModes = androidx.compose.ui.platform.LocalInputModeManager.current
                         val pageHost = remember { MarySidebarPageGestureHost() }
                         val gestures = remember { MarySidebarGestureState() }
@@ -550,7 +587,7 @@ class MaryContextCompositionLayoutTest {
                             Box(Modifier.fillMaxSize().background(MixTheme.colorScheme.background)
                                 .marySidebarPageGesture(pageHost, true).testTag("context-host")) {
                                 Box(Modifier.fillMaxSize().marySidebarBackground(pageHost)) {
-                                    MaryFloatingChatLayout(bottomInset = 80.dp, modifier = Modifier.fillMaxSize(),
+                                    MaryFloatingChatLayout(bottomInset = 80.dp, modifier = Modifier.fillMaxSize().then(bodyModifier),
                                         content = { padding -> MaryLandingTranscript(padding, 56.dp, Modifier.testTag("context-transcript"), onPick = {}) },
                                         footer = { MaryComposer(value = draft.value, onValueChange = { draft.value = it },
                                             running = false, locked = false, configuring = false,
@@ -594,10 +631,14 @@ class MaryContextCompositionLayoutTest {
         val directory = File(requireNotNull(System.getProperty("mary.ui.screenshotDir")), "context")
         check(directory.mkdirs() || directory.isDirectory)
         val baseNode = node("context-host")
+        val wholeWindow = compose.runOnUiThread {
+            hk.uwu.reareye.ui.capture.captureWindowBitmap(activity!!.get().window)
+        }
         val base = baseNode.captureToImage().asAndroidBitmap()
         fun save(bitmap: Bitmap, suffix: String) = File(directory, "$name$suffix.png").outputStream().use {
             check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
         }
+        save(wholeWindow, "-window")
         save(base, if (popupTag == null) "" else "-activity")
         if (popupTag != null) {
             val popup = node(popupTag)
