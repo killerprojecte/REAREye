@@ -106,10 +106,20 @@ class ManagerNativeTopBarTest {
         } else compose.onRoot().captureToImage().asAndroidBitmap()
         File(folder, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
-    private fun dismissForm() {
-        compose.runOnUiThread { requireNotNull(ShadowDialog.getLatestDialog()).onBackPressed() }
+    private fun nativeFormTag(page: String): String? = when (page) {
+        "CardManagerScreen" -> "rear-card-create-form"
+        else -> null
+    }
+    private fun formShowing(page: String): Boolean = nativeFormTag(page)?.let { tag ->
+        compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+    } ?: (ShadowDialog.getLatestDialog()?.isShowing == true)
+    private fun dismissForm(page: String) {
+        compose.runOnUiThread {
+            if (nativeFormTag(page) != null) activity!!.get().onBackPressedDispatcher.onBackPressed()
+            else requireNotNull(ShadowDialog.getLatestDialog()).onBackPressed()
+        }
         settle()
-        assertFalse(ShadowDialog.getLatestDialog().isShowing)
+        assertFalse(formShowing(page))
     }
 
     @Test fun standaloneAndEmbeddedManagersKeepScrollingActionsAndForms() {
@@ -157,19 +167,22 @@ class ManagerNativeTopBarTest {
                     } else {
                         compose.onNodeWithContentDescription(text(addLabel)).performTouchInput { click() }; settle()
                     }
-                    if (ShadowDialog.getLatestDialog()?.isShowing != true) {
+                    if (!formShowing(page)) {
                         save(folder, "after-action-no-dialog.png")
                         File(folder, "after-action-semantics.txt").writeText(compose.onAllNodes(isRoot()).printToString())
                     }
-                    assertTrue("Add/import action opens existing form: $backend/$dark/$page/$embedded", ShadowDialog.getLatestDialog()?.isShowing == true)
-                    save(folder, "form.png", dialog = true)
-                    dismissForm()
+                    assertTrue("Add/import action opens existing form: $backend/$dark/$page/$embedded", formShowing(page))
+                    if (nativeFormTag(page) != null) {
+                        val bitmap = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }
+                        File(folder, "form.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    } else save(folder, "form.png", dialog = true)
+                    dismissForm(page)
                     save(folder, "dismissed.png")
                     if (!embedded) {
                         // Reopen and cancel again to cover repeated toolbar dispatch after dismissal.
                         compose.onNodeWithContentDescription(text(addLabel)).performTouchInput { click() }; settle()
-                        assertTrue(ShadowDialog.getLatestDialog().isShowing)
-                        dismissForm()
+                        assertTrue(formShowing(page))
+                        dismissForm(page)
                         if (page == "RearWallpaperManagerScreen") {
                             compose.onNodeWithContentDescription(text(R.string.rear_wallpaper_refresh)).performTouchInput { click() }; settle()
                         }

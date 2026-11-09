@@ -66,7 +66,9 @@ import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateConfigRepository
 import hk.uwu.reareye.ui.FeatureGuideAction
 import hk.uwu.reareye.ui.LocalFeatureGuideDemo
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.mixui.components.OverlayDialog
+import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.GlassPreferenceScene
+import hk.uwu.mixui.components.DialogActions
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
@@ -231,6 +233,7 @@ fun CardManagerScreen(
     var addModeTab by remember { mutableIntStateOf(0) }
     var appDraftTitle by remember { mutableStateOf("") }
     var selectedBusinessIndex by remember { mutableIntStateOf(0) }
+    var appRegistrationPending by remember { mutableStateOf(false) }
 
     fun persist() {
         val nextCards = cards.toList()
@@ -407,6 +410,7 @@ fun CardManagerScreen(
 
     @SuppressLint("LocalContextGetResourceValueCall")
     fun submitDialog() {
+        if (!showDialog.value) return
         val pkg = draftPackageName.trim()
         val widget = draftBusiness.trim()
         val editingCard = editingCardId?.let { id -> cards.firstOrNull { it.id == id } }
@@ -486,7 +490,7 @@ fun CardManagerScreen(
 
     @SuppressLint("LocalContextGetResourceValueCall")
     fun submitAppCardDialog() {
-        if (demo != null) return
+        if (demo != null || !showDialog.value || appRegistrationPending) return
         val title = appDraftTitle.trim()
         val business = businesses.getOrNull(selectedBusinessIndex)?.business.orEmpty()
         if (title.isBlank() || business.isBlank()) {
@@ -497,6 +501,8 @@ fun CardManagerScreen(
             ).show()
             return
         }
+        val submittedSession = dialogSessionId
+        appRegistrationPending = true
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 RearAppCardRepository.register(
@@ -506,6 +512,7 @@ fun CardManagerScreen(
                     componentBusiness = business,
                 )
             }
+            appRegistrationPending = false
             Toast.makeText(
                 context,
                 if (result.success) {
@@ -518,8 +525,10 @@ fun CardManagerScreen(
                 Toast.LENGTH_SHORT,
             ).show()
             if (result.success) {
-                showDialog.value = false
-                cardPagerState.animateScrollToPage(1)
+                if (dialogSessionId == submittedSession) {
+                    showDialog.value = false
+                    cardPagerState.animateScrollToPage(1)
+                }
                 appRefreshRevision++
             }
         }
@@ -719,6 +728,7 @@ fun CardManagerScreen(
                                     ) { isDragging, hoveredItemKey ->
                                         ModuleStyleManagerCard(
                                             modifier = Modifier
+                                                .testTag("rear-card-item-${item.id}")
                                                 .longPressDraggable(draggableState, item.id)
                                                 .then(
                                                     if (isDragging) {
@@ -907,8 +917,143 @@ fun CardManagerScreen(
             }
         }
 
+        val pageDialogs: @Composable () -> Unit = {
+            key(dialogSessionId) {
+                RearCardCreateDialog(
+                    show = showDialog.value && editingCardId == null,
+                    mode = addModeTab,
+                    onModeChange = { addModeTab = it },
+                    businesses = businesses,
+                    normalTitle = draftTitle,
+                    onNormalTitleChange = { draftTitle = it },
+                    normalPackageName = draftPackageName,
+                    onNormalPackageNameChange = { draftPackageName = it },
+                    normalBusiness = draftBusiness,
+                    onNormalBusinessChange = { draftBusiness = it },
+                    normalPriorityText = draftPriorityText,
+                    onNormalPriorityTextChange = { draftPriorityText = it },
+                    normalAutomaticPriority = draftAutomaticPriority,
+                    onNormalAutomaticPriorityChange = { draftAutomaticPriority = it },
+                    normalSticky = draftSticky,
+                    onNormalStickyChange = { draftSticky = it },
+                    appTitle = appDraftTitle,
+                    onAppTitleChange = { appDraftTitle = it },
+                    selectedAppBusinessIndex = selectedBusinessIndex,
+                    onSelectedAppBusinessIndexChange = { selectedBusinessIndex = it },
+                    onConfirmNormal = ::submitDialog,
+                    onConfirmApp = ::submitAppCardDialog,
+                    submitting = appRegistrationPending,
+                    onDismissRequest = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
+                )
+
+                val editingCard = editingCardId?.let { id -> cards.firstOrNull { it.id == id } }
+                val lockedCard = editingCard?.takeIf { !it.renameable }
+                GlassFormDialog(
+                    show = showDialog.value && editingCard != null,
+                    title = stringResource(R.string.rear_widget_edit_card),
+                    onDismissRequest = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
+                    modifier = Modifier.testTag("rear-card-edit-dialog"),
+                ) {
+                    DialogFormColumn {
+                        if (demo != null) {
+                            Text(stringResource(R.string.guide_demo_notice))
+                            Text(stringResource(R.string.guide_demo_edit_card))
+                        }
+                        if (lockedCard == null) {
+                            TextField(
+                                value = draftTitle,
+                                onValueChange = { draftTitle = it },
+                                modifier = Modifier.fillMaxWidth().testTag("rear-card-edit-title"),
+                                label = stringResource(R.string.rear_widget_card_title),
+                                singleLine = true,
+                            )
+                            TextField(
+                                value = draftPackageName,
+                                onValueChange = { draftPackageName = it },
+                                modifier = Modifier.fillMaxWidth().testTag("rear-card-edit-package"),
+                                label = stringResource(R.string.rear_widget_target_package),
+                                singleLine = true,
+                            )
+                            TextField(
+                                value = draftBusiness,
+                                onValueChange = { draftBusiness = it },
+                                modifier = Modifier.fillMaxWidth().testTag("rear-card-edit-business"),
+                                label = stringResource(R.string.rear_widget_business_name),
+                                singleLine = true,
+                            )
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.rear_widget_card_locked_summary),
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 14.sp,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = stringResource(
+                                            R.string.rear_widget_card_summary,
+                                            lockedCard.packageName,
+                                            lockedCard.business,
+                                            lockedCard.priority,
+                                        ),
+                                        fontSize = 12.sp,
+                                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
+                                    )
+                                }
+                            }
+                        }
+                        SwitchPreference(
+                            title = stringResource(R.string.rear_widget_priority_mode_auto),
+                            summary = stringResource(
+                                if (draftAutomaticPriority) R.string.rear_widget_priority_auto_desc
+                                else R.string.rear_widget_priority_manual_desc,
+                            ),
+                            checked = draftAutomaticPriority,
+                            onCheckedChange = { draftAutomaticPriority = it },
+                        )
+                        TextField(
+                            value = draftPriorityText,
+                            onValueChange = { draftPriorityText = it },
+                            modifier = Modifier.fillMaxWidth().testTag("rear-card-edit-priority"),
+                            label = stringResource(R.string.rear_widget_default_priority),
+                            enabled = !draftAutomaticPriority,
+                            singleLine = true,
+                        )
+                        if (lockedCard == null) {
+                            SwitchPreference(
+                                title = stringResource(R.string.rear_widget_card_sticky),
+                                summary = stringResource(R.string.rear_widget_card_sticky_desc),
+                                checked = draftSticky,
+                                onCheckedChange = { draftSticky = it },
+                            )
+                        }
+                        DialogActions(
+                            modifier = Modifier.testTag("rear-card-edit-actions"),
+                            cancelText = stringResource(R.string.rear_widget_cancel),
+                            confirmText = stringResource(R.string.rear_widget_confirm),
+                            onCancel = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
+                            onConfirm = ::submitDialog,
+                        )
+                    }
+                }
+            }
+        }
+
         if (embedded) {
-            Scaffold { pageContent(it) }
+            GlassPreferenceScene(overlayContent = pageDialogs) {
+                Scaffold(popupHost = {}) { pageContent(it) }
+            }
         } else {
             GlassTopBarScaffold(
                 contentListState = (if (selectedCardTab == 0) listState else appListState),
@@ -952,150 +1097,10 @@ fun CardManagerScreen(
                         }
                     }
                 },
+                overlayContent = pageDialogs,
                 content = pageContent,
             )
         }
-
-        key(dialogSessionId) {
-            RearCardCreateDialog(
-                show = showDialog.value && editingCardId == null,
-                mode = addModeTab,
-                onModeChange = { addModeTab = it },
-                businesses = businesses,
-                normalTitle = draftTitle,
-                onNormalTitleChange = { draftTitle = it },
-                normalPackageName = draftPackageName,
-                onNormalPackageNameChange = { draftPackageName = it },
-                normalBusiness = draftBusiness,
-                onNormalBusinessChange = { draftBusiness = it },
-                normalPriorityText = draftPriorityText,
-                onNormalPriorityTextChange = { draftPriorityText = it },
-                normalAutomaticPriority = draftAutomaticPriority,
-                onNormalAutomaticPriorityChange = { draftAutomaticPriority = it },
-                normalSticky = draftSticky,
-                onNormalStickyChange = { draftSticky = it },
-                appTitle = appDraftTitle,
-                onAppTitleChange = { appDraftTitle = it },
-                selectedAppBusinessIndex = selectedBusinessIndex,
-                onSelectedAppBusinessIndexChange = { selectedBusinessIndex = it },
-                onConfirmNormal = ::submitDialog,
-                onConfirmApp = ::submitAppCardDialog,
-                onDismissRequest = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
-            )
-
-            val editingCard = editingCardId?.let { id -> cards.firstOrNull { it.id == id } }
-            val lockedCard = editingCard?.takeIf { !it.renameable }
-            OverlayDialog(
-                show = showDialog.value && editingCard != null,
-                title = stringResource(R.string.rear_widget_edit_card),
-                onDismissRequest = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
-            ) {
-                DialogFormColumn {
-                    if (demo != null) {
-                        Text(stringResource(R.string.guide_demo_notice))
-                        Text(stringResource(R.string.guide_demo_edit_card))
-                    }
-                    if (lockedCard == null) {
-                        TextField(
-                            value = draftTitle,
-                            onValueChange = { draftTitle = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = stringResource(R.string.rear_widget_card_title),
-                            singleLine = true,
-                        )
-                        TextField(
-                            value = draftPackageName,
-                            onValueChange = { draftPackageName = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = stringResource(R.string.rear_widget_target_package),
-                            singleLine = true,
-                        )
-                        TextField(
-                            value = draftBusiness,
-                            onValueChange = { draftBusiness = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = stringResource(R.string.rear_widget_business_name),
-                            singleLine = true,
-                        )
-                    } else {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.rear_widget_card_locked_summary),
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 14.sp,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = stringResource(
-                                        R.string.rear_widget_card_summary,
-                                        lockedCard.packageName,
-                                        lockedCard.business,
-                                        lockedCard.priority,
-                                    ),
-                                    fontSize = 12.sp,
-                                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
-                                )
-                            }
-                        }
-                    }
-                    SwitchPreference(
-                        title = stringResource(R.string.rear_widget_priority_mode_auto),
-                        summary = stringResource(
-                            if (draftAutomaticPriority) R.string.rear_widget_priority_auto_desc
-                            else R.string.rear_widget_priority_manual_desc,
-                        ),
-                        checked = draftAutomaticPriority,
-                        onCheckedChange = { draftAutomaticPriority = it },
-                    )
-                    TextField(
-                        value = draftPriorityText,
-                        onValueChange = { draftPriorityText = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = stringResource(R.string.rear_widget_default_priority),
-                        enabled = !draftAutomaticPriority,
-                        singleLine = true,
-                    )
-                    if (lockedCard == null) {
-                        SwitchPreference(
-                            title = stringResource(R.string.rear_widget_card_sticky),
-                            summary = stringResource(R.string.rear_widget_card_sticky_desc),
-                            checked = draftSticky,
-                            onCheckedChange = { draftSticky = it },
-                        )
-                    }
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Button(
-                            onClick = { submitDialog() },
-                            colors = ButtonDefaults.buttonColorsPrimary(),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(R.string.rear_widget_confirm))
-                        }
-                        Button(
-                            onClick = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(R.string.rear_widget_cancel))
-                        }
-                    }
-                }
-            }
-        }
-
     }
 
 }

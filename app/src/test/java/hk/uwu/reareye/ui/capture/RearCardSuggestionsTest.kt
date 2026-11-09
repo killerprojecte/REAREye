@@ -7,6 +7,12 @@ import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import hk.uwu.mixui.components.GlassPreferenceScene
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.Card
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -27,7 +33,6 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowDialog
 import org.robolectric.annotation.GraphicsMode
 
 /** Production dialog and editable controls; inert callbacks instead of device repositories. */
@@ -70,11 +75,17 @@ class RearCardSuggestionsTest {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().setContent {
                 MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
+                    GlassPreferenceScene(overlayContent = {
                     RearCardCreateDialog(show.value, 0, {}, catalog.value,
                         "fixture", {}, "fixture.target", {}, business.value, { business.value = it },
                         priority.value, { priority.value = it }, false, {}, false, {},
                         "fixture app", {}, 0, {}, { confirms++ }, {},
                         { dismisses++; show.value = false })
+                    }) {
+                        Column(Modifier.fillMaxSize()) {
+                            repeat(8) { index -> Card { Text("Existing card ${index + 1}: clock widget") } }
+                        }
+                    }
                 }
             }
         }
@@ -83,8 +94,7 @@ class RearCardSuggestionsTest {
     private fun capture(backend: MixUiBackend, dark: Boolean, step: String) {
         val folder = File(System.getProperty("ui.capture.output"), "card-suggestions").apply { mkdirs() }
         val name = "${backend.name.lowercase()}-${if (dark) "dark" else "light"}-$step"
-        val dialog = requireNotNull(ShadowDialog.getLatestDialog())
-        val frame = compose.runOnUiThread { captureDialogWindowBitmap(dialog) }
+        val frame = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }
         File(folder, "$name-dialog.png").outputStream().use { check(frame.compress(Bitmap.CompressFormat.PNG, 100, it)) }
         // Separate native popup window, deliberately not presented as a full page.
         if (step == "filter") {
@@ -101,9 +111,15 @@ class RearCardSuggestionsTest {
         editor().performTextReplacement("clock"); frames()
         option("clock.alpha").assertIsDisplayed()
         option("clock.beta").assertIsDisplayed()
+        editor().assertIsFocused()
+        val form = compose.onNodeWithTag("rear-card-create-form").fetchSemanticsNode()
+        val popup = compose.onNode(isPopup()).fetchSemanticsNode()
+        assertTrue("Suggestions stay inside the visible form", popup.positionOnScreen.x >= form.positionOnScreen.x &&
+            popup.positionOnScreen.y >= form.positionOnScreen.y &&
+            popup.positionOnScreen.x + popup.size.width <= form.positionOnScreen.x + form.size.width &&
+            popup.positionOnScreen.y + popup.size.height <= form.positionOnScreen.y + form.size.height)
         capture(backend, dark, "filter")
-        @Suppress("DEPRECATION")
-        compose.runOnUiThread { requireNotNull(ShadowDialog.getLatestDialog()).onBackPressed() }
+        compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }
         frames()
         option("clock.alpha").assertDoesNotExist()
         assertEquals(0, dismisses)

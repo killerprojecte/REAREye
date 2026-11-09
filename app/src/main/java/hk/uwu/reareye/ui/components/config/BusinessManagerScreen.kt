@@ -83,6 +83,7 @@ import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.InfiniteProgressIndicator
 import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.GlassPreferenceScene
 import hk.uwu.mixui.components.GlassTopBarScaffold
 import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.pageScrollFeedback
@@ -262,6 +263,8 @@ fun BusinessManagerScreen(
         }
     }
 
+    var appRegistrationPending by remember { mutableStateOf(false) }
+
     fun openRegisterCardDialog(item: RearBusinessConfig) {
         if (demo != null) return
         registerCardMode = 0
@@ -364,7 +367,7 @@ fun BusinessManagerScreen(
 
     @SuppressLint("LocalContextGetResourceValueCall")
     fun submitRegisterCardDialog() {
-        if (demo != null) return
+        if (demo != null || !showRegisterCardDialog.value) return
         val packageName = draftCardPackageName.trim()
         val business = draftCardBusiness.trim()
         if (packageName.isBlank() || business.isBlank()) {
@@ -415,7 +418,7 @@ fun BusinessManagerScreen(
     }
 
     fun submitRegisterAppCardDialog() {
-        if (demo != null) return
+        if (demo != null || !showRegisterCardDialog.value || appRegistrationPending) return
         val title = draftAppCardTitle.trim()
         val business = widgets.getOrNull(selectedAppBusinessIndex)?.business.orEmpty()
         if (title.isBlank() || business.isBlank()) {
@@ -426,6 +429,8 @@ fun BusinessManagerScreen(
             ).show()
             return
         }
+        val submittedCardId = draftCardId
+        appRegistrationPending = true
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 RearAppCardRepository.register(
@@ -435,6 +440,7 @@ fun BusinessManagerScreen(
                     componentBusiness = business,
                 )
             }
+            appRegistrationPending = false
             Toast.makeText(
                 context,
                 if (result.success) {
@@ -452,7 +458,7 @@ fun BusinessManagerScreen(
                 }
                 appCards.clear()
                 appCards.addAll(refreshed)
-                showRegisterCardDialog.value = false
+                if (draftCardId == submittedCardId) showRegisterCardDialog.value = false
             }
         }
     }
@@ -732,8 +738,38 @@ fun BusinessManagerScreen(
         }
     }
 
+    val cardDialog: @Composable () -> Unit = {
+        RearCardCreateDialog(
+            show = showRegisterCardDialog.value,
+            mode = registerCardMode,
+            onModeChange = { registerCardMode = it },
+            businesses = widgets,
+            normalTitle = draftCardTitle,
+            onNormalTitleChange = { draftCardTitle = it },
+            normalPackageName = draftCardPackageName,
+            onNormalPackageNameChange = { draftCardPackageName = it },
+            normalBusiness = draftCardBusiness,
+            onNormalBusinessChange = { draftCardBusiness = it },
+            normalPriorityText = draftCardPriorityText,
+            onNormalPriorityTextChange = { draftCardPriorityText = it },
+            normalAutomaticPriority = draftCardAutomaticPriority,
+            onNormalAutomaticPriorityChange = { draftCardAutomaticPriority = it },
+            normalSticky = draftCardSticky,
+            onNormalStickyChange = { draftCardSticky = it },
+            appTitle = draftAppCardTitle,
+            onAppTitleChange = { draftAppCardTitle = it },
+            selectedAppBusinessIndex = selectedAppBusinessIndex,
+            onSelectedAppBusinessIndexChange = { selectedAppBusinessIndex = it },
+            onConfirmNormal = ::submitRegisterCardDialog,
+            onConfirmApp = ::submitRegisterAppCardDialog,
+            submitting = appRegistrationPending,
+            onDismissRequest = { showRegisterCardDialog.value = false },
+        )
+    }
     if (embedded) {
-        Scaffold { pageContent(it) }
+        GlassPreferenceScene(overlayContent = cardDialog) {
+            Scaffold(popupHost = {}) { pageContent(it) }
+        }
     } else {
         GlassTopBarScaffold(
             contentListState = listState,
@@ -756,6 +792,7 @@ fun BusinessManagerScreen(
                     )
                 }
             },
+            overlayContent = cardDialog,
             content = pageContent,
         )
     }
@@ -844,29 +881,5 @@ fun BusinessManagerScreen(
         }
     }
 
-    RearCardCreateDialog(
-        show = showRegisterCardDialog.value,
-        mode = registerCardMode,
-        onModeChange = { registerCardMode = it },
-        businesses = widgets,
-        normalTitle = draftCardTitle,
-        onNormalTitleChange = { draftCardTitle = it },
-        normalPackageName = draftCardPackageName,
-        onNormalPackageNameChange = { draftCardPackageName = it },
-        normalBusiness = draftCardBusiness,
-        onNormalBusinessChange = { draftCardBusiness = it },
-        normalPriorityText = draftCardPriorityText,
-        onNormalPriorityTextChange = { draftCardPriorityText = it },
-        normalAutomaticPriority = draftCardAutomaticPriority,
-        onNormalAutomaticPriorityChange = { draftCardAutomaticPriority = it },
-        normalSticky = draftCardSticky,
-        onNormalStickyChange = { draftCardSticky = it },
-        appTitle = draftAppCardTitle,
-        onAppTitleChange = { draftAppCardTitle = it },
-        selectedAppBusinessIndex = selectedAppBusinessIndex,
-        onSelectedAppBusinessIndexChange = { selectedAppBusinessIndex = it },
-        onConfirmNormal = ::submitRegisterCardDialog,
-        onConfirmApp = ::submitRegisterAppCardDialog,
-        onDismissRequest = { showRegisterCardDialog.value = false },
-    )
+
 }

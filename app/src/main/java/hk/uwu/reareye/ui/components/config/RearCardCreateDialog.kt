@@ -1,7 +1,5 @@
 package hk.uwu.reareye.ui.components.config
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -10,15 +8,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.roundToIntRect
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.mixui.components.LocalOverlayDialogBounds
-import hk.uwu.mixui.components.OverlayDialog
-import hk.uwu.mixui.components.Button
-import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.DialogActions
 import hk.uwu.mixui.components.Tabs
 import hk.uwu.mixui.components.Text
 import androidx.compose.ui.platform.testTag
@@ -52,8 +51,10 @@ internal fun RearCardCreateDialog(
     onConfirmNormal: () -> Unit,
     onConfirmApp: () -> Unit,
     onDismissRequest: () -> Unit,
+    submitting: Boolean = false,
 ) {
     val safeMode = mode.coerceIn(0, 1)
+    var formBounds by remember { mutableStateOf(IntRect.Zero) }
     var suggestionsExpanded by remember(show, safeMode) { mutableStateOf(false) }
     val businessSnapshot = businesses.toList()
     val autocompleteBusinesses = remember(businessSnapshot) {
@@ -61,7 +62,8 @@ internal fun RearCardCreateDialog(
             .distinctBy { it.business }
             .sortedBy { it.business.lowercase() }
     }
-    OverlayDialog(
+    GlassFormDialog(
+        modifier = Modifier.testTag("rear-card-create-dialog"),
         show = show,
         title = stringResource(
             if (safeMode == 1) R.string.rear_widget_add_app_card else R.string.rear_widget_add_card,
@@ -75,7 +77,11 @@ internal fun RearCardCreateDialog(
             else onDismissRequest()
         },
     ) {
-        DialogFormColumn {
+        // The native form is an in-tree overlay. Measure its clipped, scrollable
+        // viewport in this window, not the old Android Dialog window or the page.
+        DialogFormColumn(Modifier.testTag("rear-card-create-form").onGloballyPositioned {
+            formBounds = it.boundsInWindow().roundToIntRect()
+        }) {
             Tabs(
                 tabs = listOf(
                     stringResource(R.string.rear_widget_card_tab_normal),
@@ -90,7 +96,7 @@ internal fun RearCardCreateDialog(
                 TextField(
                     value = appTitle,
                     onValueChange = onAppTitleChange,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("rear-card-create-app-title"),
                     label = stringResource(R.string.rear_widget_app_card_name),
                     singleLine = true,
                 )
@@ -109,7 +115,7 @@ internal fun RearCardCreateDialog(
                     Text(stringResource(R.string.rear_widget_app_no_component))
                 }
                 RearCardDialogButtons(
-                    confirmEnabled = appTitle.isNotBlank() && businesses.isNotEmpty(),
+                    confirmEnabled = !submitting && appTitle.isNotBlank() && businesses.isNotEmpty(),
                     onConfirm = onConfirmApp,
                     onCancel = onDismissRequest,
                 )
@@ -117,14 +123,14 @@ internal fun RearCardCreateDialog(
                 TextField(
                     value = normalTitle,
                     onValueChange = onNormalTitleChange,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("rear-card-create-title"),
                     label = stringResource(R.string.rear_widget_card_title),
                     singleLine = true,
                 )
                 TextField(
                     value = normalPackageName,
                     onValueChange = onNormalPackageNameChange,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("rear-card-create-package"),
                     label = stringResource(R.string.rear_widget_target_package),
                     singleLine = true,
                 )
@@ -133,6 +139,7 @@ internal fun RearCardCreateDialog(
                     expanded = suggestionsExpanded,
                     onExpandedChange = { suggestionsExpanded = it },
                     businesses = autocompleteBusinesses,
+                    boundsInWindow = formBounds,
                     onValueChange = onNormalBusinessChange,
                     onSelect = { business ->
                         onNormalBusinessChange(business.business)
@@ -151,7 +158,7 @@ internal fun RearCardCreateDialog(
                 TextField(
                     value = normalPriorityText,
                     onValueChange = onNormalPriorityTextChange,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("rear-card-create-priority"),
                     label = stringResource(R.string.rear_widget_default_priority),
                     enabled = !normalAutomaticPriority,
                     singleLine = true,
@@ -163,7 +170,7 @@ internal fun RearCardCreateDialog(
                     onCheckedChange = onNormalStickyChange,
                 )
                 RearCardDialogButtons(
-                    confirmEnabled = normalPackageName.isNotBlank() && normalBusiness.isNotBlank(),
+                    confirmEnabled = !submitting && normalPackageName.isNotBlank() && normalBusiness.isNotBlank(),
                     onConfirm = onConfirmNormal,
                     onCancel = onDismissRequest,
                 )
@@ -178,6 +185,7 @@ private fun RearBusinessAutocompleteTextField(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     businesses: List<RearBusinessConfig>,
+    boundsInWindow: IntRect,
     onValueChange: (String) -> Unit,
     onSelect: (RearBusinessConfig) -> Unit,
 ) {
@@ -201,7 +209,7 @@ private fun RearBusinessAutocompleteTextField(
             onExpandedChange(false)
         },
         onDismissRequest = { onExpandedChange(false) },
-        boundsInWindow = LocalOverlayDialogBounds.current,
+        boundsInWindow = boundsInWindow,
     ) {
         TextField(
             value = value,
@@ -223,23 +231,12 @@ private fun RearCardDialogButtons(
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Button(
-            onClick = onConfirm,
-            enabled = confirmEnabled,
-            colors = ButtonDefaults.buttonColorsPrimary(),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.rear_widget_confirm))
-        }
-        Button(
-            onClick = onCancel,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.rear_widget_cancel))
-        }
-    }
+    DialogActions(
+        modifier = Modifier.testTag("rear-card-create-actions"),
+        cancelText = stringResource(R.string.rear_widget_cancel),
+        confirmText = stringResource(R.string.rear_widget_confirm),
+        onCancel = onCancel,
+        onConfirm = onConfirm,
+        confirmEnabled = confirmEnabled,
+    )
 }
