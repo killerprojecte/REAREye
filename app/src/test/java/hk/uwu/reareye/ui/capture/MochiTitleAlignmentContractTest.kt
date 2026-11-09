@@ -50,7 +50,7 @@ class MochiTitleAlignmentContractTest {
         Box(Modifier.height(24.dp))
     }
 
-    private fun open(adapter: Boolean, lazy: Boolean, title: String, direction: LayoutDirection, fontScale: Float) {
+    private fun open(adapter: Boolean, lazy: Boolean, title: String, direction: LayoutDirection, fontScale: Float, normalizedNative: Boolean = false) {
         observed.clear()
         compose.runOnUiThread {
             activity?.close()
@@ -62,6 +62,8 @@ class MochiTitleAlignmentContractTest {
                         MochiTheme(
                             colors = MochiTheme.colorScheme,
                             textStyles = styles.copy(largeTitle = styles.largeTitle.copy(
+                                fontSize = if (normalizedNative) 32.sp else styles.largeTitle.fontSize,
+                                fontWeight = if (normalizedNative) androidx.compose.ui.text.font.FontWeight.Normal else styles.largeTitle.fontWeight,
                                 letterSpacing = 0.25.sp,
                                 textDirection = TextDirection.Content,
                             )),
@@ -115,14 +117,14 @@ class MochiTitleAlignmentContractTest {
         }
     }
 
-    @Test fun rtlUiAndRtlLeadingMixedTextRetainNativeParagraphsWithoutForcingDirection() {
+    @Test fun rtlTitlesMatchNativeParagraphsAtTheSameNormalizedTypography() {
         val cases = listOf(
             LayoutDirection.Rtl to "REAREye العربية",
             LayoutDirection.Rtl to "العربية REAREye",
             LayoutDirection.Ltr to "العربية REAREye",
         )
         for (lazy in listOf(false, true)) for ((direction, title) in cases) {
-            open(false, lazy, title, direction, 1.3f)
+            open(false, lazy, title, direction, 1.3f, normalizedNative = true)
             val native = compose.nativeTitleGeometry(title).maxBy { it.layout.layoutInput.style.fontSize.value }
             open(true, lazy, title, direction, 1.3f)
             val adapted = compose.nativeTitleGeometry(title).maxBy { it.layout.layoutInput.style.fontSize.value }

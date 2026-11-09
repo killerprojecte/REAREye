@@ -38,17 +38,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
 import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.GlassAnchoredMenu
+import hk.uwu.mixui.components.GlassMenuOption
 import hk.uwu.mixui.components.IconButton
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.LargeTitleColumnScaffold
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.components.SwitchPreference
 
 
@@ -102,61 +97,16 @@ fun MarySettingsScreen(bottomInnerPadding: Dp = 0.dp, onBack: () -> Unit) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
         },
         actions = {
-            Box {
-                IconButton(
-                    modifier = Modifier.testTag("mary-settings-presets"),
-                    onClick = { showPresets = true },
-                    enabled = ready && !saving,
-                    holdDownState = showPresets
-                ) {
-                    Icon(Icons.Outlined.Tune, stringResource(R.string.mary_provider_preset))
-                }
-                OverlayListPopup(
-                    show = showPresets,
-                    popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                    alignment = PopupPositionProvider.Align.End,
-                    onDismissRequest = { showPresets = false },
-                    maxHeight = 400.dp,
-                    minWidth = 220.dp,
-                    renderInRootScaffold = true,
-                ) {
-                    ListPopupColumn {
-                        val independent = !settings.inheritApprovalModel
-                        val targets =
-                            if (independent) listOf(false, true) else listOf(false)
-                        val count = targets.size * ProviderPreset.entries.size
-                        targets.forEachIndexed { targetIndex, forApproval ->
-                            ProviderPreset.entries.forEachIndexed { presetIndex, preset ->
-                                val target = stringResource(
-                                    if (forApproval)
-                                        R.string.mary_settings_ui_approval_draft else R.string.mary_settings_ui_dialogue_draft
-                                )
-                                DropdownImpl(
-                                    item = DropdownItem(
-                                        title = if (independent)
-                                            stringResource(
-                                                R.string.mary_settings_ui_preset_target,
-                                                preset.label,
-                                                target
-                                            )
-                                        else preset.label
-                                    ),
-                                    optionSize = count,
-                                    index = targetIndex * ProviderPreset.entries.size + presetIndex,
-                                    isSelected = false,
-                                    dropdownColors = DropdownDefaults.dropdownColors(),
-                                    onSelectedIndexChange = {
-                                        if (forApproval) approval =
-                                            approval.withPreset(preset)
-                                        else dialogue = dialogue.withPreset(preset)
-                                        showPresets = false
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            MaryProviderPresetMenu(
+                expanded = showPresets,
+                onExpandedChange = { showPresets = it },
+                enabled = ready && !saving,
+                independentApproval = !settings.inheritApprovalModel,
+                onPreset = { forApproval, preset ->
+                    if (forApproval) approval = approval.withPreset(preset)
+                    else dialogue = dialogue.withPreset(preset)
+                },
+            )
             IconButton(
                 modifier = Modifier.testTag("mary-settings-save"),
                 enabled = ready && valid && !saving,
@@ -264,5 +214,38 @@ fun MarySettingsScreen(bottomInnerPadding: Dp = 0.dp, onBack: () -> Unit) {
             }
             if (!valid) MarySettingsHint(stringResource(R.string.mary_settings_invalid))
         }
+    }
+}
+
+/** The same production menu is hosted by settings and by offline interaction tests. */
+@Composable
+internal fun MaryProviderPresetMenu(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    enabled: Boolean,
+    independentApproval: Boolean,
+    onPreset: (forApproval: Boolean, preset: ProviderPreset) -> Unit,
+) {
+    val targets = if (independentApproval) listOf(false, true) else listOf(false)
+    val choices = targets.flatMap { forApproval -> ProviderPreset.entries.map { forApproval to it } }
+    GlassAnchoredMenu(
+        expanded = expanded,
+        onExpandedChange = onExpandedChange,
+        enabled = enabled,
+        options = choices.map { (forApproval, preset) ->
+            val target = stringResource(if (forApproval) R.string.mary_settings_ui_approval_draft
+                else R.string.mary_settings_ui_dialogue_draft)
+            GlassMenuOption(title = if (independentApproval)
+                stringResource(R.string.mary_settings_ui_preset_target, preset.label, target)
+                else preset.label)
+        },
+        onOptionClick = { index -> choices[index].let { (forApproval, preset) -> onPreset(forApproval, preset) } },
+    ) {
+        IconButton(
+            modifier = Modifier.testTag("mary-settings-presets"),
+            onClick = { onExpandedChange(true) },
+            enabled = enabled,
+            holdDownState = expanded,
+        ) { Icon(Icons.Outlined.Tune, stringResource(R.string.mary_provider_preset)) }
     }
 }

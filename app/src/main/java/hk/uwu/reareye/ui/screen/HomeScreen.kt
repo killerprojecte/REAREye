@@ -41,6 +41,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
@@ -81,17 +82,12 @@ import okhttp3.Request
 import org.json.JSONObject
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.CardDefaults
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
 import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.GlassAnchoredMenu
+import hk.uwu.mixui.components.GlassMenuOption
 import hk.uwu.mixui.components.IconButton
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import hk.uwu.mixui.components.LargeTitleColumnScaffold
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.theme.MixTheme
 import hk.uwu.mixui.components.PressFeedbackType
 
@@ -271,6 +267,8 @@ fun HomeScreen(
     onOpenPresetPackDialog: () -> Unit = {},
     presetPackRefreshToken: Any? = Unit,
     snapshot: HomeScreenSnapshot? = null,
+    // Offline hosts inject callbacks explicitly; snapshot alone still cannot run root actions.
+    quickActionOverride: ((Int) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -411,9 +409,34 @@ fun HomeScreen(
         bottomObstruction = bottomInnerPadding,
         contentSpacing = 12.dp,
         actions = {
-            Box {
+            GlassAnchoredMenu(
+                expanded = showTopMenu.value,
+                onExpandedChange = { showTopMenu.value = it },
+                options = listOf(
+                    GlassMenuOption(androidx.compose.ui.res.stringResource(R.string.quick_stop_subscreencenter)),
+                    GlassMenuOption(androidx.compose.ui.res.stringResource(R.string.quick_stop_thememanager)),
+                    GlassMenuOption(androidx.compose.ui.res.stringResource(R.string.quick_stop_personalassistant)),
+                    GlassMenuOption(androidx.compose.ui.res.stringResource(R.string.quick_stop_systemui)),
+                ),
+                onOptionClick = { index ->
+                    if (quickActionOverride != null) quickActionOverride(index)
+                    else if (snapshot == null) coroutineScope.launch {
+                        when (index) {
+                            0 -> forceStopPackageByRoot(context, "com.xiaomi.subscreencenter",
+                                context.getString(R.string.category_subscreencenter))
+                            1 -> forceStopPackageByRoot(context, "com.android.thememanager",
+                                context.getString(R.string.category_thememanager))
+                            2 -> forceStopPackageByRoot(context, "com.miui.personalassistant",
+                                context.getString(R.string.category_personalassistant))
+                            3 -> forceKillSystemUI(context)
+                        }
+                    }
+                },
+                enabled = snapshot == null || quickActionOverride != null,
+            ) {
                 IconButton(
-                    onClick = { if (snapshot == null) showTopMenu.value = true },
+                    modifier = Modifier.testTag("home-quick-actions"),
+                    onClick = { if (snapshot == null || quickActionOverride != null) showTopMenu.value = true },
                     holdDownState = showTopMenu.value,
                 ) {
                     Icon(
@@ -421,111 +444,6 @@ fun HomeScreen(
                         contentDescription = null,
                         tint = MixTheme.colorScheme.onBackground,
                     )
-                }
-
-                OverlayListPopup(
-                    show = showTopMenu.value,
-                    popupModifier = Modifier,
-                    popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                    alignment = PopupPositionProvider.Align.End,
-                    enableWindowDim = true,
-                    onDismissRequest = { showTopMenu.value = false },
-                    maxHeight = null,
-                    minWidth = 220.dp,
-                    renderInRootScaffold = true,
-                ) {
-                    @SuppressLint("LocalContextGetResourceValueCall")
-                    ListPopupColumn {
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        DropdownImpl(
-                            item = DropdownItem(
-                                title = androidx.compose.ui.res.stringResource(
-                                    R.string.quick_stop_subscreencenter,
-                                ),
-                            ),
-                            optionSize = 4,
-                            isSelected = false,
-                            index = 0,
-                            dropdownColors = DropdownDefaults.dropdownColors(),
-                            onSelectedIndexChange = {
-                                showTopMenu.value = false
-
-                                coroutineScope.launch {
-                                    forceStopPackageByRoot(
-                                        context = context,
-                                        packageName = "com.xiaomi.subscreencenter",
-                                        appName = context.getString(R.string.category_subscreencenter),
-                                    )
-                                }
-                            },
-                        )
-
-                        DropdownImpl(
-                            item = DropdownItem(
-                                title = androidx.compose.ui.res.stringResource(
-                                    R.string.quick_stop_thememanager,
-                                ),
-                            ),
-                            optionSize = 4,
-                            isSelected = false,
-                            index = 1,
-                            dropdownColors = DropdownDefaults.dropdownColors(),
-                            onSelectedIndexChange = {
-                                showTopMenu.value = false
-                                coroutineScope.launch {
-                                    forceStopPackageByRoot(
-                                        context = context,
-                                        packageName = "com.android.thememanager",
-                                        appName = context.getString(R.string.category_thememanager),
-                                    )
-                                }
-                            },
-                        )
-
-                        DropdownImpl(
-                            item = DropdownItem(
-                                title = androidx.compose.ui.res.stringResource(
-                                    R.string.quick_stop_personalassistant,
-                                ),
-                            ),
-                            optionSize = 4,
-                            isSelected = false,
-                            index = 2,
-                            dropdownColors = DropdownDefaults.dropdownColors(),
-                            onSelectedIndexChange = {
-                                showTopMenu.value = false
-                                coroutineScope.launch {
-                                    forceStopPackageByRoot(
-                                        context = context,
-                                        packageName = "com.miui.personalassistant",
-                                        appName = context.getString(R.string.category_personalassistant),
-                                    )
-                                }
-                            },
-                        )
-
-                        DropdownImpl(
-                            item = DropdownItem(
-                                title = androidx.compose.ui.res.stringResource(
-                                    R.string.quick_stop_systemui,
-                                ),
-                            ),
-                            optionSize = 4,
-                            isSelected = false,
-                            index = 3,
-                            dropdownColors = DropdownDefaults.dropdownColors(),
-                            onSelectedIndexChange = {
-                                showTopMenu.value = false
-                                coroutineScope.launch {
-                                    forceKillSystemUI(context)
-                                }
-                            },
-                        )
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                    }
                 }
             }
         },

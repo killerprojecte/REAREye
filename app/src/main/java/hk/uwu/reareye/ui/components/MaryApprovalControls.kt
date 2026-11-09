@@ -44,11 +44,9 @@ import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.interaction.ApprovalMode
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.preference.ArrowPreference
+import hk.uwu.mixui.components.PreferenceRow
+import hk.uwu.mixui.components.GlassAnchoredMenu
 import hk.uwu.mixui.theme.MixTheme
 
 @Composable
@@ -130,7 +128,7 @@ internal fun ApprovalModeButton(
     val title = approvalModeTitle(mode)
     val accent = approvalModeAccent(mode)
     val action = stringResource(R.string.mary_chat_approval_action, title)
-    Box {
+    ApprovalModeMenu(expanded, mode, { expanded = it }, enabled, onSelected) {
         IconButton(
             enabled = enabled,
             onClick = {
@@ -155,10 +153,7 @@ internal fun ApprovalModeButton(
                     .testTag("mary-approval-current-${mode.name}")
             )
         }
-        ApprovalModePopup(shown, mode, { expanded = false }) {
-            expanded = false
-            onSelected(it)
-        }
+
     }
 }
 
@@ -169,8 +164,8 @@ internal fun MaryApprovalModePreference(
     enabled: Boolean = true,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Box {
-        ArrowPreference(
+    ApprovalModeMenu(expanded, mode, { expanded = it }, enabled, onSelected) {
+        PreferenceRow(
             title = stringResource(R.string.mary_settings_ui_approval_mode),
             summary = approvalModeTitle(mode),
             enabled = enabled,
@@ -178,31 +173,28 @@ internal fun MaryApprovalModePreference(
             onClick = { expanded = true },
             modifier = Modifier.testTag("mary-settings-approval-mode"),
         )
-        ApprovalModePopup(expanded && enabled, mode, { expanded = false }) {
-            expanded = false
-            onSelected(it)
-        }
+
     }
 }
 
 @Composable
-private fun ApprovalModePopup(
+private fun ApprovalModeMenu(
     show: Boolean,
     mode: ApprovalMode,
-    onDismiss: () -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    enabled: Boolean,
     onSelected: (ApprovalMode) -> Unit,
+    anchor: @Composable () -> Unit,
 ) {
-    OverlayListPopup(
-        show = show,
-        popupModifier = Modifier,
-        popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-        alignment = PopupPositionProvider.Align.Start,
-        enableWindowDim = true,
-        onDismissRequest = onDismiss,
-        maxHeight = null,
-        minWidth = 300.dp,
-        renderInRootScaffold = true,
-    ) {
+    GlassAnchoredMenu(
+        expanded = show,
+        onExpandedChange = onExpandedChange,
+        options = emptyList(),
+        onOptionClick = {},
+        enabled = enabled,
+        width = 340.dp,
+        anchor = anchor,
+        menuContent = {
         Column(Modifier
             .widthIn(max = 420.dp)
             .testTag("mary-approval-options")) {
@@ -222,8 +214,14 @@ private fun ApprovalModePopup(
                         .testTag("mary-approval-option-${option.name}")
                         .selectable(
                             selected = selected,
+                            enabled = enabled && show,
                             role = Role.RadioButton,
-                            onClick = { onSelected(option) })
+                            onClick = {
+                                if (enabled && show) {
+                                    onExpandedChange(false)
+                                    onSelected(option)
+                                }
+                            })
                         .semantics(mergeDescendants = true) {}
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -260,5 +258,6 @@ private fun ApprovalModePopup(
                 }
             }
         }
-    }
+        },
+    )
 }

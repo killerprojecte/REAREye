@@ -258,6 +258,7 @@ class MaryComposerMotionLayoutTest {
             activity = controller
             controller.get().setContent {
                 MiuixTheme(ThemeController(ColorSchemeMode.Light)) {
+                    hk.uwu.mixui.components.GlassPreferenceScene {
                     val density = LocalDensity.current
                     CompositionLocalProvider(
                         LocalDensity provides Density(
@@ -293,6 +294,7 @@ class MaryComposerMotionLayoutTest {
                         }
                     }
                 }
+                    }
             }
         }
         compose.waitForIdle()

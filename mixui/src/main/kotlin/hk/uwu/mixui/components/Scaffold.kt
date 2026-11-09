@@ -10,6 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import hk.uwu.mixui.theme.MixTheme
 
+@Composable
+fun PopupHost() = top.yukonga.miuix.kmp.utils.MiuixPopupUtils.MiuixPopupHost()
+
 enum class FabPosition { Start, Center, End, EndOverlay }
 enum class ToolbarPosition { TopStart, CenterStart, BottomStart, TopEnd, CenterEnd, BottomEnd, TopCenter, BottomCenter }
 
@@ -27,7 +30,7 @@ fun Scaffold(
     floatingToolbar: @Composable () -> Unit = {},
     floatingToolbarPosition: ToolbarPosition = ToolbarPosition.BottomCenter,
     snackbarHost: @Composable () -> Unit = {},
-    popupHost: @Composable () -> Unit = { top.yukonga.miuix.kmp.utils.MiuixPopupUtils.MiuixPopupHost() },
+    popupHost: @Composable () -> Unit = { PopupHost() },
     containerColor: Color = MixTheme.colorScheme.surface,
     contentWindowInsets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
     content: @Composable (PaddingValues) -> Unit,

@@ -55,6 +55,7 @@ class HomeNativeTitleTest {
     @get:Rule val compose = createEmptyComposeRule()
     private var activity: ActivityController<ComponentActivity>? = null
     private var presetOpens = 0
+    private val quickActions = mutableListOf<Int>()
 
     private fun frames() { repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
 
@@ -64,9 +65,11 @@ class HomeNativeTitleTest {
         bottomInset: Int,
         direction: LayoutDirection = LayoutDirection.Ltr,
         fontScale: Float = 1f,
+        quickMenu: Boolean = false,
     ) {
         compose.mainClock.autoAdvance = false
         presetOpens = 0
+        quickActions.clear()
         compose.runOnUiThread {
             activity?.close()
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
@@ -78,6 +81,7 @@ class HomeNativeTitleTest {
                         HomeScreen(
                             bottomInnerPadding = 96.dp,
                             onOpenPresetPackDialog = { presetOpens++ },
+                            quickActionOverride = if (quickMenu) ({ quickActions += it }) else null,
                             snapshot = HomeScreenSnapshot(
                                 activationState = ModuleActivationState.ACTIVE,
                                 hasRootAccess = true,
@@ -125,9 +129,13 @@ class HomeNativeTitleTest {
     private fun capture(name: String) {
         val output = System.getProperty("ui.capture.output") ?: return
         val folder = File(output, "home-native-title").apply { mkdirs() }
-        val bitmap = compose.onRoot(useUnmergedTree = true).captureToImage().asAndroidBitmap()
-        File(folder, "$name.png").outputStream().use {
-            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+        val roots = compose.onAllNodes(isRoot(), useUnmergedTree = true)
+        roots.fetchSemanticsNodes().indices.forEach { index ->
+            val bitmap = roots[index].captureToImage().asAndroidBitmap()
+            val suffix = if (index == 0) "" else "-root$index"
+            File(folder, "$name$suffix.png").outputStream().use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
         }
     }
 
@@ -185,6 +193,10 @@ class HomeNativeTitleTest {
                 writeNativeTitleGeometry("home-native-title", "$key-expanded", expanded)
                 capture("$key-expanded")
                 val title = expanded.maxBy { it.layout.layoutInput.style.fontSize.value }
+                if (backend == MixUiBackend.Mochi) {
+                    assertEquals(32.sp, title.layout.layoutInput.style.fontSize)
+                    assertEquals(androidx.compose.ui.text.font.FontWeight.Normal, title.layout.layoutInput.style.fontWeight)
+                }
                 val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
                 val inset = title.startInset(root, LayoutDirection.Ltr)
                 if (kotlin.math.abs(inset - 26f) > 1f) failures += "$key title first-glyph inset=$inset, expected 26px"
@@ -215,6 +227,31 @@ class HomeNativeTitleTest {
             }
         }
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
+
+    @Test fun actualHomeQuickMenuPreservesFourActionsAndBackDismissal() {
+        val actionLabels = listOf(R.string.quick_stop_subscreencenter, R.string.quick_stop_thememanager,
+            R.string.quick_stop_personalassistant, R.string.quick_stop_systemui)
+        for (backend in MixUiBackend.entries) for (dark in listOf(false, true)) {
+            open(backend, dark, bottomInset = 24, quickMenu = true)
+            fun openMenu() {
+                compose.onNodeWithTag("home-quick-actions").performClick(); frames()
+                actionLabels.forEach { compose.onNodeWithText(label(it)).assertIsDisplayed() }
+            }
+            openMenu()
+            capture("${backend.name}-${if (dark) "dark" else "light"}-quick-menu")
+            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }; frames()
+            compose.onNodeWithText(label(actionLabels.first())).assertDoesNotExist()
+            assertTrue(quickActions.isEmpty())
+            for (index in actionLabels.indices) {
+                openMenu()
+                compose.onNodeWithText(label(actionLabels[index])).performClick(); frames()
+                compose.onNodeWithText(label(actionLabels.first())).assertDoesNotExist()
+                assertEquals((0..index).toList(), quickActions)
+            }
+            // All callbacks are inert injected spies, never a root/system operation.
+            compose.onNodeWithText(label(R.string.home_status_working), useUnmergedTree = true).assertIsDisplayed()
+        }
     }
 
 }

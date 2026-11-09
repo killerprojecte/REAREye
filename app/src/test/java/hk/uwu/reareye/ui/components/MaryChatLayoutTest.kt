@@ -278,7 +278,7 @@ class MaryChatLayoutTest {
         val enabled = mutableStateOf(true)
         val selections = mutableListOf<ReasoningEffort>()
         host {
-            Scaffold {
+            Scaffold(popupHost = {}) {
                 Box(Modifier
                     .fillMaxSize()
                     .padding(top = 48.dp)) {
@@ -333,7 +333,7 @@ class MaryChatLayoutTest {
     fun reasoningPickerReturnKeepsEmptyEditingExpandedUntilFocusActuallyLeaves() {
         lateinit var outside: FocusRequester
         host {
-            Scaffold {
+            Scaffold(popupHost = {}) {
                 outside = remember { FocusRequester() }
                 Box(
                     Modifier
@@ -398,7 +398,7 @@ class MaryChatLayoutTest {
         )
         var saved = 0
         host {
-            Scaffold {
+            Scaffold(popupHost = {}) {
                 ReasoningStrengthButton(provider.value, true, {}, {
                     saved++
                     provider.value = provider.value.copy(reasoningEffort = it)
@@ -925,7 +925,7 @@ class MaryChatLayoutTest {
     fun topBarUsesLeadingMenuAndOnlyContextAction() {
         var opens = 0
         host {
-            Scaffold(topBar = {
+            Scaffold(popupHost = {}, topBar = {
                 MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { opens++ })
             }) { }
         }
@@ -951,7 +951,7 @@ class MaryChatLayoutTest {
                 activity = controller
                 controller.get().setContent {
                     hk.uwu.mixui.MixUiHost(backend = backend, colorMode = hk.uwu.mixui.MixColorSchemeMode.Light) {
-                        Scaffold(topBar = {
+                        Scaffold(popupHost = {}, topBar = {
                             MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { opens++ })
                         }) { }
                     }
@@ -1133,7 +1133,7 @@ class MaryChatLayoutTest {
         val mode = mutableStateOf(ApprovalMode.ASK)
         val saving = mutableStateOf(false)
         host {
-            Scaffold {
+            Scaffold(popupHost = {}) {
                 Box(Modifier
                     .fillMaxSize()
                     .background(pageBackground)
@@ -1211,7 +1211,7 @@ class MaryChatLayoutTest {
             MiuixTheme(ThemeController(theme.value)) {
                 val currentPrimary = MiuixTheme.colorScheme.primary
                 SideEffect { themePrimary = currentPrimary }
-                Scaffold {
+                Scaffold(popupHost = {}) {
                     Column(
                         Modifier
                             .fillMaxSize()
@@ -1355,7 +1355,7 @@ class MaryChatLayoutTest {
         host {
             // The popup host and navigation stay full-window; only the settings page
             // avoids the IME. This mirrors MainActivity + MarySettingsScreen.
-            Scaffold {
+            Scaffold(popupHost = {}) {
                 Box(Modifier
                     .fillMaxSize()
                     .testTag("mary-fixed-root")) {
@@ -1777,7 +1777,7 @@ class MaryChatLayoutTest {
                         .background(pageBackground)
                         .testTag("layout-container")
                 ) {
-                    Scaffold { padding ->
+                    Scaffold(popupHost = {}) { padding ->
                         Column(Modifier
                             .padding(padding)
                             .padding(top = 20.dp)) {
@@ -1858,7 +1858,8 @@ class MaryChatLayoutTest {
                     .background(pageBackground)
                     .testTag("layout-container")
             ) {
-                Scaffold { padding ->
+                hk.uwu.mixui.components.GlassPreferenceScene {
+                Scaffold(popupHost = {}) { padding ->
                     Column(
                         Modifier
                             .fillMaxSize()
@@ -1873,6 +1874,7 @@ class MaryChatLayoutTest {
                             unreadable = false,
                         )
                     }
+                }
                 }
             }
         }
@@ -2011,7 +2013,7 @@ class MaryChatLayoutTest {
                         surfaceContainer = scheme.surfaceContainer
                         outline = scheme.outline
                     }
-                    content()
+                    hk.uwu.mixui.components.GlassPreferenceScene { content() }
                 }
             }
         }

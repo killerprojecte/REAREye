@@ -535,6 +535,7 @@ class MaryContextCompositionLayoutTest {
                 controller.get().enableEdgeToEdge()
                 controller.get().setContent {
                     MiuixTheme(ThemeController(mode)) {
+                    hk.uwu.mixui.components.GlassPreferenceScene {
                         inputModes = androidx.compose.ui.platform.LocalInputModeManager.current
                         val pageHost = remember { MarySidebarPageGestureHost() }
                         val gestures = remember { MarySidebarGestureState() }
@@ -567,6 +568,7 @@ class MaryContextCompositionLayoutTest {
                                 MarySidebarPagePreview(pageHost, true)
                             }
                         }
+                    }
                     }
                 }
             }

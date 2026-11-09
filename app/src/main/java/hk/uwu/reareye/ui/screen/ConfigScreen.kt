@@ -81,21 +81,16 @@ import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import hk.uwu.mixui.components.Card
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
 import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.GlassAnchoredMenu
+import hk.uwu.mixui.components.GlassMenuOption
 import hk.uwu.mixui.components.IconButton
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.LargeTitleLazyScaffold
 import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.components.ArrowPreference
 import hk.uwu.mixui.theme.MixTheme
 import java.util.IdentityHashMap
@@ -879,12 +874,24 @@ internal fun ConfigNodeRowWithFavoriteMenu(
     val favoriteIconTint = rememberFavoriteIconTint()
     var showFavoritePopup by remember(favoriteNodeId) { mutableStateOf(false) }
 
-    Box(
+    GlassAnchoredMenu(
+        expanded = showFavoritePopup,
+        onExpandedChange = { showFavoritePopup = it },
+        enabled = canFavorite,
+        options = listOf(GlassMenuOption(
+            title = stringResource(if (isFavorite) R.string.config_favorite_remove else R.string.config_favorite_add),
+            dismissOnClick = false,
+            icon = { iconModifier ->
+                FavoritePopupIcon(isFavorite = isFavorite, tint = favoriteIconTint, modifier = iconModifier)
+            },
+        )),
+        onOptionClick = { onToggleFavorite(node) },
         modifier = Modifier.configNodeLongPress(
             enabled = canFavorite,
             isScrolling = isListScrolling,
             onLongPress = { showFavoritePopup = true },
-        )
+        ),
+        width = 240.dp,
     ) {
         ConfigNodeRow(
             node = node,
@@ -894,48 +901,6 @@ internal fun ConfigNodeRowWithFavoriteMenu(
             onOpenManager = onOpenManager,
             onPreferenceChanged = onPreferenceChanged,
         )
-
-        if (canFavorite) {
-            OverlayListPopup(
-                show = showFavoritePopup,
-                popupModifier = Modifier,
-                popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                alignment = PopupPositionProvider.Align.Start,
-                enableWindowDim = true,
-                onDismissRequest = { showFavoritePopup = false },
-                maxHeight = null,
-                minWidth = 180.dp,
-                renderInRootScaffold = true,
-            ) {
-                ListPopupColumn {
-                    DropdownImpl(
-                        item = DropdownItem(
-                            icon = { iconModifier ->
-                                FavoritePopupIcon(
-                                    isFavorite = isFavorite,
-                                    tint = favoriteIconTint,
-                                    modifier = iconModifier,
-                                )
-                            },
-                            title = stringResource(
-                                if (isFavorite) {
-                                    R.string.config_favorite_remove
-                                } else {
-                                    R.string.config_favorite_add
-                                }
-                            )
-                        ),
-                        optionSize = 1,
-                        isSelected = false,
-                        index = 0,
-                        dropdownColors = DropdownDefaults.dropdownColors(),
-                        onSelectedIndexChange = {
-                            onToggleFavorite(node)
-                        },
-                    )
-                }
-            }
-        }
     }
 }
 

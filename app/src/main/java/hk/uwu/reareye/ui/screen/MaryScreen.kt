@@ -106,6 +106,7 @@ import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.CardDefaults
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.GlassPreferenceScene
 import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.CompactTopBar
 import hk.uwu.mixui.components.Text
@@ -187,7 +188,9 @@ fun MaryScreen(
         canFollow = { tailFollow.following },
     )
 
+    GlassPreferenceScene {
     Scaffold(
+        popupHost = {},
         modifier = if (pageGestureHost == null && !showSidebar) Modifier.marySidebarOpenGesture(
             sidebarGestures, beforeSidebarOpen, onOpen = { showSidebar = true },
         ) else Modifier,
@@ -352,6 +355,8 @@ fun MaryScreen(
                 )
             }
         }
+    }
+
     }
 
     MaryConversationSidebar(

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -52,17 +51,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.components.RearSearchBar
@@ -70,34 +64,24 @@ import hk.uwu.reareye.ui.components.rememberApplicationIconBitmap
 import hk.uwu.reareye.ui.config.ConfigItem
 import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.rememberRemotePrefsStatusRevision
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.platform.testTag
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.GlassAnchoredMenu
+import hk.uwu.mixui.components.GlassMenuOption
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.TopBarIconButton
+import hk.uwu.mixui.components.pageScrollFeedback
 import hk.uwu.mixui.components.Card
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
-import hk.uwu.mixui.components.FabPosition
-import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import hk.uwu.mixui.components.Icon
-import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.theme.MixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 private enum class AppSortMode {
     LABEL,
@@ -539,8 +523,6 @@ fun AppListSelectorScreen(
 ) {
     val context = LocalContext.current
     val pm = context.packageManager
-    val layoutDirection = LocalLayoutDirection.current
-    LocalDensity.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val popupScope = rememberCoroutineScope()
@@ -562,9 +544,7 @@ fun AppListSelectorScreen(
     val showSortMenu = remember(configItem.key) { mutableStateOf(false) }
     val showFilterMenu = remember(configItem.key) { mutableStateOf(false) }
     val showMoreMenu = remember(configItem.key) { mutableStateOf(false) }
-    val scrollBehavior = MiuixScrollBehavior()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
+    val isContentScrolled by remember { derivedStateOf { listState.canScrollBackward } }
 
     BackHandler(enabled = searchFocused.value) {
         focusManager.clearFocus(force = true)
@@ -642,238 +622,97 @@ fun AppListSelectorScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .rearAcrylicEffect(hazeState, hazeStyle),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                TopAppBar(
-                    color = Color.Transparent,
-                    title = stringResource(configItem.titleRes),
-                    navigationIconPadding = 12.dp,
-                    actionIconPadding = 12.dp,
-                    navigationIcon = {
-                        IconButton(onClick = onCancel) {
-                            Icon(
-                                modifier = Modifier.graphicsLayer {
-                                    if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                                },
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = null,
-                                tint = MixTheme.colorScheme.onBackground,
-                            )
-                        }
-                    },
-                    actions = {
-                        Box {
-                            IconButton(
-                                onClick = { showSortMenu.value = true },
-                                holdDownState = showSortMenu.value
-                            ) {
-                                Icon(
-                                    imageVector = UiIcons.Regular.Sort,
-                                    contentDescription = stringResource(R.string.app_list_sort),
-                                    tint = MixTheme.colorScheme.onBackground,
-                                )
-                            }
-                            OverlayListPopup(
-                                show = showSortMenu.value,
-                                popupModifier = Modifier,
-                                popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                                alignment = PopupPositionProvider.Align.End,
-                                enableWindowDim = true,
-                                onDismissRequest = { showSortMenu.value = false },
-                                maxHeight = null,
-                                minWidth = 200.dp,
-                                renderInRootScaffold = true,
-                                content = {
-                                    ListPopupColumn {
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.app_list_sort_by_name)),
-                                            optionSize = 3,
-                                            isSelected = sortMode == AppSortMode.LABEL,
-                                            index = 0,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                dismissThenApply(
-                                                    { showSortMenu.value = false },
-                                                    { sortMode = AppSortMode.LABEL },
-                                                )
-                                            }
-                                        )
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.app_list_sort_by_package)),
-                                            optionSize = 3,
-                                            isSelected = sortMode == AppSortMode.PACKAGE,
-                                            index = 1,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                dismissThenApply(
-                                                    { showSortMenu.value = false },
-                                                    { sortMode = AppSortMode.PACKAGE },
-                                                )
-                                            }
-                                        )
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.app_list_sort_reverse)),
-                                            optionSize = 3,
-                                            isSelected = reverseOrder,
-                                            index = 2,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                dismissThenApply(
-                                                    { showSortMenu.value = false },
-                                                    { reverseOrder = !reverseOrder },
-                                                )
-                                            }
-                                        )
-                                    }
-                                })
-                        }
-
-                        Box {
-                            IconButton(
-                                onClick = { showFilterMenu.value = true },
-                                holdDownState = showFilterMenu.value
-                            ) {
-                                Icon(
-                                    imageVector = UiIcons.Regular.Tune,
-                                    contentDescription = stringResource(R.string.app_list_filter),
-                                    tint = MixTheme.colorScheme.onBackground,
-                                )
-                            }
-                            OverlayListPopup(
-                                show = showFilterMenu.value,
-                                popupModifier = Modifier,
-                                popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                                alignment = PopupPositionProvider.Align.End,
-                                enableWindowDim = true,
-                                onDismissRequest = { showFilterMenu.value = false },
-                                maxHeight = null,
-                                minWidth = 200.dp,
-                                renderInRootScaffold = true,
-                                content = {
-                                    ListPopupColumn {
-                                        DropdownImpl(
-                                            item = DropdownItem(
-                                                icon = { modifier ->
-                                                    Icon(
-                                                        imageVector = Icons.Filled.Apps,
-                                                        contentDescription = null,
-                                                        modifier = modifier,
-                                                        tint = MixTheme.colorScheme.onBackground,
-                                                    )
-                                                },
-                                                title = stringResource(R.string.show_system_apps),
-                                            ),
-                                            optionSize = 1,
-                                            isSelected = showSystemApps,
-                                            index = 0,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                dismissThenApply(
-                                                    { showFilterMenu.value = false },
-                                                    { showSystemApps = !showSystemApps },
-                                                )
-                                            },
-                                        )
-                                    }
-                                })
-                        }
-
-                        Box {
-                            IconButton(
-                                onClick = { showMoreMenu.value = true },
-                                holdDownState = showMoreMenu.value,
-                            ) {
-                                Icon(
-                                    imageVector = UiIcons.MoreCircle,
-                                    contentDescription = stringResource(R.string.app_list_more_actions),
-                                    tint = MixTheme.colorScheme.onBackground,
-                                )
-                            }
-                            OverlayListPopup(
-                                show = showMoreMenu.value,
-                                popupModifier = Modifier,
-                                popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                                alignment = PopupPositionProvider.Align.End,
-                                enableWindowDim = true,
-                                onDismissRequest = { showMoreMenu.value = false },
-                                maxHeight = null,
-                                minWidth = 200.dp,
-                                renderInRootScaffold = true,
-                                content = {
-                                    ListPopupColumn {
-                                        DropdownImpl(
-                                            item = DropdownItem(
-                                                icon = { modifier ->
-                                                    Icon(
-                                                        imageVector = Icons.Filled.Delete,
-                                                        contentDescription = null,
-                                                        modifier = modifier,
-                                                        tint = MixTheme.colorScheme.onBackground,
-                                                    )
-                                                },
-                                                title = stringResource(R.string.selection_clear),
-                                            ),
-                                            optionSize = 1,
-                                            isSelected = false,
-                                            index = 0,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                dismissThenApply(
-                                                    { showMoreMenu.value = false },
-                                                    { selectedOrder.clear() },
-                                                )
-                                            },
-                                        )
-                                    }
-                                })
-                        }
-                    },
-                    scrollBehavior = scrollBehavior,
-                )
-
-                AppSelectorHeader(
-                    prefsManager = prefsManager,
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp),
-                    searchQuery = searchInput,
-                    onSearchQueryChange = { searchInput = it },
-                    onSearchFocusChange = { searchFocused.value = it },
+    GlassTopBarScaffold(
+        title = stringResource(configItem.titleRes),
+        isContentScrolled = isContentScrolled,
+        contentListState = listState,
+        navigationIcon = {
+            TopBarIconButton(onClick = onCancel, modifier = Modifier.testTag("app-list-back")) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                    tint = MixTheme.colorScheme.onBackground,
                 )
             }
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (!selectedOrderLoaded) return@FloatingActionButton
-                    prefsManager.putStringSet(configItem.key, selectedLookup)
-                    onSave()
+        actions = {
+            GlassAnchoredMenu(
+                expanded = showSortMenu.value,
+                onExpandedChange = { showSortMenu.value = it },
+                options = listOf(
+                    GlassMenuOption(stringResource(R.string.app_list_sort_by_name), selected = sortMode == AppSortMode.LABEL),
+                    GlassMenuOption(stringResource(R.string.app_list_sort_by_package), selected = sortMode == AppSortMode.PACKAGE),
+                    GlassMenuOption(stringResource(R.string.app_list_sort_reverse), selected = reverseOrder),
+                ),
+                width = 240.dp,
+                onOptionClick = { index ->
+                    dismissThenApply({ showSortMenu.value = false }) {
+                        when (index) {
+                            0 -> sortMode = AppSortMode.LABEL
+                            1 -> sortMode = AppSortMode.PACKAGE
+                            2 -> reverseOrder = !reverseOrder
+                        }
+                    }
                 },
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Save,
-                    contentDescription = stringResource(R.string.selection_save),
-                    tint = MixTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(30.dp),
-                )
+                TopBarIconButton(onClick = { showSortMenu.value = true }) {
+                    Icon(UiIcons.Regular.Sort, contentDescription = stringResource(R.string.app_list_sort),
+                        tint = MixTheme.colorScheme.onBackground)
+                }
+            }
+            GlassAnchoredMenu(
+                expanded = showFilterMenu.value,
+                onExpandedChange = { showFilterMenu.value = it },
+                options = listOf(GlassMenuOption(
+                    stringResource(R.string.show_system_apps), selected = showSystemApps,
+                    icon = { modifier -> Icon(Icons.Filled.Apps, contentDescription = null,
+                        modifier = modifier, tint = MixTheme.colorScheme.onBackground) },
+                )),
+                width = 240.dp,
+                onOptionClick = {
+                    dismissThenApply({ showFilterMenu.value = false }) { showSystemApps = !showSystemApps }
+                },
+            ) {
+                TopBarIconButton(onClick = { showFilterMenu.value = true }) {
+                    Icon(UiIcons.Regular.Tune, contentDescription = stringResource(R.string.app_list_filter),
+                        tint = MixTheme.colorScheme.onBackground)
+                }
+            }
+            GlassAnchoredMenu(
+                expanded = showMoreMenu.value,
+                onExpandedChange = { showMoreMenu.value = it },
+                options = listOf(GlassMenuOption(
+                    stringResource(R.string.selection_clear),
+                    icon = { modifier -> Icon(Icons.Filled.Delete, contentDescription = null,
+                        modifier = modifier, tint = MixTheme.colorScheme.onBackground) },
+                )),
+                width = 240.dp,
+                onOptionClick = {
+                    dismissThenApply({ showMoreMenu.value = false }) { selectedOrder.clear() }
+                },
+            ) {
+                TopBarIconButton(onClick = { showMoreMenu.value = true }) {
+                    Icon(UiIcons.MoreCircle, contentDescription = stringResource(R.string.app_list_more_actions),
+                        tint = MixTheme.colorScheme.onBackground)
+                }
             }
         },
-        floatingActionButtonPosition = FabPosition.End,
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets.systemBars,
+        pinnedHeader = {
+            AppSelectorHeader(
+                prefsManager = prefsManager,
+                modifier = Modifier.padding(horizontal = 12.dp).padding(top = 12.dp, bottom = 12.dp),
+                searchQuery = searchInput,
+                onSearchQueryChange = { searchInput = it },
+                onSearchFocusChange = { searchFocused.value = it },
+            )
+        },
     ) { paddingValues ->
+        Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .rearAcrylicSource(hazeState)
+                .pageScrollFeedback()
+                .testTag("app-list-results")
                 .padding(horizontal = 12.dp),
             state = listState,
             contentPadding = PaddingValues(
@@ -900,6 +739,25 @@ fun AppListSelectorScreen(
                     )
                 }
             }
+        }
+    Button(
+        onClick = {
+            if (selectedOrderLoaded) {
+                prefsManager.putStringSet(configItem.key, selectedLookup)
+                onSave()
+            }
+        },
+        modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding()
+            .padding(16.dp).size(56.dp).testTag("app-list-save"),
+        cornerRadius = 16.dp,
+        minWidth = 56.dp,
+        minHeight = 56.dp,
+        insideMargin = PaddingValues(0.dp),
+        colors = ButtonDefaults.buttonColorsPrimary(),
+    ) {
+        Icon(Icons.Filled.Save, contentDescription = stringResource(R.string.selection_save),
+            tint = MixTheme.colorScheme.onPrimary, modifier = Modifier.size(30.dp))
+    }
         }
     }
 }

@@ -998,6 +998,7 @@ class MarySidebarLayoutTest {
                 controller.get().setContent {
                     CompositionLocalProvider(LocalLayoutDirection provides direction) {
                     MiuixTheme(ThemeController(mode)) {
+                    hk.uwu.mixui.components.GlassPreferenceScene {
                         val menuFocus = remember { FocusRequester() }
                         val focusManager = LocalFocusManager.current
                         val keyboard = LocalSoftwareKeyboardController.current
@@ -1081,6 +1082,7 @@ class MarySidebarLayoutTest {
                             MarySidebarPagePreview(pageHost, enabled = maryActive.value)
                         }
                         }
+                    }
                     }
                     }
                 }

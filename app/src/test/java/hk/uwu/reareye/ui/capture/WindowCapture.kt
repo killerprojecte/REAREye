@@ -9,7 +9,11 @@ import android.view.PixelCopy
 /** Robolectric native-graphics capture of the actual Dialog window after Compose is idle. */
 internal fun captureDialogWindowBitmap(dialog: Dialog): Bitmap {
     check(dialog.isShowing) { "Cannot capture a dismissed dialog" }
-    val window = requireNotNull(dialog.window)
+    return captureWindowBitmap(requireNotNull(dialog.window))
+}
+
+/** Captures every Compose root in a single native window, including native popovers. */
+internal fun captureWindowBitmap(window: android.view.Window): Bitmap {
     val decor = window.decorView
     check(decor.width > 0 && decor.height > 0) { "Dialog has not been laid out" }
     val bitmap = Bitmap.createBitmap(decor.width, decor.height, Bitmap.Config.ARGB_8888)

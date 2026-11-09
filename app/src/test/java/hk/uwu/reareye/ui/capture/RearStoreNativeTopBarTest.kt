@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -76,6 +77,7 @@ class RearStoreNativeTopBarTest {
     private fun frames() { repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
     private fun label(id: Int) = activity!!.get().getString(id)
     private fun text(value: String) = compose.onNodeWithText(value, useUnmergedTree = true)
+    private fun sortOption(id: Int) = compose.onNode(hasText(label(id)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected))
     private fun awaitText(value: String) {
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText(value, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
@@ -142,15 +144,19 @@ class RearStoreNativeTopBarTest {
     private fun capture(name: String) {
         val output = System.getProperty("ui.capture.output") ?: return
         val folder = File(output, "rear-store-native-topbar").apply { mkdirs() }
-        val bitmap = compose.onRoot(useUnmergedTree = true).captureToImage().asAndroidBitmap()
-        File(folder, "$name.png").outputStream().use {
-            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+        val roots = compose.onAllNodes(isRoot(), useUnmergedTree = true)
+        roots.fetchSemanticsNodes().indices.forEach { index ->
+            val bitmap = roots[index].captureToImage().asAndroidBitmap()
+            val suffix = if (index == 0) "" else "-root$index"
+            File(folder, "$name$suffix.png").outputStream().use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
         }
     }
     private fun openSort() {
         compose.onNodeWithContentDescription(label(R.string.app_list_sort)).performClick()
         frames()
-        text(label(R.string.rear_store_sort_by_stars)).assertIsDisplayed()
+        sortOption(R.string.rear_store_sort_by_stars).assertIsDisplayed()
     }
     private fun assertBefore(first: String, second: String) {
         assertTrue("$first must precede $second in the rendered store list",
@@ -215,18 +221,24 @@ class RearStoreNativeTopBarTest {
             openSort()
             compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }
             frames()
-            text(label(R.string.rear_store_sort_by_stars)).assertDoesNotExist()
+            sortOption(R.string.rear_store_sort_by_stars).assertDoesNotExist()
             assertEquals("Dismissing the sort popup must not navigate away", 0, backCalls)
             openSort()
-            text(label(R.string.rear_store_prioritize_updates)).performClick()
+            sortOption(R.string.rear_store_prioritize_updates).assertIsSelected()
+            sortOption(R.string.rear_store_sort_by_updated_at).assertIsSelected()
+            capture("${backend.name}-sort-open")
+            sortOption(R.string.rear_store_prioritize_updates).performClick()
             frames()
-            text(label(R.string.rear_store_sort_by_stars)).assertIsDisplayed()
-            text(label(R.string.rear_store_sort_by_stars)).performClick()
+            sortOption(R.string.rear_store_sort_by_stars).assertIsDisplayed()
+            sortOption(R.string.rear_store_prioritize_updates).assertIsNotSelected()
+            sortOption(R.string.rear_store_sort_by_stars).performClick()
             frames()
-            text(label(R.string.rear_store_sort_by_stars)).assertDoesNotExist()
+            sortOption(R.string.rear_store_sort_by_stars).assertDoesNotExist()
             assertBefore(items[1].name, items[0].name)
             openSort()
-            text(label(R.string.rear_store_sort_by_name)).performClick()
+            sortOption(R.string.rear_store_sort_by_stars).assertIsSelected()
+            sortOption(R.string.rear_store_sort_by_updated_at).assertIsNotSelected()
+            sortOption(R.string.rear_store_sort_by_name).performClick()
             frames()
             assertBefore(items[0].name, items[1].name)
 
@@ -354,9 +366,9 @@ class RearStoreNativeTopBarTest {
             text(label(if (items == null) R.string.rear_store_load_failed else R.string.rear_store_search_empty))
                 .assertIsDisplayed()
             openSort()
-            text(label(R.string.rear_store_sort_by_updated_at)).performClick()
+            sortOption(R.string.rear_store_sort_by_updated_at).performClick()
             frames()
-            text(label(R.string.rear_store_sort_by_updated_at)).assertDoesNotExist()
+            sortOption(R.string.rear_store_sort_by_updated_at).assertDoesNotExist()
             assertTrue(openedIds.isEmpty())
         }
     }

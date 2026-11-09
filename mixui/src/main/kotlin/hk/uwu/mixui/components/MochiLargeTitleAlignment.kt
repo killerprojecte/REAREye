@@ -9,12 +9,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.isSpecified
 import ui.feice.mochi.theme.LocalContentColor
 import ui.feice.mochi.theme.LocalTextStyle
@@ -27,7 +29,8 @@ import ui.feice.mochi.theme.MochiTheme
  * changing the native 16dp body/search padding, scroll state or compact title.
  *
  * A paragraph indent is direction-sensitive. RTL UI/RTL-leading titles retain
- * native geometry rather than forcing their textDirection or reordering text.
+ * native paragraph direction rather than forcing textDirection or reordering text.
+ * Large titles use MIUIX's 32sp/normal typography in both layout directions.
  * Explicit caller paragraph alignment/indentation is also left intact. Remove
  * this compatibility adapter when Mochi exposes a title layout modifier.
  */
@@ -38,7 +41,7 @@ internal fun MochiLargeTitleAlignment(
 ) {
     val styles = MochiTheme.textStyles
     val caller = MochiTitleContentStyle(styles, LocalTextStyle.current, LocalContentColor.current)
-    val style = styles.largeTitle
+    val style = styles.largeTitle.copy(fontSize = 32.sp, fontWeight = FontWeight.Normal)
     val direction = LocalLayoutDirection.current
     val textMeasurer = rememberTextMeasurer(cacheSize = 1)
     val hasDefaultParagraph = (style.textIndent == null || style.textIndent == TextIndent.None) &&
@@ -46,7 +49,7 @@ internal fun MochiLargeTitleAlignment(
     val align = direction == LayoutDirection.Ltr && title.isNotEmpty() && hasDefaultParagraph &&
         textMeasurer.measure(title, style).getParagraphDirection(0) == ResolvedTextDirection.Ltr
     if (!align) {
-        content(caller)
+        MochiTypography(styles.copy(largeTitle = style)) { content(caller) }
         return
     }
     val indent = with(LocalDensity.current) {

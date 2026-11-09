@@ -98,11 +98,12 @@ fun LargeTitleColumnScaffold(
 ) {
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val background = MixTheme.colorScheme.surface
+    GlassPreferenceScene(modifier = modifier) {
     when (LocalMixUiBackend.current) {
         MixUiBackend.Miuix -> {
             val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior()
             Scaffold(
-                modifier = modifier,
+                popupHost = {},
                 containerColor = background,
                 contentWindowInsets = WindowInsets.systemBars,
                 topBar = {
@@ -145,7 +146,7 @@ fun LargeTitleColumnScaffold(
                 if (bottomObstruction > 0.dp) bottomObstruction + 8.dp else 0.dp,
             )
             Scaffold(
-                modifier = modifier,
+                popupHost = {},
                 containerColor = background,
                 // Mochi owns status and navigation insets. Do not apply a second
                 // scaffold content padding or recreate its scrolling container.
@@ -175,6 +176,7 @@ fun LargeTitleColumnScaffold(
                 }
             }
         }
+    }
     }
 }
 

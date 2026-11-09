@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.theme.MixTheme
@@ -23,20 +24,24 @@ import ui.feice.mochi.effect.glass.rememberMochiBackdrop
  * list, insets or scroll behavior and does not change its caller's page layout.
  */
 @Composable
-fun GlassPreferenceScene(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun GlassPreferenceScene(
+    modifier: Modifier = Modifier,
+    backgroundColor: Color = MixTheme.colorScheme.surface,
+    content: @Composable () -> Unit,
+) {
     when (LocalMixUiBackend.current) {
         MixUiBackend.Miuix -> {
             val source = if (isRuntimeShaderSupported()) rememberLayerBackdrop() else null
             PreferenceScene(
-                modifier = modifier,
+                modifier = modifier, backgroundColor = backgroundColor,
                 sourceModifier = if (source != null) Modifier.layerBackdrop(source) else Modifier,
                 backdrop = remember(source) { GlassFormBackdrop.Miuix(source) }, content = content,
             )
         }
         MixUiBackend.Mochi -> {
-            val source = rememberMochiBackdrop(MixTheme.colorScheme.surface)
+            val source = rememberMochiBackdrop(backgroundColor)
             PreferenceScene(
-                modifier = modifier, sourceModifier = Modifier.mochiBackdropSource(source),
+                modifier = modifier, backgroundColor = backgroundColor, sourceModifier = Modifier.mochiBackdropSource(source),
                 backdrop = remember(source) { GlassFormBackdrop.Mochi(source) }, content = content,
             )
         }
@@ -46,14 +51,15 @@ fun GlassPreferenceScene(modifier: Modifier = Modifier, content: @Composable () 
 @Composable
 private fun PreferenceScene(
     modifier: Modifier,
+    backgroundColor: Color,
     sourceModifier: Modifier,
     backdrop: GlassFormBackdrop,
     content: @Composable () -> Unit,
 ) {
-    Scaffold(modifier = modifier, containerColor = MixTheme.colorScheme.surface,
+    Scaffold(modifier = modifier, containerColor = backgroundColor,
         contentWindowInsets = WindowInsets(0, 0, 0, 0)) {
         GlassPreferenceOverlayHost(backdrop) {
-            Box(Modifier.fillMaxSize().then(sourceModifier).background(MixTheme.colorScheme.surface)) { content() }
+            Box(Modifier.fillMaxSize().then(sourceModifier).background(backgroundColor)) { content() }
         }
     }
 }

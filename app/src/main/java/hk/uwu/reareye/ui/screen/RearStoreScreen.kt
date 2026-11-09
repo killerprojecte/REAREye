@@ -146,17 +146,13 @@ import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.CardDefaults
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.GlassAnchoredMenu
+import hk.uwu.mixui.components.GlassMenuOption
 import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.LargeTitleLazyScaffold
 import hk.uwu.mixui.components.TopBarIconButton
@@ -164,7 +160,6 @@ import top.yukonga.miuix.kmp.basic.Surface
 import hk.uwu.mixui.components.Tabs
 import hk.uwu.mixui.components.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -958,89 +953,38 @@ internal fun RearStoreRootContent(
             }
         },
         actions = {
-            Box {
-                TopBarIconButton(
-                    onClick = { showSortMenu.value = true },
-                ) {
+            GlassAnchoredMenu(
+                expanded = showSortMenu.value,
+                onExpandedChange = { showSortMenu.value = it },
+                options = listOf(
+                    GlassMenuOption(stringResource(R.string.rear_store_prioritize_updates),
+                        selected = prioritizeUpdates, dismissOnClick = false),
+                    GlassMenuOption(stringResource(R.string.rear_store_sort_by_updated_at),
+                        selected = sortMode == RearStoreSortMode.UPDATED_AT, dividerBefore = true),
+                    GlassMenuOption(stringResource(R.string.rear_store_sort_by_installed_at),
+                        selected = sortMode == RearStoreSortMode.INSTALLED_AT),
+                    GlassMenuOption(stringResource(R.string.rear_store_sort_by_name),
+                        selected = sortMode == RearStoreSortMode.NAME),
+                    GlassMenuOption(stringResource(R.string.rear_store_sort_by_stars),
+                        selected = sortMode == RearStoreSortMode.STARS),
+                ),
+                onOptionClick = { index ->
+                    when (index) {
+                        0 -> prioritizeUpdates = !prioritizeUpdates
+                        1 -> sortMode = RearStoreSortMode.UPDATED_AT
+                        2 -> sortMode = RearStoreSortMode.INSTALLED_AT
+                        3 -> sortMode = RearStoreSortMode.NAME
+                        4 -> sortMode = RearStoreSortMode.STARS
+                    }
+                },
+            ) {
+                TopBarIconButton(onClick = { showSortMenu.value = true }) {
                     Icon(
                         imageVector = UiIcons.Regular.Sort,
                         contentDescription = stringResource(R.string.app_list_sort),
                         tint = MixTheme.colorScheme.onBackground,
                     )
                 }
-                OverlayListPopup(
-                    show = showSortMenu.value,
-                    popupModifier = Modifier,
-                    popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                    alignment = PopupPositionProvider.Align.End,
-                    enableWindowDim = true,
-                    onDismissRequest = { showSortMenu.value = false },
-                    maxHeight = null,
-                    minWidth = 220.dp,
-                    renderInRootScaffold = true,
-                    content = {
-                        ListPopupColumn {
-                            DropdownImpl(
-                                item = DropdownItem(title = stringResource(R.string.rear_store_prioritize_updates)),
-                                optionSize = 5,
-                                isSelected = prioritizeUpdates,
-                                index = 0,
-                                dropdownColors = DropdownDefaults.dropdownColors(),
-                                onSelectedIndexChange = {
-                                    prioritizeUpdates = !prioritizeUpdates
-                                },
-                            )
-                            HorizontalDivider(
-                                thickness = 0.5.dp,
-                                color = MixTheme.colorScheme.outline.copy(alpha = 0.35f),
-                            )
-                            DropdownImpl(
-                                item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_updated_at)),
-                                optionSize = 5,
-                                isSelected = sortMode == RearStoreSortMode.UPDATED_AT,
-                                index = 1,
-                                dropdownColors = DropdownDefaults.dropdownColors(),
-                                onSelectedIndexChange = {
-                                    showSortMenu.value = false
-                                    sortMode = RearStoreSortMode.UPDATED_AT
-                                },
-                            )
-                            DropdownImpl(
-                                item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_installed_at)),
-                                optionSize = 5,
-                                isSelected = sortMode == RearStoreSortMode.INSTALLED_AT,
-                                index = 2,
-                                dropdownColors = DropdownDefaults.dropdownColors(),
-                                onSelectedIndexChange = {
-                                    showSortMenu.value = false
-                                    sortMode = RearStoreSortMode.INSTALLED_AT
-                                },
-                            )
-                            DropdownImpl(
-                                item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_name)),
-                                optionSize = 5,
-                                isSelected = sortMode == RearStoreSortMode.NAME,
-                                index = 3,
-                                dropdownColors = DropdownDefaults.dropdownColors(),
-                                onSelectedIndexChange = {
-                                    showSortMenu.value = false
-                                    sortMode = RearStoreSortMode.NAME
-                                },
-                            )
-                            DropdownImpl(
-                                item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_stars)),
-                                optionSize = 5,
-                                isSelected = sortMode == RearStoreSortMode.STARS,
-                                index = 4,
-                                dropdownColors = DropdownDefaults.dropdownColors(),
-                                onSelectedIndexChange = {
-                                    showSortMenu.value = false
-                                    sortMode = RearStoreSortMode.STARS
-                                },
-                            )
-                        }
-                    },
-                )
             }
         },
         searchBar = {

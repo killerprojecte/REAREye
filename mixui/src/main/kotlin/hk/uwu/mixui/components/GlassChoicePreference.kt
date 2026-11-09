@@ -24,10 +24,10 @@ import ui.feice.mochi.effect.glass.LocalMochiBackdrop
 /** Option payload with lossless text and caller-owned selection, including multiple ticks. */
 data class ChoiceOption(val title: String, val summary: String? = null, val selected: Boolean = false)
 
-private class PreferenceOverlays {
+internal class PreferenceOverlays {
     val entries = mutableStateMapOf<Any, @Composable BoxScope.(Offset) -> Unit>()
 }
-private val LocalPreferenceOverlays = staticCompositionLocalOf<PreferenceOverlays?> { null }
+internal val LocalPreferenceOverlays = staticCompositionLocalOf<PreferenceOverlays?> { null }
 
 /** Page-only recording belongs in [page]; these popup siblings are never recorded. */
 @Composable

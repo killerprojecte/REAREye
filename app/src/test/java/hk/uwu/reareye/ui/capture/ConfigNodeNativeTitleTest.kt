@@ -106,8 +106,14 @@ class ConfigNodeNativeTitleTest {
     }
     private fun capture(name: String) {
         val folder = File(System.getProperty("ui.capture.output"), "config-native-lists").apply { mkdirs() }
-        val bitmap = compose.onRoot(useUnmergedTree = true).captureToImage().asAndroidBitmap()
-        File(folder, "$name.png").outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        val roots = compose.onAllNodes(isRoot(), useUnmergedTree = true)
+        roots.fetchSemanticsNodes().indices.forEach { index ->
+            val bitmap = roots[index].captureToImage().asAndroidBitmap()
+            val suffix = if (index == 0) "" else "-root$index"
+            File(folder, "$name$suffix.png").outputStream().use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        }
     }
     @After fun close() {
         compose.mainClock.autoAdvance = true
@@ -291,6 +297,10 @@ class ConfigNodeNativeTitleTest {
                 writeNativeTitleGeometry("config-native-lists", "$key-expanded", expanded)
                 capture("$key-expanded")
                 val title = expanded.maxBy { it.layout.layoutInput.style.fontSize.value }
+                if (backend == MixUiBackend.Mochi) {
+                    assertTrue("Native auto-size must not exceed the shared 32sp large-title size", title.layout.layoutInput.style.fontSize.value <= 32f)
+                    assertEquals(androidx.compose.ui.text.font.FontWeight.Normal, title.layout.layoutInput.style.fontWeight)
+                }
                 val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
                 val inset = title.startInset(root, LayoutDirection.Ltr)
                 if (kotlin.math.abs(inset - 26f) > 1f) failures += "$key title first-glyph inset=$inset, expected 26px"
