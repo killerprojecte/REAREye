@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -28,13 +29,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfig
@@ -56,10 +52,6 @@ import hk.uwu.reareye.ui.config.ConfigNode
 import hk.uwu.reareye.ui.config.ConfigType
 import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.rememberRemotePrefsStatusRevision
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -67,16 +59,13 @@ import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
-import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.TopBarIconButton
+import hk.uwu.mixui.components.pageScrollFeedback
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.TextField
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import hk.uwu.mixui.components.SwitchPreference
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 private val BusinessExtraConfigNodes = listOf<ConfigNode>(
     ConfigGroup(
@@ -98,10 +87,7 @@ fun BusinessExtraConfigManagerScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val layoutDirection = LocalLayoutDirection.current
-    val scrollBehavior = MiuixScrollBehavior()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
+    val listState = rememberLazyListState()
     val entries = remember { mutableStateListOf<RearBusinessExtraConfigEntry>() }
     var loaded by remember { mutableStateOf(false) }
     var dataCardsVisible by remember { mutableStateOf(false) }
@@ -202,45 +188,26 @@ fun BusinessExtraConfigManagerScreen(
                 },
             )
         } else {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                        color = Color.Transparent,
-                        title = stringResource(R.string.rear_widget_business_extra_manager),
-                        navigationIcon = {
-                            IconButton(
-                                modifier = Modifier.padding(start = 16.dp),
-                                onClick = onBack
-                            ) {
-                                Icon(
-                                    modifier = Modifier.graphicsLayer {
-                                        if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                                    },
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = null,
-                                )
-                            }
-                        },
-                        actions = {
-                            IconButton(
-                                modifier = Modifier.padding(end = 16.dp),
-                                onClick = { if (loaded) openCreateDialog() },
-                            ) {
-                                Icon(imageVector = Icons.Filled.Add, contentDescription = null)
-                            }
-                        },
-                        scrollBehavior = scrollBehavior,
-                    )
-                }
+            GlassTopBarScaffold(
+                title = stringResource(R.string.rear_widget_business_extra_manager),
+                isContentScrolled = listState.canScrollBackward,
+                contentListState = listState,
+                navigationIcon = {
+                    TopBarIconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.scene_route_navigate_back))
+                    }
+                },
+                actions = {
+                    TopBarIconButton(onClick = ::openCreateDialog, enabled = loaded) {
+                        Icon(Icons.Filled.Add, stringResource(R.string.rear_widget_business_extra_add))
+                    }
+                },
             ) { paddingValues ->
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
-                        .scrollEndHaptic()
-                        .overScrollVertical()
-                        .rearAcrylicSource(hazeState)
+                        .pageScrollFeedback()
                         .padding(horizontal = 12.dp),
                     contentPadding = PaddingValues(
                         top = paddingValues.calculateTopPadding() + 12.dp,
@@ -406,10 +373,7 @@ fun BusinessExtraConfigScreen(
     business: String,
     onBack: () -> Unit,
 ) {
-    val layoutDirection = LocalLayoutDirection.current
-    val scrollBehavior = MiuixScrollBehavior()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
+    val listState = rememberLazyListState()
     val remotePrefsStatusRevision = rememberRemotePrefsStatusRevision()
     var remoteReady by remember(business, remotePrefsStatusRevision) {
         mutableStateOf(false)
@@ -443,35 +407,21 @@ fun BusinessExtraConfigScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                color = Color.Transparent,
-                title = stringResource(R.string.rear_widget_business_extra_settings),
-                navigationIconPadding = 12.dp,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            modifier = Modifier.graphicsLayer {
-                                if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                            },
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-            )
-        }
+    GlassTopBarScaffold(
+        title = stringResource(R.string.rear_widget_business_extra_settings),
+        isContentScrolled = listState.canScrollBackward,
+        contentListState = listState,
+        navigationIcon = {
+            TopBarIconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.scene_route_navigate_back))
+            }
+        },
     ) { paddingValues ->
         LazyColumn(
+                    state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .rearAcrylicSource(hazeState)
+                .pageScrollFeedback()
                 .padding(horizontal = 12.dp),
             contentPadding = PaddingValues(
                 top = paddingValues.calculateTopPadding() + 12.dp,
