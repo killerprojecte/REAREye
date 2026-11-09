@@ -8,12 +8,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import ui.feice.mochi.effect.glass.mochiBackdropSource
+import ui.feice.mochi.effect.glass.rememberMochiBackdrop
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
 
-internal class GlassSheetScene(val backdrop: Backdrop?) {
+internal class GlassSheetScene(
+    val backdrop: Backdrop?,
+    val mochiBackdrop: ui.feice.mochi.effect.glass.MochiBackdrop,
+) {
     val entries = mutableStateMapOf<Any, @Composable () -> Unit>()
 }
 
@@ -36,10 +41,16 @@ fun GlassBottomSheetScene(content: @Composable () -> Unit) {
         drawRect(background)
         drawContent()
     } else null
-    val scene = remember(backdrop) { GlassSheetScene(backdrop) }
+    // Keep a public Mochi source even while the applied backend is MIUIX:
+    // the draft theme can open a Mochi sheet without changing the underlying page.
+    val mochiBackdrop = rememberMochiBackdrop(background)
+    val scene = remember(backdrop, mochiBackdrop) { GlassSheetScene(backdrop, mochiBackdrop) }
     Box(Modifier.fillMaxSize()) {
         CompositionLocalProvider(LocalGlassSheetScene provides scene) {
-            Box(Modifier.fillMaxSize().then(if (backdrop != null && scene.entries.isNotEmpty()) Modifier.layerBackdrop(backdrop) else Modifier)) {
+            // Native MochiSheet lives in a separate DecorView overlay. Its surface
+            // is never a descendant of this source, so it cannot sample itself.
+            Box(Modifier.fillMaxSize().mochiBackdropSource(mochiBackdrop)
+                .then(if (backdrop != null && scene.entries.isNotEmpty()) Modifier.layerBackdrop(backdrop) else Modifier)) {
                 content()
             }
         }

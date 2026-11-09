@@ -17,6 +17,10 @@ import ui.feice.mochi.theme.MochiTheme
 /** Body-only backdrop supplied by glass headers and native MIUIX sheets. */
 internal val LocalGlassTabsBackdrop = staticCompositionLocalOf<Backdrop?> { null }
 
+// Native overlays clear LocalMochiBackdrop; explicitly hosted joined tracks
+// may sample this external page source without changing other overlay controls.
+internal val LocalGlassTabsMochiBackdrop = staticCompositionLocalOf<ui.feice.mochi.effect.glass.MochiBackdrop?> { null }
+
 internal val LocalGlassTabsSurfaceAlpha = staticCompositionLocalOf<Float?> { null }
 
 /**
@@ -61,7 +65,7 @@ fun GlassTabs(
             }
         }
         MixUiBackend.Mochi -> {
-            val backdrop = LocalMochiBackdrop.current
+            val backdrop = LocalGlassTabsMochiBackdrop.current ?: LocalMochiBackdrop.current
             val material = MochiTheme.materials.controlGlass
             if (backdrop == null || material == null) {
                 Tabs(tabs, selected, onTabSelected, modifier)

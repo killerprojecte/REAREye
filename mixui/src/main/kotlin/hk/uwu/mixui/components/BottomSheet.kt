@@ -1,6 +1,11 @@
 package hk.uwu.mixui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Color
+import ui.feice.mochi.effect.glass.LocalMochiBackdrop
+import ui.feice.mochi.theme.MochiDefaults
+import ui.feice.mochi.theme.MochiTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Alignment
 import hk.uwu.mixui.theme.MixTheme
@@ -64,19 +69,36 @@ fun BottomSheet(
                 }
             }
             LaunchedEffect(show, allowDismiss) { if (show) state.show() else state.hide() }
-            ui.feice.mochi.basic.MochiSheet(state = state, onDismiss = {
-                if (currentShow && !currentAllowDismiss) state.show() else onDismissRequest()
-            }) {
-                Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
-                    if (title != null || startAction != null || endAction != null) {
-                        Box(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Box(Modifier.align(Alignment.CenterStart)) { startAction?.invoke() }
-                            title?.let { Text(it, Modifier.align(Alignment.Center), style = MixTheme.textStyles.title3) }
-                            Box(Modifier.align(Alignment.CenterEnd)) { endAction?.invoke() }
+            val backdrop = LocalGlassSheetScene.current?.mochiBackdrop ?: LocalMochiBackdrop.current
+            val glass = backdrop != null && MochiTheme.materials.sheetGlass != null
+            CompositionLocalProvider(
+                LocalMochiBackdrop provides backdrop,
+                LocalGlassTabsMochiBackdrop provides backdrop,
+                // Joined controls in the sheet use the same public page source.
+                LocalGlassTabsSurfaceAlpha provides if (glass) 1f else null,
+            ) {
+                ui.feice.mochi.basic.MochiSheet(
+                    state = state,
+                    // Maven 0.2.0 paints the public color over its glass at Large.
+                    // Transparent suppresses only that opaque overlay, not the native
+                    // glass/scrim, detent geometry or input handling. Retain the native
+                    // solid fallback when no real page source or material is present.
+                    color = if (glass) Color.Transparent else MochiDefaults.sheetBackground(),
+                    onDismiss = {
+                        if (currentShow && !currentAllowDismiss) state.show() else onDismissRequest()
+                    },
+                ) {
+                    Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
+                        if (title != null || startAction != null || endAction != null) {
+                            Box(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Box(Modifier.align(Alignment.CenterStart)) { startAction?.invoke() }
+                                title?.let { Text(it, Modifier.align(Alignment.Center), style = MixTheme.textStyles.title3) }
+                                Box(Modifier.align(Alignment.CenterEnd)) { endAction?.invoke() }
+                            }
+                            Spacer(Modifier.height(20.dp))
                         }
-                        Spacer(Modifier.height(20.dp))
+                        content()
                     }
-                    content()
                 }
             }
         }
