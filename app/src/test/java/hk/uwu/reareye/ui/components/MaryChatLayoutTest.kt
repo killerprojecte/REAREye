@@ -1360,6 +1360,7 @@ class MaryChatLayoutTest {
         host {
             // The popup host and navigation stay full-window; only the settings page
             // avoids the IME. This mirrors MainActivity + MarySettingsScreen.
+            hk.uwu.mixui.components.GlassPreferenceScene {
             Scaffold(popupHost = {}) {
                 Box(Modifier
                     .fillMaxSize()
@@ -1381,6 +1382,7 @@ class MaryChatLayoutTest {
                     )
                 }
             }
+        }
         }
         fieldLabel(R.string.mary_provider_endpoint).performClick()
         val editor =

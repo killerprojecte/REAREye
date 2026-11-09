@@ -67,7 +67,8 @@ import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.TextField
-import hk.uwu.mixui.components.FormDialog
+import hk.uwu.mixui.components.DialogActions
+import hk.uwu.mixui.components.GlassPreferenceFormDialog
 import hk.uwu.mixui.components.PreferenceRow
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
@@ -583,6 +584,7 @@ internal fun MarySettingsField(
     summary: String? = null,
 ) {
     var editing by remember { mutableStateOf(false) }
+    var editToken by remember { mutableStateOf(Any()) }
     var input by remember { mutableStateOf(value) }
     val fieldTitle = stringResource(label)
     PreferenceRow(
@@ -590,26 +592,32 @@ internal fun MarySettingsField(
         summary = if (password && value.isNotEmpty()) "••••••" else summary
             ?: value.ifBlank { stringResource(R.string.mary_settings_value_default) },
         holdDownState = editing,
-        onClick = { input = value; editing = true },
+        onClick = { if (!editing) { input = value; editToken = Any(); editing = true } },
     )
-    FormDialog(show = editing, title = fieldTitle, onDismissRequest = { editing = false }) {
-        DialogFormColumn {
-            TextField(
-                value = input, onValueChange = { input = it }, label = fieldTitle,
-                modifier = Modifier.fillMaxWidth(), singleLine = true,
-                visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None
-            )
-            Button(
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                onClick = {
-                    if (editing) {
-                        editing = false
-                        onChange(input)
-                    }
-                }) { Text(stringResource(R.string.rear_widget_confirm)) }
-            Button(modifier = Modifier.fillMaxWidth(), onClick = { editing = false }) {
-                Text(stringResource(R.string.rear_widget_cancel))
+    val token = editToken
+    val dismiss = { if (editToken === token) editing = false }
+    GlassPreferenceFormDialog(
+        show = editing, title = fieldTitle, onDismissRequest = dismiss,
+        modifier = Modifier.testTag("mary-field-dialog-$label"),
+    ) {
+        androidx.compose.runtime.key(token) {
+            DialogFormColumn {
+                TextField(
+                    value = input, onValueChange = { input = it }, label = fieldTitle,
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None
+                )
+                DialogActions(
+                    cancelText = stringResource(R.string.rear_widget_cancel),
+                    confirmText = stringResource(R.string.rear_widget_confirm),
+                    onCancel = dismiss,
+                    onConfirm = {
+                        if (editing && editToken === token) {
+                            editing = false
+                            onChange(input)
+                        }
+                    },
+                )
             }
         }
     }
