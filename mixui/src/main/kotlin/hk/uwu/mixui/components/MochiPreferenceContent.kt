@@ -47,7 +47,9 @@ internal fun MochiPreferenceContent(
             MochiListSectionFooter(
                 text = summary,
                 color = if (enabled) color else color.copy(alpha = color.alpha * MochiDefaults.DisabledAlpha),
-                modifier = Modifier.padding(bottom = 12.dp),
+                // Give the native footer the available row width instead of
+                // shrink-wrapping its text; retain native padding and wrapping.
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             )
         }
     }

@@ -63,6 +63,7 @@ import hk.uwu.mixui.components.ArrowPreference
 import hk.uwu.mixui.components.PreferenceRow
 import hk.uwu.mixui.components.GlassSelectPreference
 import hk.uwu.mixui.components.GlassChoicePreference
+import hk.uwu.mixui.components.PreferenceSupportingText
 import hk.uwu.mixui.components.ChoiceOption
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
@@ -270,6 +271,7 @@ fun MaskMultiSelectConfigInput(
     GlassChoicePreference(
         title = stringResource(item.titleRes),
         summary = summary,
+        supportingText = PreferenceSupportingText(description, selectedSummary),
         expanded = showModePopup.value,
         onExpandedChange = { showModePopup.value = it },
         multiple = true,
@@ -330,6 +332,7 @@ fun EnumSingleSelectConfigInput(
     GlassSelectPreference(
         title = stringResource(item.titleRes),
         summary = summary,
+        supportingText = PreferenceSupportingText(description, selectedLabel),
         items = optionTitles,
         selectedIndex = options.indexOfFirst { it.value == selectedOptionValue },
         enabled = enabled,

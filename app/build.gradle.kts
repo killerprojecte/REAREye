@@ -359,6 +359,7 @@ tasks.withType<Test>().configureEach {
             includeTestsMatching("hk.uwu.reareye.ui.capture.SurfacePrimitivesContractTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.FinalGlassPopupPagesTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.RearCardSuggestionsTest")
+            includeTestsMatching("hk.uwu.reareye.ui.capture.NativePickerMusicCandidateTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.OverlayDialogContractTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.RearStoreNativeTopBarTest")
             includeTestsMatching("hk.uwu.reareye.ui.components.ArrowPreferenceInteractionTest")

@@ -70,6 +70,7 @@ fun GlassChoicePreference(
     summary: String? = null,
     enabled: Boolean = true,
     multiple: Boolean = false,
+    supportingText: PreferenceSupportingText? = null,
 ) {
     val backdrop = checkNotNull(LocalGlassPreferenceBackdrop.current) {
         "GlassChoicePreference requires GlassTopBarScaffold or GlassPreferenceScene"
@@ -113,12 +114,12 @@ fun GlassChoicePreference(
         }
         is GlassFormBackdrop.Mochi -> CompositionLocalProvider(LocalMochiBackdrop provides backdrop.value) {
             val (anchorModifier, changeExpanded) = rememberMochiMenuActivation(
-                Modifier.widthIn(min = 34.dp, max = 120.dp), active, expanded,
+                Modifier.widthIn(min = 34.dp, max = if (supportingText != null) 200.dp else 120.dp), active, expanded,
             ) { next ->
                 val requested = next && active
                 if (requested != expanded) onExpandedChange(requested)
             }
-            MochiPreferenceContent(summary = summary, modifier = modifier, enabled = active,
+            MochiPreferenceContent(summary = if (supportingText != null) supportingText.description else summary, modifier = modifier, enabled = active,
                 onClick = { onExpandedChange(true) }) {
                 MochiListRow(
                     title = title,
@@ -136,8 +137,9 @@ fun GlassChoicePreference(
                                 align = MochiAlign.End,
                             ),
                             modifier = anchorModifier,
+                            colors = if (supportingText != null) nativePreferencePickerColors() else MochiDropdownDefaults.dropdownColors(),
                             buttonMinHeight = 34.dp,
-                            buttonPadding = PaddingValues(horizontal = 12.dp),
+                            buttonPadding = if (supportingText != null) PaddingValues(start = 12.dp, end = 10.dp) else PaddingValues(horizontal = 12.dp),
                             contentPadding = PaddingValues(vertical = 8.dp),
                             popover = {
                                 options.forEachIndexed { index, option ->
@@ -161,11 +163,13 @@ fun GlassChoicePreference(
                             },
                         ) {
                             ui.feice.mochi.basic.Text(
-                                text = options.filter { it.selected }.joinToString(" / ") { it.title }.ifEmpty { "⌄" },
+                                text = supportingText?.selectedValue ?: options.filter { it.selected }.joinToString(" / ") { it.title }.ifEmpty { "⌄" },
                                 style = MochiTheme.textStyles.body,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
+                                modifier = if (supportingText != null) Modifier.weight(1f, fill = false) else Modifier,
                             )
+                            if (supportingText != null) NativePreferencePickerIndicator(expanded)
                         }
                     },
                 )

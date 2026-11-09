@@ -42,6 +42,7 @@ fun GlassSelectPreference(
     modifier: Modifier = Modifier,
     summary: String? = null,
     enabled: Boolean = true,
+    supportingText: PreferenceSupportingText? = null,
 ) {
     val backdrop = checkNotNull(LocalGlassPreferenceBackdrop.current) {
         "GlassSelectPreference requires GlassTopBarScaffold or GlassPreferenceScene"
@@ -62,9 +63,9 @@ fun GlassSelectPreference(
             LaunchedEffect(actualEnabled) { if (!actualEnabled) expanded = false }
             val nativeItems = remember(items) { items.map { MochiItem(label = it) }.toImmutableList() }
             val (anchorModifier, changeExpanded) = rememberMochiMenuActivation(
-                Modifier.widthIn(min = 34.dp, max = 120.dp), actualEnabled, expanded,
+                Modifier.widthIn(min = 34.dp, max = if (supportingText != null) 200.dp else 120.dp), actualEnabled, expanded,
             ) { expanded = it && actualEnabled }
-            MochiPreferenceContent(summary = summary, modifier = rowModifier, enabled = actualEnabled,
+            MochiPreferenceContent(summary = if (supportingText != null) supportingText.description else summary, modifier = rowModifier, enabled = actualEnabled,
                 onClick = { expanded = true }) {
                 MochiListRow(
                     title = title,
@@ -88,15 +89,18 @@ fun GlassSelectPreference(
                                 trigger = MochiTrigger.LongPress,
                                 align = MochiAlign.End,
                             ),
+                            colors = if (supportingText != null) nativePreferencePickerColors() else MochiDropdownDefaults.dropdownColors(),
                             buttonMinHeight = 34.dp,
-                            buttonPadding = PaddingValues(horizontal = 12.dp),
+                            buttonPadding = if (supportingText != null) PaddingValues(start = 12.dp, end = 10.dp) else PaddingValues(horizontal = 12.dp),
                         ) {
                             ui.feice.mochi.basic.Text(
-                                text = items.getOrElse(selectedIndex) { "" },
+                                text = supportingText?.selectedValue ?: items.getOrElse(selectedIndex) { "" },
                                 style = MochiTheme.textStyles.body,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
+                                modifier = if (supportingText != null) Modifier.weight(1f, fill = false) else Modifier,
                             )
+                            if (supportingText != null) NativePreferencePickerIndicator(expanded)
                         }
                     },
                 )
