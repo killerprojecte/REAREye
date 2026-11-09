@@ -2,12 +2,17 @@ package hk.uwu.mixui.components
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -18,6 +23,10 @@ import top.yukonga.miuix.kmp.icon.glass.Close
 import top.yukonga.miuix.kmp.icon.glass.Save
 
 enum class BottomSheetAction { Close, Save }
+
+private class MochiSheetActionClickGate {
+    var released = false
+}
 
 /** Only native sheet header actions use this; Dialog form controls stay ordinary. */
 @Composable
@@ -38,9 +47,45 @@ fun BottomSheetActionButton(
         // Maven 0.2.0's native Glass body control creates its own padded canvas
         // backdrop. Do not give it transparent colors or a page source containing
         // itself. The native implementation owns disabled input and content tint.
+        val clickGate = remember { MochiSheetActionClickGate() }
         ui.feice.mochi.basic.MochiIconButton(
-            onClick = onClick,
-            modifier = buttonModifier,
+            onClick = {
+                if (clickGate.released) {
+                    clickGate.released = false
+                    onClick()
+                }
+            },
+            modifier = buttonModifier
+                // Semantics activation is independent of a touch release, including
+                // when an accessibility action follows a canceled or held pointer.
+                .semantics {
+                    onClick {
+                        if (enabled) {
+                            onClick()
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                }
+                .pointerInput(clickGate) {
+                    // Mochi 0.2.0 mistakes Compose's consumed synthetic cancel-up
+                    // for a click. Cancellation visits the native child first, so
+                    // allow its callback only during a real, unconsumed up dispatch.
+                    // Observe without consuming to retain its press/drag animation.
+                    try {
+                        awaitPointerEventScope {
+                            while (true) {
+                                clickGate.released = awaitPointerEvent(PointerEventPass.Initial)
+                                    .changes.any { it.changedToUp() }
+                                awaitPointerEvent(PointerEventPass.Final)
+                                clickGate.released = false
+                            }
+                        }
+                    } finally {
+                        clickGate.released = false
+                    }
+                },
             enabled = enabled,
             style = ui.feice.mochi.basic.MochiButtonStyle.Glass,
             size = 44.dp,

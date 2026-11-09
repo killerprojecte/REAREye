@@ -6,10 +6,19 @@ import android.graphics.Rect
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -21,6 +30,7 @@ import androidx.core.view.WindowInsetsCompat
 import hk.uwu.mixui.MixColorSchemeMode
 import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.MixUiHost
+import hk.uwu.mixui.components.BottomSheetActionButton
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Text
@@ -48,14 +58,19 @@ class NativeActionBoundaryTest {
     @get:Rule val compose = createEmptyComposeRule()
     private var activity: ActivityController<ComponentActivity>? = null
     private fun settle() { repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
-    private fun open(backend: MixUiBackend, rtl: Boolean = false, content: @Composable () -> Unit) {
+    private fun open(
+        backend: MixUiBackend,
+        rtl: Boolean = false,
+        colorMode: MixColorSchemeMode = MixColorSchemeMode.Dark,
+        content: @Composable () -> Unit,
+    ) {
         compose.mainClock.autoAdvance = false
         compose.runOnUiThread {
             activity?.close()
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().enableEdgeToEdge()
             activity!!.get().setContent {
-                MixUiHost(backend, MixColorSchemeMode.Dark) {
+                MixUiHost(backend, colorMode) {
                     CompositionLocalProvider(LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
                         content()
                     }
@@ -88,6 +103,80 @@ class NativeActionBoundaryTest {
             assertEquals(1, parent); assertEquals(2, child)
         }
     }
+    @Test fun mochiLightSheetActionCancellation() = exerciseMochiSheetAction(MixColorSchemeMode.Light)
+    @Test fun mochiDarkSheetActionCancellation() = exerciseMochiSheetAction(MixColorSchemeMode.Dark)
+
+    private fun exerciseMochiSheetAction(colorMode: MixColorSchemeMode) {
+        var enabled by mutableStateOf(true)
+        var visible by mutableStateOf(true)
+        var clicks = 0
+        open(MixUiBackend.Mochi, colorMode = colorMode) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                if (visible) {
+                    BottomSheetActionButton(
+                        onClick = { clicks++ },
+                        modifier = Modifier.testTag("mochi-sheet-action"),
+                        enabled = enabled,
+                    ) { Text("Action") }
+                }
+            }
+        }
+        fun action() = compose.onNodeWithTag("mochi-sheet-action")
+        fun semanticClick() {
+            action().performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+        }
+        fun assertClicks(expected: Int) {
+            settle()
+            assertEquals(expected, clicks)
+        }
+
+        action().assertIsEnabled().performTouchInput { click() }
+        assertClicks(1)
+        action().performTouchInput { down(center); cancel() }
+        assertClicks(1)
+        semanticClick()
+        assertClicks(2) // No stale cancel latch may suppress semantics activation.
+        action().performTouchInput { down(center); moveTo(Offset(width * 3f, height * 3f)); up() }
+        assertClicks(2)
+        semanticClick()
+        assertClicks(3) // A rejected out-of-bounds release must not block semantics.
+        action().performTouchInput { click() }
+        assertClicks(4)
+
+        // Semantic activation is not a pointer callback, even while a finger is down.
+        action().performTouchInput { down(center) }
+        semanticClick()
+        assertClicks(5)
+        action().performTouchInput { cancel() }
+        assertClicks(5)
+
+        action().performTouchInput { down(center) }
+        compose.runOnUiThread { enabled = false }
+        settle()
+        action().assertIsNotEnabled().performSemanticsAction(SemanticsActions.OnClick) {
+            assertFalse("Disabled semantics must reject activation", it())
+        }
+        action().performTouchInput { cancel() }
+        assertClicks(5)
+        compose.runOnUiThread { enabled = true }
+        settle()
+        action().performTouchInput { click() }
+        assertClicks(6)
+
+        repeat(3) { session ->
+            compose.runOnUiThread { visible = false }
+            settle()
+            action().assertDoesNotExist()
+            compose.runOnUiThread { visible = true }
+            settle()
+            action().performTouchInput { down(center); cancel() }
+            assertClicks(6 + session * 2)
+            semanticClick()
+            action().performTouchInput { click() }
+            assertClicks(8 + session * 2)
+        }
+    }
+
     @Test fun actualAboutSecondaryHeaderClearsBothSideInsets() {
         for (backend in MixUiBackend.entries) for (rtl in listOf(false, true)) {
             open(backend, rtl) {

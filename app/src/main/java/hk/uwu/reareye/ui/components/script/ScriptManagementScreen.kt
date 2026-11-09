@@ -17,15 +17,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -59,7 +56,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import hk.uwu.reareye.R
@@ -78,6 +74,7 @@ import hk.uwu.mixui.components.BottomSheetAction
 import hk.uwu.mixui.components.BottomSheetActionButton
 import hk.uwu.mixui.components.BottomSheetActionIcon
 import hk.uwu.mixui.components.GlassBottomSheet
+import hk.uwu.mixui.components.GlassBottomSheetSize
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
@@ -91,7 +88,6 @@ import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.FormDialog
 import hk.uwu.mixui.components.TextField
 import hk.uwu.mixui.theme.MixTheme
-import top.yukonga.miuix.kmp.window.WindowBottomSheet
 
 private sealed interface ScriptRoute {
     data object List : ScriptRoute
@@ -719,7 +715,7 @@ internal fun ScriptOverwriteDialog(
 }
 
 @Composable
-private fun ScriptDebugBottomSheet(
+internal fun ScriptDebugBottomSheet(
     show: Boolean,
     providerId: String,
     onProviderIdChange: (String) -> Unit,
@@ -729,39 +725,48 @@ private fun ScriptDebugBottomSheet(
     onRun: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    WindowBottomSheet(
+    val contentScroll = rememberScrollState()
+    val resultScroll = rememberScrollState()
+    LaunchedEffect(show) {
+        if (show) {
+            contentScroll.scrollTo(0)
+            resultScroll.scrollTo(0)
+        }
+    }
+    GlassBottomSheet(
         show = show,
         title = stringResource(R.string.script_debug_title),
         onDismissRequest = onDismiss,
         endAction = {
-            IconButton(onClick = onRun) {
+            BottomSheetActionButton(onClick = { if (show) onRun() }, enabled = show) {
                 Icon(Icons.Outlined.PlayArrow, stringResource(R.string.script_debug_run))
             }
         },
-        defaultWindowInsetsPadding = true,
+        size = GlassBottomSheetSize.Content,
+        isContentScrolled = contentScroll.value > 0 || resultScroll.value > 0,
         enableNestedScroll = false,
-        insideMargin = DpSize(24.dp, 28.dp),
+        horizontalPadding = 24.dp,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 520.dp)
-                .verticalScroll(rememberScrollState())
-                .windowInsetsPadding(WindowInsets.navigationBars)
+                .verticalScroll(contentScroll)
+                .testTag("script-debug-content")
                 .padding(bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             TextField(
                 value = providerId,
                 onValueChange = onProviderIdChange,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("script-debug-provider"),
                 label = stringResource(R.string.script_debug_provider),
                 singleLine = true,
             )
             TextField(
                 value = paramsText,
                 onValueChange = onParamsTextChange,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("script-debug-params"),
                 label = stringResource(R.string.script_debug_params),
                 singleLine = true,
             )
@@ -771,7 +776,8 @@ private fun ScriptDebugBottomSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 180.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(resultScroll)
+                        .testTag("script-debug-result"),
                     color = MixTheme.colorScheme.onSurfaceVariantSummary
                 )
             }
