@@ -277,7 +277,7 @@ class MaryChatLayoutTest {
         )
         val enabled = mutableStateOf(true)
         val selections = mutableListOf<ReasoningEffort>()
-        host {
+        host(glassSheets = true) {
             Scaffold(popupHost = {}) {
                 Box(Modifier
                     .fillMaxSize()
@@ -332,7 +332,7 @@ class MaryChatLayoutTest {
     @Test
     fun reasoningPickerReturnKeepsEmptyEditingExpandedUntilFocusActuallyLeaves() {
         lateinit var outside: FocusRequester
-        host {
+        host(glassSheets = true) {
             Scaffold(popupHost = {}) {
                 outside = remember { FocusRequester() }
                 Box(
@@ -397,7 +397,7 @@ class MaryChatLayoutTest {
             )
         )
         var saved = 0
-        host {
+        host(glassSheets = true) {
             Scaffold(popupHost = {}) {
                 ReasoningStrengthButton(provider.value, true, {}, {
                     saved++
@@ -2000,6 +2000,7 @@ class MaryChatLayoutTest {
 
     private fun host(
         mode: ColorSchemeMode = ColorSchemeMode.Light,
+        glassSheets: Boolean = false,
         content: @Composable () -> Unit
     ) {
         compose.runOnUiThread {
@@ -2013,7 +2014,10 @@ class MaryChatLayoutTest {
                         surfaceContainer = scheme.surfaceContainer
                         outline = scheme.outline
                     }
-                    hk.uwu.mixui.components.GlassPreferenceScene { content() }
+                    hk.uwu.mixui.components.GlassPreferenceScene {
+                        if (glassSheets) hk.uwu.mixui.components.GlassBottomSheetScene { content() }
+                        else content()
+                    }
                 }
             }
         }

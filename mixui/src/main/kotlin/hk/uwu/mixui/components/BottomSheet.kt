@@ -33,6 +33,7 @@ fun BottomSheet(
     isContentScrolled: Boolean = false,
     onDismissFinished: () -> Unit = {},
     horizontalPadding: Dp = 24.dp,
+    enableNestedScroll: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     when (LocalMixUiBackend.current) {
@@ -47,13 +48,14 @@ fun BottomSheet(
             }
             if (scene != null) {
                 NativeGlassSheet(scene, show, onDismissRequest, title, startAction,
-                    endAction, allowDismiss, isContentScrolled, onDismissFinished, horizontalPadding, insetContent)
+                    endAction, allowDismiss, isContentScrolled, onDismissFinished, horizontalPadding, enableNestedScroll, insetContent)
             } else {
                 // Standalone/legacy callers without a page recording keep the
                 // ordinary native window. Never pretend a null source is glass.
                 top.yukonga.miuix.kmp.window.WindowBottomSheet(
                     show = show, onDismissRequest = onDismissRequest,
                     title = title, startAction = startAction, endAction = endAction,
+                    enableNestedScroll = enableNestedScroll,
                     allowDismiss = allowDismiss, onDismissFinished = onDismissFinished,
                     insideMargin = DpSize(horizontalPadding, 0.dp),
                     content = insetContent,

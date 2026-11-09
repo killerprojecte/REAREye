@@ -107,12 +107,9 @@ import kotlinx.coroutines.launch
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
-import top.yukonga.miuix.kmp.basic.RichTooltip
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.basic.TooltipBox
-import top.yukonga.miuix.kmp.basic.TooltipDefaults
-import top.yukonga.miuix.kmp.basic.rememberTooltipState
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import hk.uwu.mixui.components.GlassBottomSheet
+import hk.uwu.mixui.components.GlassBottomSheetSize
 import hk.uwu.mixui.theme.MixTheme
 import java.util.Locale
 import kotlin.math.PI
@@ -314,10 +311,10 @@ private fun ReasoningStrengthPicker(
         if (currentShow && currentEnabled) currentOnSelected(levels[index.coerceIn(0, lastIndex)])
     }
     val currentCommit by rememberUpdatedState(commit)
-    OverlayBottomSheet(
+    GlassBottomSheet(
         show = show,
         onDismissRequest = onDismiss,
-        renderInRootScaffold = true,
+        size = GlassBottomSheetSize.Content,
         enableNestedScroll = false,
     ) {
         Column(

@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.*
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
@@ -42,10 +43,15 @@ import ui.feice.mochi.theme.MochiDefaults
 import ui.feice.mochi.theme.MochiTheme
 import kotlin.math.roundToInt
 
+/** Large preserves the existing viewport sheet; Content wraps short controls. */
+enum class GlassBottomSheetSize { Large, Content }
+
 /**
  * Opt-in glass sheet host with separate page/scrim and sheet-material sources.
  * Change [sessionKey] when an owner closes and reopens without an observable
  * show=false composition; it identifies the new modal interaction session.
+ * Content-sized Mochi sheets require GlassBottomSheetScene; they never silently
+ * expand into the legacy Large-only fallback.
  */
 @Composable
 fun GlassBottomSheet(
@@ -59,11 +65,13 @@ fun GlassBottomSheet(
     onDismissFinished: () -> Unit = {},
     horizontalPadding: Dp = 24.dp,
     sessionKey: Any? = Unit,
+    size: GlassBottomSheetSize = GlassBottomSheetSize.Large,
+    enableNestedScroll: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     key(sessionKey) {
         GlassBottomSheetSession(show, onDismissRequest, title, startAction, endAction,
-            allowDismiss, isContentScrolled, onDismissFinished, horizontalPadding, content)
+            allowDismiss, isContentScrolled, onDismissFinished, horizontalPadding, size, enableNestedScroll, content)
     }
 }
 
@@ -78,12 +86,18 @@ private fun GlassBottomSheetSession(
     isContentScrolled: Boolean,
     onDismissFinished: () -> Unit,
     horizontalPadding: Dp,
+    size: GlassBottomSheetSize,
+    enableNestedScroll: Boolean,
     content: @Composable () -> Unit,
 ) {
     val scene = LocalGlassSheetScene.current
+    if (LocalMixUiBackend.current == MixUiBackend.Mochi && scene == null && size == GlassBottomSheetSize.Content) {
+        check(!show) { "Content-sized Mochi GlassBottomSheet requires GlassBottomSheetScene" }
+        return
+    }
     if (LocalMixUiBackend.current != MixUiBackend.Mochi || scene == null) {
         BottomSheet(show, onDismissRequest, title, startAction, endAction, allowDismiss,
-            isContentScrolled, onDismissFinished, horizontalPadding, content)
+            isContentScrolled, onDismissFinished, horizontalPadding, enableNestedScroll, content)
         return
     }
     var retained by remember { mutableStateOf(show) }
@@ -100,7 +114,7 @@ private fun GlassBottomSheetSession(
                     retained = false
                     currentFinished()
                 }
-            }, title, startAction, endAction, horizontalPadding, content)
+            }, title, startAction, endAction, horizontalPadding, size, enableNestedScroll, content)
         }
     })
     DisposableEffect(scene, token) {
@@ -135,6 +149,8 @@ private fun MochiGlassSheetHost(
     startAction: (@Composable () -> Unit)?,
     endAction: (@Composable () -> Unit)?,
     horizontalPadding: Dp,
+    size: GlassBottomSheetSize,
+    enableNestedScroll: Boolean,
     content: @Composable () -> Unit,
 ) {
     val currentShow by rememberUpdatedState(show)
@@ -148,7 +164,10 @@ private fun MochiGlassSheetHost(
     BoxWithConstraints(Modifier.fillMaxSize().recalculateWindowInsets()
         .testTag("mochi-glass-sheet-host")) {
         val density = LocalDensity.current
-        val hidden = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
+        val viewportHeight = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
+        var measuredHeight by remember { mutableIntStateOf(0) }
+        val compact = size == GlassBottomSheetSize.Content
+        val hidden = if (compact && measuredHeight > 0) measuredHeight.toFloat() else viewportHeight
         var offset by remember { mutableFloatStateOf(hidden) }
         var dragging by remember { mutableStateOf(false) }
         var settle by remember { mutableIntStateOf(0) }
@@ -218,51 +237,57 @@ private fun MochiGlassSheetHost(
         LaunchedEffect(Unit) { sheetFocus.requestFocus() }
         val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-            .padding(top = 12.dp)
-            .offset { IntOffset(0, offset.roundToInt()) }.clip(shape)
-            .testTag("mochi-glass-sheet")
-            .semantics {
-                paneTitle = title.orEmpty()
-                if (allowDismiss) dismiss { request(); true }
-            }
-            .focusRequester(sheetFocus)
-            .focusProperties { onExit = { cancelFocusChange() } }
-            .focusable()
-            .pointerInput(Unit) { detectTapGestures { } }) {
-            // S records only the final native sheet material. Foreground controls
-            // are a sibling: no self-sampling, original-page shortcut or text echo.
-            Box(Modifier.matchParentSize().mochiBackdropSource(surface)) {
-                if (MochiTheme.materials.sheetGlass != null) {
-                    MochiGlassSurface(Modifier.fillMaxSize(), material = MochiTheme.materials.sheetGlass,
-                        backdrop = scene.mochiBackdrop, cornerRadius = 28.dp) {}
-                } else Box(Modifier.fillMaxSize().background(MochiDefaults.sheetBackground()))
-            }
-            CompositionLocalProvider(
-                LocalMochiBackdrop provides surface,
-                LocalGlassTabsMochiBackdrop provides surface,
-                LocalGlassTabsSurfaceAlpha provides 1f,
-                // A nested app sheet must establish its own source boundary;
-                // do not let it sample the original page through this scene.
-                LocalGlassSheetScene provides null,
-            ) {
-                Column(Modifier.fillMaxSize().nestedScroll(nested).imePadding()
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
-                    .padding(horizontal = horizontalPadding)) {
-                    Column(Modifier.fillMaxWidth().draggable(
-                        state = rememberDraggableState { drag(it) }, orientation = Orientation.Vertical,
-                        enabled = show && allowDismiss, onDragStarted = { dragging = true },
-                        onDragStopped = { release(it) },
-                    )) {
-                        Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp, bottom = 8.dp)
-                            .size(36.dp, 4.dp).background(MixTheme.colorScheme.onSurface.copy(alpha = 0.2f), RoundedCornerShape(2.dp)))
-                        Box(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Box(Modifier.align(Alignment.CenterStart)) { startAction?.invoke() }
-                            title?.let { Text(it, Modifier.align(Alignment.Center), style = MixTheme.textStyles.title3) }
-                            Box(Modifier.align(Alignment.CenterEnd)) { endAction?.invoke() }
+            .padding(top = 12.dp)) {
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .then(if (compact) Modifier.wrapContentHeight() else Modifier.fillMaxHeight())
+                .onSizeChanged { measuredHeight = it.height }
+                .offset { IntOffset(0, offset.roundToInt()) }.clip(shape)
+                .testTag("mochi-glass-sheet")
+                .semantics {
+                    paneTitle = title.orEmpty()
+                    if (allowDismiss) dismiss { request(); true }
+                }
+                .focusRequester(sheetFocus)
+                .focusProperties { onExit = { cancelFocusChange() } }
+                .focusable()
+                .pointerInput(Unit) { detectTapGestures { } }) {
+                // S records only the final native sheet material. Foreground controls
+                // are a sibling: no self-sampling, original-page shortcut or text echo.
+                Box(Modifier.matchParentSize().mochiBackdropSource(surface)) {
+                    if (MochiTheme.materials.sheetGlass != null) {
+                        MochiGlassSurface(Modifier.fillMaxSize(), material = MochiTheme.materials.sheetGlass,
+                            backdrop = scene.mochiBackdrop, cornerRadius = 28.dp) {}
+                    } else Box(Modifier.fillMaxSize().background(MochiDefaults.sheetBackground()))
+                }
+                CompositionLocalProvider(
+                    LocalMochiBackdrop provides surface,
+                    LocalGlassTabsMochiBackdrop provides surface,
+                    LocalGlassTabsSurfaceAlpha provides 1f,
+                    // A nested app sheet must establish its own source boundary;
+                    // do not let it sample the original page through this scene.
+                    LocalGlassSheetScene provides null,
+                ) {
+                    Column(Modifier.fillMaxWidth()
+                        .then(if (compact) Modifier else Modifier.fillMaxHeight())
+                        .then(if (enableNestedScroll) Modifier.nestedScroll(nested) else Modifier).imePadding()
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                        .padding(horizontal = horizontalPadding)) {
+                        Column(Modifier.fillMaxWidth().draggable(
+                            state = rememberDraggableState { drag(it) }, orientation = Orientation.Vertical,
+                            enabled = show && allowDismiss, onDragStarted = { dragging = true },
+                            onDragStopped = { release(it) },
+                        )) {
+                            Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp, bottom = 8.dp)
+                                .size(36.dp, 4.dp).background(MixTheme.colorScheme.onSurface.copy(alpha = 0.2f), RoundedCornerShape(2.dp)))
+                            Box(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Box(Modifier.align(Alignment.CenterStart)) { startAction?.invoke() }
+                                title?.let { Text(it, Modifier.align(Alignment.Center), style = MixTheme.textStyles.title3) }
+                                Box(Modifier.align(Alignment.CenterEnd)) { endAction?.invoke() }
+                            }
+                            Spacer(Modifier.height(20.dp))
                         }
-                        Spacer(Modifier.height(20.dp))
+                        Box(if (compact) Modifier else Modifier.weight(1f)) { content() }
                     }
-                    Box(Modifier.weight(1f)) { content() }
                 }
             }
         }
