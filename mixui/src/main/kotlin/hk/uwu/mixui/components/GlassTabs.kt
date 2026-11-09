@@ -73,7 +73,13 @@ fun GlassTabs(
                 MochiGlassSurface(
                     modifier = modifier.testTag("glass-tabs-mochi"),
                     backdrop = backdrop,
-                    material = material,
+                    // The floating-button recipe casts an 80dp outer shadow.
+                    // A full-width joined track must not darken an entire form;
+                    // keep native glass optics and the segmented thumb shadow.
+                    material = material.copy(
+                        light = material.light.copy(shadowOpacity = 0f),
+                        dark = material.dark.copy(shadowOpacity = 0f),
+                    ),
                 ) {
                     ui.feice.mochi.basic.MochiSegmentedControl(
                         items = tabs.toImmutableList(),

@@ -2,6 +2,7 @@ package hk.uwu.reareye.ui.theme
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
@@ -13,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.offset
 import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.MixUiHost
 import hk.uwu.mixui.components.*
@@ -89,7 +91,17 @@ internal fun ThemeStyleSheet(
     ) {
         Column(
             Modifier.fillMaxWidth().testTag("theme-style-sheet")
-                .verticalScroll(sheetScroll).padding(vertical = 4.dp),
+                // Give the scrolling render layer the sheet's full width, while
+                // keeping labels and tracks at their original 24dp inset. Shadows
+                // can then paint into the margin rather than ending at the track edge.
+                .layout { measurable, constraints ->
+                    val gutter = 24.dp.roundToPx()
+                    val child = measurable.measure(constraints.offset(horizontal = gutter * 2))
+                    layout((child.width - gutter * 2).coerceAtLeast(0), child.height) {
+                        child.placeRelative(-gutter, 0)
+                    }
+                }
+                .verticalScroll(sheetScroll).padding(horizontal = 24.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Column(Modifier.testTag("theme-style-tabs"), verticalArrangement = Arrangement.spacedBy(10.dp)) {

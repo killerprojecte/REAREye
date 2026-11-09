@@ -46,13 +46,14 @@ class ThemeSheetPreviewTest {
             hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true).performTouchInput { click() }
         frames()
     }
-    private fun capture(name: String) {
+    private fun capture(name: String): Bitmap {
         val folder = File(System.getProperty("ui.capture.output"), "theme-sheet-preview").apply { mkdirs() }
         val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }
         val bitmap = if (dialog != null) compose.runOnUiThread { captureDialogWindowBitmap(dialog) }
         else compose.onNode(isRoot() and hasAnyDescendant(hasTestTag("theme-style-sheet")), useUnmergedTree = true)
             .captureToImage().asAndroidBitmap()
         File(folder, "$name.png").outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        return bitmap
     }
     @After fun close() { compose.mainClock.autoAdvance = true; compose.runOnUiThread { activity?.close(); activity = null } }
     @Test fun renderDraftStylesAndKeepSaveCancelTransactional() {
@@ -60,7 +61,18 @@ class ThemeSheetPreviewTest {
         compose.mainClock.autoAdvance = false
         for (dark in listOf(false, true)) {
             open("miuix", dark)
-            capture("miuix-default-${if (dark) "dark" else "light"}")
+            val miuixFrame = capture("miuix-default-${if (dark) "dark" else "light"}")
+            val track = compose.onAllNodes(hasTestTag("glass-tabs-miuix") and hasAnyAncestor(hasTestTag("theme-style-sheet")))[0].fetchSemanticsNode().boundsInRoot
+            assertEquals("Track keeps its original left inset", 24f, track.left, 1f)
+            assertEquals("Track keeps its original width", 352f, track.width, 1f)
+            if (!dark) {
+                val y = track.center.y.toInt()
+                val left = track.left.toInt()
+                val right = track.right.toInt()
+                fun shade(x: Int) = android.graphics.Color.red(miuixFrame.getPixel(x, y))
+                assertTrue("Left native shadow must extend beyond the track ($left,$y)", shade(left - 2) < shade(left - 12))
+                assertTrue("Right native shadow must extend beyond the track ($right,$y)", shade(right + 1) < shade(right + 11))
+            }
             tab("theme-palette-tabs", "Monet")
             capture("miuix-monet-${if (dark) "dark" else "light"}")
             for (style in listOf("Default", "Ios", "Nothing")) {
