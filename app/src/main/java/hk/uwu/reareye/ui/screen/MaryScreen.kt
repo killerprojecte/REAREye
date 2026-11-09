@@ -109,6 +109,7 @@ import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.CompactGlassTopBarScene
 import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.CompactGlassTopBar
+import hk.uwu.mixui.components.CompactTopBarIconButton
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 import hk.uwu.mixui.components.pageScrollFeedback
@@ -399,7 +400,7 @@ internal fun MaryTopBar(
     CompactGlassTopBar(
         title = stringResource(R.string.mary_title),
         navigationIcon = {
-            IconButton(onClick = {
+            CompactTopBarIconButton(onClick = {
                 focusManager.clearFocus(force = true)
                 keyboard?.hide()
                 // Restore keyboard navigation here, not to the composer, after the dialog closes.
@@ -409,7 +410,7 @@ internal fun MaryTopBar(
                 Icon(Icons.Outlined.Menu, stringResource(R.string.mary_sidebar_open))
             }
         },
-        actions = { ContextUsageButton(summary) },
+        actions = { ContextUsageButton(summary, topBar = true) },
     )
 }
 
@@ -644,7 +645,7 @@ internal fun EntryAppearance(new: Boolean, content: @Composable () -> Unit) {
  * squared off so the bubble reads as coming from that side.
  */
 @Composable
-private fun UserBubble(text: String) {
+internal fun UserBubble(text: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Card(
             // Capped rather than a fixed 85%: a short "好的" should not become a wide slab.
@@ -683,7 +684,7 @@ private fun UserBubble(text: String) {
  * reply rather than as a separate item in the transcript.
  */
 @Composable
-private fun AssistantBubble(
+internal fun AssistantBubble(
     text: String,
     streaming: Boolean,
     reasoning: String,

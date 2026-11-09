@@ -67,7 +67,21 @@ class MaryContextRingRenderingTest {
     @Test
     fun darkThemeRingStartsAtTopAndFillsClockwise() = assertRingPixels(MixColorSchemeMode.Dark)
 
-    private fun assertRingPixels(mode: MixColorSchemeMode) {
+    @Test
+    fun mochiStylesKeepTheSameBlueProgressAndClockwiseGeometry() {
+        for (style in hk.uwu.mixui.MixMochiStyle.entries) {
+            for (mode in listOf(MixColorSchemeMode.Light, MixColorSchemeMode.Dark)) {
+                compose.runOnUiThread { activity?.close(); activity = null }
+                assertRingPixels(mode, MixUiBackend.Mochi, style)
+            }
+        }
+    }
+
+    private fun assertRingPixels(
+        mode: MixColorSchemeMode,
+        backend: MixUiBackend = MixUiBackend.Miuix,
+        style: hk.uwu.mixui.MixMochiStyle = hk.uwu.mixui.MixMochiStyle.Default,
+    ) {
         // Quadrants are ordered clockwise from twelve o'clock: NE, SE, SW, NW.
         val cases = listOf(
             RingCase("unknown", MaryUsageSummary(null, 100, null), 0),
@@ -86,8 +100,8 @@ class MaryContextRingRenderingTest {
             val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity = controller
             controller.get().setContent {
-                MixUiHost(backend = MixUiBackend.Miuix, colorMode = mode) {
-                    primary = MixTheme.colorScheme.primary
+                MixUiHost(backend = backend, colorMode = mode, mochiStyle = style) {
+                    primary = MaryContextProgressBlue
                     track = MixTheme.colorScheme.outline
                     hk.uwu.mixui.components.GlassPreferenceScene {
                         Column(Modifier.background(MixTheme.colorScheme.background)) {
@@ -106,7 +120,7 @@ class MaryContextRingRenderingTest {
             System.getProperty("mary.ui.screenshotDir")?.let { path ->
                 val directory = java.io.File(path, "context-ring")
                 check(directory.mkdirs() || directory.isDirectory)
-                val filename = "$mode-${case.name.replace(' ', '-')}.png"
+                val filename = "$backend-$style-$mode-${case.name.replace(' ', '-')}.png"
                 java.io.File(directory, filename).outputStream().use { output ->
                     check(
                         image.asAndroidBitmap()
@@ -126,7 +140,7 @@ class MaryContextRingRenderingTest {
                     val x = (pixels.width / 2.0 + radius * cos(angle)).toInt()
                     val y = (pixels.height / 2.0 + radius * sin(angle)).toInt()
                     val actual = pixels[x, y]
-                    val label = "$mode ${case.name}, quadrant $quadrant, pixel ($x,$y)"
+                    val label = "$backend $style $mode ${case.name}, quadrant $quadrant, pixel ($x,$y)"
                     assertEquals("$label red", expected.red, actual.red, 0.08f)
                     assertEquals("$label green", expected.green, actual.green, 0.08f)
                     assertEquals("$label blue", expected.blue, actual.blue, 0.08f)

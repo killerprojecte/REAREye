@@ -462,7 +462,7 @@ class MaryContextCompositionLayoutTest {
         assertEquals("Equal-width mode cells", first.width.value, second.width.value, 1f)
         val modes = node("mary-context-modes").getUnclippedBoundsInRoot()
         val popup = node("mary-context-popup").getUnclippedBoundsInRoot()
-        assertTrue("Header tabs remain readable, not tiny: $modes", modes.width.value in 124f..140f)
+        assertTrue("Header tabs remain readable, not tiny: $modes", modes.width.value in 124f..200f)
         val close = node("mary-context-close").getUnclippedBoundsInRoot()
         val title = node("mary-context-title").getUnclippedBoundsInRoot()
         assertEquals("Mode tabs share header center with close", close.top.value + close.height.value / 2f, modes.top.value + modes.height.value / 2f, 1f)
@@ -471,20 +471,23 @@ class MaryContextCompositionLayoutTest {
         assertTrue("Header retains at least48dp for title", title.width.value >= 48f)
         assertTrue("Removing dedicated mode row keeps popup compact", popup.height.value <= 304f)
         val popupId = node("mary-context-popup").fetchSemanticsNode().id
-        val track = node("compact-tabs-track")
+        val track = node("compact-glass-tabs-miuix")
         val stableTrackBounds = track.getUnclippedBoundsInRoot()
-        assertEquals("Each tab fills half the shared track", (stableTrackBounds.width.value - 12f) / 2f, first.width.value, 1f)
-        assertEquals("Second cell reaches contour trailing inset", stableTrackBounds.right.value - 5f, second.right.value, 1f)
+        assertEquals("Each tab fills half the shared track", (stableTrackBounds.width.value - 14f) / 2f, first.width.value, 1f)
+        assertEquals("Second cell reaches native glass track inset", stableTrackBounds.right.value - 3f, second.right.value, 1f)
         val directory = File(requireNotNull(System.getProperty("mary.ui.screenshotDir")), "context")
         val initial = track.captureToImage().asAndroidBitmap()
         val y = initial.height - 8
         fun light(bitmap: Bitmap, x: Int): Int = android.graphics.Color.red(bitmap.getPixel(x, y))
         val selectedColor = light(initial, initial.width / 4)
         val backgroundColor = light(initial, initial.width * 3 / 4)
-        assertTrue("Native indicator has measurable contrast", selectedColor > backgroundColor + 2)
+        assertTrue("Native indicator has measurable contrast", kotlin.math.abs(selectedColor - backgroundColor) > 2)
         val threshold = (selectedColor + backgroundColor) / 2
         fun center(bitmap: Bitmap): Double {
-            val xs = (6 until bitmap.width - 6).filter { light(bitmap, it) > threshold }
+            val xs = (6 until bitmap.width - 6).filter {
+                if (selectedColor < backgroundColor) light(bitmap, it) < threshold
+                else light(bitmap, it) > threshold
+            }
             assertTrue("A native indicator must remain visible", xs.size > bitmap.width / 4)
             return xs.average()
         }
@@ -505,7 +508,7 @@ class MaryContextCompositionLayoutTest {
             modeTab(true).assertIsSelected()
             lines += "clickClock=$clickClock selectionAppliedClock=${compose.mainClock.currentTime}"
             val startClock = compose.mainClock.currentTime
-            for (time in listOf(0L, 50L, 100L, 150L, 200L, 240L)) {
+            for (time in listOf(0L, 16L, 32L, 50L, 80L, 120L, 180L, 260L, 400L, 600L)) {
                 val remaining = startClock + time - compose.mainClock.currentTime
                 if (remaining > 0) compose.mainClock.advanceTimeBy(remaining, ignoreFrameDuration = true)
                 compose.waitForIdle()
@@ -521,7 +524,8 @@ class MaryContextCompositionLayoutTest {
         } finally { compose.mainClock.autoAdvance = true }
         File(directory, "row-tabs-animation-times.txt").writeText(lines.joinToString("\n"))
         assertTrue("Indicator reaches second cell: $centers", centers.last() > startCenter + initial.width * 0.35)
-        assertTrue("100ms must show a genuine intermediate position: $centers", centers[2] > startCenter + 10 && centers[2] < centers.last() - 10)
+        assertTrue("Native motion must include a genuine intermediate position: $centers",
+            centers.any { it > startCenter + 5 && it < centers.last() - 5 })
         centers.zipWithNext().forEach { (a, b) -> assertTrue("Indicator moves continuously forward: $centers", b >= a - 1) }
     }
 

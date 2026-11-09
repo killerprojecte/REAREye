@@ -48,6 +48,7 @@ import hk.uwu.reareye.agent.context.ContextCategory
 import hk.uwu.reareye.agent.context.ContextSegment
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.CompactTopBarIconButton
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
 import java.text.NumberFormat
@@ -102,12 +103,23 @@ private fun percent(value: Double?): String = value?.takeIf { it.isFinite() }?.l
     String.format(Locale.getDefault(), "%.1f%%", it * 100)
 } ?: "—"
 
+/** Stable cross-backend progress identity; theme accents do not change capacity meaning. */
+internal val MaryContextProgressBlue = Color(0xFF1677FF)
+
 /** Independent native implementation. Composition estimates and provider usage are separate facts. */
 @Composable
-internal fun ContextUsageButton(summary: MaryUsageSummary) {
+internal fun ContextUsageButton(summary: MaryUsageSummary, topBar: Boolean = false) {
     val colors = MixTheme.colorScheme
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     var expanded by remember { mutableStateOf(false) }
+    val anchorFocus = remember { FocusRequester() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    var wasExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(expanded) {
+        if (!expanded && wasExpanded) anchorFocus.requestFocus()
+        wasExpanded = expanded
+    }
     var sequence by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf<ContextCategory?>(null) }
     var selectedIndex by remember { mutableIntStateOf(0) }
@@ -180,6 +192,7 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).testTag("mary-context-title"),
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                     CompactTabs(
+                        glass = true,
                         tabs = listOf(stringResource(R.string.mary_context_category_mode), stringResource(R.string.mary_context_sequence_mode)),
                         selectedTabIndex = if (sequence) 1 else 0,
                         onTabSelected = { index ->
@@ -290,26 +303,33 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
             }
         },
         anchor = {
-            // Preserve the existing compact topbar ring; detailed composition lives only in the popup.
-            IconButton(
-                onClick = { expanded = !expanded },
-                modifier = Modifier.testTag("mary-context-usage").semantics(mergeDescendants = true) {
+            // The popup close button remains ordinary; only Mary's toolbar anchor opts in.
+            val anchorModifier = Modifier.focusRequester(anchorFocus).testTag("mary-context-usage")
+                .semantics(mergeDescendants = true) {
                     contentDescription = description
                     ratio?.let { progressBarRangeInfo = ProgressBarRangeInfo(it.toFloat().coerceIn(0f, 1f), 0f..1f) }
-                },
-            ) {
+                }
+            val toggle = {
+                focusManager.clearFocus(force = true)
+                keyboard?.hide()
+                anchorFocus.requestFocus()
+                expanded = !expanded
+            }
+            val ring: @Composable () -> Unit = {
                 Canvas(Modifier.size(20.dp).testTag("mary-context-ring")) {
                     val stroke = 2.dp.toPx()
                     drawCircle(colors.outline, radius = (size.minDimension - stroke) / 2, style = Stroke(stroke))
                     val sweep = contextProgressSweep(ratio)
                     if (sweep != 0f) drawArc(
-                        colors.primary, startAngle = -90f, sweepAngle = sweep, useCenter = false,
+                        MaryContextProgressBlue, startAngle = -90f, sweepAngle = sweep, useCenter = false,
                         topLeft = Offset(stroke / 2, stroke / 2),
                         size = Size(size.width - stroke, size.height - stroke),
                         style = Stroke(stroke, cap = StrokeCap.Butt),
                     )
                 }
             }
+            if (topBar) CompactTopBarIconButton(toggle, anchorModifier, ring)
+            else IconButton(onClick = toggle, modifier = anchorModifier, content = ring)
         },
     )
 }

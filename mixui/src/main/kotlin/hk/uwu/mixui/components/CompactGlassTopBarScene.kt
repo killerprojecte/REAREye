@@ -1,11 +1,21 @@
 package hk.uwu.mixui.components
 
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
@@ -82,7 +92,7 @@ fun CompactGlassTopBar(
                 Modifier.glass(
                     backdrop = it, shape = GlassShape(0.dp),
                     material = GlassMaterials.puredThinGlass(background.luminance() < 0.5f),
-                    shading = false,
+                    shading = false, enabled = scrolled,
                 )
             } ?: Modifier.background(background)
             top.yukonga.miuix.kmp.basic.SmallTopAppBar(
@@ -96,5 +106,86 @@ fun CompactGlassTopBar(
             backgroundProgress = { if (scrolled) 1f else 0f },
             navigationIcon = navigationIcon, actions = actions,
         )
+    }
+}
+
+/**
+ * Native control for the fixed compact bar. Unlike GlassTopAppBar, SmallTopAppBar
+ * provides no native glass context. Passing only a backdrop would leave the
+ * vendor button permanently floating, including at the transcript's top.
+ *
+ * Keep one native clickable/focus node mounted and remove all material inputs at
+ * rest. surfaceAlpha alone is insufficient: MIUIX still samples/blurs its backdrop
+ * at alpha zero. No whole-button alpha is used, so the icon/ring stays legible.
+ * Ordinary IconButton children, including those in dialogs, are unaffected.
+ */
+@Composable
+fun CompactTopBarIconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val backdrop = checkNotNull(LocalCompactBarBackdrop.current) {
+        "CompactTopBarIconButton requires CompactGlassTopBarScene"
+    }
+    val scrolled = LocalCompactBarScrolled.current
+    val buttonModifier = modifier.size(48.dp).semantics(mergeDescendants = true) {
+        role = Role.Button
+    }
+    when (backdrop) {
+        is GlassFormBackdrop.Miuix -> {
+            if (backdrop.value != null) {
+                top.yukonga.miuix.kmp.glass.GlassIconButton(
+                    onClick = onClick,
+                    modifier = buttonModifier,
+                    inheritTopBarMaterial = false,
+                    backdrop = backdrop.value.takeIf { scrolled },
+                    size = 48.dp,
+                    fill = Color.Transparent,
+                    stroke = if (scrolled) top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults.buttonStroke() else null,
+                    shadow = if (scrolled) top.yukonga.miuix.kmp.glass.GlassShadows.Regular else null,
+                    content = content,
+                )
+            } else {
+                top.yukonga.miuix.kmp.basic.IconButton(
+                    onClick = onClick, modifier = buttonModifier,
+                    minWidth = 48.dp, minHeight = 48.dp, content = content,
+                )
+            }
+        }
+        // BoundedMochiTitleBar supplies the body backdrop and scroll visibility.
+        // TopBarIconButton already selects the vendor plain surface at rest.
+        is GlassFormBackdrop.Mochi -> {
+            // Mochi 0.2.0 owns pointer gestures and accessibility OnClick, but its
+            // ButtonCore has no focus target or key handler. Add only keyboard
+            // behavior here; another clickable would compete with native gestures.
+            var pressedKey by remember { mutableStateOf<Key?>(null) }
+            TopBarIconButton(
+                onClick = onClick,
+                modifier = buttonModifier
+                    .onFocusChanged { if (!it.isFocused) pressedKey = null }
+                    .onKeyEvent { event ->
+                        val activationKey = event.key == Key.Enter ||
+                            event.key == Key.NumPadEnter || event.key == Key.DirectionCenter ||
+                            event.key == Key.Spacebar
+                        if (!activationKey) return@onKeyEvent false
+                        when (event.type) {
+                            KeyEventType.KeyDown -> {
+                                if (pressedKey == null) pressedKey = event.key
+                                true
+                            }
+                            KeyEventType.KeyUp -> {
+                                val activate = pressedKey == event.key
+                                pressedKey = null
+                                if (activate) onClick()
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                    .focusable(),
+                content = content,
+            )
+        }
     }
 }

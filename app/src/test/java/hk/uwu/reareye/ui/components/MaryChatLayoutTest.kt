@@ -1582,7 +1582,7 @@ class MaryChatLayoutTest {
         listOf(0.83f to 0.17f, 0.17f to 0.17f, 0.17f to 0.83f, 0.83f to 0.83f).forEach { (x, y) ->
             assertColorNear(outline, sample(unknown, x, y))
         }
-        assertColorNear(primary, sample(quarter, 0.83f, 0.17f))
+        assertColorNear(MaryContextProgressBlue, sample(quarter, 0.83f, 0.17f))
         listOf(0.17f to 0.17f, 0.17f to 0.83f, 0.83f to 0.83f).forEach { (x, y) ->
             assertColorNear(outline, sample(quarter, x, y))
         }
