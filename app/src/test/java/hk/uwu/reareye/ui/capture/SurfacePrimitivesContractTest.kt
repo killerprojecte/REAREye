@@ -135,4 +135,28 @@ class SurfacePrimitivesContractTest {
             capture("store-badge-${backend.name}-$dark")
         }
     }
+    @Test fun nativeCheckboxRetainsSelectionDisabledAndReadOnlyContracts() {
+        for (backend in MixUiBackend.entries) for (dark in listOf(false, true)) {
+            var checked by mutableStateOf(false)
+            var callbacks = 0
+            open(backend, dark) {
+                Column {
+                    hk.uwu.mixui.components.Checkbox(checked, { checked = it; callbacks++ }, Modifier.testTag("check"))
+                    hk.uwu.mixui.components.Checkbox(false, { callbacks++ }, Modifier.testTag("disabled-check"), enabled = false)
+                    hk.uwu.mixui.components.Checkbox(true, null, Modifier.testTag("readonly-check"))
+                }
+            }
+            compose.onNodeWithTag("check").assertIsOff().performTouchInput { click() }; settle()
+            compose.onNodeWithTag("check").assertIsOn()
+            assertEquals(1, callbacks)
+            compose.onNodeWithTag("check").performTouchInput { click() }; settle()
+            compose.onNodeWithTag("check").assertIsOff()
+            assertEquals(2, callbacks)
+            compose.onNodeWithTag("disabled-check").assertIsNotEnabled().performTouchInput { click() }; settle()
+            compose.onNodeWithTag("readonly-check").assertHasNoClickAction()
+            assertEquals(2, callbacks)
+            capture("checkbox-${backend.name}-$dark")
+        }
+    }
+
 }

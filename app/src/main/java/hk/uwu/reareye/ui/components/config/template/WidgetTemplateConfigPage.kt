@@ -52,7 +52,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.toColorInt
@@ -123,7 +122,7 @@ import hk.uwu.mixui.components.ListItem
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
-import top.yukonga.miuix.kmp.basic.Checkbox
+import hk.uwu.mixui.components.Checkbox
 import top.yukonga.miuix.kmp.basic.ColorPalette
 import top.yukonga.miuix.kmp.basic.ColorPicker
 import hk.uwu.mixui.components.Icon
@@ -1708,8 +1707,8 @@ private fun TemplateImageOptionCard(
                 ImageOptionSelectionMode.None -> Unit
                 ImageOptionSelectionMode.Single -> Unit
                 ImageOptionSelectionMode.Multi -> Checkbox(
-                    state = if (selected) ToggleableState.On else ToggleableState.Off,
-                    onClick = onClick,
+                    checked = selected,
+                    onCheckedChange = { onClick() },
                 )
             }
         }
