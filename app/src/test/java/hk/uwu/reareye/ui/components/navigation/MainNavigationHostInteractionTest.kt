@@ -12,12 +12,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.unit.LayoutDirection
@@ -26,6 +29,7 @@ import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.components.*
 import hk.uwu.mixui.motion.ArtVisibilityMotion
 import hk.uwu.reareye.R
+import hk.uwu.reareye.ui.config.ConfigType
 import hk.uwu.reareye.ui.featureGuideAnchor
 import hk.uwu.reareye.ui.screen.LocalMarySidebarPageGestureHost
 import hk.uwu.reareye.ui.screen.MarySidebarPageGestureHost
@@ -353,6 +357,71 @@ class MainNavigationHostInteractionTest {
                 assertEquals(listOf("mary"), selected)
             }
             compose.onNodeWithText(quickLabel).assertDoesNotExist()
+        }
+    }
+
+    @Test fun heldIosMenuBottomEdgeOwnsOverlapWithNavigationSlop() {
+        for (rtl in listOf(false, true)) {
+            launch(AppNavigationBarStyle.IOS, rtl)
+            val config = point(R.string.configuration_navigation)
+            val mary = point(R.string.mary_title)
+            val px = activity!!.get().resources.displayMetrics.density
+            val scene = compose.onNodeWithTag("main-host")
+            val menuLabel = activity!!.get().getString(R.string.navigation_quick_available_title)
+            val cardLabel = activity!!.get().getString(R.string.navigation_quick_card_manager)
+            val adapter = compose.onNode(SemanticsMatcher("navigation gesture adapter") {
+                it.config.getOrNull(SemanticsActions.CustomActions)?.any { action -> action.label == menuLabel } == true
+            }, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            for (start in listOf("center", "upper-edge")) for (path in listOf("menu-edge-release", "menu-then-return", "gap-then-Mary")) {
+                scene.performTouchInput { click(config) }
+                frames(60)
+                compose.runOnIdle { assertEquals("config", route); selected.clear(); quickSelected.clear() }
+                val startPoint = if (start == "center") config else Offset(config.x, adapter.top + 2f * px)
+                scene.performTouchInput { down(startPoint) }
+                frames(45)
+                scene.performTouchInput { advanceEventTime(720) }
+                val card = compose.onNode(hasClickAction() and hasText(cardLabel)).fetchSemanticsNode()
+                val cardOrigin = card.positionOnScreen - scene.fetchSemanticsNode().positionOnScreen
+                val actualTarget = Rect(cardOrigin.x, cardOrigin.y,
+                    cardOrigin.x + card.size.width, cardOrigin.y + card.size.height)
+                // The real 176x40dp target ends 12dp above the bar (10dp gap + 2dp padding).
+                // This overlaps IOS's 7dp pressed overflow + 8dp continuation slop.
+                assertEquals("Actual menu bottom rtl=$rtl", adapter.top - 12f * px, actualTarget.bottom, 1.1f)
+                val y = adapter.top - (if (path == "gap-then-Mary") 11f else 13f) * px
+                val enter = Offset(config.x, y)
+                val crossTab = Offset(config.x + (mary.x - config.x) * 0.75f, y)
+                if (path == "gap-then-Mary") {
+                    assertFalse("11dp is the gap, not a menu hit", actualTarget.contains(enter))
+                } else {
+                    assertTrue("13dp must enter the actual target", actualTarget.contains(enter))
+                    assertTrue("The sideways 0.75-tab move remains on the target", actualTarget.contains(crossTab))
+                }
+                scene.performTouchInput { moveTo(enter, delayMillis = 16) }
+                frames(1)
+                scene.performTouchInput { moveTo(crossTab, delayMillis = 16) }
+                frames(1)
+                when (path) {
+                    "menu-then-return" -> scene.performTouchInput { moveTo(mary, delayMillis = 16) }
+                    "gap-then-Mary" -> scene.performTouchInput { moveTo(Offset(mary.x, y), delayMillis = 16) }
+                }
+                frames(1)
+                compose.runOnIdle { assertEquals("No route before release", "config", route); assertTrue(selected.isEmpty()) }
+                scene.performTouchInput { up() }
+                fun verify() = compose.runOnIdle {
+                    val context = "$start $path rtl=$rtl"
+                    assertEquals(context, if (path == "gap-then-Mary") "mary" else "config", route)
+                    assertEquals(context, if (path == "gap-then-Mary") listOf("mary") else emptyList<String>(), selected)
+                    assertEquals(context,
+                        if (path == "menu-edge-release") listOf(NavigationQuickTarget.ConfigManager(ConfigType.ManagerType.CARD))
+                        else emptyList<NavigationQuickTarget>(), quickSelected)
+                    assertFalse(context, sidebarOpened)
+                }
+                frames(24)
+                verify()
+                frames(120)
+                verify()
+                compose.onNodeWithText(cardLabel).assertDoesNotExist()
+            }
         }
     }
 

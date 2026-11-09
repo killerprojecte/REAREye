@@ -127,7 +127,8 @@ fun NavigationBar(
     style: NavigationBarStyle = NavigationBarStyle.IOS,
     shadowVisibilityProgress: Float = 1f,
     onSecondaryAction: (String, NavigationAnchor) -> Unit = { _, _ -> },
-    onSecondaryDrag: (Offset) -> Unit = {},
+    /** True means the pointer hit an actual secondary target and must keep menu ownership. */
+    onSecondaryDrag: (Offset) -> Boolean = { false },
     onSecondaryEnd: (cancelled: Boolean) -> Unit = {},
     onEditAction: (String) -> Unit = {},
 ) {
@@ -211,6 +212,16 @@ fun NavigationBar(
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 bridge.selection.begin()
+                // Touch slop is continuation tolerance, not an expanded initial hit target.
+                // A thumb may briefly skim any edge, including the pressed IOS lens, without
+                // abandoning navigation. Larger exits still terminally cancel the same gate.
+                val continuationSlop = if (down.position.x in 0f..size.width.toFloat() &&
+                    down.position.y in 0f..size.height.toFloat()
+                ) viewConfiguration.touchSlop else 0f
+                fun insideContinuation(position: Offset): Boolean =
+                    position.x in -continuationSlop..(size.width + continuationSlop) &&
+                        position.y in -(verticalOverflow + continuationSlop)..
+                            (size.height + verticalOverflow + continuationSlop)
                 // Ancestors may own an opening/page drag while the native bar still receives
                 // the hit path. Reject its callbacks, but never consume the owner's next event.
                 var ancestorOwnsGesture = down.isConsumed
@@ -245,8 +256,7 @@ fun NavigationBar(
                                 bridge.selection.move(
                                     beyondSlop = (change.position - down.position).getDistance() > viewConfiguration.touchSlop,
                                     horizontalDrag = kotlin.math.abs(change.position.x - down.position.x) > kotlin.math.abs(change.position.y - down.position.y),
-                                    outside = change.position.x !in 0f..size.width.toFloat() ||
-                                        change.position.y !in -verticalOverflow..(size.height + verticalOverflow),
+                                    outside = !insideContinuation(change.position),
                                     multiplePointers = event.changes.count { it.pressed } > 1,
                                 )
                                 val releaseX = if (direction == LayoutDirection.Rtl) size.width - change.position.x else change.position.x
@@ -268,7 +278,7 @@ fun NavigationBar(
                                 (if (direction == LayoutDirection.Rtl) renderedItems.lastIndex - index else index) + 0.5f
                             ), bridge.origin.y, density.density,
                         ))
-                        drag(bridge.origin + down.position)
+                        if (drag(bridge.origin + down.position)) secondaryLeftBar = true
                     }
                     // Drain even a cancelled sequence to its final release. A native control
                     // can call onSelect after its own release animation has already started.
@@ -287,20 +297,22 @@ fun NavigationBar(
                             }
                             bridge.selection.move(
                                 beyondSlop = (change.position - down.position).getDistance() > viewConfiguration.touchSlop,
-                                    horizontalDrag = kotlin.math.abs(change.position.x - down.position.x) > kotlin.math.abs(change.position.y - down.position.y),
-                                outside = change.position.x !in 0f..size.width.toFloat() ||
-                                    change.position.y !in -verticalOverflow..(size.height + verticalOverflow),
+                                horizontalDrag = kotlin.math.abs(change.position.x - down.position.x) > kotlin.math.abs(change.position.y - down.position.y),
+                                outside = !insideContinuation(change.position),
                                 multiplePointers = event.changes.count { it.pressed } > 1,
                             )
                             val releaseX = if (direction == LayoutDirection.Rtl) size.width - change.position.x else change.position.x
                             releaseIndex = if (span > 0f) ((releaseX - horizontalInset) / span).toInt().coerceIn(renderedItems.indices) else index
                             if (bridge.selection.intent == NavigationSelectionGate.Intent.Secondary) {
-                                val insideBar = change.position.x in 0f..size.width.toFloat() &&
-                                    change.position.y in -verticalOverflow..(size.height + verticalOverflow)
-                                if (!insideBar) secondaryLeftBar = true
+                                // Ask the owner before reclaiming navigation: a real popup target
+                                // can overlap the continuation margin. Once entered, it owns this
+                                // sequence even if the pointer later returns to the bar.
+                                val hitSecondaryTarget = drag(bridge.origin + change.position)
+                                if (hitSecondaryTarget || !insideContinuation(change.position)) secondaryLeftBar = true
                                 val delta = change.position - down.position
                                 // A horizontal move to another tab means navigation, even after
-                                // holding Config. Once the finger leaves for the menu, retain
+                                // holding Config, with the same edge tolerance as ordinary drags.
+                                // A real menu hit or departure from that region permanently retains
                                 // secondary ownership so its upward selection contract survives.
                                 if (!secondaryLeftBar && releaseIndex != index &&
                                     kotlin.math.abs(delta.x) > viewConfiguration.touchSlop &&
@@ -309,8 +321,6 @@ fun NavigationBar(
                                 ) {
                                     secondaryFinished = true
                                     end(true)
-                                } else {
-                                    drag(bridge.origin + change.position)
                                 }
                             }
                             if (!ancestorOwnsGesture && (bridge.selection.intent == NavigationSelectionGate.Intent.Secondary || bridge.selection.intent == NavigationSelectionGate.Intent.Cancelled)) change.consume()

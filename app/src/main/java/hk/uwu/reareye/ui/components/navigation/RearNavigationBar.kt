@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -226,7 +227,7 @@ fun AppNavigationBar(
     ) {
         if (item.quickActions.isNotEmpty()) {
             menuAnchor = NavigationAnchor(anchorCenterX, anchorTop, density)
-            quickMenuController.begin(anchorCenterX, anchorTop, density)
+            quickMenuController.begin()
             expandedQuickActionsRoute = item.route
         }
     }
@@ -260,7 +261,10 @@ fun AppNavigationBar(
         },
     )
 
-    Box(modifier.onGloballyPositioned { navigationHostPosition = it.positionInRoot() }) {
+    Box(modifier.onGloballyPositioned {
+        navigationHostPosition = it.positionInRoot()
+        quickMenuController.positionHost(it)
+    }) {
         NavigationBar(
             items = items.map { item ->
                 NavigationItem(
@@ -290,8 +294,8 @@ fun AppNavigationBar(
             },
             onSecondaryDrag = { pointer ->
                 items.firstOrNull { it.route == expandedQuickActionsRoute }?.let { item ->
-                    quickMenuController.updateHover(pointer, item.quickActions)
-                }
+                    quickMenuController.updateHover(pointer, item.quickActions) != null
+                } ?: false
             },
             onSecondaryEnd = { cancelled ->
                 val action = items.firstOrNull { it.route == expandedQuickActionsRoute }
@@ -490,7 +494,7 @@ private fun NavigationQuickActionsPopup(
                                 scaleY = appearScale
                             },
                             onClick = onOpenEditor,
-                            onPositioned = { _ -> },
+                            onPositioned = { quickMenuController.positionTarget(EDIT_QUICK_ACTIONS_KEY, it) },
                         )
                     }
                 }
@@ -508,7 +512,7 @@ private fun NavigationQuickActionsPopup(
                             hovered = quickMenuController.hoveredKey == action.id,
                             delayProgress = ((progressValue - index * 0.05f).coerceIn(0f, 1f)),
                             onClick = { onActionSelected(action.target) },
-                            onPositioned = { _ -> },
+                            onPositioned = { quickMenuController.positionTarget(action.id, it) },
                         )
                     }
                 }
@@ -806,7 +810,10 @@ private fun AutoShrinkText(
 }
 
 private class NavigationQuickMenuController {
-    private var densityScaleFallback = 1f
+    private var hostCoordinates: LayoutCoordinates? = null
+    // Coordinates stay live through popup/hover animations. Detached entries cannot hit;
+    // retaining them across close/reopen also covers an interrupted exit without a relayout.
+    private val targetCoordinates = mutableMapOf<String, LayoutCoordinates>()
 
     var hoveredKey by mutableStateOf<String?>(null)
         private set
@@ -814,61 +821,55 @@ private class NavigationQuickMenuController {
     var showEditTarget by mutableStateOf(false)
         private set
 
-    private var anchorCenterX = 0f
-    private var anchorTop = 0f
-
-    fun begin(anchorCenterX: Float, anchorTop: Float, density: Float) {
-        densityScaleFallback = density
-        this.anchorCenterX = anchorCenterX
-        this.anchorTop = anchorTop
-        hoveredKey = null
-        showEditTarget = false
+    fun positionHost(coordinates: LayoutCoordinates) {
+        hostCoordinates = coordinates
     }
+
+    fun positionTarget(key: String, coordinates: LayoutCoordinates) {
+        targetCoordinates[key] = coordinates
+    }
+
+    fun begin() = reset()
 
     fun reset() {
         hoveredKey = null
         showEditTarget = false
-        anchorCenterX = 0f
-        anchorTop = 0f
     }
 
     fun updateHover(pointer: Offset, actions: List<NavigationQuickAction>): String? {
-        val buttonWidth = QUICK_ACTION_BUTTON_WIDTH_DP * densityScaleFallback
-        val buttonHeight = 40f * densityScaleFallback
-        val gap = 8f * densityScaleFallback
-        val menuBottom = anchorTop - 10f * densityScaleFallback
-        val menuTop =
-            menuBottom - actions.size * buttonHeight - (actions.size - 1).coerceAtLeast(0) * gap
-        val xInMenu =
-            pointer.x in (anchorCenterX - buttonWidth / 2f)..(anchorCenterX + buttonWidth / 2f)
-
-        if (pointer.y <= menuTop + buttonHeight / 2f && xInMenu) {
-            showEditTarget = true
+        val host = hostCoordinates?.takeIf { it.isAttached }
+        if (host == null) {
+            hoveredKey = null
+            return null
         }
-
-        val actionIndex = ((pointer.y - menuTop) / (buttonHeight + gap)).toInt()
-        val action = actions.getOrNull(actionIndex)
-        val actionTop = menuTop + actionIndex * (buttonHeight + gap)
-        val actionHovered =
-            action != null && xInMenu && pointer.y in actionTop..(actionTop + buttonHeight)
-
+        // The navigation pointer is in the activity's root; the targets live in a Popup
+        // with its own root/window. Screen conversion accounts for the real padding,
+        // popup placement/clamping and transforms instead of reconstructing anchor offsets.
+        val pointerOnScreen = host.findRootCoordinates().localToScreen(pointer)
+        fun target(key: String) = targetCoordinates[key]?.takeIf { it.isAttached }
+        fun contains(key: String): Boolean {
+            val coordinates = target(key) ?: return false
+            val local = coordinates.screenToLocal(pointerOnScreen)
+            return local.x >= 0f && local.x < coordinates.size.width &&
+                local.y >= 0f && local.y < coordinates.size.height
+        }
+        actions.firstOrNull()?.let { first ->
+            target(first.id)?.let { coordinates ->
+                val local = coordinates.screenToLocal(pointerOnScreen)
+                if (local.x >= 0f && local.x < coordinates.size.width && local.y <= coordinates.size.height / 2f) {
+                    showEditTarget = true
+                }
+            }
+        }
+        val actionIndex = actions.indexOfFirst { contains(it.id) }
         if (showEditTarget) {
-            val editTop = menuTop - gap - buttonHeight
-            val editBottom = editTop + buttonHeight
-            if (xInMenu && pointer.y in editTop..editBottom) {
+            if (contains(EDIT_QUICK_ACTIONS_KEY)) {
                 hoveredKey = EDIT_QUICK_ACTIONS_KEY
                 return hoveredKey
             }
-            if (actionHovered && actionIndex > 0) {
-                showEditTarget = false
-            }
+            if (actionIndex > 0) showEditTarget = false
         }
-
-        hoveredKey = if (actionHovered) {
-            action.id
-        } else {
-            null
-        }
+        hoveredKey = actions.getOrNull(actionIndex)?.id
         return hoveredKey
     }
 }

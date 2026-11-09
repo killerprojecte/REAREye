@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.view.ViewConfiguration
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
@@ -162,6 +163,16 @@ class MainActivityNavigationInteractionTest {
     @Test fun realConfigToMaryMochiCurvedPathDiagnostics() =
         exerciseCurvedPaths(AppNavigationBarStyle.HyperOS, AppThemeMode.MOCHI_LIGHT)
 
+    @Test
+    @Config(qualifiers = "ar-rSA-ldrtl-w400dp-h869dp-xxhdpi")
+    fun realConfigToMaryRtlCurvedPathDiagnostics() {
+        for ((style, theme) in listOf(
+            AppNavigationBarStyle.IOS to AppThemeMode.MIUIX_LIGHT,
+            AppNavigationBarStyle.HyperOS to AppThemeMode.MIUIX_LIGHT,
+            AppNavigationBarStyle.HyperOS to AppThemeMode.MOCHI_LIGHT,
+        )) exerciseCurvedPaths(style, theme, rtl = true)
+    }
+
     private data class PointerPath(
         val name: String,
         val down: Offset,
@@ -174,15 +185,16 @@ class MainActivityNavigationInteractionTest {
     /**
      * Deliberately small counterexamples, not a claim about unrecorded user coordinates:
      *  - the same in-bounds curve with/without a hold isolates the gate's first-direction lock;
-     *  - an in-bounds lower-edge path versus a 1px excursion isolates terminal cancellation.
-     * The latter is a cancellation control, not a requested relaxation of cancel semantics.
+     *  - small edge excursions may continue or re-enter, before and after a held-menu handoff;
+     *  - exits beyond the continuation slop must remain cancelled after returning to Mary.
      */
-    private fun exerciseCurvedPaths(style: AppNavigationBarStyle, theme: AppThemeMode) {
+    private fun exerciseCurvedPaths(style: AppNavigationBarStyle, theme: AppThemeMode, rtl: Boolean = false) {
         launch(style, theme)
         tap(R.string.configuration_navigation)
         val config = point(R.string.configuration_navigation)
         val mary = point(R.string.mary_title)
-        assertTrue("LTR Config→Mary is physically right→left", config.x > mary.x)
+        assertTrue("Config→Mary actual physical order rtl=$rtl", if (rtl) config.x < mary.x else config.x > mary.x)
+        val towardMarySign = if (rtl) 1f else -1f
         val px = activity!!.get().resources.displayMetrics.density
         val slop = ViewConfiguration.get(activity!!.get()).scaledTouchSlop.toFloat()
         // This semantic action belongs to NavigationBar's actual outer gesture adapter,
@@ -192,13 +204,15 @@ class MainActivityNavigationInteractionTest {
             it.config.getOrNull(SemanticsActions.CustomActions)?.any { action -> action.label == actionLabel } == true
         }, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val overflow = if (theme == AppThemeMode.MIUIX_LIGHT && style == AppNavigationBarStyle.IOS) 7f * px else 0f
+        val continuation = Rect(adapter.left - slop, adapter.top - overflow - slop,
+            adapter.right + slop, adapter.bottom + overflow + slop)
         val towardMary = (mary - config)
         fun line(from: Offset, to: Offset, count: Int = 12): List<Offset> =
             (1..count).map { from + (to - from) * (it.toFloat() / count) }
         // Use the measured platform slop, not an assumed dp value. The entire lead stays inside.
-        val initialVertical = config + Offset(-0.55f * slop, 1.1f * slop)
+        val initialVertical = config + Offset(towardMarySign * 0.55f * slop, 1.1f * slop)
         val horizontalArc = listOf(
-            config + Offset(-1.5f * slop, 0.55f * slop),
+            config + Offset(towardMarySign * 1.5f * slop, 0.55f * slop),
             config + towardMary * 0.5f + Offset(0f, 1.1f * slop),
         ) + line(config + towardMary * 0.5f + Offset(0f, 1.1f * slop), mary)
         val verticalArc = listOf(initialVertical) + line(initialVertical, mary)
@@ -219,11 +233,52 @@ class MainActivityNavigationInteractionTest {
             PointerPath("held-lower-edge-inside", lowConfig, edgeLine, holdMs = 720),
             PointerPath("held-lower-edge-1px-out-after-Mary", lowConfig,
                 edgeLine + listOf(Offset(mary.x, adapter.bottom + overflow + 1f), lowMary),
-                holdMs = 720, expectMary = false),
-        )
+                holdMs = 720),
+        ) + buildList {
+            for (hold in listOf(0L, 720L)) {
+                // Leave the vertical edge before entering Mary's cell. The held variant must
+                // relinquish the actual quick menu despite the small initial overshoot.
+                for ((edge, positions) in listOf(
+                    // IOS menu ends 12dp above the bar. At platform slop 16dp,
+                    // overflow + half-slop is 15dp and actually enters that menu.
+                    // Keep this navigation positive in the verified 11dp gap; the
+                    // production-popup suite separately requires menu ownership at 13dp.
+                    "upper" to Triple(adapter.top + 2f * px, adapter.top -
+                        (if (hold > 0 && overflow > 0) minOf(overflow + 0.5f * slop, 11f * px)
+                         else overflow + 0.5f * slop),
+                        adapter.top - overflow - 1.25f * slop),
+                    "lower" to Triple(adapter.bottom - 2f * px, adapter.bottom + overflow + 0.5f * slop,
+                        adapter.bottom + overflow + 1.25f * slop),
+                )) {
+                    val (innerY, smallY, largeY) = positions
+                    val from = Offset(config.x, innerY)
+                    val near = Offset(config.x, smallY)
+                    val end = Offset(mary.x, smallY)
+                    add(PointerPath("$edge-small-exit-reenter-hold-$hold", from,
+                        listOf(near, from) + line(from, Offset(mary.x, innerY)), holdMs = hold))
+                    add(PointerPath("$edge-small-exit-continue-release-hold-$hold", from,
+                        listOf(near) + line(near, end), holdMs = hold))
+                    // First become Drag, then leave. Otherwise Secondary legitimately owns
+                    // an upward departure and the test would exercise a menu, not cancellation.
+                    add(PointerPath("$edge-large-exit-return-hold-$hold", from,
+                        line(from, mary) + listOf(Offset(mary.x, largeY), mary),
+                        holdMs = hold, expectMary = false))
+                }
+                for ((edge, smallX, largeX) in listOf(
+                    Triple("left", adapter.left - 0.5f * slop, adapter.left - 1.25f * slop),
+                    Triple("right", adapter.right + 0.5f * slop, adapter.right + 1.25f * slop),
+                )) {
+                    add(PointerPath("$edge-small-exit-return-hold-$hold", config,
+                        line(config, mary) + listOf(Offset(smallX, mary.y), mary), holdMs = hold))
+                    add(PointerPath("$edge-large-exit-return-hold-$hold", config,
+                        line(config, mary) + listOf(Offset(largeX, mary.y), mary),
+                        holdMs = hold, expectMary = false))
+                }
+            }
+        }
         val report = mutableListOf(
-            "Actual MainActivity; style=$style theme=$theme; density=$px touchSlopPx=$slop",
-            "Actual gesture-adapter bounds=$adapter; existing continuation overflowPx=$overflow",
+            "Actual MainActivity; style=$style theme=$theme rtl=$rtl; density=$px touchSlopPx=$slop",
+            "Actual gesture-adapter bounds=$adapter; pressed overflowPx=$overflow; continuation=$continuation",
             "Actual Config center=$config; Mary center=$mary",
             "This is a constructed input diagnostic, not evidence of the user's exact path.",
         )
@@ -238,10 +293,18 @@ class MainActivityNavigationInteractionTest {
             tap(path.initialTab)
             val initialPage = if (path.initialTab == R.string.home_navigation) "home" else "config"
             check(page() == initialPage) { "Diagnostic did not begin on the real $initialPage page" }
+            check(adapter.contains(path.down)) { "Continuation test must begin inside the actual bar: ${path.name}" }
             if (path.expectMary) {
-                check((listOf(path.down) + path.moves).all { adapter.contains(it) }) {
-                    "An intended in-bounds diagnostic accidentally left the adapter: ${path.name}"
+                check(path.moves.all { continuation.contains(it) }) {
+                    "An intended tolerated path left the continuation bounds: ${path.name}"
                 }
+            }
+            if ("small-exit" in path.name) check(path.moves.any {
+                it.x < adapter.left || it.x > adapter.right ||
+                    it.y < adapter.top - overflow || it.y > adapter.bottom + overflow
+            }) { "Small-exit case did not leave the old continuation bounds: ${path.name}" }
+            if ("large-exit" in path.name) check(path.moves.any { !continuation.contains(it) }) {
+                "Large-exit case did not exceed the new continuation bounds: ${path.name}"
             }
             val root = scene()
             root.performTouchInput { down(path.down) }
@@ -261,15 +324,19 @@ class MainActivityNavigationInteractionTest {
             frames(120)
             val afterSettle = page()
             val expected = if (path.expectMary) "mary" else initialPage
-            val passed = beforeUp == initialPage && afterRelease == expected && afterSettle == expected
-            val result = "${path.name}: expected=$expected beforeUp=$beforeUp after384ms=$afterRelease after2304ms=$afterSettle pass=$passed"
+            val menuVisible = compose.onAllNodesWithText(activity!!.get().getString(R.string.navigation_quick_component_manager))
+                .fetchSemanticsNodes().isNotEmpty()
+            val sidebarVisible = compose.onAllNodesWithTag("mary-sidebar-overlay").fetchSemanticsNodes().isNotEmpty()
+            val passed = beforeUp == initialPage && afterRelease == expected && afterSettle == expected &&
+                !menuVisible && !sidebarVisible
+            val result = "${path.name}: expected=$expected beforeUp=$beforeUp after384ms=$afterRelease after2304ms=$afterSettle menu=$menuVisible sidebar=$sidebarVisible pass=$passed"
             report += result
             report += "  initialPage=$initialPage; holdMs=${path.holdMs}; down=${path.down}; moves=${path.moves}"
             if (!passed) failures += result
         }
         val output = File(System.getProperty("ui.capture.output"), "main-activity-navigation-paths")
         output.mkdirs()
-        val evidence = File(output, "${theme.name}-${style.name}.txt")
+        val evidence = File(output, "${theme.name}-${style.name}-rtl-$rtl.txt")
         evidence.writeText(report.joinToString("\n") + "\n")
         assertTrue("Constructed pointer-path failures; evidence=${evidence.absolutePath}\n${failures.joinToString("\n")}", failures.isEmpty())
     }
@@ -338,6 +405,35 @@ class MainActivityNavigationInteractionTest {
                 val initiallySelected = configVisible() && !sidebarVisible()
                 frames(120)
                 record("navigation-$name", "Config, no sidebar", initiallySelected && configVisible() && !sidebarVisible() && !maryVisible())
+            }
+            // Exercise the opposite route with the real Mary's opening recognizer mounted.
+            // The small excursion must navigate; a real departure must not recover navigation or open the sidebar.
+            val slop = ViewConfiguration.get(activity!!.get()).scaledTouchSlop.toFloat()
+            val overflow = if (theme == AppThemeMode.MIUIX_LIGHT && style == AppNavigationBarStyle.IOS) 7f * px else 0f
+            for ((edge, sign) in listOf("upper" to -1f, "lower" to 1f)) for (factor in listOf(0.5f, 1.25f)) {
+                prepareMary()
+                val edgeY = if (sign < 0) adapter.top else adapter.bottom
+                val innerY = edgeY - sign * 2f * px
+                val from = Offset(mary.x, innerY)
+                val target = Offset(config.x, innerY)
+                val root = scene()
+                root.performTouchInput { down(from) }
+                repeat(12) { step ->
+                    root.performTouchInput { moveTo(from + (target - from) * ((step + 1) / 12f), delayMillis = 16) }
+                    frames(1)
+                }
+                root.performTouchInput { moveTo(Offset(config.x, edgeY + sign * (overflow + factor * slop)), delayMillis = 16) }
+                frames(1)
+                root.performTouchInput { moveTo(target, delayMillis = 16) }
+                frames(1)
+                val deferred = maryVisible() && !configVisible() && !sidebarVisible()
+                root.performTouchInput { up() }
+                frames(24)
+                fun expectedPage() = if (factor < 1f) configVisible() && !maryVisible() else maryVisible() && !configVisible()
+                val initiallyCorrect = expectedPage() && !sidebarVisible()
+                frames(120)
+                record("navigation-$edge-exit-$factor-slop", if (factor < 1f) "Config, no sidebar" else "Mary, no sidebar",
+                    deferred && initiallyCorrect && expectedPage() && !sidebarVisible())
             }
             // Same center path, but after a hold: exposes the existing direction/timeout priority.
             prepareMary()
