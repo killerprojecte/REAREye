@@ -277,9 +277,26 @@ fun TopBarIconButton(
                 )
             }
         }
-        MixUiBackend.Mochi -> ui.feice.mochi.basic.MochiBarIconButton(
-            onClick = onClick, modifier = buttonModifier, enabled = enabled, content = content,
-        )
+        MixUiBackend.Mochi -> {
+            val colors = ui.feice.mochi.basic.MochiButtonDefaults.barColors()
+            // Mochi 0.2.0's backgroundProgress fades only the edge/shadow, not the
+            // button glass. Its public colors override selects the native plain
+            // surface while retaining the same control, size, icon and gestures.
+            // Never fade the entire button: the icon must remain visible at top.
+            val hideMaterial = !LocalMochiTopBarMaterialVisible.current &&
+                ui.feice.mochi.theme.MochiTheme.materials.controlGlass != null
+            ui.feice.mochi.basic.MochiBarIconButton(
+                onClick = onClick,
+                modifier = buttonModifier,
+                enabled = enabled,
+                colors = if (hideMaterial) colors.copy(
+                    container = Color.Transparent,
+                    disabledContainer = Color.Transparent,
+                    outline = Color.Transparent,
+                ) else colors,
+                content = content,
+            )
+        }
     }
 }
 

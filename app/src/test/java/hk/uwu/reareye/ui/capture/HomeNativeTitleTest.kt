@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -24,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import hk.uwu.mixui.MixMochiStyle
 import hk.uwu.mixui.MixColorSchemeMode
 import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.MixUiHost
@@ -56,6 +61,7 @@ class HomeNativeTitleTest {
     private var activity: ActivityController<ComponentActivity>? = null
     private var presetOpens = 0
     private val quickActions = mutableListOf<Int>()
+    private var observedStatusBarInset = 0
 
     private fun frames() { repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
 
@@ -66,6 +72,7 @@ class HomeNativeTitleTest {
         direction: LayoutDirection = LayoutDirection.Ltr,
         fontScale: Float = 1f,
         quickMenu: Boolean = false,
+        mochiStyle: MixMochiStyle = MixMochiStyle.Default,
     ) {
         compose.mainClock.autoAdvance = false
         presetOpens = 0
@@ -76,7 +83,9 @@ class HomeNativeTitleTest {
             activity!!.get().enableEdgeToEdge()
             activity!!.get().setContent {
                 NativeTitleTestEnvironment(direction, fontScale) {
-                MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
+                val statusBarInset = WindowInsets.statusBars.getTop(LocalDensity.current)
+                SideEffect { observedStatusBarInset = statusBarInset }
+                MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light, mochiStyle) {
                     Box(Modifier.fillMaxSize()) {
                         HomeScreen(
                             bottomInnerPadding = 96.dp,
@@ -101,14 +110,20 @@ class HomeNativeTitleTest {
         }
         frames()
         compose.runOnUiThread {
-            ViewCompat.dispatchApplyWindowInsets(activity!!.get().window.decorView,
-                WindowInsetsCompat.Builder()
-                    .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, 24, 0, 0))
-                    .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, bottomInset))
-                    .setInsetsIgnoringVisibility(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, bottomInset))
-                    .setVisible(WindowInsetsCompat.Type.statusBars(), true)
-                    .setVisible(WindowInsetsCompat.Type.navigationBars(), true)
-                    .build())
+            val decor = activity!!.get().window.decorView
+            val insets = WindowInsetsCompat.Builder()
+                .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, 24, 0, 0))
+                .setInsetsIgnoringVisibility(WindowInsetsCompat.Type.statusBars(), Insets.of(0, 24, 0, 0))
+                .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, bottomInset))
+                .setInsetsIgnoringVisibility(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, bottomInset))
+                .setVisible(WindowInsetsCompat.Type.statusBars(), true)
+                .setVisible(WindowInsetsCompat.Type.navigationBars(), true)
+                .build()
+            // Native Mochi overlays attach a ComposeView to this same DecorView.
+            // Its requestApplyInsets must not replace our synthetic device insets
+            // with Robolectric's zero-inset window after opening/closing a menu.
+            ViewCompat.setOnApplyWindowInsetsListener(decor) { _, _ -> insets }
+            ViewCompat.dispatchApplyWindowInsets(decor, insets)
         }
         frames()
     }
@@ -282,6 +297,90 @@ class HomeNativeTitleTest {
             }
             assertTrue("Expanded title pixels must recover after pointer scrolling: $changed/$total", changed < total * 0.05f)
             capture("short-home-$fontScale-restored")
+        }
+    }
+
+    @Test fun actualHomeMochiToolbarMaterialOnlyAppearsAfterPointerScrolling() {
+        for (style in MixMochiStyle.entries) for (dark in listOf(false, true)) {
+            open(MixUiBackend.Mochi, dark, 24, quickMenu = true, mochiStyle = style)
+            val name = "toolbar-material-${style.name}-${if (dark) "dark" else "light"}"
+            fun assertStatusInset() {
+                assertEquals("$name must retain the fixture's real 24px status inset", 24, observedStatusBarInset)
+            }
+            assertStatusInset()
+            val button = compose.onNodeWithTag("home-quick-actions")
+            val initialBounds = button.fetchSemanticsNode().boundsInRoot
+            assertEquals("Keep the native 44dp toolbar hit target", 44f, initialBounds.width, 1f)
+            assertEquals("Keep the native 44dp toolbar hit target", 44f, initialBounds.height, 1f)
+            fun image() = compose.onRoot(useUnmergedTree = true).captureToImage().asAndroidBitmap()
+            fun contrast(bitmap: Bitmap, inner: Float, outer: Float): Double {
+                val b = button.fetchSemanticsNode().boundsInRoot
+                val radius = minOf(b.width, b.height) / 2f
+                var sum = 0.0
+                var count = 0
+                for (y in b.top.toInt() until b.bottom.toInt()) {
+                    // Compare at the same y, outside the button's native glass footprint.
+                    val background = bitmap.getPixel((b.left - 6f).toInt(), y)
+                    for (x in b.left.toInt() until b.right.toInt()) {
+                        val dx = (x + 0.5f - b.center.x) / radius
+                        val dy = (y + 0.5f - b.center.y) / radius
+                        val r2 = dx * dx + dy * dy
+                        if (r2 < inner * inner || r2 > outer * outer) continue
+                        val pixel = bitmap.getPixel(x, y)
+                        sum += maxOf(
+                            kotlin.math.abs(android.graphics.Color.red(pixel) - android.graphics.Color.red(background)),
+                            kotlin.math.abs(android.graphics.Color.green(pixel) - android.graphics.Color.green(background)),
+                            kotlin.math.abs(android.graphics.Color.blue(pixel) - android.graphics.Color.blue(background)),
+                        )
+                        count++
+                    }
+                }
+                assertTrue("The tested pixel region must be nonempty", count > 0)
+                return sum / count
+            }
+            fun assertNoMaterial(bitmap: Bitmap) {
+                // The 24dp icon stays inside this annulus. Transparent material
+                // must show the untouched page background, not a faint glass disc.
+                assertTrue("$name material must be absent at top: ${contrast(bitmap, .65f, .9f)}",
+                    contrast(bitmap, .65f, .9f) < .75)
+                assertTrue("$name icon must stay visible with no material", contrast(bitmap, 0f, .55f) > 2.0)
+            }
+            val initial = image()
+            assertNoMaterial(initial)
+            capture("$name-initial")
+            val list = compose.onNode(hasScrollAction())
+            // Real pointer drag followed by a fling, not a semantics-only scroll.
+            list.performTouchInput { swipeUp(durationMillis = 800) }; frames()
+            assertTrue("$name drag must reveal native glass", contrast(image(), .65f, .9f) > .75)
+            capture("$name-dragged")
+            list.performTouchInput { swipeUp(durationMillis = 120) }; frames()
+            assertTrue("$name fling must retain native glass", contrast(image(), .65f, .9f) > .75)
+            capture("$name-flung")
+            assertStatusInset()
+            assertEquals("Toolbar bounds cannot move during collapse", initialBounds,
+                button.fetchSemanticsNode().boundsInRoot)
+            // Exercise the real native click after the glass/plain transition.
+            button.performTouchInput { click() }; frames()
+            compose.onNodeWithText(label(R.string.quick_stop_subscreencenter)).assertIsDisplayed()
+            assertStatusInset()
+            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }; frames()
+            assertStatusInset()
+            assertEquals("Menu dismissal cannot move the toolbar", initialBounds,
+                button.fetchSemanticsNode().boundsInRoot)
+            assertTrue("Dismissing the menu must not invoke a quick action", quickActions.isEmpty())
+            repeat(5) { list.performTouchInput { swipeDown(durationMillis = 120) }; frames() }
+            val range = list.fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange]
+            assertEquals("Pointer recovery must reach the true top", 0f, range.value(), 0f)
+            assertNoMaterial(image())
+            assertStatusInset()
+            assertEquals(initialBounds, button.fetchSemanticsNode().boundsInRoot)
+            capture("$name-restored")
+            // The native control is still actionable with its material hidden.
+            button.performTouchInput { click() }; frames()
+            compose.onNodeWithText(label(R.string.quick_stop_subscreencenter)).assertIsDisplayed()
+            assertStatusInset()
+            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }; frames()
         }
     }
 

@@ -21,6 +21,9 @@ import ui.feice.mochi.navigation.*
 import ui.feice.mochi.theme.MochiTheme
 import ui.feice.mochi.theme.mochiOpticalLeading
 
+/** Only scroll-aware title bars opt into hiding the native button surface at the top. */
+internal val LocalMochiTopBarMaterialVisible = staticCompositionLocalOf { true }
+
 /** Native material, app-owned geometry. Mochi 0.2 has a fixed 64dp title margin.
  * Measure the actual slots before laying out the title, including large font and RTL.
  * The native bar still owns the edge material, glass-source composition and buttons.
@@ -36,36 +39,41 @@ internal fun BoundedMochiTitleBar(
     navigationIcon: @Composable () -> Unit,
     actions: @Composable RowScope.() -> Unit,
 ) {
+    val materialVisible by remember(backgroundProgress) {
+        derivedStateOf { backgroundProgress() > 0f }
+    }
     MochiTitleBar(
         title = "", modifier = modifier, background = background, backdrop = backdrop,
         backgroundProgress = backgroundProgress,
         // One full-width slot lets the vendor provide all glass locals while we
         // measure each control only once. Never record this row into its own source.
         navigationIcon = {
-            SubcomposeLayout(Modifier.fillMaxWidth().height(MochiTitleBarDefaults.Height)) { constraints ->
-                val loose = constraints.copy(minWidth = 0, minHeight = 0)
-                val nav = subcompose("navigation") { Row(verticalAlignment = Alignment.CenterVertically) { navigationIcon() } }
-                    .single().measure(loose)
-                val action = subcompose("actions") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
-                }.single().measure(loose.copy(maxWidth = (constraints.maxWidth - nav.width).coerceAtLeast(0)))
-                val gap = 8.dp.roundToPx()
-                val start = nav.width + if (nav.width > 0) gap else 0
-                val end = constraints.maxWidth - action.width - if (action.width > 0) gap else 0
-                val width = (end - start).coerceAtLeast(0)
-                val text = subcompose("title") {
-                    MochiBlurText(title, style = MochiTheme.textStyles.navTitle, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, contentAlignment = Alignment.Center,
-                        modifier = Modifier.mochiBlurReveal(titleProgress, rise = 6.dp))
-                }.single().measure(loose.copy(maxWidth = width))
-                layout(constraints.maxWidth, constraints.maxHeight) {
-                    nav.placeRelative(0, (constraints.maxHeight - nav.height) / 2)
-                    action.placeRelative(constraints.maxWidth - action.width, (constraints.maxHeight - action.height) / 2)
-                    // Prefer the screen center when it fits; otherwise center in the
-                    // free interval. This keeps four actions and the title disjoint.
-                    val ideal = (constraints.maxWidth - text.width) / 2
-                    text.placeRelative(ideal.coerceIn(start, (end - text.width).coerceAtLeast(start)),
-                        (constraints.maxHeight - text.height) / 2)
+            CompositionLocalProvider(LocalMochiTopBarMaterialVisible provides materialVisible) {
+                SubcomposeLayout(Modifier.fillMaxWidth().height(MochiTitleBarDefaults.Height)) { constraints ->
+                    val loose = constraints.copy(minWidth = 0, minHeight = 0)
+                    val nav = subcompose("navigation") { Row(verticalAlignment = Alignment.CenterVertically) { navigationIcon() } }
+                        .single().measure(loose)
+                    val action = subcompose("actions") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
+                    }.single().measure(loose.copy(maxWidth = (constraints.maxWidth - nav.width).coerceAtLeast(0)))
+                    val gap = 8.dp.roundToPx()
+                    val start = nav.width + if (nav.width > 0) gap else 0
+                    val end = constraints.maxWidth - action.width - if (action.width > 0) gap else 0
+                    val width = (end - start).coerceAtLeast(0)
+                    val text = subcompose("title") {
+                        MochiBlurText(title, style = MochiTheme.textStyles.navTitle, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis, contentAlignment = Alignment.Center,
+                            modifier = Modifier.mochiBlurReveal(titleProgress, rise = 6.dp))
+                    }.single().measure(loose.copy(maxWidth = width))
+                    layout(constraints.maxWidth, constraints.maxHeight) {
+                        nav.placeRelative(0, (constraints.maxHeight - nav.height) / 2)
+                        action.placeRelative(constraints.maxWidth - action.width, (constraints.maxHeight - action.height) / 2)
+                        // Prefer the screen center when it fits; otherwise center in the
+                        // free interval. This keeps four actions and the title disjoint.
+                        val ideal = (constraints.maxWidth - text.width) / 2
+                        text.placeRelative(ideal.coerceIn(start, (end - text.width).coerceAtLeast(start)),
+                            (constraints.maxHeight - text.height) / 2)
+                    }
                 }
             }
         },
