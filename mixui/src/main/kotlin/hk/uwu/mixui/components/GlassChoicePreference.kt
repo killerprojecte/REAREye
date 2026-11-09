@@ -101,15 +101,20 @@ fun GlassChoicePreference(
             }
         }
         is GlassFormBackdrop.Mochi -> CompositionLocalProvider(LocalMochiBackdrop provides backdrop.value) {
-            ui.feice.mochi.basic.MochiPopoverButton(
+            // A settings row is not a capsule button. The native button variant opens
+            // on press and owns press/slide selection, stealing a parent's scroll gesture.
+            // Box keeps the vendor glass panel but leaves activation to a scroll-aware row.
+            ui.feice.mochi.basic.MochiPopoverBox(
                 expanded = expanded && active,
                 onExpandedChange = { onExpandedChange(it && active) },
-                popover = rows, modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+                popover = rows,
+                modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {
                     if (!active) disabled()
-                }, enabled = active,
-                buttonPadding = PaddingValues(0.dp), contentPadding = PaddingValues(vertical = 8.dp),
+                },
+                contentPadding = PaddingValues(vertical = 8.dp),
             ) {
-                PreferenceRow(title = title, summary = summary, enabled = active)
+                PreferenceRow(title = title, summary = summary, enabled = active,
+                    holdDownState = expanded && active, onClick = { onExpandedChange(true) })
             }
         }
     }

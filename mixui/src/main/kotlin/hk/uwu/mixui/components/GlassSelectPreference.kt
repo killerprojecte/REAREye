@@ -1,9 +1,6 @@
 package hk.uwu.mixui.components
 
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -11,11 +8,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.disabled
-import kotlinx.collections.immutable.toImmutableList
-import ui.feice.mochi.effect.glass.LocalMochiBackdrop
 
 /** The page scene excludes popup hosts. Supplied separately from form-only scope. */
 internal val LocalGlassPreferenceBackdrop = staticCompositionLocalOf<GlassFormBackdrop?> { null }
@@ -52,29 +46,18 @@ fun GlassSelectPreference(
         is GlassFormBackdrop.Mochi -> {
             var expanded by remember { mutableStateOf(false) }
             LaunchedEffect(actualEnabled) { if (!actualEnabled) expanded = false }
-            val entries = remember(items) {
-                items.map { ui.feice.mochi.basic.MochiItem(label = it) }.toImmutableList()
-            }
-            CompositionLocalProvider(LocalMochiBackdrop provides backdrop.value) {
-                ui.feice.mochi.basic.MochiDropdown(
-                    expanded = expanded && actualEnabled,
-                    onExpandedChange = { expanded = it && actualEnabled },
-                    items = entries, selectedIndex = selectedIndex,
-                    onItemClick = { index ->
-                        expanded = false
-                        if (actualEnabled && index in items.indices) onSelectedIndexChange(index)
-                    },
-                    // The app already dismisses before persistence. A delayed native close
-                    // must not close a menu the user has just reopened.
-                    behavior = ui.feice.mochi.basic.MochiDropdownDefaults.behavior(dismissDelayMillis = 0),
-                    modifier = rowModifier.fillMaxWidth(), enabled = actualEnabled,
-                    buttonPadding = PaddingValues(0.dp),
-                ) {
-                    // Only the native dropdown owns gestures and accessibility actions.
-                    PreferenceRow(title = title, summary = summary,
-                        enabled = actualEnabled)
-                }
-            }
+            GlassChoicePreference(
+                title = title,
+                summary = summary,
+                modifier = modifier,
+                enabled = actualEnabled,
+                expanded = expanded,
+                onExpandedChange = { expanded = it && actualEnabled },
+                options = items.mapIndexed { index, label ->
+                    ChoiceOption(title = label, selected = index == selectedIndex)
+                },
+                onOptionClick = onSelectedIndexChange,
+            )
         }
     }
 }
