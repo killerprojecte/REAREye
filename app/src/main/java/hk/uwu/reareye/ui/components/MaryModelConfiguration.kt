@@ -67,8 +67,8 @@ import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.TextField
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.preference.ArrowPreference
+import hk.uwu.mixui.components.FormDialog
+import hk.uwu.mixui.components.PreferenceRow
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
 
@@ -573,7 +573,7 @@ internal fun MarySettingsSectionTitle(title: Int) {
     )
 }
 
-/** Preference rows stay compact; editing uses the same native dialog as app-card settings. */
+/** Full summaries and native in-window editors through mixui. */
 @Composable
 internal fun MarySettingsField(
     value: String,
@@ -585,14 +585,14 @@ internal fun MarySettingsField(
     var editing by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf(value) }
     val fieldTitle = stringResource(label)
-    ArrowPreference(
+    PreferenceRow(
         title = fieldTitle,
         summary = if (password && value.isNotEmpty()) "••••••" else summary
             ?: value.ifBlank { stringResource(R.string.mary_settings_value_default) },
         holdDownState = editing,
         onClick = { input = value; editing = true },
     )
-    OverlayDialog(show = editing, title = fieldTitle, onDismissRequest = { editing = false }) {
+    FormDialog(show = editing, title = fieldTitle, onDismissRequest = { editing = false }) {
         DialogFormColumn {
             TextField(
                 value = input, onValueChange = { input = it }, label = fieldTitle,
@@ -603,8 +603,10 @@ internal fun MarySettingsField(
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColorsPrimary(),
                 onClick = {
-                    onChange(input)
-                    editing = false
+                    if (editing) {
+                        editing = false
+                        onChange(input)
+                    }
                 }) { Text(stringResource(R.string.rear_widget_confirm)) }
             Button(modifier = Modifier.fillMaxWidth(), onClick = { editing = false }) {
                 Text(stringResource(R.string.rear_widget_cancel))
