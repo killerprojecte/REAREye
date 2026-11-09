@@ -60,7 +60,7 @@ import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
-import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.mixui.components.ListItem
 import hk.uwu.mixui.motion.ArtRevealItem
 import hk.uwu.mixui.components.rememberAccentBadgePalette
 import hk.uwu.reareye.ui.config.ConfigItem
@@ -445,7 +445,8 @@ fun CustomBoundsCompatManagerScreen(
                         .padding(bottom = 12.dp)
                         .fillMaxWidth(),
                 ) {
-                    SuperCard(
+                    ListItem(
+                        animateContentSize = true,
                         title = stringResource(R.string.custom_bounds_hint_title),
                         summary = stringResource(R.string.custom_bounds_hint),
                         onClick = {},

@@ -119,7 +119,7 @@ import hk.uwu.reareye.widgetapi.RearWidgetTemplateConfigState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.BasicComponent
+import hk.uwu.mixui.components.ListItem
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
@@ -1604,7 +1604,7 @@ private fun TemplateSectionHeader(
     summary: String? = null,
     insideMargin: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
 ) {
-    BasicComponent(
+    ListItem(
         modifier = modifier.fillMaxWidth(),
         title = title,
         summary = summary?.takeIf { it.isNotBlank() },

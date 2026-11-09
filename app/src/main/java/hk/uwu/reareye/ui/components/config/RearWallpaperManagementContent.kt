@@ -68,7 +68,7 @@ import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
 import hk.uwu.reareye.ui.components.card.ModuleStyleTextAction
-import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.mixui.components.ListItem
 import hk.uwu.reareye.ui.components.config.draggable.library.draggable.DraggableItem
 import hk.uwu.reareye.ui.components.config.draggable.library.draggable.rememberDraggableLazyListState
 import hk.uwu.reareye.ui.components.config.draggable.longPressDraggable
@@ -76,8 +76,7 @@ import hk.uwu.reareye.ui.components.rememberRearWallpaperPreviewBitmap
 import hk.uwu.reareye.ui.featureGuideAnchor
 import hk.uwu.reareye.widgetapi.RearWallpaperScheduleEntry
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
+import hk.uwu.mixui.components.ListItemDefaults
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
@@ -450,7 +449,8 @@ fun RearWallpaperManagementContent(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Card(modifier = Modifier.fillMaxWidth()) {
-                SuperCard(
+                ListItem(
+                    animateContentSize = true,
                     title = stringResource(
                         R.string.rear_wallpaper_delete_message,
                         deleteTarget?.name.orEmpty(),
@@ -588,7 +588,7 @@ private fun RearWallpaperManagementList(
 
         item(key = "wallpaper-rotation-control") {
             Card(modifier = Modifier.fillMaxWidth()) {
-                BasicComponent(
+                ListItem(
                     title = stringResource(R.string.rear_wallpaper_rotation_toggle),
                     startAction = {
                         Icon(
@@ -653,7 +653,8 @@ private fun RearWallpaperManagementList(
         if (loading) {
             item(key = "wallpaper-loading") {
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    SuperCard(
+                    ListItem(
+                        animateContentSize = true,
                         title = stringResource(R.string.rear_wallpaper_loading),
                         startAction = { InfiniteProgressIndicator() })
                 }
@@ -661,7 +662,7 @@ private fun RearWallpaperManagementList(
         }
         if (!loading && wallpapers.isEmpty()) {
             item(key = "wallpaper-empty") {
-                Card(modifier = Modifier.fillMaxWidth()) { SuperCard(title = stringResource(R.string.rear_wallpaper_catalog_empty)) }
+                Card(modifier = Modifier.fillMaxWidth()) { ListItem(animateContentSize = true, title = stringResource(R.string.rear_wallpaper_catalog_empty)) }
             }
         }
         items(remainingWallpapers, key = { "library-${it.wallpaperId}" }) { wallpaper ->
@@ -1068,10 +1069,10 @@ private fun FilePickRow(
     onClear: (() -> Unit)? = null,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        BasicComponent(
+        ListItem(
             title = title,
             summary = label,
-            summaryColor = BasicComponentDefaults.summaryColor(),
+            summaryColor = ListItemDefaults.summaryColor(),
             onClick = onPick,
             bottomAction = {
                 Row(
@@ -1106,7 +1107,7 @@ private fun MetadataSwitchRow(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        BasicComponent(
+        ListItem(
             title = title,
             onClick = { onCheckedChange(!checked) },
             endActions = {

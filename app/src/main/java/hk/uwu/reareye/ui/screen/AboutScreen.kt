@@ -86,7 +86,7 @@ import hk.uwu.reareye.generated.AppProperties
 import hk.uwu.reareye.repository.contributor.ContributorLoadState
 import hk.uwu.reareye.repository.contributor.ContributorProfile
 import hk.uwu.reareye.repository.contributor.ContributorRepository
-import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.mixui.components.ListItem
 import hk.uwu.mixui.motion.ArtRevealItem
 import hk.uwu.mixui.motion.ArtStaggeredReveal
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
@@ -103,8 +103,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
+import hk.uwu.mixui.components.ListItemDefaults
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.CardDefaults
@@ -761,7 +760,8 @@ private fun AboutRootContent(
                             Color.Transparent,
                         ),
                     ) {
-                        SuperCard(
+                        ListItem(
+                            animateContentSize = true,
                             title = stringResource(R.string.preset_pack_title),
                             summary = stringResource(R.string.preset_pack_summary),
                             onClick = onOpenPresetPackDialog,
@@ -803,7 +803,8 @@ private fun AboutRootContent(
                                     Color.Transparent,
                                 ),
                             ) {
-                                SuperCard(
+                                ListItem(
+                                    animateContentSize = true,
                                     title = stringResource(R.string.credits_contributors_title),
                                     summary = stringResource(R.string.credits_contributors_desc),
                                     onClick = onOpenContributors,
@@ -844,7 +845,8 @@ private fun AboutRootContent(
                                         Color.Transparent,
                                     ),
                                 ) {
-                                    SuperCard(
+                                    ListItem(
+                                        animateContentSize = true,
                                         title = stringResource(entry.titleRes),
                                         summary = stringResource(entry.summaryRes),
                                         onClick = {
@@ -892,7 +894,8 @@ private fun AboutRootContent(
                                     Color.Transparent,
                                 ),
                             ) {
-                                SuperCard(
+                                ListItem(
+                                    animateContentSize = true,
                                     title = stringResource(R.string.licenses_name),
                                     summary = stringResource(R.string.licenses_name_summary),
                                     onClick = onOpenLibraries,
@@ -928,9 +931,9 @@ private fun AboutDeviceInfoCard(
     ) {
         val layoutDirection = LocalLayoutDirection.current
         val deviceInfoCardPadding = PaddingValues(
-            start = BasicComponentDefaults.InsideMargin.calculateStartPadding(layoutDirection),
+            start = ListItemDefaults.InsideMargin.calculateStartPadding(layoutDirection),
             top = AboutDeviceInfoCardTopPadding,
-            end = BasicComponentDefaults.InsideMargin.calculateEndPadding(layoutDirection),
+            end = ListItemDefaults.InsideMargin.calculateEndPadding(layoutDirection),
             bottom = AboutDeviceInfoCardBottomPadding,
         )
         val deviceInfoRowPadding = PaddingValues(vertical = AboutDeviceInfoRowVerticalPadding)
@@ -964,41 +967,41 @@ private fun AboutDeviceInfoCard(
                     modifier = Modifier.padding(bottom = AboutDeviceInfoHeaderBottomSpacing),
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Medium,
-                    color = BasicComponentDefaults.titleColor().color,
+                    color = ListItemDefaults.titleColor().color,
                 )
 
-                BasicComponent(
+                ListItem(
                     title = stringResource(R.string.device_name),
                     summary = DeviceConfigTools.marketName,
                     insideMargin = deviceInfoRowPadding,
                 )
 
-                BasicComponent(
+                ListItem(
                     title = stringResource(R.string.android_version),
                     summary = DeviceConfigTools.androidVersion,
                     insideMargin = deviceInfoRowPadding,
                 )
 
-                BasicComponent(
+                ListItem(
                     title = stringResource(R.string.os_version),
                     summary = OSVersionTools.addVersionSuffix(context),
                     insideMargin = deviceInfoRowPadding,
                 )
 
-                BasicComponent(
+                ListItem(
                     title = stringResource(R.string.module_version_label),
                     summary = rememberVersionText(),
                     insideMargin = deviceInfoRowPadding,
                 )
 
-                BasicComponent(
+                ListItem(
                     title = stringResource(R.string.version_codename_label),
                     summary = AppProperties.PROJECT_APP_VERSION_CODENAME,
                     insideMargin = deviceInfoRowPadding,
                 )
 
                 if (subscreenVer != "UNKNOWN") {
-                    BasicComponent(
+                    ListItem(
                         title = stringResource(R.string.subsceen_version),
                         summary = subscreenVer,
                         insideMargin = deviceInfoRowPadding,
@@ -1083,7 +1086,8 @@ private fun ContributorListContent(
             ContributorLoadState.Failed -> item {
                 ArtRevealItem(visible = true, delayMillis = 40) {
                     Card(modifier = Modifier.fillMaxWidth()) {
-                        SuperCard(
+                        ListItem(
+                            animateContentSize = true,
                             title = stringResource(R.string.credits_contributors_title),
                             summary = stringResource(R.string.credits_contributors_load_failed),
                             bottomAction = {
@@ -1181,7 +1185,8 @@ private fun ContributorCard(
     val hasLink = link != null
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        SuperCard(
+        ListItem(
+            animateContentSize = true,
             title = item.name,
             summary = item.description.takeIf { it.isNotBlank() },
             startAction = {

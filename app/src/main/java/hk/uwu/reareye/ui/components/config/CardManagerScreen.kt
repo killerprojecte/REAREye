@@ -71,7 +71,7 @@ import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
-import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.mixui.components.ListItem
 import hk.uwu.reareye.ui.components.config.draggable.library.draggable.DraggableItem
 import hk.uwu.reareye.ui.components.config.draggable.library.draggable.rememberDraggableLazyListState
 import hk.uwu.reareye.ui.components.config.draggable.longPressDraggable
@@ -622,7 +622,8 @@ fun CardManagerScreen(
                                         .fillMaxWidth()
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        SuperCard(
+                                        ListItem(
+                                            animateContentSize = true,
                                             title = stringResource(R.string.rear_widget_card_dialog_hint_title),
                                             summary = stringResource(R.string.rear_widget_card_dialog_hint),
                                             onClick = {},

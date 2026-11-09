@@ -57,7 +57,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import top.yukonga.miuix.kmp.basic.BasicComponent
+import hk.uwu.mixui.components.ListItem
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
@@ -312,7 +312,7 @@ internal fun ModelConfigurationCard(
                         )
                     }
                 })
-            BasicComponent(
+            ListItem(
                 title = stringResource(R.string.mary_settings_available_models),
                 enabled = !loadingModels && !testing && draft.connectionValid(),
                 endActions = {
@@ -400,7 +400,7 @@ internal fun ModelConfigurationCard(
             )
             modelStatus?.let { if (modelError) MarySettingsDiagnostic(it) else MarySettingsHint(it) }
             result?.let { if (resultError) MarySettingsDiagnostic(it) else MarySettingsHint(it) }
-            BasicComponent(
+            ListItem(
                 title = stringResource(R.string.mary_settings_advanced_model),
                 onClick = { advanced = !advanced },
                 endActions = {

@@ -42,7 +42,7 @@ import hk.uwu.reareye.ui.components.OverlayDialog
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
-import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.mixui.components.ListItem
 import hk.uwu.mixui.motion.ArtRevealItem
 import hk.uwu.mixui.motion.ArtStaggeredReveal
 import hk.uwu.mixui.motion.ArtSwapContent
@@ -223,7 +223,8 @@ fun BusinessExtraConfigManagerScreen(
                                 .fillMaxWidth()
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                SuperCard(
+                                ListItem(
+                                    animateContentSize = true,
                                     title = stringResource(R.string.rear_widget_business_extra_hint_title),
                                     summary = buildString {
                                         if (loaded) {

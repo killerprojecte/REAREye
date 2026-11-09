@@ -70,7 +70,7 @@ import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
-import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.mixui.components.ListItem
 import hk.uwu.mixui.components.rememberAccentBadgePalette
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -286,7 +286,7 @@ internal fun ScriptList(
         },
     ) {
         if (projects.isEmpty()) item(key = "empty") {
-            Card(Modifier.fillMaxWidth()) { SuperCard(title = stringResource(R.string.script_empty)) }
+            Card(Modifier.fillMaxWidth()) { ListItem(animateContentSize = true, title = stringResource(R.string.script_empty)) }
         }
         // Standalone scripts share a root; their entry file is their unique identity.
         items(items = projects, key = { it.mainFile.absolutePath }) { project ->

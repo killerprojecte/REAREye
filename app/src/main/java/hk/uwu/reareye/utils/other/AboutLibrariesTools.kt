@@ -39,7 +39,7 @@ import androidx.core.net.toUri
 import hk.uwu.reareye.R
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.mixui.components.BadgeItem
-import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.mixui.components.ListItem
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import hk.uwu.mixui.components.Button
@@ -113,7 +113,8 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
     var expandLicensesInline by remember { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        SuperCard(
+        ListItem(
+            animateContentSize = true,
             title = lib.name,
             summary = buildLibrarySummary(lib),
             endActions = {

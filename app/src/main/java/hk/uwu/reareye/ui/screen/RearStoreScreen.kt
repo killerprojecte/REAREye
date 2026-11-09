@@ -123,7 +123,7 @@ import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.mixui.components.BadgePalette
 import hk.uwu.reareye.ui.components.RearSearchBar
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
-import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.mixui.components.ListItem
 import hk.uwu.reareye.ui.components.config.WallpaperMetadataFields
 import hk.uwu.mixui.components.rememberAccentBadgePalette
 import hk.uwu.reareye.ui.components.webview.ScrollWebView
@@ -137,8 +137,7 @@ import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
+import hk.uwu.mixui.components.ListItemDefaults
 import hk.uwu.mixui.components.Button
 import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
@@ -1917,7 +1916,8 @@ private fun RearStoreListCard(
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        SuperCard(
+        ListItem(
+            animateContentSize = true,
             title = item.displayName,
             summary = item.author.displayName.ifBlank {
                 stringResource(R.string.rear_store_unknown_author)
@@ -2025,7 +2025,8 @@ private fun RearStoreDetailHeroCard(
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        SuperCard(
+        ListItem(
+            animateContentSize = true,
             title = detail.name,
             summary = detail.author.displayName.ifBlank {
                 stringResource(R.string.rear_store_unknown_author)
@@ -2203,7 +2204,8 @@ private fun RearStoreReleaseCard(
     onInstallAsset: (RearStoreReleaseAsset) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        SuperCard(
+        ListItem(
+            animateContentSize = true,
             title = release.name.ifBlank {
                 release.tagName.ifBlank { stringResource(R.string.rear_store_unknown_release) }
             },
@@ -2591,11 +2593,11 @@ private fun RearStoreRepositoryCard(detail: RearStoreWidgetDetail) {
     val context = LocalContext.current
     val repositoryUrl = detail.repository?.url?.normalizedOrNull()
     Card(modifier = Modifier.fillMaxWidth()) {
-        BasicComponent(
+        ListItem(
             title = stringResource(R.string.rear_store_repository_card_title),
             summary = detail.repository?.fullName?.normalizedOrNull()
                 ?: stringResource(R.string.rear_store_repository_missing),
-            summaryColor = BasicComponentDefaults.summaryColor(),
+            summaryColor = ListItemDefaults.summaryColor(),
             onClick = repositoryUrl?.let {
                 { context.startActivity(Intent(Intent.ACTION_VIEW, it.toUri())) }
             },
@@ -2611,7 +2613,7 @@ private fun RearStoreAuthorCard(
     val context = LocalContext.current
     val authorUrl = author.url.normalizedOrNull()
     Card(modifier = Modifier.fillMaxWidth()) {
-        BasicComponent(
+        ListItem(
             startAction = {
                 RearStoreAuthorAvatar(
                     avatarUrl = author.avatarUrl,
@@ -2684,7 +2686,7 @@ private fun RearStoreReadmeCard(
     webViewCache: MutableMap<String, WebView>,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        BasicComponent(
+        ListItem(
             onClick = null,
             insideMargin = PaddingValues(0.dp),
             content = {
