@@ -111,8 +111,7 @@ import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.CompactTopBar
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.theme.MixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import hk.uwu.mixui.components.pageScrollFeedback
 
 /**
  * Mary — the in-app agent.
@@ -439,7 +438,7 @@ internal fun MaryConversationList(
 ) {
     LazyColumn(
         state = state,
-        modifier = Modifier.fillMaxSize().then(gestureModifier).scrollEndHaptic().overScrollVertical(),
+        modifier = Modifier.fillMaxSize().then(gestureModifier).pageScrollFeedback(),
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(MaryRowSpacing),
         overscrollEffect = null,

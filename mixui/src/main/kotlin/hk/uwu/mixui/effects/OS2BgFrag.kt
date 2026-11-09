@@ -1,9 +1,9 @@
 // Copyright 2026, compose-miuix-ui contributors
 // SPDX-License-Identifier: Apache-2.0
 
-package hk.uwu.reareye.utils.effect
+package hk.uwu.mixui.effects
 
-const val OS2_BG_FRAG = """
+internal const val OS2_BG_FRAG = """
     uniform vec2 uResolution;
     uniform shader uTex;
     uniform float uAnimTime;

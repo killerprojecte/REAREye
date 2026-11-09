@@ -1,7 +1,7 @@
 // Copyright 2026, compose-miuix-ui contributors
 // SPDX-License-Identifier: Apache-2.0
 
-package hk.uwu.reareye.utils.effect
+package hk.uwu.mixui.effects
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -17,16 +17,22 @@ import top.yukonga.miuix.kmp.blur.asBrush
 import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import hk.uwu.mixui.theme.MixTheme
 
+/**
+ * Shared decorative gradient for both backends. This preserves the app's branding;
+ * it is not a native Mochi glass material.
+ *
+ * [backgroundModifier] applies only to the background Canvas, never [content].
+ */
 @Composable
-inline fun BgEffectBackground(
+fun AnimatedGradientBackground(
     dynamicBackground: Boolean,
     modifier: Modifier = Modifier,
-    bgModifier: Modifier = Modifier,
+    backgroundModifier: Modifier = Modifier,
     backgroundColor: Color? = null,
     isDarkTheme: Boolean? = null,
     isFullSize: Boolean = false,
     effectBackground: Boolean = true,
-    crossinline alpha: () -> Float = { 1f },
+    alpha: () -> Float = { 1f },
     content: @Composable (BoxScope.() -> Unit),
 ) {
     val shaderSupported = remember { isRuntimeShaderSupported() }
@@ -48,7 +54,7 @@ inline fun BgEffectBackground(
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .then(bgModifier),
+                .then(backgroundModifier),
         ) {
             drawRect(surface)
             if (effectBackground) {

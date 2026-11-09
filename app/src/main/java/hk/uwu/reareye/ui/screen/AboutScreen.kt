@@ -92,7 +92,7 @@ import hk.uwu.mixui.motion.ArtStaggeredReveal
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
 import hk.uwu.reareye.utils.blend.ColorBlendToken
-import hk.uwu.reareye.utils.effect.BgEffectBackground
+import hk.uwu.mixui.effects.AnimatedGradientBackground
 import hk.uwu.reareye.utils.other.DeviceConfigTools
 import hk.uwu.reareye.utils.other.AboutLibraries
 import hk.uwu.reareye.utils.other.LibraryLicenseSheet
@@ -117,13 +117,12 @@ import hk.uwu.mixui.components.GlassTopBarScaffold
 import hk.uwu.mixui.components.TopBarIconButton
 import androidx.compose.ui.platform.testTag
 import hk.uwu.mixui.components.Text
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.BlurBlendMode
-import top.yukonga.miuix.kmp.blur.BlurColors
-import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.blur.textureBlur
+import hk.uwu.mixui.effects.TextureBlendLayer
+import hk.uwu.mixui.effects.TextureBlendOperation
+import hk.uwu.mixui.effects.TextureBackdrop
+import hk.uwu.mixui.effects.textureBackdropSource
+import hk.uwu.mixui.effects.rememberTextureBackdrop
+import hk.uwu.mixui.effects.textureBlur
 import hk.uwu.mixui.theme.MixTheme.colorScheme
 import java.util.concurrent.ConcurrentHashMap
 
@@ -194,8 +193,8 @@ private data class CreditEntry(
 private data class AboutVisualTokens(
     val isDarkTheme: Boolean,
     val backgroundColor: Color,
-    val cardBlendColors: List<BlendColorEntry>,
-    val logoBlendColors: List<BlendColorEntry>,
+    val cardBlendColors: List<TextureBlendLayer>,
+    val logoBlendColors: List<TextureBlendLayer>,
 )
 
 @Composable
@@ -213,7 +212,7 @@ private fun rememberAboutVisualTokens(): AboutVisualTokens {
     }
 }
 
-private fun aboutCardBlendColors(isDarkTheme: Boolean): List<BlendColorEntry> {
+private fun aboutCardBlendColors(isDarkTheme: Boolean): List<TextureBlendLayer> {
     return if (isDarkTheme) {
         ColorBlendToken.Overlay_Thin_Light
     } else {
@@ -221,18 +220,18 @@ private fun aboutCardBlendColors(isDarkTheme: Boolean): List<BlendColorEntry> {
     }
 }
 
-private fun aboutLogoBlendColors(isDarkTheme: Boolean): List<BlendColorEntry> {
+private fun aboutLogoBlendColors(isDarkTheme: Boolean): List<TextureBlendLayer> {
     return if (isDarkTheme) {
         listOf(
-            BlendColorEntry(Color(0xe6a1a1a1), BlurBlendMode.ColorDodge),
-            BlendColorEntry(Color(0x4de6e6e6), BlurBlendMode.LinearLight),
-            BlendColorEntry(Color(0xff1af500), BlurBlendMode.Lab),
+            TextureBlendLayer(Color(0xe6a1a1a1), TextureBlendOperation.ColorDodge),
+            TextureBlendLayer(Color(0x4de6e6e6), TextureBlendOperation.LinearLight),
+            TextureBlendLayer(Color(0xff1af500), TextureBlendOperation.Lab),
         )
     } else {
         listOf(
-            BlendColorEntry(Color(0xcc4a4a4a), BlurBlendMode.ColorBurn),
-            BlendColorEntry(Color(0xff4f4f4f), BlurBlendMode.LinearLight),
-            BlendColorEntry(Color(0xff1af200), BlurBlendMode.Lab),
+            TextureBlendLayer(Color(0xcc4a4a4a), TextureBlendOperation.ColorBurn),
+            TextureBlendLayer(Color(0xff4f4f4f), TextureBlendOperation.LinearLight),
+            TextureBlendLayer(Color(0xff1af200), TextureBlendOperation.Lab),
         )
     }
 }
@@ -518,7 +517,7 @@ private fun AboutRootContent(
     val layoutDirection = LocalLayoutDirection.current
     val visualTokens = rememberAboutVisualTokens()
 
-    val backdrop = rememberLayerBackdrop()
+    val backdrop = rememberTextureBackdrop()
 
     val scrollPadding = pageContentPadding(
         paddingValues,
@@ -551,7 +550,6 @@ private fun AboutRootContent(
     var projectNameProgress by remember { mutableFloatStateOf(0f) }
     var versionCodeProgress by remember { mutableFloatStateOf(0f) }
     var initialLogoAreaY by remember { mutableFloatStateOf(0f) }
-    val runtimeShaderSupported = remember { isRuntimeShaderSupported() }
 
 
     LaunchedEffect(lazyListState) {
@@ -589,13 +587,13 @@ private fun AboutRootContent(
             }
             .collect { }
     }
-    BgEffectBackground(
-        dynamicBackground = runtimeShaderSupported,
+    AnimatedGradientBackground(
+        dynamicBackground = true,
         modifier = Modifier.fillMaxSize(),
-        bgModifier = Modifier.layerBackdrop(backdrop),
+        backgroundModifier = Modifier.textureBackdropSource(backdrop),
         backgroundColor = visualTokens.backgroundColor,
         isDarkTheme = visualTokens.isDarkTheme,
-        effectBackground = runtimeShaderSupported,
+        effectBackground = true,
         alpha = { 1f - scrollProgress },
     ) {
         // ── 修改：Logo 固定悬浮在 LazyColumn 下方，与 AboutPage 结构一致 ──
@@ -635,10 +633,8 @@ private fun AboutRootContent(
                         .textureBlur(
                             backdrop = backdrop,
                             shape = RoundedCornerShape(24.dp),
-                            blurRadius = 150f,
-                            colors = BlurColors(
-                                blendColors = visualTokens.logoBlendColors,
-                            ),
+                            blurRadius = 150.dp,
+                            blendLayers = visualTokens.logoBlendColors,
                             contentBlendMode = BlendMode.DstIn,
                             enabled = true,
                         ),
@@ -665,10 +661,8 @@ private fun AboutRootContent(
                     .textureBlur(
                         backdrop = backdrop,
                         shape = RoundedCornerShape(16.dp),
-                        blurRadius = 150f,
-                        colors = BlurColors(
-                            blendColors = visualTokens.logoBlendColors,
-                        ),
+                        blurRadius = 150.dp,
+                        blendLayers = visualTokens.logoBlendColors,
                         contentBlendMode = BlendMode.DstIn,
                         enabled = true,
                     ),
@@ -750,14 +744,9 @@ private fun AboutRootContent(
                         modifier = Modifier.textureBlur(
                             backdrop = backdrop,
                             shape = RoundedCornerShape(16.dp),
-                            blurRadius = 60f,
+                            blurRadius = 60.dp,
                             noiseCoefficient = 0.001f,
-                            colors = BlurColors(
-                                blendColors = visualTokens.cardBlendColors,
-                                brightness = 0f,
-                                contrast = 1f,
-                                saturation = 1f,
-                            ),
+                            blendLayers = visualTokens.cardBlendColors,
                             enabled = true,
                         ),
                         colors = CardDefaults.defaultColors(
@@ -793,14 +782,9 @@ private fun AboutRootContent(
                                     .textureBlur(
                                         backdrop = backdrop,
                                         shape = RoundedCornerShape(16.dp),
-                                        blurRadius = 60f,
+                                        blurRadius = 60.dp,
                                         noiseCoefficient = 0.001f,
-                                        colors = BlurColors(
-                                            blendColors = visualTokens.cardBlendColors,
-                                            brightness = 0f,
-                                            contrast = 1f,
-                                            saturation = 1f,
-                                        ),
+                                        blendLayers = visualTokens.cardBlendColors,
                                         enabled = true,
                                     ),
                                 colors = CardDefaults.defaultColors(
@@ -835,14 +819,9 @@ private fun AboutRootContent(
                                         .textureBlur(
                                             backdrop = backdrop,
                                             shape = RoundedCornerShape(16.dp),
-                                            blurRadius = 60f,
+                                            blurRadius = 60.dp,
                                             noiseCoefficient = 0.001f,
-                                            colors = BlurColors(
-                                                blendColors = visualTokens.cardBlendColors,
-                                                brightness = 0f,
-                                                contrast = 1f,
-                                                saturation = 1f,
-                                            ),
+                                            blendLayers = visualTokens.cardBlendColors,
                                             enabled = true,
                                         ),
                                     colors = CardDefaults.defaultColors(
@@ -884,14 +863,9 @@ private fun AboutRootContent(
                                     .textureBlur(
                                         backdrop = backdrop,
                                         shape = RoundedCornerShape(16.dp),
-                                        blurRadius = 60f,
+                                        blurRadius = 60.dp,
                                         noiseCoefficient = 0.001f,
-                                        colors = BlurColors(
-                                            blendColors = visualTokens.cardBlendColors,
-                                            brightness = 0f,
-                                            contrast = 1f,
-                                            saturation = 1f,
-                                        ),
+                                        blendLayers = visualTokens.cardBlendColors,
                                         enabled = true,
                                     ),
                                 colors = CardDefaults.defaultColors(
@@ -925,7 +899,7 @@ private fun AboutRootContent(
 @Composable
 private fun AboutDeviceInfoCard(
     context: android.content.Context,
-    backdrop: top.yukonga.miuix.kmp.blur.LayerBackdrop,
+    backdrop: TextureBackdrop,
     visualTokens: AboutVisualTokens,
     animateEnter: Boolean,
 ) {
@@ -949,14 +923,9 @@ private fun AboutDeviceInfoCard(
                 .textureBlur(
                     backdrop = backdrop,
                     shape = RoundedCornerShape(16.dp),
-                    blurRadius = 60f,
+                    blurRadius = 60.dp,
                     noiseCoefficient = 0.001f,
-                    colors = BlurColors(
-                        blendColors = visualTokens.cardBlendColors,
-                        brightness = 0f,
-                        contrast = 1f,
-                        saturation = 1f,
-                    ),
+                    blendLayers = visualTokens.cardBlendColors,
                     enabled = true,
                 ),
             colors = CardDefaults.defaultColors(

@@ -1,7 +1,7 @@
 // Copyright 2026, compose-miuix-ui contributors
 // SPDX-License-Identifier: Apache-2.0
 
-package hk.uwu.reareye.utils.effect
+package hk.uwu.mixui.effects
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -12,7 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 
 @Composable
-fun rememberFrameTimeSeconds(
+internal fun rememberFrameTimeSeconds(
     playing: Boolean = true,
 ): () -> Float {
     var time by remember { mutableFloatStateOf(0f) }

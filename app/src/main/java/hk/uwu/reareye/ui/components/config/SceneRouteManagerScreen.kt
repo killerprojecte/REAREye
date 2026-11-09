@@ -66,8 +66,7 @@ import hk.uwu.mixui.components.TopBarIconButton
 import androidx.compose.foundation.lazy.rememberLazyListState
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.TextField
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import hk.uwu.mixui.components.pageScrollFeedback
 
 private const val REAR_WIDGET_DEBUG_TAG = "RearWidgetDebug"
 
@@ -268,8 +267,7 @@ fun SceneRouteManagerScreen(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .scrollEndHaptic()
-                .overScrollVertical(),
+                .pageScrollFeedback(),
             contentPadding = PaddingValues(
                 start = paddingValues.calculateStartPadding(direction) + 12.dp,
                 end = paddingValues.calculateEndPadding(direction) + 12.dp,

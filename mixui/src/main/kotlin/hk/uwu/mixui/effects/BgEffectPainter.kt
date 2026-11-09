@@ -1,11 +1,11 @@
 // Copyright 2026, compose-miuix-ui contributors
 // SPDX-License-Identifier: Apache-2.0
 
-package hk.uwu.reareye.utils.effect
+package hk.uwu.mixui.effects
 
 import top.yukonga.miuix.kmp.blur.RuntimeShader
 
-class BgEffectPainter {
+internal class BgEffectPainter {
 
     val runtimeShader by lazy {
         RuntimeShader(OS2_BG_FRAG).also {
