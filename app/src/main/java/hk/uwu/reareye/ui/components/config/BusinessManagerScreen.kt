@@ -62,7 +62,7 @@ import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.ui.FeatureGuideAction
 import hk.uwu.reareye.ui.LocalFeatureGuideDemo
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.mixui.components.OverlayDialog
+import hk.uwu.mixui.components.GlassFormDialog
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
@@ -283,6 +283,7 @@ fun BusinessManagerScreen(
 
     @SuppressLint("LocalContextGetResourceValueCall")
     fun submitDialog() {
+        if (!showDialog.value) return
         val editingBusiness = editingId?.let { id -> widgets.firstOrNull { it.id == id } }
         if (editingBusiness?.renameable == false) {
             Toast.makeText(
@@ -738,6 +739,92 @@ fun BusinessManagerScreen(
         }
     }
 
+    val dialogEditingBusiness = editingId?.let { id -> widgets.firstOrNull { it.id == id } }
+    val lockedDialogBusiness = dialogEditingBusiness?.takeIf { !it.renameable }
+
+    LaunchedEffect(showDialog.value, lockedDialogBusiness?.id) {
+        if (showDialog.value && lockedDialogBusiness != null) {
+            if (lockedDialogBusiness.downloadedFromStore) {
+                debugLog(
+                    "blocked business dialog: business=${lockedDialogBusiness.business}, renameable=${lockedDialogBusiness.renameable}, storeWidgetId=${lockedDialogBusiness.storeWidgetId}"
+                )
+            }
+            showDialog.value = false
+            editingId = null
+        }
+    }
+
+    val businessDialog: @Composable () -> Unit = {
+        GlassFormDialog(
+            show = showDialog.value && lockedDialogBusiness == null,
+            title = stringResource(
+                if (editingId == null) R.string.rear_widget_add_business else R.string.rear_widget_edit_business,
+            ),
+            onDismissRequest = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
+        ) {
+            val lockedBusiness = dialogEditingBusiness?.takeIf { !it.renameable }
+            DialogFormColumn(modifier = Modifier.testTag("business-form")) {
+                if (demo != null) {
+                    Text(stringResource(R.string.guide_demo_notice))
+                    Text(stringResource(R.string.guide_demo_edit_component))
+                }
+                TextField(
+                    value = draftWidget,
+                    onValueChange = { draftWidget = it },
+                    modifier = Modifier.fillMaxWidth().testTag("business-form-name"),
+                    label = stringResource(R.string.rear_widget_business_name),
+                    enabled = lockedBusiness == null,
+                    readOnly = lockedBusiness != null,
+                    singleLine = true,
+                )
+                TextField(
+                    value = draftFilePath,
+                    onValueChange = { draftFilePath = it },
+                    modifier = Modifier.fillMaxWidth().testTag("business-form-path"),
+                    label = stringResource(R.string.rear_widget_template_file),
+                    enabled = lockedBusiness == null,
+                    readOnly = lockedBusiness != null,
+                    singleLine = true,
+                )
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = lockedBusiness == null && demo == null,
+                    onClick = { if (lockedBusiness == null && demo == null) picker.launch(arrayOf("*/*")) }) {
+                    Icon(
+                        imageVector = Icons.Filled.UploadFile,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 6.dp),
+                    )
+                    Text(stringResource(R.string.rear_widget_pick_file))
+                }
+                SwitchPreference(
+                    title = stringResource(R.string.rear_widget_business_hide_time_tip),
+                    summary = stringResource(R.string.rear_widget_business_hide_time_tip_desc),
+                    checked = draftHideTimeTip,
+                    onCheckedChange = { draftHideTimeTip = it },
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(
+                        onClick = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
+                        modifier = Modifier.weight(1f).testTag("business-form-cancel"),
+                    ) {
+                        Text(stringResource(R.string.rear_widget_cancel))
+                    }
+                    Button(
+                        onClick = { submitDialog() },
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.weight(1f).testTag("business-form-confirm"),
+                    ) {
+                        Text(stringResource(R.string.rear_widget_confirm))
+                    }
+                }
+            }
+        }
+    }
+
     val cardDialog: @Composable () -> Unit = {
         RearCardCreateDialog(
             show = showRegisterCardDialog.value,
@@ -766,8 +853,12 @@ fun BusinessManagerScreen(
             onDismissRequest = { showRegisterCardDialog.value = false },
         )
     }
+    val dialogs: @Composable () -> Unit = {
+        businessDialog()
+        cardDialog()
+    }
     if (embedded) {
-        GlassPreferenceScene(overlayContent = cardDialog) {
+        GlassPreferenceScene(overlayContent = dialogs) {
             Scaffold(popupHost = {}) { pageContent(it) }
         }
     } else {
@@ -792,94 +883,9 @@ fun BusinessManagerScreen(
                     )
                 }
             },
-            overlayContent = cardDialog,
+            overlayContent = dialogs,
             content = pageContent,
         )
     }
-
-    val dialogEditingBusiness = editingId?.let { id -> widgets.firstOrNull { it.id == id } }
-    val lockedDialogBusiness = dialogEditingBusiness?.takeIf { !it.renameable }
-
-    LaunchedEffect(showDialog.value, lockedDialogBusiness?.id) {
-        if (showDialog.value && lockedDialogBusiness != null) {
-            if (lockedDialogBusiness.downloadedFromStore) {
-                debugLog(
-                    "blocked business dialog: business=${lockedDialogBusiness.business}, renameable=${lockedDialogBusiness.renameable}, storeWidgetId=${lockedDialogBusiness.storeWidgetId}"
-                )
-            }
-            showDialog.value = false
-            editingId = null
-        }
-    }
-
-    OverlayDialog(
-        show = showDialog.value && lockedDialogBusiness == null,
-        title = stringResource(
-            if (editingId == null) R.string.rear_widget_add_business else R.string.rear_widget_edit_business,
-        ),
-        onDismissRequest = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
-    ) {
-        val lockedBusiness = dialogEditingBusiness?.takeIf { !it.renameable }
-        DialogFormColumn {
-            if (demo != null) {
-                Text(stringResource(R.string.guide_demo_notice))
-                Text(stringResource(R.string.guide_demo_edit_component))
-            }
-            TextField(
-                value = draftWidget,
-                onValueChange = { draftWidget = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_widget_business_name),
-                enabled = lockedBusiness == null,
-                readOnly = lockedBusiness != null,
-                singleLine = true,
-            )
-            TextField(
-                value = draftFilePath,
-                onValueChange = { draftFilePath = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_widget_template_file),
-                enabled = lockedBusiness == null,
-                readOnly = lockedBusiness != null,
-                singleLine = true,
-            )
-            Button(
-                modifier = Modifier.fillMaxWidth(),
-                enabled = lockedBusiness == null && demo == null,
-                onClick = { if (lockedBusiness == null && demo == null) picker.launch(arrayOf("*/*")) }) {
-                Icon(
-                    imageVector = Icons.Filled.UploadFile,
-                    contentDescription = null,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-                Text(stringResource(R.string.rear_widget_pick_file))
-            }
-            SwitchPreference(
-                title = stringResource(R.string.rear_widget_business_hide_time_tip),
-                summary = stringResource(R.string.rear_widget_business_hide_time_tip_desc),
-                checked = draftHideTimeTip,
-                onCheckedChange = { draftHideTimeTip = it },
-            )
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = { submitDialog() },
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.rear_widget_confirm))
-                }
-                Button(
-                    onClick = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(stringResource(R.string.rear_widget_cancel))
-                }
-            }
-        }
-    }
-
 
 }

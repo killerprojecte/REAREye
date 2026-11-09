@@ -108,6 +108,7 @@ class ManagerNativeTopBarTest {
     }
     private fun nativeFormTag(page: String): String? = when (page) {
         "CardManagerScreen" -> "rear-card-create-form"
+        "BusinessManagerScreen" -> "business-form"
         "RearWallpaperManagerScreen" -> "wallpaper-import-actions"
         else -> null
     }

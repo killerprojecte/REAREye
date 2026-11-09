@@ -56,7 +56,6 @@ import hk.uwu.reareye.repository.bounds.CustomBoundsFillMode
 import hk.uwu.reareye.repository.bounds.CustomBoundsMode
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.mixui.components.GlassFormDialog
-import hk.uwu.mixui.components.OverlayDialog
 import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
@@ -260,6 +259,7 @@ fun CustomBoundsCompatManagerScreen(
     }
 
     fun submitDialog() {
+        if (!showDialog) return
         val packageName = editingPackageName ?: return
         val mode = when (draftMode) {
             1 -> CustomBoundsMode.CUSTOM_RATIO
@@ -405,6 +405,197 @@ fun CustomBoundsCompatManagerScreen(
         return
     }
 
+    val managerDialogs: @Composable () -> Unit = {
+        GlassFormDialog(
+            show = showDialog,
+            title = stringResource(R.string.custom_bounds_edit_app),
+            onDismissRequest = { showDialog = false },
+        ) {
+            DialogFormColumn(modifier = Modifier.testTag("bounds-edit-form")) {
+                TextField(
+                    value = editingPackageName.orEmpty(),
+                    onValueChange = {},
+                    modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.rear_widget_target_package),
+                    enabled = false,
+                    readOnly = true,
+                    singleLine = true,
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.custom_bounds_enable_app),
+                    checked = draftEnabled,
+                    onCheckedChange = { draftEnabled = it },
+                )
+                CustomBoundsDropdownPreference(
+                    title = stringResource(R.string.custom_bounds_mode),
+                    description = stringResource(R.string.custom_bounds_mode_help),
+                    options = modeOptions,
+                    selectedValue = draftMode,
+                    onSelected = { draftMode = it },
+                )
+                if (draftMode == 1) {
+                    TextField(
+                        value = draftAspectRatio,
+                        onValueChange = { draftAspectRatio = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.custom_bounds_aspect_ratio),
+                        singleLine = true,
+                    )
+                }
+                if (draftMode == 2) {
+                    TextField(
+                        value = draftInsetLeft,
+                        onValueChange = { draftInsetLeft = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.custom_bounds_inset_left),
+                        singleLine = true,
+                    )
+                    TextField(
+                        value = draftInsetTop,
+                        onValueChange = { draftInsetTop = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.custom_bounds_inset_top),
+                        singleLine = true,
+                    )
+                    TextField(
+                        value = draftInsetRight,
+                        onValueChange = { draftInsetRight = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.custom_bounds_inset_right),
+                        singleLine = true,
+                    )
+                    TextField(
+                        value = draftInsetBottom,
+                        onValueChange = { draftInsetBottom = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.custom_bounds_inset_bottom),
+                        singleLine = true,
+                    )
+                }
+                if (draftMode == 0) {
+                    CustomBoundsInfoText(
+                        text = stringResource(R.string.custom_bounds_auto_ratio_hint),
+                    )
+                }
+                CustomBoundsDropdownPreference(
+                    title = stringResource(R.string.custom_bounds_gravity),
+                    description = stringResource(R.string.custom_bounds_gravity_help),
+                    options = gravityOptions,
+                    selectedValue = draftGravity,
+                    onSelected = { draftGravity = it },
+                )
+                TextField(
+                    value = draftScale,
+                    onValueChange = { draftScale = it },
+                    modifier = Modifier.fillMaxWidth().testTag("bounds-edit-form-scale"),
+                    label = stringResource(R.string.custom_bounds_scale),
+                    singleLine = true,
+                )
+                TextField(
+                    value = draftDensityDpi,
+                    onValueChange = { draftDensityDpi = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.custom_bounds_density_dpi),
+                    singleLine = true,
+                )
+                CustomBoundsDropdownPreference(
+                    title = stringResource(R.string.custom_bounds_rotation_degrees),
+                    description = stringResource(R.string.custom_bounds_rotation_help),
+                    options = rotationOptions,
+                    selectedValue = draftRotationDegrees,
+                    onSelected = { draftRotationDegrees = it },
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.custom_bounds_fill_enable),
+                    checked = draftFillEnabled,
+                    onCheckedChange = { draftFillEnabled = it },
+                )
+                if (draftFillEnabled) {
+                    CustomBoundsDropdownPreference(
+                        title = stringResource(R.string.custom_bounds_fill_mode),
+                        description = stringResource(R.string.custom_bounds_fill_mode_help),
+                        options = listOf(
+                            CustomBoundsOption(0, R.string.custom_bounds_fill_mode_auto),
+                            CustomBoundsOption(1, R.string.custom_bounds_fill_mode_custom),
+                        ),
+                        selectedValue = draftFillMode,
+                        onSelected = { draftFillMode = it },
+                    )
+                    if (draftFillMode == 0) {
+                        CustomBoundsInfoText(
+                            text = stringResource(R.string.custom_bounds_fill_auto_hint),
+                        )
+                    } else {
+                        CustomBoundsColorEditor(
+                            value = draftFillColor,
+                            onValueChange = {
+                                draftFillColor = it
+                                draftFillColorError = parseColorInt(it) == null
+                            },
+                            error = draftFillColorError,
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(
+                        onClick = { showDialog = false },
+                        modifier = Modifier.weight(1f).testTag("bounds-edit-form-cancel"),
+                    ) {
+                        Text(stringResource(R.string.rear_widget_cancel))
+                    }
+                    Button(
+                        onClick = { submitDialog() },
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.weight(1f).testTag("bounds-edit-form-confirm"),
+                    ) {
+                        Text(stringResource(R.string.rear_widget_confirm))
+                    }
+                }
+            }
+        }
+
+        GlassFormDialog(
+            show = pendingOverwriteConfig != null,
+            title = stringResource(R.string.custom_bounds_rule_import_overwrite_title),
+            onDismissRequest = { pendingOverwriteConfig = null },
+        ) {
+            DialogFormColumn(modifier = Modifier.testTag("bounds-overwrite-form")) {
+                Text(
+                    text = stringResource(
+                        R.string.custom_bounds_rule_import_overwrite_message,
+                        pendingOverwriteConfig?.packageName.orEmpty(),
+                    ),
+                    style = MixTheme.textStyles.body2,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(
+                        onClick = { pendingOverwriteConfig = null },
+                        modifier = Modifier.weight(1f).testTag("bounds-overwrite-form-cancel"),
+                    ) {
+                        Text(stringResource(R.string.rear_widget_cancel))
+                    }
+                    Button(
+                        onClick = {
+                            pendingOverwriteConfig?.let(::applyImportedConfig)
+                            pendingOverwriteConfig = null
+                        },
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.weight(1f).testTag("bounds-overwrite-form-confirm"),
+                    ) {
+                        Text(stringResource(R.string.custom_bounds_rule_import_overwrite_confirm))
+                    }
+                }
+            }
+        }
+    }
+
     GlassTopBarScaffold(
         title = stringResource(R.string.custom_bounds_compat_manager),
         isContentScrolled = listState.canScrollBackward,
@@ -416,6 +607,7 @@ fun CustomBoundsCompatManagerScreen(
             }
         },
         overlayContent = {
+            managerDialogs()
             CustomBoundsImportNotice(
                 title = stringResource(R.string.custom_bounds_rule_import_rejected_title),
                 message = rejectedImportPackage?.let {
@@ -566,189 +758,7 @@ fun CustomBoundsCompatManagerScreen(
         }
     }
 
-    OverlayDialog(
-        show = showDialog,
-        title = stringResource(R.string.custom_bounds_edit_app),
-        onDismissRequest = { showDialog = false },
-    ) {
-        DialogFormColumn {
-            TextField(
-                value = editingPackageName.orEmpty(),
-                onValueChange = {},
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_widget_target_package),
-                enabled = false,
-                readOnly = true,
-                singleLine = true,
-            )
-            SwitchPreference(
-                title = stringResource(R.string.custom_bounds_enable_app),
-                checked = draftEnabled,
-                onCheckedChange = { draftEnabled = it },
-            )
-            CustomBoundsDropdownPreference(
-                title = stringResource(R.string.custom_bounds_mode),
-                description = stringResource(R.string.custom_bounds_mode_help),
-                options = modeOptions,
-                selectedValue = draftMode,
-                onSelected = { draftMode = it },
-            )
-            if (draftMode == 1) {
-                TextField(
-                    value = draftAspectRatio,
-                    onValueChange = { draftAspectRatio = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.custom_bounds_aspect_ratio),
-                    singleLine = true,
-                )
-            }
-            if (draftMode == 2) {
-                TextField(
-                    value = draftInsetLeft,
-                    onValueChange = { draftInsetLeft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.custom_bounds_inset_left),
-                    singleLine = true,
-                )
-                TextField(
-                    value = draftInsetTop,
-                    onValueChange = { draftInsetTop = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.custom_bounds_inset_top),
-                    singleLine = true,
-                )
-                TextField(
-                    value = draftInsetRight,
-                    onValueChange = { draftInsetRight = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.custom_bounds_inset_right),
-                    singleLine = true,
-                )
-                TextField(
-                    value = draftInsetBottom,
-                    onValueChange = { draftInsetBottom = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.custom_bounds_inset_bottom),
-                    singleLine = true,
-                )
-            }
-            if (draftMode == 0) {
-                CustomBoundsInfoText(
-                    text = stringResource(R.string.custom_bounds_auto_ratio_hint),
-                )
-            }
-            CustomBoundsDropdownPreference(
-                title = stringResource(R.string.custom_bounds_gravity),
-                description = stringResource(R.string.custom_bounds_gravity_help),
-                options = gravityOptions,
-                selectedValue = draftGravity,
-                onSelected = { draftGravity = it },
-            )
-            TextField(
-                value = draftScale,
-                onValueChange = { draftScale = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.custom_bounds_scale),
-                singleLine = true,
-            )
-            TextField(
-                value = draftDensityDpi,
-                onValueChange = { draftDensityDpi = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.custom_bounds_density_dpi),
-                singleLine = true,
-            )
-            CustomBoundsDropdownPreference(
-                title = stringResource(R.string.custom_bounds_rotation_degrees),
-                description = stringResource(R.string.custom_bounds_rotation_help),
-                options = rotationOptions,
-                selectedValue = draftRotationDegrees,
-                onSelected = { draftRotationDegrees = it },
-            )
-            SwitchPreference(
-                title = stringResource(R.string.custom_bounds_fill_enable),
-                checked = draftFillEnabled,
-                onCheckedChange = { draftFillEnabled = it },
-            )
-            if (draftFillEnabled) {
-                CustomBoundsDropdownPreference(
-                    title = stringResource(R.string.custom_bounds_fill_mode),
-                    description = stringResource(R.string.custom_bounds_fill_mode_help),
-                    options = listOf(
-                        CustomBoundsOption(0, R.string.custom_bounds_fill_mode_auto),
-                        CustomBoundsOption(1, R.string.custom_bounds_fill_mode_custom),
-                    ),
-                    selectedValue = draftFillMode,
-                    onSelected = { draftFillMode = it },
-                )
-                if (draftFillMode == 0) {
-                    CustomBoundsInfoText(
-                        text = stringResource(R.string.custom_bounds_fill_auto_hint),
-                    )
-                } else {
-                    CustomBoundsColorEditor(
-                        value = draftFillColor,
-                        onValueChange = {
-                            draftFillColor = it
-                            draftFillColorError = parseColorInt(it) == null
-                        },
-                        error = draftFillColorError,
-                    )
-                }
-            }
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = { submitDialog() },
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.rear_widget_confirm))
-                }
-                Button(
-                    onClick = { showDialog = false },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.rear_widget_cancel))
-                }
-            }
-        }
-    }
 
-    OverlayDialog(
-        show = pendingOverwriteConfig != null,
-        title = stringResource(R.string.custom_bounds_rule_import_overwrite_title),
-        onDismissRequest = { pendingOverwriteConfig = null },
-    ) {
-        DialogFormColumn {
-            Text(
-                text = stringResource(
-                    R.string.custom_bounds_rule_import_overwrite_message,
-                    pendingOverwriteConfig?.packageName.orEmpty(),
-                ),
-                style = MixTheme.textStyles.body2,
-                color = MixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-            Button(
-                onClick = {
-                    pendingOverwriteConfig?.let(::applyImportedConfig)
-                    pendingOverwriteConfig = null
-                },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.custom_bounds_rule_import_overwrite_confirm))
-            }
-            Button(
-                onClick = { pendingOverwriteConfig = null },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
-            }
-        }
-    }
 
 
 }

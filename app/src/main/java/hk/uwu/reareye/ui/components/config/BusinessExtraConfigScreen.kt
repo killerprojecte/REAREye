@@ -38,7 +38,8 @@ import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigEntry
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigFields
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigRepository
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.mixui.components.OverlayDialog
+import hk.uwu.mixui.components.GlassFormDialog
+import androidx.compose.ui.platform.testTag
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
@@ -136,6 +137,7 @@ fun BusinessExtraConfigManagerScreen(
     }
 
     fun submitDialog() {
+        if (!showDialog) return
         val business = draftBusiness.trim()
         if (business.isBlank()) {
             Toast.makeText(
@@ -200,6 +202,41 @@ fun BusinessExtraConfigManagerScreen(
                 actions = {
                     TopBarIconButton(onClick = ::openCreateDialog, enabled = loaded) {
                         Icon(Icons.Filled.Add, stringResource(R.string.rear_widget_business_extra_add))
+                    }
+                },
+                overlayContent = {
+                    GlassFormDialog(
+                        show = showDialog,
+                        title = stringResource(R.string.rear_widget_business_extra_add),
+                        onDismissRequest = { showDialog = false },
+                    ) {
+                        DialogFormColumn(modifier = Modifier.testTag("business-extra-form")) {
+                            TextField(
+                                value = draftBusiness,
+                                onValueChange = { draftBusiness = it },
+                                modifier = Modifier.fillMaxWidth().testTag("business-extra-form-name"),
+                                label = stringResource(R.string.rear_widget_business_name),
+                                singleLine = true,
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Button(
+                                    onClick = { showDialog = false },
+                                    modifier = Modifier.weight(1f).testTag("business-extra-form-cancel"),
+                                ) {
+                                    Text(stringResource(R.string.rear_widget_cancel))
+                                }
+                                Button(
+                                    onClick = { submitDialog() },
+                                    colors = ButtonDefaults.buttonColorsPrimary(),
+                                    modifier = Modifier.weight(1f).testTag("business-extra-form-confirm"),
+                                ) {
+                                    Text(stringResource(R.string.rear_widget_confirm))
+                                }
+                            }
+                        }
                     }
                 },
             ) { paddingValues ->
@@ -331,39 +368,7 @@ fun BusinessExtraConfigManagerScreen(
                 }
             }
 
-            OverlayDialog(
-                show = showDialog,
-                title = stringResource(R.string.rear_widget_business_extra_add),
-                onDismissRequest = { showDialog = false },
-            ) {
-                DialogFormColumn {
-                    TextField(
-                        value = draftBusiness,
-                        onValueChange = { draftBusiness = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = stringResource(R.string.rear_widget_business_name),
-                        singleLine = true,
-                    )
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Button(
-                            onClick = { submitDialog() },
-                            colors = ButtonDefaults.buttonColorsPrimary(),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(R.string.rear_widget_confirm))
-                        }
-                        Button(
-                            onClick = { showDialog = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(stringResource(R.string.rear_widget_cancel))
-                        }
-                    }
-                }
-            }
+
         }
     }
 }
