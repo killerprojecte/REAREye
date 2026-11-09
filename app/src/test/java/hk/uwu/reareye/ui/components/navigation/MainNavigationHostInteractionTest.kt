@@ -97,9 +97,10 @@ class MainNavigationHostInteractionTest {
                             Scaffold { _ ->
                                 GlassBottomSheetScene {
                                     Box(Modifier.fillMaxSize().testTag("main-host")
-                                        .marySidebarPageGesture(sidebar, enabled = route == "mary")
                                         .graphicsLayer { clip = true }) {
-                                        Box(Modifier.fillMaxSize().marySidebarBackground(sidebar).navigationBackdrop(backdrop)) {
+                                        Box(Modifier.fillMaxSize()
+                                            .marySidebarPageGesture(sidebar, enabled = route == "mary")
+                                            .marySidebarBackground(sidebar).navigationBackdrop(backdrop)) {
                                             AnimatedContent(route, contentKey = { it }, transitionSpec = {
                                                 (fadeIn(tween(210, delayMillis = 50)) + slideInHorizontally(tween(280)) { it / 3 }) togetherWith
                                                     (fadeOut(tween(180)) + slideOutHorizontally(tween(280)) { -it / 3 })

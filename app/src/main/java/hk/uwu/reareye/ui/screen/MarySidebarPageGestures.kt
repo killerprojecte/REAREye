@@ -15,7 +15,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 
-/** One root host covers the page and its sibling app navigation, only while Mary registers it. */
+/** The content owns opening gestures; its sidebar preview is hosted above sibling navigation. */
 @Stable
 internal class MarySidebarPageGestureHost {
     // Independent of drawer-open registration.enabled: a pending release must die on leaving Mary.
@@ -77,23 +77,6 @@ internal fun Modifier.marySidebarPageGesture(host: MarySidebarPageGestureHost, e
     fun current() = enabledNow && host.registration === registration && registration.enabled() && openingAllowed()
     return base.marySidebarOpenGesture(
         registration.state,
-        beforeOpen = { if (current()) registration.beforeOpen() },
-        onOpen = { if (current()) registration.open() },
-    )
-}
-
-/** Let only an active Mary's opening drag take precedence over native navigation dragging. */
-@Composable
-internal fun Modifier.marySidebarNavigationGesture(host: MarySidebarPageGestureHost?): Modifier {
-    val activeHost = host ?: return this
-    val registration = activeHost.registration ?: return this
-    val enabled by rememberUpdatedState(activeHost.pageEnabled?.value != false)
-    fun current() = enabled && activeHost.registration === registration && registration.enabled() &&
-        (!activeHost.overlayVisible || registration.state.isOpening)
-    if (!current()) return this
-    return marySidebarNavigationOpenGesture(
-        registration.state,
-        enabled = { current() },
         beforeOpen = { if (current()) registration.beforeOpen() },
         onOpen = { if (current()) registration.open() },
     )

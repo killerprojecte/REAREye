@@ -333,8 +333,6 @@ class MainActivity : ComponentActivity() {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .marySidebarPageGesture(marySidebarGestureHost,
-                                    enabled = currentScreen == "mary" && !showPresetPackDialog && !featureGuideVisible)
                                 // Navigation stays at the physical window bottom. Screens own
                                 // IME avoidance; never shrink this shared root or its popup host.
                                 .graphicsLayer { clip = true }
@@ -342,6 +340,10 @@ class MainActivity : ComponentActivity() {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
+                                    // Only page content opens Mary's sidebar. The sibling bottom
+                                    // bar keeps its own pointer stream in either drag direction.
+                                    .marySidebarPageGesture(marySidebarGestureHost,
+                                        enabled = currentScreen == "mary" && !showPresetPackDialog && !featureGuideVisible)
                                     .marySidebarBackground(marySidebarGestureHost)
                                     .then(
                                         if (enableNavigationGlass) {

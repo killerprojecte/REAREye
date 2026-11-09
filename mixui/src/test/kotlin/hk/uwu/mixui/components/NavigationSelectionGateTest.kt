@@ -28,7 +28,7 @@ class NavigationSelectionGateTest {
         assertEquals(NavigationSelectionGate.Result(null, true), gate.finish())
     }
 
-    @Test fun crossingSlopInsideBarCancelsTapAndHold() {
+    @Test fun verticalLeadSuppressesTapAndHold() {
         val gate = NavigationSelectionGate()
         gate.begin()
         gate.select(0)
@@ -36,6 +36,61 @@ class NavigationSelectionGateTest {
         assertNull(gate.select(1))
         assertFalse(gate.openSecondary())
         assertEquals(NavigationSelectionGate.Result(null, true), gate.finish())
+    }
+
+    @Test fun inBoundsVerticalLeadMayBecomeHorizontalNavigation() {
+        val gate = NavigationSelectionGate()
+        gate.begin()
+        gate.select(2) // Native down callback must not survive the vertical lead.
+        gate.move(beyondSlop = true, outside = false, multiplePointers = false)
+        assertEquals(NavigationSelectionGate.Intent.AwaitingHorizontal, gate.intent)
+        assertNull(gate.select(2))
+        assertFalse(gate.openSecondary())
+        gate.move(beyondSlop = true, outside = false, multiplePointers = false, horizontalDrag = true)
+        assertEquals(NavigationSelectionGate.Intent.Drag, gate.intent)
+        assertNull(gate.select(1)) // The adapter supplies the actual release target.
+        assertEquals(NavigationSelectionGate.Result(1, false), gate.finish())
+    }
+
+    @Test fun returningToOriginAfterVerticalLeadDoesNotRestoreClickOrHold() {
+        val gate = NavigationSelectionGate()
+        gate.begin(); gate.select(2)
+        gate.move(beyondSlop = true, outside = false, multiplePointers = false)
+        gate.move(beyondSlop = false, outside = false, multiplePointers = false)
+        assertEquals(NavigationSelectionGate.Intent.AwaitingHorizontal, gate.intent)
+        assertNull(gate.select(2)) // Native up/click cannot restore the discarded tap.
+        assertFalse(gate.openSecondary())
+        assertFalse(gate.resumeNavigationDrag())
+        assertEquals(NavigationSelectionGate.Result(null, true), gate.finish())
+        assertEquals(1, gate.select(1)) // Keyboard/accessibility remains available afterward.
+    }
+
+    @Test fun recoveringDirectionDoesNotRestoreDiscardedNativeDown() {
+        val gate = NavigationSelectionGate()
+        gate.begin(); gate.select(2)
+        gate.move(beyondSlop = true, outside = false, multiplePointers = false)
+        gate.move(beyondSlop = true, outside = false, multiplePointers = false, horizontalDrag = true)
+        assertEquals(NavigationSelectionGate.Result(null, true), gate.finish())
+    }
+
+    @Test fun hardCancellationAfterVerticalLeadCannotRecoverAsHorizontal() {
+        for (reason in listOf("bounds", "multiple pointers", "ancestor or system")) {
+            val gate = NavigationSelectionGate()
+            gate.begin(); gate.select(2)
+            gate.move(beyondSlop = true, outside = false, multiplePointers = false)
+            when (reason) {
+                "bounds" -> gate.move(beyondSlop = true, outside = true, multiplePointers = false)
+                "multiple pointers" -> gate.move(beyondSlop = false, outside = false, multiplePointers = true)
+                else -> gate.cancel()
+            }
+            assertEquals(reason, NavigationSelectionGate.Intent.Cancelled, gate.intent)
+            gate.move(beyondSlop = true, outside = false, multiplePointers = false, horizontalDrag = true)
+            assertEquals(reason, NavigationSelectionGate.Intent.Cancelled, gate.intent)
+            assertNull(gate.select(1))
+            assertFalse(gate.openSecondary())
+            assertFalse(gate.resumeNavigationDrag())
+            assertEquals(reason, NavigationSelectionGate.Result(null, true), gate.finish())
+        }
     }
 
     @Test fun horizontalDragSuppressesHoldAndCommitsReleaseTarget() {

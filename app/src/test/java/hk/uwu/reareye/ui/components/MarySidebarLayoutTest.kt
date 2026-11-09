@@ -260,20 +260,20 @@ class MarySidebarLayoutTest {
         compose.runOnIdle { assertEquals(0, sentMessages) }
     }
 
-    @Test fun productionNavigationRightSwipeOpensWithoutSwitchingTab() =
-        assertNavigationRightSwipeOpens(MixUiBackend.Miuix)
+    @Test fun productionNavigationRightSwipeSelectsWithoutOpeningSidebar() =
+        assertNavigationRightSwipeSelects(MixUiBackend.Miuix)
 
-    @Test fun mochiProductionNavigationRightSwipeOpensWithoutSwitchingTab() =
-        assertNavigationRightSwipeOpens(MixUiBackend.Mochi)
+    @Test fun mochiProductionNavigationRightSwipeSelectsWithoutOpeningSidebar() =
+        assertNavigationRightSwipeSelects(MixUiBackend.Mochi)
 
-    private fun assertNavigationRightSwipeOpens(backend: MixUiBackend) {
+    private fun assertNavigationRightSwipeSelects(backend: MixUiBackend) {
         host(transcriptMode = "conversation", backend = backend)
         node("fixture-navigation").performTouchInput {
             swipe(Offset(80f, center.y), Offset(320f, center.y), durationMillis = 600)
         }
         compose.waitForIdle()
-        node("mary-sidebar-panel").assertIsDisplayed()
-        compose.runOnIdle { assertEquals(0, navigationClicks) }
+        node("mary-sidebar-modal").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, navigationClicks); assertFalse(maryActive.value); assertNull(gestures.progress) }
     }
 
     @Test fun productionConversationVerticalDragStillScrollsWithoutOpening() {
@@ -296,21 +296,21 @@ class MarySidebarLayoutTest {
         node("mary-sidebar-modal").assertDoesNotExist()
     }
 
-    @Test fun productionConfigTabSlowSwipeOpensWithoutQuickMenu() =
-        assertConfigTabSlowSwipeOpens(MixUiBackend.Miuix)
+    @Test fun productionConfigTabSlowSwipeNavigatesWithoutQuickMenu() =
+        assertConfigTabSlowSwipeNavigates(MixUiBackend.Miuix)
 
-    @Test fun mochiProductionConfigTabSlowSwipeOpensWithoutQuickMenu() =
-        assertConfigTabSlowSwipeOpens(MixUiBackend.Mochi)
+    @Test fun mochiProductionConfigTabSlowSwipeNavigatesWithoutQuickMenu() =
+        assertConfigTabSlowSwipeNavigates(MixUiBackend.Mochi)
 
-    private fun assertConfigTabSlowSwipeOpens(backend: MixUiBackend) {
+    private fun assertConfigTabSlowSwipeNavigates(backend: MixUiBackend) {
         host(transcriptMode = "conversation", backend = backend)
         node("fixture-navigation").performTouchInput {
             swipe(Offset(250f, center.y), Offset(380f, center.y), durationMillis = 600)
         }
         compose.waitForIdle()
-        node("mary-sidebar-panel").assertIsDisplayed()
+        node("mary-sidebar-modal").assertDoesNotExist()
         compose.onAllNodes(isPopup()).assertCountEquals(0)
-        compose.runOnIdle { assertEquals(0, navigationClicks) }
+        compose.runOnIdle { assertEquals(1, navigationClicks); assertFalse(maryActive.value); assertNull(gestures.progress) }
     }
 
     @Test fun productionNavigationCancellationTapHoldAndOppositeSwipeRetainContracts() =
@@ -330,10 +330,10 @@ class MarySidebarLayoutTest {
                 moveTo(Offset(200f, center.y), delayMillis = 100)
             }
             compose.mainClock.advanceTimeBy(64)
-            node("mary-sidebar-preview").assertIsDisplayed()
+            node("mary-sidebar-preview").assertDoesNotExist()
             compose.runOnIdle {
                 assertFalse(showing.value)
-                assertEquals(120f / 328f, requireNotNull(gestures.progress), 0.03f)
+                assertNull(gestures.progress)
                 assertEquals(0, navigationClicks)
             }
             navigation.performTouchInput { cancel() }
@@ -353,7 +353,7 @@ class MarySidebarLayoutTest {
             compose.onAllNodes(isPopup()).assertCountEquals(0)
             compose.runOnIdle { assertEquals(0, navigationClicks) }
 
-            // Mary's opposite direction remains an ordinary native tab-selection drag.
+            // Both directions remain ordinary native tab-selection drags.
             navigation.performTouchInput {
                 swipe(Offset(250f, center.y), Offset(80f, center.y), durationMillis = 600)
             }
@@ -365,16 +365,17 @@ class MarySidebarLayoutTest {
             compose.runOnIdle { assertEquals(2, navigationClicks); assertTrue(maryActive.value) }
             node("mary-sidebar-modal").assertDoesNotExist()
 
-            // Losing the Mary page while held retires its token and any late native release.
-            navigation.performTouchInput {
-                down(Offset(80f, center.y))
-                moveTo(Offset(200f, center.y), delayMillis = 100)
+            // Losing Mary during a CONTENT opening still retires its sidebar token.
+            val content = node("sidebar-transcript")
+            content.performTouchInput {
+                down(Offset(80f, 280f))
+                moveTo(Offset(200f, 280f), delayMillis = 100)
             }
             compose.mainClock.advanceTimeBy(64)
             node("mary-sidebar-preview").assertIsDisplayed()
             compose.runOnIdle { maryActive.value = false }
             settle()
-            navigation.performTouchInput { up() }
+            content.performTouchInput { up() }
             settle()
             node("mary-sidebar-preview").assertDoesNotExist()
             node("mary-sidebar-modal").assertDoesNotExist()
@@ -392,7 +393,7 @@ class MarySidebarLayoutTest {
         }
     }
 
-    @Test fun rtlNavigationOpeningAndCancellationRetainMaryOwnership() {
+    @Test fun rtlNavigationOwnsBothDirectionsAndCancellation() {
         for (backend in MixUiBackend.entries) {
             compose.runOnUiThread { showing.value = false; maryActive.value = true; navigationClicks = 0 }
             host(transcriptMode = "conversation", backend = backend, direction = LayoutDirection.Rtl)
@@ -403,7 +404,8 @@ class MarySidebarLayoutTest {
                     moveTo(Offset(200f, center.y), delayMillis = 100)
                 }
                 compose.mainClock.advanceTimeBy(64)
-                node("mary-sidebar-preview").assertIsDisplayed()
+                node("mary-sidebar-preview").assertDoesNotExist()
+                compose.runOnIdle { assertNull(gestures.progress) }
                 node("fixture-navigation").performTouchInput { cancel() }
                 repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
                 node("mary-sidebar-preview").assertDoesNotExist()
@@ -412,8 +414,8 @@ class MarySidebarLayoutTest {
                     swipe(Offset(320f, center.y), Offset(80f, center.y), durationMillis = 600)
                 }
                 repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
-                node("mary-sidebar-panel").assertIsDisplayed()
-                compose.runOnIdle { assertEquals(0, navigationClicks) }
+                node("mary-sidebar-modal").assertDoesNotExist()
+                compose.runOnIdle { assertEquals(1, navigationClicks); assertFalse(maryActive.value); assertNull(gestures.progress) }
             } finally {
                 compose.mainClock.autoAdvance = true
                 compose.runOnUiThread { activity?.close(); activity = null }
@@ -1146,9 +1148,9 @@ class MarySidebarLayoutTest {
                                 menuFocus.requestFocus()
                             }, onOpen = { showing.value = true })
                         CompositionLocalProvider(LocalMarySidebarPageGestureHost provides pageHost) {
-                        Box(Modifier.fillMaxSize().background(MixTheme.colorScheme.background)
-                            .marySidebarPageGesture(pageHost, enabled = maryActive.value).testTag("sidebar-fixture")) {
-                            Box(Modifier.fillMaxSize().marySidebarBackground(pageHost).testTag("sidebar-underlay")) {
+                        Box(Modifier.fillMaxSize().background(MixTheme.colorScheme.background).testTag("sidebar-fixture")) {
+                            Box(Modifier.fillMaxSize().marySidebarPageGesture(pageHost, enabled = maryActive.value)
+                                .marySidebarBackground(pageHost).testTag("sidebar-underlay")) {
                             MaryFloatingChatLayout(bottomInset = 80.dp, modifier = Modifier.fillMaxSize().then(bodyModifier),
                                 content = { padding ->
                                     val edge = Modifier.testTag("sidebar-transcript")

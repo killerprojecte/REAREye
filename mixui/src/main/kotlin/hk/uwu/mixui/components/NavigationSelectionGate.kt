@@ -2,7 +2,7 @@ package hk.uwu.mixui.components
 
 /** Pointer intent is independent of vendor press/selection animations. */
 internal class NavigationSelectionGate {
-    enum class Intent { Idle, Tap, Drag, Secondary, Cancelled }
+    enum class Intent { Idle, Tap, AwaitingHorizontal, Drag, Secondary, Cancelled }
     data class Result(val selectedIndex: Int?, val resetNative: Boolean)
     var intent = Intent.Idle
         private set
@@ -17,13 +17,22 @@ internal class NavigationSelectionGate {
     fun select(index: Int): Int? = when (intent) {
         Intent.Idle -> index
         Intent.Tap, Intent.Drag -> { pending = index; null }
-        Intent.Secondary, Intent.Cancelled -> null
+        Intent.AwaitingHorizontal, Intent.Secondary, Intent.Cancelled -> null
     }
 
     fun move(beyondSlop: Boolean, outside: Boolean, multiplePointers: Boolean, horizontalDrag: Boolean = false) {
-        if (multiplePointers || ((intent == Intent.Tap || intent == Intent.Drag) && outside)) cancel()
-        else if (intent == Intent.Tap && beyondSlop) {
-            if (horizontalDrag) intent = Intent.Drag else cancel()
+        val navigating = intent == Intent.Tap || intent == Intent.AwaitingHorizontal || intent == Intent.Drag
+        if (multiplePointers || (navigating && outside)) cancel()
+        else if ((intent == Intent.Tap || intent == Intent.AwaitingHorizontal) && beyondSlop) {
+            if (horizontalDrag) intent = Intent.Drag
+            else {
+                // A curved thumb path can cross vertical slop before turning along the bar.
+                // Drop click/hold ownership now, but let an in-bounds horizontal move take
+                // over later. This is not Cancelled: bounds, extra pointers and owner/system
+                // cancellation remain terminal and can never be recovered here.
+                intent = Intent.AwaitingHorizontal
+                pending = null
+            }
         }
     }
 
