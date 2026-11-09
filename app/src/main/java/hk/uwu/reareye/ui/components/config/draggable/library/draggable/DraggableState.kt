@@ -195,6 +195,7 @@ abstract class DraggableState<T>(
     }
 
     fun onDragCanceled() {
+        val hadActiveDrag = draggingItemIndex != null
         draggingItemIndex?.let { index ->
             val key = draggingItemKey
             val offset = Offset(draggingItemLeft, draggingItemTop)
@@ -212,7 +213,7 @@ abstract class DraggableState<T>(
         hoveredItemIndex = null
         _draggedDistance = Offset(0f, 0f)
         cancelOverscrollJob()
-        onDragFinished()
+        if (hadActiveDrag) onDragFinished()
     }
 
     private fun cancelOverscrollJob() {
