@@ -182,8 +182,8 @@ class RearStoreNativeTopBarTest {
                     titles[index].performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(result) }
                     result
                 }
-                assertTrue("Store must render native Mochi's 34sp bold large title", layouts.any {
-                    it.layoutInput.style.fontSize == 34.sp && it.layoutInput.style.fontWeight == FontWeight.Bold
+                assertTrue("Store must retain the shared 32sp normal large-title contract", layouts.any {
+                    it.layoutInput.style.fontSize == 32.sp && it.layoutInput.style.fontWeight == FontWeight.Normal
                 })
             }
             capture("${backend.name}-${if (dark) "dark" else "light"}-initial")
@@ -390,8 +390,8 @@ class RearStoreNativeTopBarTest {
                 if (backend == MixUiBackend.Mochi) {
                     val search = compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot
                     // The editable field is inside the production search card:
-                    // 16dp native body + 12dp row padding + 18dp search icon.
-                    assertEquals("Search content stays at its native position", 46f, search.left - root.left, 1.5f)
+                    // 16dp native body + 9dp row padding + 18dp search icon + 8dp gap.
+                    assertEquals("Search content stays at its native position", 51f, search.left - root.left, 1.5f)
                     assertEquals("Search trailing padding stays native", 28f, root.right - search.right, 1.5f)
                 }
                 repeat(2) { compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }; frames() }
@@ -408,6 +408,120 @@ class RearStoreNativeTopBarTest {
             }
         }
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
+
+    @Test fun glassSearchKeepsFilteringAndBackLocalInBothThemes() {
+        for (backend in MixUiBackend.entries) for (dark in listOf(false, true)) {
+            open(backend, dark)
+            val mode = "${backend.name}-${if (dark) "dark" else "light"}"
+            repeat(2) {
+                compose.onNode(hasSetTextAction()).performClick()
+                compose.onNode(hasSetTextAction()).performTextReplacement("Mountain")
+                frames()
+                awaitText(catalog[1].name)
+                text(catalog[0].name).assertDoesNotExist()
+                capture("$mode-glass-search-filtered")
+                compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }
+                frames()
+                assertEquals("Back dismisses search focus, not the store", 0, backCalls)
+                compose.onNode(hasSetTextAction()).assertIsNotFocused()
+                text(catalog[1].name).assertIsDisplayed()
+                compose.onNode(hasSetTextAction()).performTextReplacement("no-such-widget")
+                frames()
+                awaitText(label(R.string.rear_store_search_empty))
+                capture("$mode-glass-search-empty")
+                compose.onNode(hasSetTextAction()).performTextClearance()
+                frames()
+                awaitText(catalog[0].name)
+                compose.onNode(hasSetTextAction()).performImeAction()
+                frames()
+                compose.onNode(hasSetTextAction()).assertIsNotFocused()
+            }
+            capture("$mode-glass-search-restored")
+        }
+    }
+
+    @Test fun mochiGlassSearchRemainsInNativeScrollAndFocusTree() {
+        for (dark in listOf(false, true)) {
+            val items = List(30) { index -> catalog.first().copy(id = "portal-$index", name = "Portal item $index") }
+            open(MixUiBackend.Mochi, dark, items = items)
+            val field = compose.onNode(hasSetTextAction())
+            field.performClick()
+            frames()
+            field.assertIsFocused()
+            val center = field.fetchSemanticsNode().boundsInRoot.center
+            compose.onRoot().performTouchInput {
+                // Drag the native search icon, not the editable text's selection
+                // gesture region. The header must remain a list descendant.
+                swipe(androidx.compose.ui.geometry.Offset(24f, center.y),
+                    androidx.compose.ui.geometry.Offset(24f, 32f), 200)
+            }
+            frames()
+            assertFalse("A swipe starting inside native search must collapse its header", field.isDisplayed())
+            capture("Mochi-${if (dark) "dark" else "light"}-glass-search-swipe-collapsed")
+            compose.onNode(hasScrollAction()).performScrollToKey("portal-29")
+            frames()
+            // Compose may retain a focused lazy item offscreen. It must not paint there.
+            assertFalse(field.isDisplayed())
+            scroll(-100000f)
+            field.assertIsDisplayed()
+            field.performTextReplacement("Portal item 29")
+            frames()
+            awaitText(items.last().name)
+            text(items.first().name).assertDoesNotExist()
+            capture("Mochi-${if (dark) "dark" else "light"}-glass-search-returned")
+        }
+    }
+
+    @Test fun captureActualItemsBehindPinnedSearchAndMochiHeader() {
+        val items = List(24) { index -> catalog[index % catalog.size].copy(
+            id = "sampling-$index", name = "Layer sample %02d".format(index),
+            updatedAt = "2026-01-02T00:00:00Z",
+        ) }
+        for (backend in MixUiBackend.entries) for (dark in listOf(false, true)) {
+            open(backend, dark, items = items)
+            repeat(2) { compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }; frames() }
+            compose.onNode(hasScrollAction()).performScrollToKey("sampling-8")
+            frames()
+            val target = text(items[8].name)
+            // MIUIX pins search. Mochi scrolls search away with its native header,
+            // so only its TopBar can truthfully show passing list items underneath.
+            val targetCenter = if (backend == MixUiBackend.Miuix) {
+                compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot.center.y
+            } else 54f
+            scroll(target.fetchSemanticsNode().boundsInRoot.center.y - targetCenter)
+            val itemY = target.fetchSemanticsNode().boundsInRoot.center.y
+            assertEquals("Actual item title must occupy the sampled header band", targetCenter, itemY, 2f)
+            if (backend == MixUiBackend.Miuix) compose.onNode(hasSetTextAction()).assertIsDisplayed()
+            else assertFalse("Mochi's native search is scrolled away, not pinned over items",
+                compose.onNode(hasSetTextAction()).isDisplayed())
+            capture("${backend.name}-${if (dark) "dark" else "light"}-item-under-${if (backend == MixUiBackend.Miuix) "search" else "topbar"}")
+        }
+    }
+
+    @Test fun miuixNativeSearchShadowKeepsGeometryAndSampling() {
+        val items = List(24) { index -> catalog[index % catalog.size].copy(
+            id = "shadow-$index", name = "Layer sample %02d".format(index),
+            updatedAt = "2026-01-02T00:00:00Z",
+        ) }
+        for (dark in listOf(false, true)) {
+            open(MixUiBackend.Miuix, dark, items = items)
+            val mode = if (dark) "dark" else "light"
+            capture("Miuix-$mode-after-shadow-initial")
+            // Native captureToImage may invalidate recorded backdrop layers.
+            // Each material comparison therefore starts with a fresh host.
+            open(MixUiBackend.Miuix, dark, items = items)
+            repeat(2) { compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }; frames() }
+            compose.onNode(hasScrollAction()).performScrollToKey("shadow-8")
+            frames()
+            val target = text(items[8].name)
+            val field = compose.onNode(hasSetTextAction())
+            val fieldBounds = field.fetchSemanticsNode().boundsInRoot
+            scroll(target.fetchSemanticsNode().boundsInRoot.center.y - fieldBounds.center.y)
+            assertEquals(fieldBounds.center.y, target.fetchSemanticsNode().boundsInRoot.center.y, 2f)
+            assertEquals("Shadow must not change search geometry", fieldBounds, field.fetchSemanticsNode().boundsInRoot)
+            capture("Miuix-$mode-after-shadow-scrolled")
+        }
     }
 
 }

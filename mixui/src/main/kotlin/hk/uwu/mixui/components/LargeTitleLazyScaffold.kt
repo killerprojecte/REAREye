@@ -97,7 +97,9 @@ fun LargeTitleLazyScaffold(
                             )
                         }
                         searchBar?.let {
-                            Column(Modifier.background(background).padding(12.dp)) { it() }
+                            CompositionLocalProvider(LocalSearchBackdrop provides backdrop) {
+                                Column(Modifier.padding(12.dp)) { it() }
+                            }
                         }
                     }
                 },

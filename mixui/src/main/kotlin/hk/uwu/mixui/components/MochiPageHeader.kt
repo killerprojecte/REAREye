@@ -6,6 +6,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.SubcomposeLayout
@@ -129,7 +137,17 @@ internal fun MochiPageScaffold(
     val edge = with(density) { 8.dp.toPx() }
     val progress = { headerProgress(offset(), headerHeight) }
     val material = { (offset() / edge).coerceIn(0f, 1f) }
-    BoxWithConstraints(modifier.fillMaxSize().background(background)) {
+    // Keep the native search in the scroll/input tree, but paint its recorded
+    // pixels only after the body source is complete. The source never draws this
+    // layer, so native glass cannot sample itself.
+    val searchLayer = rememberGraphicsLayer()
+    var viewportCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var searchCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val searchVisible by remember(listState) { derivedStateOf {
+        listState == null || listState.layoutInfo.visibleItemsInfo.any { it.key == "mixui-title-header" }
+    } }
+    BoxWithConstraints(modifier.fillMaxSize().clipToBounds().background(background)
+        .onGloballyPositioned { viewportCoordinates = it }) {
         val viewport = maxHeight
         val header: @Composable () -> Unit = {
             Column(Modifier.fillMaxWidth().onSizeChanged { headerHeight = it.height }) {
@@ -137,7 +155,14 @@ internal fun MochiPageScaffold(
                     maxLines = 1, overflow = TextOverflow.Ellipsis, minFontScale = 0.7f,
                     modifier = Modifier.mochiOpticalLeading(MochiTheme.textStyles.largeTitle)
                         .mochiBlurReveal({ 1f - progress() }))
-                searchBar?.let { Spacer(Modifier.height(12.dp)); it() }
+                searchBar?.let {
+                    Spacer(Modifier.height(12.dp))
+                    Box(Modifier.fillMaxWidth()
+                        .onGloballyPositioned { searchCoordinates = it }
+                        .drawWithContent { searchLayer.record { this@drawWithContent.drawContent() } }) {
+                        it()
+                    }
+                }
             }
         }
         CompositionLocalProvider(
@@ -146,7 +171,10 @@ internal fun MochiPageScaffold(
         ) {
             // Share MIUIX gesture feedback and Compose decay across visual backends.
             // The Mochi edge blur below is a material effect, not scroll physics.
-            val body = Modifier.fillMaxSize().pageScrollFeedback().mochiBackdropSource(backdrop).mochiScrollEdgeBlur(top, material)
+            val body = Modifier.fillMaxSize().pageScrollFeedback().mochiScrollEdgeBlur(top, material)
+            // Record the fixed viewport including its clearing background, before
+            // overscroll translates content. Search and the compact bar stay outside.
+            Box(Modifier.fillMaxSize().mochiBackdropSource(backdrop).background(background)) {
             if (scrollState != null) {
                 Column(body.verticalScroll(scrollState)
                     .padding(start = 16.dp, end = 16.dp, top = top, bottom = bottom)) {
@@ -173,6 +201,19 @@ internal fun MochiPageScaffold(
                     lazyContent?.invoke(this)
                     item(key = "mixui-title-footer") { Spacer(Modifier.height(with(density) { footerHeight.toDp() })) }
                 }
+            }
+            }
+            if (searchBar != null && searchVisible) {
+                Box(Modifier.fillMaxSize().mochiScrollEdgeBlur(top, material).drawWithContent {
+                    val viewport = viewportCoordinates
+                    val search = searchCoordinates
+                    if (viewport?.isAttached == true && search?.isAttached == true) {
+                        // Resolve at draw time, including overscroll transforms. No
+                        // post-layout State-to-offset feedback or input overlay.
+                        val position = viewport.localPositionOf(search, Offset.Zero)
+                        translate(position.x, position.y) { drawLayer(searchLayer) }
+                    }
+                })
             }
         }
         BoundedMochiTitleBar(title, background = background, backdrop = backdrop,
