@@ -113,6 +113,9 @@ import hk.uwu.mixui.components.CardDefaults
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.InfiniteProgressIndicator
 import hk.uwu.mixui.components.pageScrollFeedback
+import hk.uwu.mixui.components.CompactGlassTopBar
+import hk.uwu.mixui.components.CompactGlassTopBarScene
+import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.GlassTopBarScaffold
 import hk.uwu.mixui.components.TopBarIconButton
 import androidx.compose.ui.platform.testTag
@@ -451,25 +454,37 @@ private fun AboutRootPage(
         }
     }
 
-    GlassTopBarScaffold(
-        title = stringResource(R.string.about_navigation),
-        isContentScrolled = lazyListState.firstVisibleItemIndex > 0 ||
-            lazyListState.firstVisibleItemScrollOffset > 0,
-        contentListState = lazyListState,
-    ) { paddingValues ->
-        AboutRootContent(
-            bottomInnerPadding = bottomInnerPadding,
-            paddingValues = paddingValues,
-            hazeState = hazeState,
-            versionText = versionText,
-            entries = entries,
-            onOpenContributors = onOpenContributors,
-            scrollProgress = scrollProgress,
-            lazyListState = lazyListState,
-            onOpenLibraries = onOpenLibraries,
-            onOpenPresetPackDialog = onOpenPresetPackDialog,
-            animateEnter = animateEnter,
-        )
+    // About has always used a fixed compact header: the hero owns the title at
+    // rest, and only the small toolbar title fades in as the hero scrolls away.
+    // Do not use the collapsing scaffold here; secondary routes still need it.
+    CompactGlassTopBarScene(isContentScrolled = scrollProgress > 0f) { bodyModifier ->
+        Scaffold(
+            popupHost = {},
+            topBar = {
+                CompactGlassTopBar(
+                    title = stringResource(R.string.about_navigation),
+                    modifier = Modifier.testTag("about-root-header").graphicsLayer {
+                        alpha = scrollProgress
+                    },
+                )
+            },
+        ) { paddingValues ->
+            Box(Modifier.fillMaxSize().then(bodyModifier)) {
+                AboutRootContent(
+                    bottomInnerPadding = bottomInnerPadding,
+                    paddingValues = paddingValues,
+                    hazeState = hazeState,
+                    versionText = versionText,
+                    entries = entries,
+                    onOpenContributors = onOpenContributors,
+                    scrollProgress = scrollProgress,
+                    lazyListState = lazyListState,
+                    onOpenLibraries = onOpenLibraries,
+                    onOpenPresetPackDialog = onOpenPresetPackDialog,
+                    animateEnter = animateEnter,
+                )
+            }
+        }
     }
 }
 

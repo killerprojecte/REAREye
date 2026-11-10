@@ -677,7 +677,11 @@ class RealPageCaptureTest {
 
     @Test fun aboutNativeHeadersKeepRoutesScrollingAndCallbacks() {
         val directory = File(System.getProperty("ui.capture.output"), "about-native-headers")
-        for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) for (rtl in listOf(false, true)) {
+        val backends = System.getProperty("ui.capture.backends", "miuix,mochi").split(",")
+        val modes = System.getProperty("ui.capture.modes", "light,dark").split(",")
+        for (backend in backends) for (dark in listOf(false, true).filter {
+            (if (it) "dark" else "light") in modes
+        }) for (rtl in listOf(false, true)) {
             compose.mainClock.autoAdvance = false
             compose.runOnUiThread {
                 activity?.close()
@@ -705,6 +709,49 @@ class RealPageCaptureTest {
             val folder = File(directory, "$backend/${if (dark) "dark" else "light"}/${if (rtl) "rtl" else "ltr"}").apply { mkdirs() }
             assertVisibleText("REAREye")
             save(folder, "initial.png")
+            val header = compose.onNodeWithTag("about-root-header").fetchSemanticsNode().boundsInRoot
+            // A large title would add an expanded region and move the hero down.
+            org.junit.Assert.assertTrue("About must retain compact header geometry", header.height <= 80f)
+            val title = context.getString(hk.uwu.reareye.R.string.about_navigation)
+            compose.onAllNodesWithText(title, useUnmergedTree = true).assertCountEquals(1)
+            fun assertTitleInk(expected: Boolean) {
+                // Semantics visibility ignores graphicsLayer alpha. Inspect the actual
+                // title region: the resting gradient is smooth, glyphs have sharp edges.
+                val bounds = compose.onNodeWithText(title, useUnmergedTree = true)
+                    .fetchSemanticsNode().boundsInRoot
+                val bitmap = compose.onRoot(useUnmergedTree = true).captureToImage().asAndroidBitmap()
+                var edges = 0
+                for (y in bounds.top.toInt().coerceAtLeast(0) until bounds.bottom.toInt().coerceAtMost(bitmap.height)) {
+                    for (x in (bounds.left.toInt() + 1).coerceAtLeast(1) until bounds.right.toInt().coerceAtMost(bitmap.width)) {
+                        val a = bitmap.getPixel(x - 1, y)
+                        val b = bitmap.getPixel(x, y)
+                        val contrast = maxOf(
+                            kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)),
+                            kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)),
+                            kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b)),
+                        )
+                        if (contrast > 25) edges++
+                    }
+                }
+                org.junit.Assert.assertEquals("Rendered compact title ink (edges=$edges)", expected, edges > 10)
+            }
+            assertTitleInk(false)
+            repeat(2) { pass ->
+                compose.onNodeWithTag("about-root-list").performTouchInput { swipeUp() }
+                settle()
+                assertVisibleText(title)
+                assertTitleInk(true)
+                org.junit.Assert.assertEquals(header,
+                    compose.onNodeWithTag("about-root-header").fetchSemanticsNode().boundsInRoot)
+                save(folder, "root-scrolled-$pass.png")
+                compose.onNodeWithTag("about-root-list").performScrollToIndex(0)
+                settle()
+                org.junit.Assert.assertEquals(header,
+                    compose.onNodeWithTag("about-root-header").fetchSemanticsNode().boundsInRoot)
+                assertVisibleText("REAREye")
+                assertTitleInk(false)
+                save(folder, "root-returned-$pass.png")
+            }
             val preset = context.getString(hk.uwu.reareye.R.string.preset_pack_title)
             rootItem(preset)
             compose.onNodeWithText(preset).performClick()
