@@ -675,6 +675,34 @@ class RealPageCaptureTest {
         }
     }
 
+    @Test fun mochiAboutWithoutButtonsKeepsActualGlyphsCentered() {
+        for (rtl in listOf(false, true)) {
+            compose.mainClock.autoAdvance = false
+            compose.runOnUiThread {
+                activity?.close()
+                activity = Robolectric.buildActivity(UiCaptureActivity::class.java,
+                    Intent().putExtra("page", "about").putExtra("backend", "mochi")
+                        .putExtra("dark", false).putExtra("rtl", rtl)).setup()
+            }
+            fun settle() { repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
+            settle()
+            val title = activity!!.get().getString(hk.uwu.reareye.R.string.about_navigation)
+            val folder = File(System.getProperty("ui.capture.output"), "mochi-about-no-buttons/rtl$rtl").apply { mkdirs() }
+            save(folder, "initial.png")
+            repeat(2) { pass ->
+                compose.onNodeWithTag("about-root-list").performTouchInput { swipeUp() }; settle()
+                val geometry = compose.nativeTitleGeometry(title).single()
+                val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+                val glyphs = title.indices.map { geometry.layout.getBoundingBox(it) }
+                val center = geometry.bounds.left + (glyphs.minOf { it.left } + glyphs.maxOf { it.right }) / 2f
+                org.junit.Assert.assertEquals("Actual About title glyphs rtl=$rtl", root.center.x, center, 1.5f)
+                writeNativeTitleGeometry("mochi-about-no-buttons", "rtl$rtl-scroll$pass", listOf(geometry))
+                save(folder, "scrolled-$pass.png")
+                compose.onNodeWithTag("about-root-list").performScrollToIndex(0); settle()
+            }
+        }
+    }
+
     @Test fun aboutNativeHeadersKeepRoutesScrollingAndCallbacks() {
         val directory = File(System.getProperty("ui.capture.output"), "about-native-headers")
         val backends = System.getProperty("ui.capture.backends", "miuix,mochi").split(",")

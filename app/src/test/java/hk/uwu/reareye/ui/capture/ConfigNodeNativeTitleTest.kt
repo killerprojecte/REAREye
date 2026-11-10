@@ -322,6 +322,33 @@ class ConfigNodeNativeTitleTest {
         }
     }
 
+    @Test fun actualReareyeSettingsCollapsedTitleGeometry() {
+        val category = hk.uwu.reareye.ui.components.config.buildMoreCategories(REAREyeConfig)
+            .first { it.group.id == "reareye_settings" }.category
+        for (backend in MixUiBackend.entries) for (direction in listOf(LayoutDirection.Ltr, LayoutDirection.Rtl)) {
+            val title = "REAREye 设置"
+            open(backend, category.children, direction = direction, pageTitle = title)
+            val key = "reareye-settings-${backend.name}-$direction"
+            capture("$key-expanded")
+            writeNativeTitleGeometry("reareye-settings", "$key-expanded", compose.nativeTitleGeometry(title))
+            compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }; frames()
+            capture("$key-collapsed")
+            val geometries = compose.nativeTitleGeometry(title)
+            writeNativeTitleGeometry("reareye-settings", "$key-collapsed", geometries)
+            val compact = geometries.first { it.layout.layoutInput.style.fontSize.value < 28f }
+            val back = compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back)).fetchSemanticsNode().boundsInRoot
+            val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val glyphs = title.indices.map { compact.layout.getBoundingBox(it) }
+            val glyphCenter = compact.bounds.left + (glyphs.minOf { it.left } + glyphs.maxOf { it.right }) / 2f
+            val output = File(System.getProperty("ui.capture.output"), "reareye-settings").apply { mkdirs() }
+            File(output, "$key-centers.txt").writeText("root=$root\nback=$back\ntext=${compact.bounds}\nglyphCenter=$glyphCenter\nscreenCenter=${root.center.x}\n")
+            assertEquals("Settings title fits the whole-bar center without touching the back button", root.center.x, glyphCenter, 1.5f)
+            assertTrue("Collapsed title remains separate from back button", !compact.bounds.overlaps(back))
+            compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back)).performClick()
+            compose.runOnIdle { assertEquals(1, backs) }
+        }
+    }
+
     @Test fun productionCategoryAndFavoritesTitleInsetsMatchMiuix() {
         val failures = mutableListOf<String>()
         val nodes = List(30) { index -> ConfigCategory(key = "alignment-$index", titleRes = R.string.config_tab_more) }

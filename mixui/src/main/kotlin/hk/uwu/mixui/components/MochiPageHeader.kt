@@ -76,9 +76,17 @@ internal fun BoundedMochiTitleBar(
                     layout(constraints.maxWidth, constraints.maxHeight) {
                         nav.placeRelative(0, (constraints.maxHeight - nav.height) / 2)
                         action.placeRelative(constraints.maxWidth - action.width, (constraints.maxHeight - action.height) / 2)
-                        // Center in the actual free interval, including asymmetric actions.
-                        text.placeRelative(start + (width - text.width) / 2,
-                            (constraints.maxHeight - text.height) / 2)
+                        // Prefer the whole bar's center when the complete title fits
+                        // between controls. Otherwise center in the actual free interval,
+                        // not at the nearest edge; maxWidth already ellipsizes only when
+                        // even that interval cannot contain the title.
+                        val centered = (constraints.maxWidth - text.width) / 2
+                        val titleX = if (centered >= start && centered + text.width <= end) {
+                            centered
+                        } else {
+                            start + (width - text.width) / 2
+                        }
+                        text.placeRelative(titleX, (constraints.maxHeight - text.height) / 2)
                     }
                 }
             }

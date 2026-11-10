@@ -63,7 +63,8 @@ fun CompactTopBar(
             navigationIcon = navigationIcon,
             actions = actions,
         )
-        MixUiBackend.Mochi -> ui.feice.mochi.navigation.MochiTitleBar(
+        // Use the same measured free-interval title layout as the glass/collapsing bars.
+        MixUiBackend.Mochi -> BoundedMochiTitleBar(
             title = title,
             modifier = modifier.windowInsetsPadding(horizontalBarInsets()),
             background = MixTheme.colorScheme.surface,

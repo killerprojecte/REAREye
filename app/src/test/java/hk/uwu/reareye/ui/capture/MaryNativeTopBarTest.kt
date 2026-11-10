@@ -110,10 +110,81 @@ class MaryNativeTopBarTest {
     @Test fun mochiLightAsymmetricTitleAndShadowCapture() = asymmetricTitle(MixUiBackend.Mochi, false)
     @Test fun mochiDarkAsymmetricTitleAndShadowCapture() = asymmetricTitle(MixUiBackend.Mochi, true)
 
+    @Test fun mochiNoButtonsCompactTitleActualGlyphCenter() = noButtonTitle(0)
+    @Test fun mochiNoButtonsGlassTitleActualGlyphCenter() = noButtonTitle(1)
+    @Test fun mochiNoButtonsColumnTitleActualGlyphCenter() = noButtonTitle(2)
+    @Test fun mochiNoButtonsLazyTitleActualGlyphCenter() = noButtonTitle(3)
+    @Test fun mochiNoButtonsGlassScaffoldTitleActualGlyphCenter() = noButtonTitle(4)
+
+    private fun noButtonTitle(mode: Int) {
+        val title = "没有按钮的标题"
+        for (rtl in listOf(false, true)) {
+            compose.runOnUiThread {
+                activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+                activity!!.get().enableEdgeToEdge()
+                activity!!.get().setContent {
+                    MixUiHost(MixUiBackend.Mochi, MixColorSchemeMode.Light) {
+                        CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides
+                            if (rtl) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr) {
+                            when (mode) {
+                                0 -> hk.uwu.mixui.components.CompactTopBar(title)
+                                1 -> CompactGlassTopBarScene(isContentScrolled = true) {
+                                    hk.uwu.mixui.components.CompactGlassTopBar(title)
+                                }
+                                2 -> hk.uwu.mixui.components.LargeTitleColumnScaffold(title) {
+                                    repeat(40) { hk.uwu.mixui.components.Text("Row $it", Modifier.height(48.dp)) }
+                                }
+                                4 -> hk.uwu.mixui.components.GlassTopBarScaffold(title, isContentScrolled = true) { padding ->
+                                    Box(Modifier.fillMaxSize().padding(padding))
+                                }
+                                else -> hk.uwu.mixui.components.LargeTitleLazyScaffold(title) {
+                                    items(40) { hk.uwu.mixui.components.Text("Row $it", Modifier.height(48.dp)) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            frames()
+            folder = File(System.getProperty("ui.capture.output", "build/ui-captures"), "mochi-no-buttons").apply { mkdirs() }
+            save("mode$mode-rtl$rtl-expanded")
+            writeNativeTitleGeometry("mochi-no-buttons", "mode$mode-rtl$rtl-expanded", compose.nativeTitleGeometry(title))
+            if (mode == 2 || mode == 3) {
+                compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }; frames()
+            }
+            val compact = compose.nativeTitleGeometry(title).first { it.layout.layoutInput.style.fontSize.value == 17f }
+            val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val glyphs = title.indices.map { compact.layout.getBoundingBox(it) }
+            val center = compact.bounds.left + (glyphs.minOf { it.left } + glyphs.maxOf { it.right }) / 2f
+            assertEquals("No-button actual glyph center mode=$mode rtl=$rtl", root.center.x, center, 1.5f)
+            writeNativeTitleGeometry("mochi-no-buttons", "mode$mode-rtl$rtl-collapsed", listOf(compact))
+            save("mode$mode-rtl$rtl-collapsed")
+            compose.runOnUiThread {
+                androidx.core.view.ViewCompat.dispatchApplyWindowInsets(activity!!.get().window.decorView,
+                    androidx.core.view.WindowInsetsCompat.Builder()
+                        .setDisplayCutout(androidx.core.view.DisplayCutoutCompat(android.graphics.Rect(48, 0, 0, 0),
+                            listOf(android.graphics.Rect(0, 0, 48, 100))))
+                        .setInsets(androidx.core.view.WindowInsetsCompat.Type.displayCutout(), androidx.core.graphics.Insets.of(48, 0, 0, 0))
+                        .setVisible(androidx.core.view.WindowInsetsCompat.Type.displayCutout(), true).build())
+            }
+            frames()
+            val insetTitle = compose.nativeTitleGeometry(title).first { it.layout.layoutInput.style.fontSize.value == 17f }
+            val insetGlyphs = title.indices.map { insetTitle.layout.getBoundingBox(it) }
+            val insetCenter = insetTitle.bounds.left + (insetGlyphs.minOf { it.left } + insetGlyphs.maxOf { it.right }) / 2f
+            assertEquals("No-button title centers safe width after 48dp left cutout mode=$mode rtl=$rtl", root.center.x + 24f, insetCenter, 1.5f)
+            save("mode$mode-rtl$rtl-left-cutout")
+            compose.runOnUiThread { activity!!.close(); activity = null }
+        }
+    }
+
     private fun asymmetricTitle(backend: MixUiBackend, dark: Boolean) {
         for (rtl in listOf(false, true)) {
-            for (longTitle in listOf(false, true)) {
-                val title = if (longTitle) "Mary conversation with a very long title" else "Mary"
+            for (titleCase in listOf("short", "medium", "long")) {
+                val title = when (titleCase) {
+                    "short" -> "Mary"
+                    "medium" -> "Mary session"
+                    else -> "Mary conversation with a very long title"
+                }
                 compose.runOnUiThread {
                     activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
                     activity!!.get().enableEdgeToEdge()
@@ -150,8 +221,12 @@ class MaryNativeTopBarTest {
                 val left = if (rtl) actions.maxOf { it.right.value } else nav.right.value
                 val right = if (rtl) nav.left.value else actions.minOf { it.left.value }
                 assertTrue("Title must stay between controls", text.left.value >= left && text.right.value <= right)
-                assertEquals("Title must center in the remaining interval, not screen center",
-                    (left + right) / 2f, (text.left.value + text.right.value) / 2f, 1f)
+                val screenCenter = 200f
+                val halfTitle = (text.right.value - text.left.value) / 2f
+                val canCenter = screenCenter - halfTitle >= left + 8f && screenCenter + halfTitle <= right - 8f
+                val expected = if (backend == MixUiBackend.Mochi && canCenter) screenCenter else (left + right) / 2f
+                assertEquals("Title prefers whole-bar center, then actual free interval",
+                    expected, (text.left.value + text.right.value) / 2f, 1f)
                 if (backend == MixUiBackend.Miuix && !dark) {
                     // Native controls end at y=49dp, the compact layout at y=52dp.
                     // Check actual shadow pixels beyond that layout, not only bounds.
@@ -161,8 +236,11 @@ class MaryNativeTopBarTest {
                     val background = android.graphics.Color.red(bitmap.getPixel(((left + right) / 2f).toInt(), y))
                     assertTrue("Native shadow must remain visible below the compact bar", background - shadow > 2)
                 }
+                val geometry = compose.nativeTitleGeometry(title).single()
+                assertEquals("Only titles wider than the free interval should ellipsize", titleCase == "long", geometry.layout.isLineEllipsized(0))
                 folder = File(System.getProperty("ui.capture.output", "build/ui-captures"), "mary-asymmetric-title").apply { mkdirs() }
-                save("$backend-$dark-rtl$rtl-long$longTitle")
+                writeNativeTitleGeometry("mary-asymmetric-title", "$backend-$dark-rtl$rtl-$titleCase", listOf(geometry))
+                save("$backend-$dark-rtl$rtl-$titleCase")
                 compose.runOnUiThread { activity!!.close(); activity = null }
             }
         }

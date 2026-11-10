@@ -126,6 +126,11 @@ class ScriptListNativeTitleTest {
             val title = compose.nativeTitleGeometry(label(R.string.script_management_title))
                 .first { it.layout.layoutInput.style.fontSize.value == 17f }
             val actions = listOf(R.string.script_new, R.string.script_new_project, R.string.script_import, R.string.script_refresh)
+            val back = compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back))
+                .fetchSemanticsNode().boundsInRoot
+            val actionLeft = actions.minOf { compose.onNodeWithContentDescription(label(it)).fetchSemanticsNode().boundsInRoot.left }
+            assertEquals("Collapsed title centers between back and four actions",
+                (back.right + actionLeft) / 2f, title.bounds.center.x, 1f)
             actions.forEach { id ->
                 val action = compose.onNodeWithContentDescription(label(id)).fetchSemanticsNode().boundsInRoot
                 assertTrue("Compact title overlaps action ${label(id)}", !title.bounds.overlaps(action))

@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.layout.LayoutInfo
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.unit.dp
 import hk.uwu.mixui.MixColorSchemeMode
 import hk.uwu.mixui.MixUiBackend
@@ -102,6 +103,76 @@ class ScriptEditorNativeTitleTest {
             assertEquals(1, saved); assertEquals(1, backs)
             compose.onNodeWithContentDescription(context.getString(R.string.scene_route_navigate_back)).performClick()
             assertEquals(2, backs); assertEquals(1, saved)
+        }
+    }
+    @Test fun mochiEditorTitleCentersBetweenActualControls() {
+        for (width in listOf(400, 280)) for (rtl in listOf(false, true)) for (titleCase in listOf("short", "medium", "long")) {
+            val name = when (titleCase) {
+                "short" -> "main.lua"
+                "medium" -> "settings_config.lua"
+                else -> "a_very_long_script_filename_for_small_screens.lua"
+            }
+            compose.mainClock.autoAdvance = false
+            compose.runOnUiThread {
+                activity?.close()
+                activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+                val context = activity!!.get()
+                context.enableEdgeToEdge()
+                val dir = File(context.cacheDir, "center-title").apply { mkdirs() }
+                val file = File(dir, name).apply { writeText((1..100).joinToString("\n") { "-- Source line $it" }) }
+                val project = ScriptProject("center", "Center", dir, file, ScriptProjectKind.STANDALONE)
+                context.setContent {
+                    MixUiHost(MixUiBackend.Mochi, MixColorSchemeMode.Light) {
+                        androidx.compose.runtime.CompositionLocalProvider(
+                            androidx.compose.ui.platform.LocalLayoutDirection provides
+                                if (rtl) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr,
+                            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(1f, 1.3f),
+                        ) {
+                            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.width(width.dp)) {
+                                ScriptEditorContent(project, ScriptProjectStore(context), 80.dp, {}, {},
+                                    loadProviders = { emptyList() }, runProvider = { _, _ -> error("No Lua execution") })
+                            }
+                        }
+                    }
+                }
+            }
+            settle()
+            val context = activity!!.get()
+            fun checkCenter() {
+                val nav = compose.onNodeWithContentDescription(context.getString(R.string.scene_route_navigate_back))
+                    .getUnclippedBoundsInRoot()
+                val controls = listOf(R.string.script_debug, R.string.script_save).map {
+                    compose.onNodeWithContentDescription(context.getString(it)).getUnclippedBoundsInRoot()
+                }
+                val title = compose.onNodeWithText(name, useUnmergedTree = true).getUnclippedBoundsInRoot()
+                val left = if (rtl) controls.maxOf { it.right.value } else nav.right.value
+                val right = if (rtl) nav.left.value else controls.minOf { it.left.value }
+                assertTrue("Title must avoid controls", title.left.value >= left && title.right.value <= right)
+                val viewportCenter = width / 2f
+                val halfTitle = (title.right.value - title.left.value) / 2f
+                val expected = if (viewportCenter - halfTitle >= left + 8f && viewportCenter + halfTitle <= right - 8f)
+                    viewportCenter else (left + right) / 2f
+                assertEquals("Prefer whole-bar center, otherwise center remaining area width=$width rtl=$rtl title=$titleCase",
+                    expected, (title.left.value + title.right.value) / 2f, 1f)
+            }
+            val folder = File(System.getProperty("ui.capture.output"), "mochi-editor-center").apply { mkdirs() }
+            fun capture(state: String) {
+                val bitmap = compose.onRoot(useUnmergedTree = true).captureToImage().asAndroidBitmap()
+                File(folder, "$width-rtl$rtl-$titleCase-$state.png").outputStream().use {
+                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+                }
+            }
+            capture("top")
+            checkCenter()
+            val geometry = compose.nativeTitleGeometry(name).single()
+            writeNativeTitleGeometry("mochi-editor-center", "$width-rtl$rtl-$titleCase", listOf(geometry))
+            if (width == 400 && titleCase == "medium") {
+                assertFalse("Medium title fits free interval without ellipsis", geometry.layout.isLineEllipsized(0))
+                assertTrue("Medium title exercises free-area centering rather than whole-bar center", abs(geometry.bounds.center.x - 200f) > 10f)
+            }
+            drag(checkNotNull(findEditor(context.window.decorView)), up = true)
+            checkCenter()
+            capture("scrolled")
         }
     }
     private fun drag(editor: CodeEditor, up: Boolean) {
