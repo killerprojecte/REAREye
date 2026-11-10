@@ -146,6 +146,32 @@ class ConfigDashboardTopBarTest {
         File(folder, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    @Test fun moreEntryRowsUseTheSameNativeDescriptionAndWholeRowActions() {
+        val output = File(System.getProperty("ui.capture.output"), "config-more-native-entries")
+        for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) {
+            open(backend, dark)
+            val favoriteSummary = compose.onNodeWithText(text(R.string.config_favorites_empty))
+            val scriptSummary = compose.onNodeWithText(text(R.string.config_more_scripts_desc))
+            val categorySummary = compose.onNodeWithText(text(categories.first().group.descriptionRes))
+            // All configuration entries share the same backend's description layout.
+            assertEquals(categorySummary.fetchSemanticsNode().boundsInRoot.left,
+                favoriteSummary.fetchSemanticsNode().boundsInRoot.left, 0.5f)
+            assertEquals(categorySummary.fetchSemanticsNode().boundsInRoot.left,
+                scriptSummary.fetchSemanticsNode().boundsInRoot.left, 0.5f)
+            favoriteSummary.performTouchInput { down(center); cancel() }; settle()
+            scriptSummary.performTouchInput { down(center); cancel() }; settle()
+            assertEquals(0, favoriteClicks); assertEquals(0, scriptClicks)
+            repeat(2) {
+                favoriteSummary.performTouchInput { click() }; settle()
+                scriptSummary.performTouchInput { click() }; settle()
+            }
+            tapText(R.string.config_favorites_title)
+            tapText(R.string.config_more_scripts_title)
+            assertEquals(3, favoriteClicks); assertEquals(3, scriptClicks)
+            save(File(output, "$backend/${if (dark) "dark" else "light"}"), "entries.png")
+        }
+    }
+
     @Test fun actualMorePageScrollClicksAndTabsInBothBackendsAndThemes() {
         val output = File(System.getProperty("ui.capture.output"), "config-dashboard-topbar")
         for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) {

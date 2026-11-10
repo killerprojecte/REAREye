@@ -54,7 +54,6 @@ import hk.uwu.mixui.components.GlassTopBarScaffold
 import hk.uwu.mixui.components.pageScrollFeedback
 import hk.uwu.mixui.components.GlassTabs
 import hk.uwu.mixui.components.PreferenceRow
-import hk.uwu.mixui.components.ArrowPreference
 import hk.uwu.mixui.theme.MixTheme
 
 private enum class DashboardTab { CARDS, COMPONENTS, WALLPAPERS, MORE }
@@ -342,7 +341,7 @@ private fun MoreTab(
     ) {
         item(key = "more_favorites") {
             MoreSurface {
-                ArrowPreference(
+                PreferenceRow(
                     title = stringResource(R.string.config_favorites_title),
                     summary = if (favoriteNodeCount == 0) stringResource(R.string.config_favorites_empty)
                     else stringResource(R.string.config_favorites_count, favoriteNodeCount),
@@ -359,7 +358,7 @@ private fun MoreTab(
         }
         item(key = "more_script_management") {
             MoreSurface {
-                ArrowPreference(
+                PreferenceRow(
                     title = stringResource(R.string.config_more_scripts_title),
                     summary = stringResource(R.string.config_more_scripts_desc),
                     startAction = {
