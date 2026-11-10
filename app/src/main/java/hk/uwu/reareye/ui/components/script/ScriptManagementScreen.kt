@@ -44,6 +44,7 @@ import androidx.compose.material.icons.outlined.NoteAdd
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +53,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.drawWithContent
+import hk.uwu.mixui.LocalMixUiBackend
+import hk.uwu.mixui.MixUiBackend
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,6 +89,9 @@ import hk.uwu.mixui.components.LargeTitleLazyScaffold
 import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.CompactTopBar
+import hk.uwu.mixui.components.CompactGlassTopBar
+import hk.uwu.mixui.components.CompactGlassTopBarScene
+import hk.uwu.mixui.components.CompactTopBarIconButton
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.GlassFormDialog
 import hk.uwu.mixui.components.GlassPreferenceScene
@@ -428,20 +436,36 @@ internal fun ScriptEditorContent(
         source = store.readFile(file)
         showFiles = false
     }
+    val progressiveEditor = LocalMixUiBackend.current == MixUiBackend.Miuix
+    val density = LocalDensity.current
+    val editorScrolled by remember(editor, progressiveEditor) {
+        derivedStateOf { progressiveEditor && editor.verticalScroll > 0 }
+    }
+    val editorContent: @Composable (Modifier) -> Unit = { bodyModifier ->
     Scaffold(
         topBar = {
-            CompactTopBar(
+            @Composable
+            fun EditorButton(onClick: () -> Unit, content: @Composable () -> Unit) {
+                if (progressiveEditor) CompactTopBarIconButton(onClick = onClick, content = content)
+                else IconButton(onClick = onClick, content = content)
+            }
+            @Composable
+            fun EditorBar(title: String, navigationIcon: @Composable () -> Unit, actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+                if (progressiveEditor) CompactGlassTopBar(title = title, navigationIcon = navigationIcon, actions = actions)
+                else CompactTopBar(title = title, navigationIcon = navigationIcon, actions = actions)
+            }
+            EditorBar(
                 title = selectedFile.name,
                 navigationIcon = {
                     Row {
-                        IconButton(onClick = onBack) {
+                        EditorButton(onClick = onBack) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 stringResource(R.string.scene_route_navigate_back)
                             )
                         }
                         if (project.kind != ScriptProjectKind.STANDALONE) {
-                            IconButton(onClick = { showFiles = !showFiles }) {
+                            EditorButton(onClick = { showFiles = !showFiles }) {
                                 Icon(
                                     Icons.Outlined.MoreVert,
                                     stringResource(R.string.script_file_structure)
@@ -451,23 +475,37 @@ internal fun ScriptEditorContent(
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
+                    EditorButton(onClick = {
                         saveCurrentFile()
                         editor.editor.value?.clearFocus()
                         showDebug = true
                     }) { Icon(Icons.Outlined.BugReport, stringResource(R.string.script_debug)) }
-                    IconButton(onClick = { saveCurrentFile(); onSaved(); onBack() }) {
+                    EditorButton(onClick = { saveCurrentFile(); onSaved(); onBack() }) {
                         Icon(Icons.Outlined.Check, stringResource(R.string.script_save))
                     }
                 },
             )
         },
     ) { padding ->
+        val topPadding = padding.calculateTopPadding()
+        val editorTopPadding by remember(editor, progressiveEditor, density, topPadding) {
+            derivedStateOf {
+                if (progressiveEditor) with(density) {
+                    (topPadding.toPx() - editor.verticalScroll).coerceAtLeast(0f).toDp()
+                } else topPadding
+            }
+        }
         Box(
             Modifier
                 .fillMaxSize()
+                .then(if (progressiveEditor) bodyModifier else Modifier)
+                .drawWithContent {
+                    // AndroidView invalidation must also refresh the recorded Compose source.
+                    if (progressiveEditor) editor.verticalScroll
+                    drawContent()
+                }
                 .padding(
-                    top = padding.calculateTopPadding(),
+                    top = editorTopPadding,
                     start = padding.calculateStartPadding(androidx.compose.ui.platform.LocalLayoutDirection.current),
                     end = padding.calculateEndPadding(androidx.compose.ui.platform.LocalLayoutDirection.current),
                     bottom = maxOf(padding.calculateBottomPadding(), bottomInnerPadding)
@@ -562,6 +600,12 @@ internal fun ScriptEditorContent(
                 }
             }
         }
+    }
+    }
+    if (progressiveEditor) {
+        CompactGlassTopBarScene(isContentScrolled = editorScrolled, content = editorContent)
+    } else {
+        editorContent(Modifier)
     }
     ScriptRenameDialog(
         show = renameFileTarget != null,

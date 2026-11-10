@@ -197,8 +197,8 @@ class ConfigNodeNativeTitleTest {
                 result
             }
             if (backend == MixUiBackend.Mochi) {
-                assertTrue("Native Mochi 34sp bold large header", layouts.any {
-                    it.layoutInput.style.fontSize == 34.sp && it.layoutInput.style.fontWeight == FontWeight.Bold
+                assertTrue("Mochi large header retains the existing 32sp normal MIUIX alignment", layouts.any {
+                    it.layoutInput.style.fontSize == 32.sp && it.layoutInput.style.fontWeight == FontWeight.Normal
                 })
             } else {
                 assertTrue("Native MIUIX expanded large header", layouts.any {

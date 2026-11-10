@@ -41,7 +41,7 @@ import hk.uwu.mixui.components.CircularProgressIndicator
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.GlassAnchoredMenu
 import hk.uwu.mixui.components.GlassMenuOption
-import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.LargeTitleColumnScaffold
 import hk.uwu.mixui.components.SwitchPreference
@@ -94,7 +94,9 @@ fun MarySettingsScreen(bottomInnerPadding: Dp = 0.dp, onBack: () -> Unit) {
         title = stringResource(R.string.mary_settings_title),
         bottomObstruction = bottomInnerPadding,
         navigationIcon = {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
+            TopBarIconButton(onClick = onBack, modifier = Modifier.testTag("mary-settings-back")) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.scene_route_navigate_back))
+            }
         },
         actions = {
             MaryProviderPresetMenu(
@@ -107,7 +109,7 @@ fun MarySettingsScreen(bottomInnerPadding: Dp = 0.dp, onBack: () -> Unit) {
                     else dialogue = dialogue.withPreset(preset)
                 },
             )
-            IconButton(
+            TopBarIconButton(
                 modifier = Modifier.testTag("mary-settings-save"),
                 enabled = ready && valid && !saving,
                 onClick = {
@@ -241,11 +243,10 @@ internal fun MaryProviderPresetMenu(
         },
         onOptionClick = { index -> choices[index].let { (forApproval, preset) -> onPreset(forApproval, preset) } },
     ) {
-        IconButton(
+        TopBarIconButton(
             modifier = Modifier.testTag("mary-settings-presets"),
             onClick = { onExpandedChange(true) },
             enabled = enabled,
-            holdDownState = expanded,
         ) { Icon(Icons.Outlined.Tune, stringResource(R.string.mary_provider_preset)) }
     }
 }

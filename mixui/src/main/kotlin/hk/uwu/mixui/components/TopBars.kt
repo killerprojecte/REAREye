@@ -122,7 +122,7 @@ fun LargeTitleColumnScaffold(
                             title = title,
                             isContentScrolled = materialVisible,
                             backdrop = bodyBackdrop,
-                            progressiveBlur = false,
+                            progressiveBlur = true,
                             scrollBehavior = scrollBehavior,
                             navigationIcon = navigationIcon,
                             actions = actions,

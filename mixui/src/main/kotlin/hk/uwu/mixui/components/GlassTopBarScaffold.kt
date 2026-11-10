@@ -140,9 +140,9 @@ fun GlassTopBarScaffold(
                                     modifier = if (headerOutsideBar) Modifier else topBarModifier,
                                     isContentScrolled = materialVisible,
                                     backdrop = backdrop,
-                                    // Keep the native background band. Controls may select their
-                                    // own native material while retaining the bar's scroll motion.
-                                    progressiveBlur = false,
+                                    // Use the native progressive background. Controls may select their
+                                    // own material while retaining the bar's scroll motion.
+                                    progressiveBlur = true,
                                     scrollBehavior = scrollBehavior,
                                     navigationIcon = {
                                         CompositionLocalProvider(LocalInheritMiuixBarMaterial provides inheritMiuixBarMaterial) {

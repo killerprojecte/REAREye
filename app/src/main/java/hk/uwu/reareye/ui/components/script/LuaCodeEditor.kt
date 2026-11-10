@@ -1,6 +1,10 @@
 package hk.uwu.reareye.ui.components.script
 
 import android.graphics.Typeface
+import android.view.ViewTreeObserver
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
@@ -21,6 +25,9 @@ import io.github.rosemoe.sora.widget.component.EditorAutoCompletion
 
 class LuaCodeEditorState internal constructor() {
     internal val editor = mutableStateOf<CodeEditor?>(null)
+    internal var verticalScroll by mutableIntStateOf(0)
+        private set
+    internal fun updateScroll() { verticalScroll = editor.value?.offsetY?.coerceAtLeast(0) ?: 0 }
     internal var appliedValue: String? = null
     fun text(): String = editor.value?.text?.toString().orEmpty()
 }
@@ -178,6 +185,19 @@ fun LuaCodeEditor(value: String, state: LuaCodeEditorState, modifier: Modifier =
             }
         },
     )
+    val nativeEditor = state.editor.value
+    DisposableEffect(nativeEditor) {
+        // ScrollEvent.endY is a target during fling/ensurePositionVisible, not the
+        // displayed offset. Read the actual Sora scroller on each native draw.
+        val observer = nativeEditor?.viewTreeObserver
+        val listener = ViewTreeObserver.OnPreDrawListener {
+            state.updateScroll()
+            true
+        }
+        observer?.addOnPreDrawListener(listener)
+        state.updateScroll()
+        onDispose { if (observer?.isAlive == true) observer.removeOnPreDrawListener(listener) }
+    }
     DisposableEffect(Unit) {
         onDispose {
             state.editor.value?.release()

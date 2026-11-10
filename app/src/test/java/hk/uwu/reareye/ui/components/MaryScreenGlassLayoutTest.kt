@@ -136,6 +136,11 @@ class MaryScreenGlassLayoutTest {
             assertEquals("Elastic motion must not be mistaken for real list scroll", 0f, offset(), 0f)
             val actualTop = first.fetchSemanticsNode().boundsInRoot.top
             if (actualTop < headerBottom - 2f) {
+                if (!sawRealOverlap && backend == MixUiBackend.Miuix) {
+                    // The native progressive mask now fades in over 100ms. Keep the
+                    // pointer held while observing that transition, not an instant flag.
+                    repeat(10) { compose.mainClock.advanceTimeBy(16); compose.waitForIdle() }
+                }
                 sawRealOverlap = true
                 assertNativeMaterial(true)
             }
@@ -327,7 +332,35 @@ class MaryScreenGlassLayoutTest {
     private fun frames() { repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
 
     private fun assertNativeMaterial(expected: Boolean) {
-        val origin = if (backend == MixUiBackend.Miuix) node("mary-open-sidebar") else scrollNode()
+        if (backend == MixUiBackend.Miuix) {
+            // The whole toolbar must use Home/Configuration's progressive band,
+            // not puredThinGlass. Inspect the real renderer, not a diagnostic flag.
+            val root = generateSequence(node("mary-open-sidebar").fetchSemanticsNode().layoutInfo) {
+                it.parentInfo
+            }.last()
+            val band = layoutDescendants(root).firstOrNull { layout ->
+                layout.getModifierInfo().any { info ->
+                    val element = info.modifier
+                    element.javaClass.name == "top.yukonga.miuix.kmp.blur.DrawBackdropElement" &&
+                        element.javaClass.getDeclaredField("progressiveGradient").apply { isAccessible = true }.get(element) != null
+                }
+            } ?: error("Mary must render the same native background band as Home/Configuration")
+            val alpha = compose.runOnIdle {
+                val layer = band.getModifierInfo().map { it.modifier }.first {
+                    it.javaClass.name == "androidx.compose.ui.graphics.BlockGraphicsLayerElement"
+                }
+                @Suppress("UNCHECKED_CAST")
+                val block = layer.javaClass.getDeclaredField("block").apply { isAccessible = true }
+                    .get(layer) as (androidx.compose.ui.graphics.GraphicsLayerScope) -> Unit
+                val scope = Class.forName("androidx.compose.ui.graphics.ReusableGraphicsLayerScope")
+                    .getDeclaredConstructor().newInstance() as androidx.compose.ui.graphics.GraphicsLayerScope
+                block(scope)
+                scope.alpha
+            }
+            assertEquals("Native background band must follow actual content overlap", if (expected) 1f else 0f, alpha, 0.001f)
+            return
+        }
+        val origin = scrollNode()
         val info = origin.fetchSemanticsNode().layoutInfo
         val actual = compose.runOnIdle {
             val type = if (backend == MixUiBackend.Miuix) "top.yukonga.miuix.kmp.blur.DrawBackdropElement"
@@ -346,6 +379,13 @@ class MaryScreenGlassLayoutTest {
             }
         }
         assertEquals("$backend must enable native material from the currently visible scroll source", expected, actual)
+    }
+    private fun layoutDescendants(node: LayoutInfo): Sequence<LayoutInfo> = sequence {
+        yield(node)
+        val method = node.javaClass.methods.first { it.name.startsWith("getChildren$") && it.parameterCount == 0 }
+        @Suppress("UNCHECKED_CAST")
+        val children = method.invoke(node) as List<LayoutInfo>
+        children.forEach { yieldAll(layoutDescendants(it)) }
     }
     private fun save(name: String) {
         val bitmap = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }

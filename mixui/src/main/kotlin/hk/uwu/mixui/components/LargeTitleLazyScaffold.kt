@@ -81,7 +81,7 @@ fun LargeTitleLazyScaffold(
                                 title = title,
                                 isContentScrolled = listState.canScrollBackward || scrollBehavior.state.heightOffset < 0f,
                                 backdrop = backdrop,
-                                progressiveBlur = false,
+                                progressiveBlur = true,
                                 scrollBehavior = scrollBehavior,
                                 navigationIcon = navigationIcon,
                                 actions = actions,

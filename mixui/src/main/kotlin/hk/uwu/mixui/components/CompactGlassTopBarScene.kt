@@ -1,5 +1,6 @@
 package hk.uwu.mixui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -12,7 +13,16 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurDefaults
+import top.yukonga.miuix.kmp.blur.ProgressiveBlur
+import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -22,9 +32,8 @@ import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.glass.GlassMaterials
-import top.yukonga.miuix.kmp.glass.GlassShape
-import top.yukonga.miuix.kmp.glass.glass
+import top.yukonga.miuix.kmp.glass.GlassMotion
+import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
 import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
 import ui.feice.mochi.effect.glass.mochiBackdropSource
 import ui.feice.mochi.effect.glass.rememberMochiBackdrop
@@ -88,17 +97,55 @@ fun CompactGlassTopBar(
     val scrolled = LocalCompactBarScrolled.current
     when (backdrop) {
         is GlassFormBackdrop.Miuix -> {
-            val material = backdrop.value?.let {
-                Modifier.glass(
-                    backdrop = it, shape = GlassShape(0.dp),
-                    material = GlassMaterials.puredThinGlass(background.luminance() < 0.5f),
-                    shading = false, enabled = scrolled,
-                )
-            } ?: Modifier.background(background)
-            top.yukonga.miuix.kmp.basic.SmallTopAppBar(
-                title = title, modifier = modifier.then(material), color = Color.Transparent,
-                navigationIcon = navigationIcon, actions = actions,
+            // Use the same native progressive background as Home/Configuration,
+            // while retaining the compact bar's fixed height and transcript padding.
+            val maskProgress by animateFloatAsState(
+                targetValue = if (scrolled) 1f else 0f,
+                animationSpec = GlassMotion.topBarMask(), label = "compactTopBarMask",
             )
+            val rawBackdrop = backdrop.value
+            var backgroundCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+            // Controls sample body + progressive band, never themselves. This is the
+            // same composition used by native GlassTopAppBar(progressiveBlur = true).
+            val progressiveBackdrop = if (rawBackdrop != null) rememberLayerBackdrop {
+                val coordinates = backgroundCoordinates?.takeIf { it.isAttached }
+                with(rawBackdrop) { drawBackdrop(this@rememberLayerBackdrop, coordinates) }
+                drawContent()
+            } else null
+            val controlBackdrop = remember(progressiveBackdrop, backdrop) {
+                progressiveBackdrop?.let { GlassFormBackdrop.Miuix(it) } ?: backdrop
+            }
+            Box(modifier) {
+                if (rawBackdrop != null && progressiveBackdrop != null) {
+                    val blurColors = BlurDefaults.blurColors(
+                        blendColors = listOf(BlendColorEntry(background.copy(alpha = 0.3f))),
+                    )
+                    Box(Modifier.matchParentSize()
+                        .layout { measurable, constraints ->
+                            // Extend only the rendered band, not the measured header.
+                            val bandHeight = ((constraints.maxHeight + 20.dp.toPx()) * 1.2f).roundToInt()
+                            val placeable = measurable.measure(constraints.copy(minHeight = bandHeight, maxHeight = bandHeight))
+                            layout(constraints.maxWidth, constraints.maxHeight) { placeable.placeRelative(0, 0) }
+                        }
+                        .onGloballyPositioned { backgroundCoordinates = it }
+                        .layerBackdrop(progressiveBackdrop)
+                        .graphicsLayer { alpha = maskProgress }
+                        .progressiveTextureBlur(
+                            backdrop = rawBackdrop, shape = RectangleShape,
+                            gradient = ProgressiveBlur.Top.copy(curve = 0.5f),
+                            blurRadius = GlassTopAppBarDefaults.ProgressiveBlurRadius.value,
+                            colors = blurColors,
+                        ))
+                } else {
+                    Box(Modifier.matchParentSize().background(background))
+                }
+                CompositionLocalProvider(LocalCompactBarBackdrop provides controlBackdrop) {
+                    top.yukonga.miuix.kmp.basic.SmallTopAppBar(
+                        title = title, color = Color.Transparent,
+                        navigationIcon = navigationIcon, actions = actions,
+                    )
+                }
+            }
         }
         is GlassFormBackdrop.Mochi -> BoundedMochiTitleBar(
             title = title, modifier = modifier.windowInsetsPadding(horizontalBarInsets()),
