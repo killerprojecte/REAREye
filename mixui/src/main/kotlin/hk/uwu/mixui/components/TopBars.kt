@@ -6,6 +6,7 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -110,11 +111,7 @@ fun LargeTitleColumnScaffold(
             // A short column can collapse the native bar before its own offset moves.
             // Give native toolbar buttons the bar context instead of standalone glass.
             val materialVisible = scrollState.value > 0 || nativeState.heightOffset < 0f
-            val bodyBackdrop = if (isRuntimeShaderSupported()) rememberMiuixScrollBackdrop {
-                nativeState.heightOffset
-                nativeState.contentOffset
-                scrollState.value
-            } else null
+            val bodyBackdrop = if (isRuntimeShaderSupported()) rememberLayerBackdrop() else null
             Scaffold(
                 popupHost = {},
                 containerColor = background,
@@ -144,7 +141,7 @@ fun LargeTitleColumnScaffold(
                 // Record only the body for the bar. The existing outer preference
                 // scene still records body + bar for its sibling popup host.
                 Box(Modifier.fillMaxSize()
-                    .then(if (bodyBackdrop != null) Modifier.layerBackdrop(bodyBackdrop.source) else Modifier)
+                    .then(if (bodyBackdrop != null) Modifier.layerBackdrop(bodyBackdrop) else Modifier)
                     .background(background)) {
                     Column(
                         modifier = Modifier.fillMaxSize()
