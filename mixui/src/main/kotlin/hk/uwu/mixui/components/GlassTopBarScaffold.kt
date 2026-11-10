@@ -150,9 +150,11 @@ fun GlassTopBarScaffold(
                                         }
                                     },
                                     actions = {
-                                        val rowScope = this
-                                        CompositionLocalProvider(LocalInheritMiuixBarMaterial provides inheritMiuixBarMaterial) {
-                                            actions(rowScope)
+                                        MiuixTopBarActions {
+                                            val rowScope = this
+                                            CompositionLocalProvider(LocalInheritMiuixBarMaterial provides inheritMiuixBarMaterial) {
+                                                actions(rowScope)
+                                            }
                                         }
                                     },
                                     // The native joined track has no public inheritance opt-out.

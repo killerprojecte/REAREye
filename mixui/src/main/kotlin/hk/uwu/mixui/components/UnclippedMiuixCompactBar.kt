@@ -39,7 +39,7 @@ internal fun UnclippedMiuixCompactBar(
         }.single().measure(loose)
         val action = subcompose("actions") {
             Row(Modifier.padding(end = TopAppBarDefaults.ActionIconPadding),
-                horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MiuixTopBarActionSpacing, Alignment.End), verticalAlignment = Alignment.CenterVertically,
                 content = actions)
         }.single().measure(loose.copy(maxWidth = (constraints.maxWidth - nav.width).coerceAtLeast(0)))
         val gap = 8.dp.roundToPx()

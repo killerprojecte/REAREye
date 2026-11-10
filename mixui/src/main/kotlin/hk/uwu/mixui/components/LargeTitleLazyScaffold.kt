@@ -84,7 +84,7 @@ fun LargeTitleLazyScaffold(
                                 progressiveBlur = true,
                                 scrollBehavior = scrollBehavior,
                                 navigationIcon = navigationIcon,
-                                actions = actions,
+                                actions = { MiuixTopBarActions(content = actions) },
                             )
                         } else {
                             top.yukonga.miuix.kmp.basic.TopAppBar(
