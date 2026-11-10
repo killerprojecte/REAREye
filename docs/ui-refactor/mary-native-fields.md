@@ -1,6 +1,6 @@
 # Mary native settings fields
 
-MarySettingsField now uses mixui PreferenceRow for complete summaries and held state, and mixui FormDialog for native in-window form presentation. MIUIX delegates to OverlayDialog with root scaffold rendering. Mochi delegates to the Maven MochiDialog. No vendor source is copied; model draft, endpoint, credential and provider semantics remain unchanged. A retained exit cannot submit a field a second time.
+MarySettingsField now uses mixui PreferenceRow for complete summaries and held state, and mixui FormDialog for native in-window form presentation. MIUIX delegates to OverlayDialog with root scaffold rendering. Mochi uses the stationary editable-form host built with public Maven Mochi rendering APIs. The original direct MochiDialog delegation was replaced to keep text selection from moving the entire card; see [native API constraints](mochi-native-api-constraints.md). No vendor source is copied; model draft, endpoint, credential and provider semantics remain unchanged. A retained exit cannot submit a field a second time.
 
 The first unpublished candidate accidentally resolved the app's same-package Android Dialog after removing the MIUIX import. The existing IME test detected a changed host: expected 260 px movement, observed 0 px. It was replaced with the native in-window abstraction before publication. The original IME movement/restoration assertions were not changed.
 

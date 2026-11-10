@@ -16,6 +16,8 @@ import hk.uwu.mixui.MixUiBackend
  *
  * Mochi 0.2 does not expose readOnly, minLines or arbitrary visual transformations. Those
  * requests explicitly use the MIUIX compatibility renderer, never silently drop behavior.
+ * A disabled field can use native Mochi even when also marked readOnly: neither backend
+ * allows focus, selection or keyboard input while disabled.
  * TextFieldValue/state, custom selection, input/output transformations, layout callbacks and
  * interaction sources are intentionally not exposed until both implementations can honor them.
  */
@@ -39,7 +41,7 @@ fun TextField(
 ) {
     require(minLines > 0 && maxLines >= minLines) { "TextField requires 1 <= minLines <= maxLines" }
     val nativeMochi = LocalMixUiBackend.current == MixUiBackend.Mochi &&
-        supportsNativeMochiTextField(readOnly, minLines, visualTransformation)
+        supportsNativeMochiTextField(readOnly, minLines, visualTransformation, enabled)
     if (nativeMochi) {
         ui.feice.mochi.basic.MochiTextField(
             value = value,
@@ -92,7 +94,8 @@ internal fun supportsNativeMochiTextField(
     readOnly: Boolean,
     minLines: Int,
     visualTransformation: VisualTransformation,
-): Boolean = !readOnly && minLines == 1 &&
+    enabled: Boolean = true,
+): Boolean = (!readOnly || !enabled) && minLines == 1 &&
     (visualTransformation === VisualTransformation.None ||
         (visualTransformation is PasswordVisualTransformation &&
             visualTransformation.filter(AnnotatedString("x")).text.text == "\u2022"))

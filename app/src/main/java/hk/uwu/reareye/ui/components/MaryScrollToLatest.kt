@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDownward
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -28,11 +27,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import kotlinx.coroutines.delay
 import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.Surface
 import hk.uwu.mixui.theme.MixTheme
 
 /** Scroll activity, not incoming tokens or recomposition, owns the visibility timeout. */
@@ -68,6 +71,7 @@ internal fun MaryScrollToLatest(
             contentColor = MixTheme.colorScheme.onSurfaceContainerHighest,
             shadowElevation = 4.dp,
             modifier = modifier.size(46.dp).testTag("mary-jump-to-latest")
+                .semantics { role = Role.Button }
                 .graphicsLayer { alpha = opacity }
                 .border(0.5.dp, MixTheme.colorScheme.outline.copy(alpha = 0.25f), CircleShape),
         ) {

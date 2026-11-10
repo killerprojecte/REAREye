@@ -67,6 +67,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -751,7 +752,43 @@ class MaryChatLayoutTest {
     }
 
     @Test
-    fun jumpButtonIsCenteredOverComposerShowsOnlyWhenIdleAndFadesOutAfterTimeout() {
+    fun jumpButtonIsCenteredOverComposerShowsOnlyWhenIdleAndFadesOutAfterTimeout() =
+        verifyJumpButton(MixUiBackend.Miuix)
+
+    @Test
+    fun mochiJumpButtonKeepsGeometryClickAndFadeBehavior() = verifyJumpButton(MixUiBackend.Mochi)
+
+    @Test
+    fun nativeDisabledReadOnlyFieldRejectsTouchEditingAndClear() {
+        val value = mutableStateOf("Protected")
+        var writes = 0
+        host(backend = MixUiBackend.Mochi) {
+            hk.uwu.mixui.components.TextField(
+                value = value.value,
+                onValueChange = { writes++; value.value = it },
+                enabled = false,
+                readOnly = true,
+                singleLine = true,
+                modifier = Modifier.testTag("disabled-read-only"),
+            )
+        }
+        compose.onNodeWithText("Protected").assertIsNotEnabled()
+        compose.onNode(hasSetTextAction()).assertDoesNotExist()
+        node("disabled-read-only").performTouchInput { click() }
+        compose.onNode(isFocused()).assertDoesNotExist()
+        compose.onNode(hasSetTextAction()).assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(0, writes)
+            assertEquals("Protected", value.value)
+        }
+        // Recomposition with a new protected value must not activate the editor.
+        compose.runOnIdle { value.value = "Updated" }
+        compose.onNodeWithText("Updated").assertIsDisplayed()
+        compose.onNodeWithText("Updated").assertIsNotEnabled()
+        compose.onNode(isFocused()).assertDoesNotExist()
+    }
+
+    private fun verifyJumpButton(backend: MixUiBackend) {
         fun advanceUi(millis: Long) {
             compose.mainClock.advanceTimeByFrame()
             compose.waitForIdle()
@@ -765,7 +802,7 @@ class MaryChatLayoutTest {
         val away = mutableStateOf(true)
         val session = mutableStateOf("one")
         val enabledClicks = mutableStateOf(0)
-        host {
+        host(backend = backend) {
             Box(
                 Modifier
                     .requiredSize(360.dp, 640.dp)
@@ -790,6 +827,8 @@ class MaryChatLayoutTest {
         compose.runOnIdle { scrolling.value = false }
         node("mary-jump-to-latest").assertIsDisplayed()
         compose.mainClock.autoAdvance = false
+        assertEquals(androidx.compose.ui.semantics.Role.Button,
+            node("mary-jump-to-latest").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Role])
         val button = bounds("mary-jump-to-latest")
         val composer = bounds("mary-composer")
         assertEquals(46f, button.width.value, 0.5f)
@@ -800,7 +839,7 @@ class MaryChatLayoutTest {
         )
         node("mary-jump-to-latest").performClick()
         compose.runOnIdle { assertEquals(1, enabledClicks.value) }
-        screenshot("jump-centered-over-composer.png")
+        screenshot("jump-centered-over-composer-${backend.name.lowercase()}.png")
         advanceUi(3_200)
         node("mary-jump-to-latest").assertDoesNotExist()
         compose.runOnIdle { scrolling.value = true }
@@ -2008,13 +2047,14 @@ class MaryChatLayoutTest {
     private fun host(
         mode: MixColorSchemeMode = MixColorSchemeMode.Light,
         glassSheets: Boolean = false,
+        backend: MixUiBackend = MixUiBackend.Miuix,
         content: @Composable () -> Unit
     ) {
         compose.runOnUiThread {
             val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity = controller
             controller.get().setContent {
-                MixUiHost(backend = MixUiBackend.Miuix, colorMode = mode) {
+                MixUiHost(backend = backend, colorMode = mode) {
                     val scheme = MixTheme.colorScheme
                     SideEffect {
                         primary = scheme.primary

@@ -19,6 +19,15 @@ class TextFieldRoutingTest {
         assertFalse(supportsNativeMochiTextField(false, 3, VisualTransformation.None))
     }
 
+    @Test fun disabledReadOnlyFieldsUseNativeWithoutDroppingOtherContracts() {
+        assertTrue(supportsNativeMochiTextField(true, 1, VisualTransformation.None, enabled = false))
+        assertTrue(supportsNativeMochiTextField(true, 1, PasswordVisualTransformation(), enabled = false))
+        assertFalse(supportsNativeMochiTextField(true, 3, VisualTransformation.None, enabled = false))
+        assertFalse(supportsNativeMochiTextField(true, 1, PasswordVisualTransformation('*'), enabled = false))
+        val custom = VisualTransformation { text -> TransformedText(text, OffsetMapping.Identity) }
+        assertFalse(supportsNativeMochiTextField(true, 1, custom, enabled = false))
+    }
+
     @Test fun customPasswordMaskKeepsCompatibilityRenderer() {
         assertFalse(supportsNativeMochiTextField(false, 1, PasswordVisualTransformation('*')))
     }
