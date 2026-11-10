@@ -107,7 +107,7 @@ fun LargeTitleColumnScaffold(
     when (LocalMixUiBackend.current) {
         MixUiBackend.Miuix -> {
             val nativeState = top.yukonga.miuix.kmp.basic.rememberTopAppBarState()
-            val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior(state = nativeState)
+            val scrollBehavior = rememberMiuixPageScrollBehavior(state = nativeState)
             // A short column can collapse the native bar before its own offset moves.
             // Give native toolbar buttons the bar context instead of standalone glass.
             val materialVisible = scrollState.value > 0 || nativeState.heightOffset < 0f

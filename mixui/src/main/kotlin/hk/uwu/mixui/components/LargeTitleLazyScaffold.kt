@@ -69,7 +69,7 @@ fun LargeTitleLazyScaffold(
     GlassPreferenceScene(modifier = modifier) {
     when (LocalMixUiBackend.current) {
         MixUiBackend.Miuix -> {
-            val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior()
+            val scrollBehavior = rememberMiuixPageScrollBehavior()
             val backdrop = if (isRuntimeShaderSupported()) rememberLayerBackdrop() else null
             Scaffold(
                 popupHost = {},

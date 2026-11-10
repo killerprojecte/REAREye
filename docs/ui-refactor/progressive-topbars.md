@@ -33,3 +33,29 @@ SDK 36 native-graphics Robolectric coverage:
 - `ScriptEditorNativeTitleTest`: native Android motion, first-line restoration, cursor selection, save/back, progressive renderer visibility and real Sora-pixel sampling. Android event time and the native Looper advance together; Compose's test clock alone does not drive the native editor's scroller.
 
 Use `-PmaryUiResources=true -PuiCapture=false` for the two `Mary*LayoutTest` suites; use `-PmaryUiResources=true -PuiCapture=true` for the capture suites. These tests and screenshots are not physical-device GPU, IME or performance certification.
+
+## Short-page collapse displacement
+
+`rememberMiuixPageScrollBehavior` retains MIUIX's native nested-scroll behavior
+and adds the measured header displacement to its material `contentOffset`.
+The vendor consumes collapse in pre-scroll but updates `contentOffset` only in
+post-scroll. On short pages the body consumes nothing, leaving the progressive
+band transparent even though reducing the header moves the page upward.
+The adapter observes actual height changes, including native settling, and
+clamps expansion at zero. It does not add an independent animation or timer.
+
+Regression coverage in `ScriptListNativeTitleTest` includes:
+
+- A non-scrolling short page: baseline band alpha was zero after collapse;
+  fixed alpha matches measured page displacement / the native 48dp ramp.
+  Two repeated expand/collapse cycles must restore the same alpha without drift.
+- Red/blue lazy rows scrolled under the header and back, both backends/light/dark.
+- One unchanged long Canvas, testing placement-only scrolling without content
+  recomposition, both backends/light/dark.
+- Actual ScriptList cards with contrasting text shapes moved by pointer input,
+  both backends/light/dark, verifying replacement of sampled pixels.
+
+These are SDK 36 native-graphics Robolectric checks. They do not reproduce or
+certify the reported persistent first-card sampling on the user's physical GPU.
+The short-page visibility fix should not be represented as proof that that
+separate device-specific report has been resolved.

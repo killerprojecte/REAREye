@@ -94,7 +94,7 @@ fun GlassTopBarScaffold(
             val nativeState = key(contentListState) {
                 top.yukonga.miuix.kmp.basic.rememberTopAppBarState()
             }
-            val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior(state = nativeState)
+            val scrollBehavior = rememberMiuixPageScrollBehavior(state = nativeState)
             LaunchedEffect(contentListState, nativeState) {
                 val list = contentListState ?: return@LaunchedEffect
                 // Wait for the vendor bar to measure its finite collapse range. Restore
