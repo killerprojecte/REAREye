@@ -32,7 +32,6 @@ import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -70,7 +69,12 @@ fun LargeTitleLazyScaffold(
     when (LocalMixUiBackend.current) {
         MixUiBackend.Miuix -> {
             val scrollBehavior = rememberMiuixPageScrollBehavior()
-            val backdrop = if (isRuntimeShaderSupported()) rememberLayerBackdrop() else null
+            val backdrop = if (isRuntimeShaderSupported()) rememberMiuixScrollBackdrop {
+                scrollBehavior.state.heightOffset
+                scrollBehavior.state.contentOffset
+                listState.firstVisibleItemIndex
+                listState.firstVisibleItemScrollOffset
+            } else null
             Scaffold(
                 popupHost = {},
                 containerColor = background,
@@ -108,7 +112,7 @@ fun LargeTitleLazyScaffold(
                         .overScrollVertical()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .imePadding()
-                        .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
+                        .then(if (backdrop != null) Modifier.layerBackdrop(backdrop.source) else Modifier)
                         .background(background),
                     state = listState,
                     contentPadding = PaddingValues(

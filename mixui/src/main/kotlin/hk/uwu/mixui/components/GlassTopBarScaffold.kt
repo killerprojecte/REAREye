@@ -109,7 +109,12 @@ fun GlassTopBarScaffold(
             // Material must follow that motion as well as the list's own offset.
             val materialVisible = isContentScrolled || nativeState.heightOffset < 0f
             val supported = isRuntimeShaderSupported()
-            val backdrop = if (supported) rememberLayerBackdrop() else null
+            val backdrop = if (supported) rememberMiuixScrollBackdrop {
+                nativeState.heightOffset
+                nativeState.contentOffset
+                contentListState?.firstVisibleItemIndex
+                contentListState?.firstVisibleItemScrollOffset
+            } else null
             val formBackdrop = if (supported) rememberLayerBackdrop() else null
             val headerOutsideBar = backdrop != null && !inheritMiuixBarMaterial
             val tabSurfaceAlpha = animateFloatAsState(
@@ -198,7 +203,7 @@ fun GlassTopBarScaffold(
                     Box(
                         Modifier.fillMaxSize()
                             .then(if (attachNestedScrollToContent) Modifier.nestedScroll(scrollBehavior.nestedScrollConnection) else Modifier)
-                            .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
+                            .then(if (backdrop != null) Modifier.layerBackdrop(backdrop.source) else Modifier)
                             .background(background),
                     ) {
                         CompositionLocalProvider(LocalPageTopBarScrollConnection provides scrollBehavior.nestedScrollConnection) {

@@ -59,3 +59,24 @@ These are SDK 36 native-graphics Robolectric checks. They do not reproduce or
 certify the reported persistent first-card sampling on the user's physical GPU.
 The short-page visibility fix should not be represented as proof that that
 separate device-specific report has been resolved.
+
+## Explicit scroll-driven draw invalidation
+
+The physical-device recording after `fa5919b` shows stale first-row text and
+switches on both script lists and short configuration categories. It supersedes
+any inference that passing Robolectric sampling tests established GPU correctness.
+
+`MiuixScrollBackdrop` adds draw-time subscriptions on **both** the body recorder
+and native backdrop consumer. They observe actual list index/offset or column
+offset, plus native header height/content offsets. The latter matters when a
+short page moves solely because its title collapses. Merely reading the boolean
+`isContentScrolled` or changing native band alpha is insufficient once alpha has
+saturated. The source/consumer identities and native progressive shader pipeline
+remain unchanged; no frame timer, bitmap copy or replacement blur is introduced.
+
+`MiuixBackdropInvalidationTest` compares the unmodified native source with the
+adapter inside separately retained layers at fixed geometry and alpha. It checks
+that only the adapter subscribes both draw paths to repeated motion and return.
+This proves the explicit invalidation contract, not physical GPU output. Device
+verification must still confirm fresh first-card sampling and actual blur on
+long lists and two-item categories, including repeated expand/collapse and return.
