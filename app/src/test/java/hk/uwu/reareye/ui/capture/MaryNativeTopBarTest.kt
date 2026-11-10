@@ -105,6 +105,69 @@ class MaryNativeTopBarTest {
     @Test fun mochiLightTranscriptKeepsNativeGlassScrollActionsAndFocus() = exercise(MixUiBackend.Mochi, false)
     @Test fun mochiDarkTranscriptKeepsNativeGlassScrollActionsAndFocus() = exercise(MixUiBackend.Mochi, true)
 
+    @Test fun miuixLightAsymmetricTitleAndShadowCapture() = asymmetricTitle(MixUiBackend.Miuix, false)
+    @Test fun miuixDarkAsymmetricTitleAndShadowCapture() = asymmetricTitle(MixUiBackend.Miuix, true)
+    @Test fun mochiLightAsymmetricTitleAndShadowCapture() = asymmetricTitle(MixUiBackend.Mochi, false)
+    @Test fun mochiDarkAsymmetricTitleAndShadowCapture() = asymmetricTitle(MixUiBackend.Mochi, true)
+
+    private fun asymmetricTitle(backend: MixUiBackend, dark: Boolean) {
+        for (rtl in listOf(false, true)) {
+            for (longTitle in listOf(false, true)) {
+                val title = if (longTitle) "Mary conversation with a very long title" else "Mary"
+                compose.runOnUiThread {
+                    activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+                    activity!!.get().enableEdgeToEdge()
+                    activity!!.get().setContent {
+                        MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
+                            CompositionLocalProvider(
+                                androidx.compose.ui.platform.LocalLayoutDirection provides
+                                    if (rtl) androidx.compose.ui.unit.LayoutDirection.Rtl else androidx.compose.ui.unit.LayoutDirection.Ltr,
+                                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(1f, 1.3f),
+                            ) {
+                                CompactGlassTopBarScene(isContentScrolled = true) { body ->
+                                    Box(Modifier.fillMaxSize().then(body))
+                                    hk.uwu.mixui.components.CompactGlassTopBar(title,
+                                        navigationIcon = {
+                                            hk.uwu.mixui.components.CompactTopBarIconButton({}, Modifier.testTag("asym-nav")) {
+                                                hk.uwu.mixui.components.Text("N")
+                                            }
+                                        }, actions = {
+                                            repeat(3) { index ->
+                                                hk.uwu.mixui.components.CompactTopBarIconButton({}, Modifier.testTag("asym-action-$index")) {
+                                                    hk.uwu.mixui.components.Text("$index")
+                                                }
+                                            }
+                                        })
+                                }
+                            }
+                        }
+                    }
+                }
+                frames()
+                val nav = bounds("asym-nav")
+                val actions = (0..2).map { bounds("asym-action-$it") }
+                val text = compose.onNodeWithText(title, useUnmergedTree = true).getUnclippedBoundsInRoot()
+                val left = if (rtl) actions.maxOf { it.right.value } else nav.right.value
+                val right = if (rtl) nav.left.value else actions.minOf { it.left.value }
+                assertTrue("Title must stay between controls", text.left.value >= left && text.right.value <= right)
+                assertEquals("Title must center in the remaining interval, not screen center",
+                    (left + right) / 2f, (text.left.value + text.right.value) / 2f, 1f)
+                if (backend == MixUiBackend.Miuix && !dark) {
+                    // Native controls end at y=49dp, the compact layout at y=52dp.
+                    // Check actual shadow pixels beyond that layout, not only bounds.
+                    val bitmap = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }
+                    val y = (nav.bottom.value + 6f).toInt()
+                    val shadow = android.graphics.Color.red(bitmap.getPixel(((nav.left.value + nav.right.value) / 2f).toInt(), y))
+                    val background = android.graphics.Color.red(bitmap.getPixel(((left + right) / 2f).toInt(), y))
+                    assertTrue("Native shadow must remain visible below the compact bar", background - shadow > 2)
+                }
+                folder = File(System.getProperty("ui.capture.output", "build/ui-captures"), "mary-asymmetric-title").apply { mkdirs() }
+                save("$backend-$dark-rtl$rtl-long$longTitle")
+                compose.runOnUiThread { activity!!.close(); activity = null }
+            }
+        }
+    }
+
     @Test fun mochiIosAndNothingKeepBlueContextAndOrdinaryPopupTabs() {
         for (style in listOf(MixMochiStyle.Ios, MixMochiStyle.Nothing)) {
             for (dark in listOf(false, true)) exercise(MixUiBackend.Mochi, dark, style)

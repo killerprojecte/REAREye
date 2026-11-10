@@ -140,8 +140,8 @@ fun CompactGlassTopBar(
                     Box(Modifier.matchParentSize().background(background))
                 }
                 CompositionLocalProvider(LocalCompactBarBackdrop provides controlBackdrop) {
-                    top.yukonga.miuix.kmp.basic.SmallTopAppBar(
-                        title = title, color = Color.Transparent,
+                    UnclippedMiuixCompactBar(
+                        title = title,
                         navigationIcon = navigationIcon, actions = actions,
                     )
                 }

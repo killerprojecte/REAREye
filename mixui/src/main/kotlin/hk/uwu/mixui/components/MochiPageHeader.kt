@@ -68,10 +68,8 @@ internal fun BoundedMochiTitleBar(
                     layout(constraints.maxWidth, constraints.maxHeight) {
                         nav.placeRelative(0, (constraints.maxHeight - nav.height) / 2)
                         action.placeRelative(constraints.maxWidth - action.width, (constraints.maxHeight - action.height) / 2)
-                        // Prefer the screen center when it fits; otherwise center in the
-                        // free interval. This keeps four actions and the title disjoint.
-                        val ideal = (constraints.maxWidth - text.width) / 2
-                        text.placeRelative(ideal.coerceIn(start, (end - text.width).coerceAtLeast(start)),
+                        // Center in the actual free interval, including asymmetric actions.
+                        text.placeRelative(start + (width - text.width) / 2,
                             (constraints.maxHeight - text.height) / 2)
                     }
                 }
