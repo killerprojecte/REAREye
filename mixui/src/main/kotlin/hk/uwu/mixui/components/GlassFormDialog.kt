@@ -2,8 +2,6 @@ package hk.uwu.mixui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -58,13 +56,7 @@ fun GlassFormDialog(
             onDismissRequest = onDismissRequest,
             modifier = modifier,
             backdrop = backdrop.value,
-            // Keep the native blurred/refracted material. A brighter final light
-            // layer separates ordinary pale controls, like the system form reference.
-            material = top.yukonga.miuix.kmp.glass.GlassDialogDefaults.material().let { native ->
-                if (top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.background.luminance() > 0.5f)
-                    native.copy(third = native.third?.copy(color = Color.White.copy(alpha = 0.75f)))
-                else native
-            },
+            // Match the official dialog material; extra white tint hides the page blur.
             renderInRootScaffold = true,
             content = styledContent,
         )

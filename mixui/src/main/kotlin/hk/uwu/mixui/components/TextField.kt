@@ -69,14 +69,10 @@ fun TextField(
             onValueChange = onValueChange,
             modifier = modifier,
             label = label,
-            // Keep ordinary native shape, focus border and interaction. A solid
-            // form-local neutral separates the field from the glass background.
-            colors = if (LocalGlassFormControlContrast.current)
-                top.yukonga.miuix.kmp.basic.TextFieldDefaults.textFieldColors(
-                    backgroundColor = glassFormControlFill()
-                        ?: top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.secondaryContainer,
-                    labelColor = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.onSurface,
-                ) else top.yukonga.miuix.kmp.basic.TextFieldDefaults.textFieldColors(),
+            // The official "With title" example uses the native neutral fill and
+            // onSecondaryContainer label, including inside dialogs. Do not replace
+            // the subdued floating title with the near-black onSurface text color.
+            colors = top.yukonga.miuix.kmp.basic.TextFieldDefaults.textFieldColors(),
             enabled = enabled,
             readOnly = readOnly,
             textStyle = textStyle ?: top.yukonga.miuix.kmp.theme.MiuixTheme.textStyles.main,
