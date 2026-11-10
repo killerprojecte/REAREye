@@ -35,16 +35,14 @@ fun SwitchPreference(
             insideMargin = insideMargin,
         )
     } else {
-        MochiPreferenceContent(summary = summary, modifier = modifier, enabled = enabled,
+        MochiPreferenceContent(title = title, summary = summary, modifier = modifier.semantics {
+            role = Role.Switch
+            toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+        }, enabled = enabled,
             onClick = { onCheckedChange(!checked) }) {
             ui.feice.mochi.list.MochiListRow(
                 title = title,
                 enabled = enabled,
-                onClick = { if (enabled) onCheckedChange(!checked) },
-                modifier = Modifier.semantics {
-                    role = Role.Switch
-                    toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
-                },
                 trailing = {
                     ui.feice.mochi.basic.MochiSwitch(
                         checked = checked,

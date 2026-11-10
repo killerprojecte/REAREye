@@ -119,12 +119,11 @@ fun GlassChoicePreference(
                 val requested = next && active
                 if (requested != expanded) onExpandedChange(requested)
             }
-            MochiPreferenceContent(summary = if (supportingText != null) supportingText.description else summary, modifier = modifier, enabled = active,
+            MochiPreferenceContent(title = title, summary = if (supportingText != null) supportingText.description else summary, modifier = modifier, enabled = active,
                 onClick = { onExpandedChange(true) }) {
                 MochiListRow(
                     title = title,
                     enabled = active,
-                    onClick = { if (active) onExpandedChange(true) },
                     trailing = {
                         MochiPopoverButton(
                             expanded = expanded && active,
@@ -143,20 +142,25 @@ fun GlassChoicePreference(
                             contentPadding = PaddingValues(vertical = 8.dp),
                             popover = {
                                 options.forEachIndexed { index, option ->
-                                    MochiPreferenceContent(summary = option.summary, enabled = active, onClick = { select(index) }) {
+                                    MochiPreferenceContent(
+                                        title = option.title,
+                                        summary = option.summary,
+                                        enabled = active,
+                                        onClick = { select(index) },
+                                        modifier = Modifier.semantics {
+                                            if (multiple) {
+                                                role = Role.Checkbox
+                                                toggleableState = if (option.selected) ToggleableState.On else ToggleableState.Off
+                                            } else {
+                                                role = Role.RadioButton
+                                                selected = option.selected
+                                            }
+                                        },
+                                    ) {
                                         MochiListRow(
                                             title = option.title,
                                             checked = option.selected,
-                                            onClick = { select(index) },
-                                            modifier = Modifier.semantics {
-                                                if (multiple) {
-                                                    role = Role.Checkbox
-                                                    toggleableState = if (option.selected) ToggleableState.On else ToggleableState.Off
-                                                } else {
-                                                    role = Role.RadioButton
-                                                    selected = option.selected
-                                                }
-                                            },
+                                            enabled = active,
                                         )
                                     }
                                 }

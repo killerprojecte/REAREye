@@ -33,12 +33,11 @@ fun PreferenceRow(
             enabled = enabled, holdDownState = holdDownState,
         )
     } else {
-        MochiPreferenceContent(summary = summary, modifier = rowModifier, enabled = enabled, onClick = onClick) {
+        MochiPreferenceContent(title = title, summary = summary, modifier = rowModifier, enabled = enabled, onClick = onClick) {
             ui.feice.mochi.list.MochiListRow(
                 title = title,
                 leading = startAction,
                 chevron = true,
-                onClick = onClick,
                 enabled = enabled,
             )
         }

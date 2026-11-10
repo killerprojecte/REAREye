@@ -217,7 +217,10 @@ class NativePickerMusicCandidateTest {
             assertEquals(3, pagePrefs.getInt("capture_mask", -1))
             assertEquals(listOf("capture_mask"), changed)
             compose.onNodeWithText(label(R.string.config_tab_more)).performClick(); frames()
-            compose.onNodeWithText(label(R.string.config_tab_wallpapers)).assertIsOn()
+            // The whole Mochi option owns selection semantics; its native text is
+            // a non-actionable child. Miuix keeps the text on its toggle node.
+            compose.onNode((hasText(label(R.string.config_tab_wallpapers)) or
+                hasContentDescription(label(R.string.config_tab_wallpapers))) and isToggleable()).assertIsOn()
             compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }; frames()
             assertEquals(3, pagePrefs.getInt("capture_mask", -1))
             assertEquals(1, changed.size)

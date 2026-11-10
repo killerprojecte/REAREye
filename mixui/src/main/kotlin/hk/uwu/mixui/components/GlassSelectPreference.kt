@@ -65,12 +65,11 @@ fun GlassSelectPreference(
             val (anchorModifier, changeExpanded) = rememberMochiMenuActivation(
                 Modifier.widthIn(min = 34.dp, max = if (supportingText != null) 200.dp else 120.dp), actualEnabled, expanded,
             ) { expanded = it && actualEnabled }
-            MochiPreferenceContent(summary = if (supportingText != null) supportingText.description else summary, modifier = rowModifier, enabled = actualEnabled,
+            MochiPreferenceContent(title = title, summary = if (supportingText != null) supportingText.description else summary, modifier = rowModifier, enabled = actualEnabled,
                 onClick = { expanded = true }) {
                 MochiListRow(
                     title = title,
                     enabled = actualEnabled,
-                    onClick = { if (actualEnabled) expanded = true },
                     trailing = {
                         MochiDropdown(
                             expanded = expanded && actualEnabled,
