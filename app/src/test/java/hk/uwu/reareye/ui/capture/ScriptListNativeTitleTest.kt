@@ -8,8 +8,12 @@ import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.LayoutInfo
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
@@ -174,6 +178,113 @@ class ScriptListNativeTitleTest {
             val settledBounds = first.fetchSemanticsNode().boundsInRoot
             assertEquals("$backend top overscroll must spring back", topBounds.top, settledBounds.top, 1f)
             capture("$backend-$count-top-edge-restored")
+        }
+    }
+
+    /** Coordinate/input contract only; this does not emulate a device GPU blur pipeline. */
+    @Test fun miuixLazyHeaderSourceStaysFixedDuringShortAndLongOverscroll() {
+        for (dark in listOf(false, true)) for (count in listOf(1, 40)) {
+            val projects = List(count) { index -> ScriptProject("id-$index", "Script $index", File("/fixture"),
+                File("/fixture/script-$index.lua"), ScriptProjectKind.STANDALONE) }
+            open(MixUiBackend.Miuix, dark, projects)
+            compose.onAllNodes(hasScrollAction()).assertCountEquals(1)
+            val list = compose.onNode(hasScrollAction())
+            val lazyLayout = list.fetchSemanticsNode().layoutInfo
+            val root = generateSequence(lazyLayout) { it.parentInfo }.last()
+            fun field(element: Any, name: String): Any? = element.javaClass
+                .getDeclaredField(name).apply { isAccessible = true }.get(element)
+            val (consumer, consumerElement) = compose.runOnIdle {
+                samplingDescendants(root).flatMap { layout ->
+                    layout.getModifierInfo().asSequence().map { layout to it.modifier }
+                }.single { (_, element) ->
+                    element.javaClass.name == "top.yukonga.miuix.kmp.blur.DrawBackdropElement" &&
+                        field(element, "progressiveGradient") != null && field(element, "enabled") == true
+                }
+            }
+            val backdrop = field(consumerElement, "backdrop")!!
+            val source = compose.runOnIdle {
+                samplingDescendants(root).single { layout ->
+                    layout.getModifierInfo().any { info ->
+                        val element = info.modifier
+                        element.javaClass.name == "top.yukonga.miuix.kmp.blur.LayerBackdropElement" &&
+                            field(element, "backdrop") === backdrop
+                    }
+                }
+            }
+            // Match the header's actual backdrop, not the separate popup-scene recorder.
+            assertTrue("The header source must be an outer ancestor, not the moving LazyColumn itself",
+                generateSequence(lazyLayout.parentInfo) { it.parentInfo }.any { it === source })
+            assertTrue("The progressive consumer must remain outside its own source recording",
+                generateSequence(consumer) { it.parentInfo }.none { it === source })
+            assertTrue("Overscroll must stay on the lazy content",
+                lazyLayout.getModifierInfo().any {
+                    it.modifier.javaClass.name == "top.yukonga.miuix.kmp.utils.OverscrollElement"
+                })
+            assertTrue("The fixed source must not carry overscroll",
+                source.getModifierInfo().none {
+                    it.modifier.javaClass.name == "top.yukonga.miuix.kmp.utils.OverscrollElement"
+                })
+            assertEquals("Source must cover the full lazy viewport width", lazyLayout.width, source.width)
+            assertEquals("Source must cover the full lazy viewport height", lazyLayout.height, source.height)
+
+            // Inspect the coordinates consumed by LayerBackdrop.drawBackdrop, not just
+            // semantics bounds, which can hide translation inside a modifier chain.
+            fun sourceBounds(): Rect = compose.runOnIdle {
+                val coordinates = backdrop.javaClass.methods.single {
+                    it.name.startsWith("getLayerCoordinates") && it.parameterCount == 0
+                }.invoke(backdrop) as LayoutCoordinates
+                assertTrue("The header source must remain attached", coordinates.isAttached)
+                coordinates.boundsInRoot()
+            }
+            val fixedBounds = sourceBounds()
+            assertEquals(source.width.toFloat(), fixedBounds.width, 0.5f)
+            assertEquals(source.height.toFloat(), fixedBounds.height, 0.5f)
+            fun assertSourceFixed(stage: String) {
+                val actual = sourceBounds()
+                val context = "dark=$dark count=$count $stage: $fixedBounds -> $actual"
+                assertEquals("Source left moved: $context", fixedBounds.left, actual.left, 0.5f)
+                assertEquals("Source top moved: $context", fixedBounds.top, actual.top, 0.5f)
+                assertEquals("Source right moved: $context", fixedBounds.right, actual.right, 0.5f)
+                assertEquals("Source bottom moved: $context", fixedBounds.bottom, actual.bottom, 0.5f)
+            }
+            fun position() = list.fetchSemanticsNode().config[
+                androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].value()
+            val first = compose.onNodeWithText("Script 0")
+            repeat(2) { drag ->
+                val restTop = first.fetchSemanticsNode().boundsInRoot.top
+                val restPosition = position()
+                // Hold the pointer down so the assertions observe active overscroll,
+                // rather than a completed swipe whose spring has already settled.
+                list.performTouchInput { down(center) }
+                try {
+                    repeat(3) { frame ->
+                        list.performTouchInput { moveBy(Offset(0f, 48f * compose.density.density), delayMillis = 80) }
+                        compose.mainClock.advanceTimeByFrame()
+                        compose.waitForIdle()
+                        assertSourceFixed("held top drag $drag frame $frame")
+                    }
+                    val draggedTop = first.fetchSemanticsNode().boundsInRoot.top
+                    assertTrue("The real row must move during top overscroll: $restTop -> $draggedTop",
+                        draggedTop > restTop + 4f * compose.density.density)
+                    assertEquals("Top overscroll must not change the logical lazy scroll position",
+                        restPosition, position(), 0.01f)
+                } finally {
+                    list.performTouchInput { up() }
+                }
+                settle()
+                assertEquals("The real row must spring back after release", restTop,
+                    first.fetchSemanticsNode().boundsInRoot.top, 1f)
+                assertSourceFixed("released top drag $drag")
+            }
+            if (count > 1) {
+                val startPosition = position()
+                list.performTouchInput { swipeUp(durationMillis = 600) }; settle()
+                assertTrue("The fixed recorder must not disable normal lazy scrolling", position() > startPosition)
+                assertSourceFixed("normal scrolling")
+                list.performScrollToKey(projects.last().mainFile.absolutePath); settle()
+                compose.onNodeWithText("Script ${count - 1}").assertIsDisplayed()
+                assertSourceFixed("last row reachable")
+            }
         }
     }
 

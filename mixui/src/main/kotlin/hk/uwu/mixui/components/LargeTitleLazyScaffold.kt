@@ -1,6 +1,7 @@
 package hk.uwu.mixui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -101,28 +102,34 @@ fun LargeTitleLazyScaffold(
                     }
                 },
             ) { padding ->
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize()
-                        .windowInsetsPadding(horizontalInsets)
-                        .scrollEndHaptic()
-                        .overScrollVertical()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
-                        .imePadding()
-                        .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
-                        .background(background),
-                    state = listState,
-                    contentPadding = PaddingValues(
-                        start = 12.dp,
-                        end = 12.dp,
-                        top = padding.calculateTopPadding() + 12.dp,
-                        bottom = 24.dp + if (imeVisible) 0.dp else maxOf(
-                            padding.calculateBottomPadding(), bottomObstruction,
+                // Keep sampling in the fixed viewport, outside overscroll's translated layer.
+                // Recording the LazyColumn itself moves the source coordinates during a
+                // top-edge drag even when its logical scroll offset remains zero.
+                Box(Modifier.fillMaxSize()
+                    .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
+                    .background(background)) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize()
+                            .windowInsetsPadding(horizontalInsets)
+                            .scrollEndHaptic()
+                            .overScrollVertical()
+                            .nestedScroll(scrollBehavior.nestedScrollConnection)
+                            .imePadding()
+                            .background(background),
+                        state = listState,
+                        contentPadding = PaddingValues(
+                            start = 12.dp,
+                            end = 12.dp,
+                            top = padding.calculateTopPadding() + 12.dp,
+                            bottom = 24.dp + if (imeVisible) 0.dp else maxOf(
+                                padding.calculateBottomPadding(), bottomObstruction,
+                            ),
                         ),
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(contentSpacing),
-                    overscrollEffect = null,
-                    content = content,
-                )
+                        verticalArrangement = Arrangement.spacedBy(contentSpacing),
+                        overscrollEffect = null,
+                        content = content,
+                    )
+                }
             }
         }
         MixUiBackend.Mochi -> {
