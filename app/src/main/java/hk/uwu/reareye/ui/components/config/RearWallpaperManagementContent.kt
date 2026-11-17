@@ -63,6 +63,7 @@ import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
 import hk.uwu.reareye.ui.LocalFeatureGuideDemo
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.GlassEditorSheet
 import hk.uwu.mixui.components.GlassPreferenceScene
 import hk.uwu.mixui.components.DialogActions
 import hk.uwu.mixui.components.BadgeGroup
@@ -86,7 +87,7 @@ import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.InfiniteProgressIndicator
 import hk.uwu.mixui.components.Switch
 import hk.uwu.mixui.components.Text
-import hk.uwu.mixui.components.TextField
+import hk.uwu.mixui.components.EditorTextField
 import kotlin.math.roundToInt
 
 private const val MANAGE_PREVIEW_RATIO = 1.6f
@@ -231,11 +232,38 @@ fun RearWallpaperManagementContent(
     // form controls stay in the sibling overlay slot throughout dismissal.
     GlassPreferenceScene(
         overlayContent = {
-            GlassFormDialog(
+            GlassEditorSheet(
                 show = showImportDialog,
                 modifier = Modifier.testTag("wallpaper-import-dialog"),
                 title = stringResource(R.string.rear_wallpaper_import),
                 onDismissRequest = { showImportDialog = false },
+                confirmText = stringResource(R.string.rear_widget_confirm),
+                cancelText = stringResource(R.string.rear_widget_cancel),
+                confirmEnabled = packageLabel.isNotBlank(),
+                onConfirm = confirm@{
+                    val source = packageUri ?: return@confirm
+                    onImport(
+                        source,
+                        metadataUri,
+                        previewUri,
+                        RearWallpaperMetadataOptions(
+                            titleFallback = importTitleFallback.ifBlank {
+                                packageLabel.ifBlank { "Imported Wallpaper" }
+                            },
+                            titleZhCn = importTitleZhCn.ifBlank { importTitleFallback },
+                            descriptionFallback = importDescriptionFallback,
+                            descriptionZhCn = importDescriptionZhCn.ifBlank { importDescriptionFallback },
+                            author = importAuthor,
+                            designer = importDesigner,
+                            category = importCategory.ifBlank { "REAREye" },
+                            resSubType = importResSubType.ifBlank { "reareye_import" },
+                            editable = importEditable,
+                            thirdParties = importThirdParties,
+                            supportAon = importSupportAon,
+                        ),
+                    )
+                    showImportDialog = false
+                },
             ) {
                 WallpaperImportForm(
                     packageLabel = packageLabel,
@@ -289,39 +317,41 @@ fun RearWallpaperManagementContent(
                     onEditableChange = { importEditable = it },
                     onThirdPartiesChange = { importThirdParties = it },
                     onSupportAonChange = { importSupportAon = it },
-                    onConfirm = {
-                        val source = packageUri ?: return@WallpaperImportForm
-                        onImport(
-                            source,
-                            metadataUri,
-                            previewUri,
-                            RearWallpaperMetadataOptions(
-                                titleFallback = importTitleFallback.ifBlank {
-                                    packageLabel.ifBlank { "Imported Wallpaper" }
-                                },
-                                titleZhCn = importTitleZhCn.ifBlank { importTitleFallback },
-                                descriptionFallback = importDescriptionFallback,
-                                descriptionZhCn = importDescriptionZhCn.ifBlank { importDescriptionFallback },
-                                author = importAuthor,
-                                designer = importDesigner,
-                                category = importCategory.ifBlank { "REAREye" },
-                                resSubType = importResSubType.ifBlank { "reareye_import" },
-                                editable = importEditable,
-                                thirdParties = importThirdParties,
-                                supportAon = importSupportAon,
-                            ),
-                        )
-                        showImportDialog = false
-                    },
-                    onCancel = { showImportDialog = false },
                 )
             }
 
-            GlassFormDialog(
+            GlassEditorSheet(
                 show = editTarget != null,
                 modifier = Modifier.testTag("wallpaper-metadata-dialog"),
                 title = stringResource(R.string.rear_wallpaper_edit_metadata),
                 onDismissRequest = { editTarget = null },
+                confirmText = stringResource(R.string.rear_widget_confirm),
+                cancelText = stringResource(R.string.rear_widget_cancel),
+                confirmEnabled = editTitleFallback.isNotBlank() || editTitleZhCn.isNotBlank(),
+                sessionKey = editTarget?.wallpaperId,
+                onConfirm = confirm@{
+                    val target = editTarget ?: return@confirm
+                    onUpdateMetadata(
+                        target,
+                        RearWallpaperMetadataOptions(
+                            titleFallback = editTitleFallback.ifBlank { target.name },
+                            titleZhCn = editTitleZhCn.ifBlank {
+                                editTitleFallback.ifBlank { target.name }
+                            },
+                            descriptionFallback = editDescriptionFallback,
+                            descriptionZhCn = editDescriptionZhCn.ifBlank { editDescriptionFallback },
+                            author = editAuthor,
+                            designer = editDesigner,
+                            category = editCategory.ifBlank { "REAREye" },
+                            resSubType = editResSubType.ifBlank { "reareye_import" },
+                            editable = editEditable,
+                            thirdParties = editThirdParties,
+                            supportAon = editSupportAon,
+                        ),
+                        editPreviewUri,
+                    )
+                    editTarget = null
+                },
             ) {
                 WallpaperMetadataForm(
                     titleFallback = editTitleFallback,
@@ -360,30 +390,6 @@ fun RearWallpaperManagementContent(
                         editPreviewUri = null
                         editPreviewLabel = ""
                     },
-                    onConfirm = {
-                        val target = editTarget ?: return@WallpaperMetadataForm
-                        onUpdateMetadata(
-                            target,
-                            RearWallpaperMetadataOptions(
-                                titleFallback = editTitleFallback.ifBlank { target.name },
-                                titleZhCn = editTitleZhCn.ifBlank {
-                                    editTitleFallback.ifBlank { target.name }
-                                },
-                                descriptionFallback = editDescriptionFallback,
-                                descriptionZhCn = editDescriptionZhCn.ifBlank { editDescriptionFallback },
-                                author = editAuthor,
-                                designer = editDesigner,
-                                category = editCategory.ifBlank { "REAREye" },
-                                resSubType = editResSubType.ifBlank { "reareye_import" },
-                                editable = editEditable,
-                                thirdParties = editThirdParties,
-                                supportAon = editSupportAon,
-                            ),
-                            editPreviewUri,
-                        )
-                        editTarget = null
-                    },
-                    onCancel = { editTarget = null },
                 )
             }
 
@@ -394,7 +400,10 @@ fun RearWallpaperManagementContent(
                 onDismissRequest = { intervalTargetId = null },
             ) {
                 DialogFormColumn {
-                    TextField(
+                    EditorTextField(
+                        autoFocus = intervalTargetId != null,
+                        selectAllOnFocus = true,
+                        focusSessionKey = intervalTargetId,
                         value = intervalInput,
                         onValueChange = { intervalInput = it.filter(Char::isDigit) },
                         modifier = Modifier.fillMaxWidth().testTag("wallpaper-interval-input"),
@@ -856,10 +865,8 @@ private fun WallpaperImportForm(
     onEditableChange: (Boolean) -> Unit,
     onThirdPartiesChange: (Boolean) -> Unit,
     onSupportAonChange: (Boolean) -> Unit,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
 ) {
-    DialogFormColumn(maxHeight = 620.dp) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         FilePickRow(
             modifier = Modifier.testTag("wallpaper-package-file"),
             title = stringResource(R.string.rear_wallpaper_package_file),
@@ -904,12 +911,6 @@ private fun WallpaperImportForm(
             onThirdPartiesChange = onThirdPartiesChange,
             onSupportAonChange = onSupportAonChange,
         )
-        DialogButtons(
-            modifier = Modifier.testTag("wallpaper-import-actions"),
-            confirmEnabled = packageLabel.isNotBlank(),
-            onConfirm = onConfirm,
-            onCancel = onCancel,
-        )
     }
 }
 
@@ -940,10 +941,8 @@ private fun WallpaperMetadataForm(
     onSupportAonChange: (Boolean) -> Unit,
     onPickPreview: () -> Unit,
     onClearPreview: () -> Unit,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
 ) {
-    DialogFormColumn(maxHeight = 620.dp) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         FilePickRow(
             modifier = Modifier.testTag("wallpaper-preview-file"),
             title = stringResource(R.string.rear_wallpaper_preview_file),
@@ -975,12 +974,6 @@ private fun WallpaperMetadataForm(
             onThirdPartiesChange = onThirdPartiesChange,
             onSupportAonChange = onSupportAonChange,
         )
-        DialogButtons(
-            modifier = Modifier.testTag("wallpaper-metadata-actions"),
-            confirmEnabled = titleFallback.isNotBlank() || titleZhCn.isNotBlank(),
-            onConfirm = onConfirm,
-            onCancel = onCancel,
-        )
     }
 }
 
@@ -1009,54 +1002,54 @@ internal fun WallpaperMetadataFields(
     onThirdPartiesChange: (Boolean) -> Unit,
     onSupportAonChange: (Boolean) -> Unit,
 ) {
-    TextField(
+    EditorTextField(
         value = titleFallback,
         onValueChange = onTitleFallbackChange,
         label = stringResource(R.string.rear_wallpaper_meta_title_fallback),
         modifier = Modifier.fillMaxWidth().testTag("wallpaper-title-fallback"),
         singleLine = true,
     )
-    TextField(
+    EditorTextField(
         value = titleZhCn,
         onValueChange = onTitleZhCnChange,
         label = stringResource(R.string.rear_wallpaper_meta_title_zh),
         modifier = Modifier.fillMaxWidth().testTag("wallpaper-title-zh"),
         singleLine = true,
     )
-    TextField(
+    EditorTextField(
         value = descriptionFallback,
         onValueChange = onDescriptionFallbackChange,
         label = stringResource(R.string.rear_wallpaper_meta_desc_fallback),
         modifier = Modifier.fillMaxWidth(),
     )
-    TextField(
+    EditorTextField(
         value = descriptionZhCn,
         onValueChange = onDescriptionZhCnChange,
         label = stringResource(R.string.rear_wallpaper_meta_desc_zh),
         modifier = Modifier.fillMaxWidth(),
     )
-    TextField(
+    EditorTextField(
         value = author,
         onValueChange = onAuthorChange,
         label = stringResource(R.string.rear_wallpaper_meta_author),
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
     )
-    TextField(
+    EditorTextField(
         value = designer,
         onValueChange = onDesignerChange,
         label = stringResource(R.string.rear_wallpaper_meta_designer),
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
     )
-    TextField(
+    EditorTextField(
         value = category,
         onValueChange = onCategoryChange,
         label = stringResource(R.string.rear_wallpaper_meta_category),
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
     )
-    TextField(
+    EditorTextField(
         value = resSubType,
         onValueChange = onResSubTypeChange,
         label = stringResource(R.string.rear_wallpaper_meta_res_sub_type),
@@ -1138,23 +1131,6 @@ private fun MetadataSwitchRow(
             },
         )
     }
-}
-
-@Composable
-private fun DialogButtons(
-    confirmEnabled: Boolean,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    DialogActions(
-        modifier = modifier,
-        cancelText = stringResource(R.string.rear_widget_cancel),
-        confirmText = stringResource(R.string.rear_widget_confirm),
-        onCancel = onCancel,
-        onConfirm = onConfirm,
-        confirmEnabled = confirmEnabled,
-    )
 }
 
 @Composable

@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
@@ -34,7 +35,7 @@ import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.material.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -70,7 +71,12 @@ fun LargeTitleLazyScaffold(
     GlassPreferenceScene(modifier = modifier) {
     when (LocalMixUiBackend.current) {
         MixUiBackend.Miuix -> {
-            val scrollBehavior = rememberMiuixPageScrollBehavior()
+            val nativeState = key(listState) { top.yukonga.miuix.kmp.basic.rememberTopAppBarState() }
+            val scrollBehavior = rememberMiuixPageScrollBehavior(state = nativeState, listState = listState)
+            val visualOffset = rememberMiuixPageVisualOffset(scrollBehavior, listState)
+            val surfaceRamp = top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults.collapseRamp(
+                scrollBehavior, visualOffset,
+            )
             val backdrop = if (isRuntimeShaderSupported()) rememberLayerBackdrop() else null
             Scaffold(
                 popupHost = {},
@@ -80,10 +86,11 @@ fun LargeTitleLazyScaffold(
                         if (backdrop != null) {
                             top.yukonga.miuix.kmp.glass.GlassTopAppBar(
                                 title = title,
-                                isContentScrolled = listState.canScrollBackward || scrollBehavior.state.heightOffset < 0f,
+                                isContentScrolled = listState.canScrollBackward || visualOffset() < 0f,
                                 backdrop = backdrop,
                                 progressiveBlur = true,
                                 scrollBehavior = scrollBehavior,
+                                visualContentOffset = visualOffset,
                                 navigationIcon = navigationIcon,
                                 actions = { MiuixTopBarActions(content = actions) },
                             )
@@ -97,7 +104,10 @@ fun LargeTitleLazyScaffold(
                             )
                         }
                         searchBar?.let {
-                            CompositionLocalProvider(LocalSearchBackdrop provides backdrop) {
+                            CompositionLocalProvider(
+                                LocalSearchBackdrop provides backdrop,
+                                LocalSearchSurfaceAlpha provides surfaceRamp.value,
+                            ) {
                                 Column(Modifier.padding(12.dp)) { it() }
                             }
                         }

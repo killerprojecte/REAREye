@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.recalculateWindowInsets
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -81,7 +82,11 @@ fun GlassOverlayDialog(
             }
             val body: @Composable () -> Unit = {
                 SideEffect { rendered = true }
-                CompositionLocalProvider(LocalGlassFormControlContrast provides true) {
+                CompositionLocalProvider(
+                    LocalGlassFormControlContrast provides true,
+                    LocalMiuixSheetTabs provides false,
+                    LocalFormPresentation provides FormPresentation.Dialog,
+                ) {
                     content()
                 }
             }
@@ -102,6 +107,9 @@ fun GlassOverlayDialog(
                         }
                         Scaffold(
                             modifier = Modifier.fillMaxSize().recalculateWindowInsets()
+                                // A dialog opened by a sheet must paint and hit-test above it,
+                                // independently of SnapshotStateMap entry iteration order.
+                                .zIndex(1f)
                                 .semantics { dialog() }
                                 .focusRequester(modalFocus)
                                 .focusProperties { onExit = { cancelFocusChange() } }
@@ -134,7 +142,7 @@ fun GlassOverlayDialog(
                                 onDismissFinished = finished,
                                 backgroundColor = top.yukonga.miuix.kmp.glass.GlassDialogDefaults.containerColor(),
                                 dimColor = top.yukonga.miuix.kmp.glass.GlassDialogDefaults.ScrimColor,
-                                surface = top.yukonga.miuix.kmp.glass.glassDialogSurface(scene.backdrop),
+                                surface = top.yukonga.miuix.kmp.glass.glassDialogSurface(scene.backdrop, material = modalGlassMaterial()),
                                 // The local Scaffold is already outside the recorded page. Routing
                                 // to the root would lose both caller locals and navigation isolation.
                                 renderInRootScaffold = false,

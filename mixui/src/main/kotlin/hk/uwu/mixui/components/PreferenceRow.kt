@@ -28,7 +28,7 @@ fun PreferenceRow(
     }
     if (LocalMixUiBackend.current == MixUiBackend.Miuix) {
         top.yukonga.miuix.kmp.preference.ArrowPreference(
-            title = title, modifier = rowModifier, summary = summary,
+            title = title, modifier = rowModifier.miuixSheetPreferenceSurface(enabled), summary = summary,
             startAction = startAction, onClick = onClick,
             enabled = enabled, holdDownState = holdDownState,
         )

@@ -88,12 +88,13 @@ class MarySettingsFieldInteractionTest {
         repeat(8) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
     }
 
-    private fun host(backend: MixUiBackend, initial: String, password: Boolean = false, dark: Boolean = false, rtl: Boolean = false) {
+    private fun host(backend: MixUiBackend, initial: String, password: Boolean = false, dark: Boolean = false,
+        rtl: Boolean = false, fieldLabel: Int? = null) {
         compose.runOnUiThread {
             activity?.close()
             value = initial
             writes.clear()
-            label = if (password) R.string.mary_provider_api_key else R.string.mary_provider_endpoint
+            label = fieldLabel ?: if (password) R.string.mary_provider_api_key else R.string.mary_provider_endpoint
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().setContent {
                 MixUiHost(backend = backend, colorMode = if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
@@ -297,6 +298,83 @@ class MarySettingsFieldInteractionTest {
             button(R.string.rear_widget_cancel)
             compose.runOnIdle { assertEquals(1, writes.size) }
         }
+    }
+
+    private fun assertInitialSelection(expectedLength: Int) {
+        val field = compose.onNode(hasSetTextAction(), useUnmergedTree = true).assertIsFocused()
+        val selection = field.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange]
+        assertEquals("Selection starts at the beginning", 0, selection.min)
+        assertEquals("Selection covers the entire draft", expectedLength, selection.max)
+    }
+
+    private fun assertDraftText(expected: String) {
+        // EditableText is deliberately transformed for passwords. InputText is
+        // the underlying draft; checking it does not unmask the rendered field.
+        val field = compose.onNode(hasSetTextAction(), useUnmergedTree = true)
+        field.assert(SemanticsMatcher.expectValue(
+            androidx.compose.ui.semantics.SemanticsProperties.InputText,
+            androidx.compose.ui.text.AnnotatedString(expected),
+        ))
+        val semantics = field.fetchSemanticsNode().config
+        if (semantics.contains(androidx.compose.ui.semantics.SemanticsProperties.Password)) {
+            val displayed = semantics[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text
+            assertEquals("Password presentation retains the draft length", expected.length, displayed.length)
+            assertTrue("Password presentation stays masked", displayed.all { it == '\u2022' })
+        }
+    }
+
+    /** Every label below is an actual MarySettingsField call-site in production. All values are inert fixtures. */
+    @Test fun everyProductionFieldOpensFocusedSelectedAndRendersBothThemes() {
+        val fields = listOf(
+            Triple(R.string.mary_provider_endpoint, "https://offline.example.invalid/v1", "endpoint"),
+            Triple(R.string.mary_provider_api_key, "fake-offline-secret", "api-key"),
+            Triple(R.string.mary_behaviour_temperature, "0.7", "temperature"),
+            Triple(R.string.mary_behaviour_max_tokens, "4096", "max-tokens"),
+            Triple(R.string.mary_provider_context, "32768", "context"),
+            Triple(R.string.mary_behaviour_iterations, "12", "iterations"),
+            Triple(R.string.mary_behaviour_tool_failures, "3", "tool-failures"),
+            Triple(R.string.mary_behaviour_turn_budget, "240", "turn-budget"),
+            Triple(R.string.mary_behaviour_result_chars, "12000", "result-chars"),
+        )
+        for (backend in MixUiBackend.entries) for (dark in listOf(false, true))
+            for ((resource, initial, name) in fields) {
+                host(backend, initial, password = resource == R.string.mary_provider_api_key,
+                    dark = dark, fieldLabel = resource)
+                open(); assertInitialSelection(initial.length)
+                screenshot("${backend.name}-${if (dark) "dark" else "light"}-field-$name")
+                compose.onNode(hasSetTextAction()).performTextInput("7"); frames()
+                assertDraftText("7")
+                assertEquals("Typing edits only the field draft", emptyList<String>(), writes)
+                button(R.string.rear_widget_cancel)
+                assertEquals(initial, value)
+                open(); assertInitialSelection(initial.length)
+                button(R.string.rear_widget_cancel)
+            }
+    }
+
+    @Test fun ordinarySecretAndEmptyInputsReplaceOnceThenRespectManualSelection() {
+        for (backend in MixUiBackend.entries) for (dark in listOf(false, true))
+            for ((initial, secret) in listOf("original" to false, "fake-offline-secret" to true, "" to false, "" to true)) {
+                host(backend, initial, password = secret, dark = dark)
+                open(); assertInitialSelection(initial.length)
+                val field = compose.onNode(hasSetTextAction(), useUnmergedTree = true)
+                field.performTextInput("draft"); frames()
+                assertDraftText("draft")
+                field.performTextInputSelection(androidx.compose.ui.text.TextRange(1, 4)); frames()
+                field.performTextInput("X"); frames()
+                assertDraftText("dXt")
+                field.performTextInput("Y"); frames()
+                assertDraftText("dXYt")
+                assertEquals(emptyList<String>(), writes)
+                button(R.string.rear_widget_cancel)
+                assertEquals(initial, value)
+                open(); assertInitialSelection(initial.length)
+                field.performTextInput("saved"); frames()
+                button(R.string.rear_widget_confirm)
+                assertEquals(listOf("saved"), writes)
+                open(); assertInitialSelection("saved".length)
+                button(R.string.rear_widget_cancel)
+            }
     }
 
     @Test fun secretSummaryStaysMaskedAndClearingRequiresConfirm() {

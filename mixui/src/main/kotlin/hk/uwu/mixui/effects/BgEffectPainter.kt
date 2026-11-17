@@ -3,7 +3,7 @@
 
 package hk.uwu.mixui.effects
 
-import top.yukonga.miuix.kmp.blur.RuntimeShader
+import top.yukonga.miuix.kmp.material.RuntimeShader
 
 internal class BgEffectPainter {
 

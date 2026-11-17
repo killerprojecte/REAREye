@@ -3,6 +3,7 @@ package hk.uwu.mixui.components
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.role
@@ -29,7 +30,7 @@ fun SwitchPreference(
             checked = checked,
             onCheckedChange = onCheckedChange,
             title = title,
-            modifier = modifier,
+            modifier = modifier.semantics { if (!enabled) disabled() }.miuixSheetPreferenceSurface(enabled),
             summary = summary,
             enabled = enabled,
             insideMargin = insideMargin,

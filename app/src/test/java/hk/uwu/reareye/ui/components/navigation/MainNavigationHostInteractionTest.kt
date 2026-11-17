@@ -94,6 +94,9 @@ class MainNavigationHostInteractionTest {
                 AppTheme(themeMode = if (backend == MixUiBackend.Mochi) AppThemeMode.MOCHI_LIGHT else AppThemeMode.MIUIX_LIGHT) {
                     CompositionLocalProvider(LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
                         val backdrop = rememberNavigationBackdrop()
+                        val navigationMode = style.mode(backend)
+                        val navigationGlass = navigationMode == hk.uwu.reareye.ui.config.ModuleNavigationBarMode.FLOATING_GLASS ||
+                            navigationMode == hk.uwu.reareye.ui.config.ModuleNavigationBarMode.SEMI_TRANSPARENT
                         val density = LocalDensity.current
                         var stableBottomInset by remember { mutableStateOf(0.dp) }
                         val sidebar = remember { MarySidebarPageGestureHost() }
@@ -104,7 +107,11 @@ class MainNavigationHostInteractionTest {
                                         .graphicsLayer { clip = true }) {
                                         Box(Modifier.fillMaxSize()
                                             .marySidebarPageGesture(sidebar, enabled = route == "mary")
-                                            .marySidebarBackground(sidebar).navigationBackdrop(backdrop)) {
+                                            .marySidebarBackground(sidebar).then(
+                                                if (navigationGlass || backdrop.isQuickActionRecordingRequested)
+                                                    Modifier.navigationBackdrop(backdrop, recordNavigation = navigationGlass)
+                                                else Modifier,
+                                            )) {
                                             AnimatedContent(route, contentKey = { it }, transitionSpec = {
                                                 (fadeIn(tween(210, delayMillis = 50)) + slideInHorizontally(tween(280)) { it / 3 }) togetherWith
                                                     (fadeOut(tween(180)) + slideOutHorizontally(tween(280)) { -it / 3 })

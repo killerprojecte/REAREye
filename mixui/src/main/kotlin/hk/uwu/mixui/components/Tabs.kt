@@ -17,6 +17,13 @@ fun Tabs(
 ) {
     if (tabs.isEmpty()) return
     val selected = selectedTabIndex.coerceIn(tabs.indices)
+    // Scope this to the native sheet body, not page/dialog tabs. Check both
+    // inputs before delegating so GlassTabs' no-source fallback cannot recurse.
+    if (LocalMixUiBackend.current == MixUiBackend.Miuix && LocalMiuixSheetTabs.current &&
+        LocalGlassTabsBackdrop.current != null && LocalGlassTabsSurfaceAlpha.current != null) {
+        GlassTabs(tabs, selected, onTabSelected, modifier)
+        return
+    }
     when (LocalMixUiBackend.current) {
         MixUiBackend.Mochi -> ui.feice.mochi.basic.MochiSegmentedControl(
             items = tabs.toImmutableList(),

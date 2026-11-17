@@ -13,6 +13,9 @@ import androidx.compose.ui.semantics.dismiss
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -67,11 +70,12 @@ fun GlassBottomSheet(
     sessionKey: Any? = Unit,
     size: GlassBottomSheetSize = GlassBottomSheetSize.Large,
     enableNestedScroll: Boolean = true,
+    dismissRequestKey: Any? = Unit,
     content: @Composable () -> Unit,
 ) {
     key(sessionKey) {
         GlassBottomSheetSession(show, onDismissRequest, title, startAction, endAction,
-            allowDismiss, isContentScrolled, onDismissFinished, horizontalPadding, size, enableNestedScroll, content)
+            allowDismiss, isContentScrolled, onDismissFinished, horizontalPadding, size, enableNestedScroll, dismissRequestKey, content)
     }
 }
 
@@ -88,6 +92,7 @@ private fun GlassBottomSheetSession(
     horizontalPadding: Dp,
     size: GlassBottomSheetSize,
     enableNestedScroll: Boolean,
+    dismissRequestKey: Any?,
     content: @Composable () -> Unit,
 ) {
     val scene = LocalGlassSheetScene.current
@@ -114,7 +119,7 @@ private fun GlassBottomSheetSession(
                     retained = false
                     currentFinished()
                 }
-            }, title, startAction, endAction, horizontalPadding, size, enableNestedScroll, content)
+            }, title, startAction, endAction, horizontalPadding, size, enableNestedScroll, dismissRequestKey, content)
         }
     })
     DisposableEffect(scene, token) {
@@ -151,6 +156,7 @@ private fun MochiGlassSheetHost(
     horizontalPadding: Dp,
     size: GlassBottomSheetSize,
     enableNestedScroll: Boolean,
+    dismissRequestKey: Any?,
     content: @Composable () -> Unit,
 ) {
     val currentShow by rememberUpdatedState(show)
@@ -170,10 +176,13 @@ private fun MochiGlassSheetHost(
         val hidden = if (compact && measuredHeight > 0) measuredHeight.toFloat() else viewportHeight
         var offset by remember { mutableFloatStateOf(hidden) }
         var dragging by remember { mutableStateOf(false) }
+        var pointerGestureActive by remember { mutableStateOf(false) }
         var settle by remember { mutableIntStateOf(0) }
         var finished by remember { mutableStateOf(false) }
         val travel by rememberUpdatedState(hidden)
-        LaunchedEffect(show) { if (show) { gate.reset(); finished = false } }
+        // A nested editor popup may consume a dismissal without hiding this
+        // sheet. Its owner changes dismissRequestKey to permit the next request.
+        LaunchedEffect(show, dismissRequestKey) { if (show) { gate.reset(); finished = false } }
         LaunchedEffect(show, dragging, settle, hidden) {
             if (!dragging) {
                 animate(offset, if (show) 0f else hidden, animationSpec = MochiMotions.responseSpring(if (show) 0.42f else 0.34f, if (show) 0.88f else 1f)) { value, _ -> offset = value }
@@ -200,10 +209,10 @@ private fun MochiGlassSheetHost(
         val nested = remember {
             object : NestedScrollConnection {
                 override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
-                    if (source == NestedScrollSource.UserInput && available.y < 0f && offset > 0f)
+                    if (pointerGestureActive && source == NestedScrollSource.UserInput && available.y < 0f && offset > 0f)
                         Offset(0f, drag(available.y)) else Offset.Zero
                 override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
-                    if (source == NestedScrollSource.UserInput && available.y > 0f)
+                    if (pointerGestureActive && source == NestedScrollSource.UserInput && available.y > 0f)
                         Offset(0f, drag(available.y)) else Offset.Zero
                 override suspend fun onPreFling(available: Velocity): Velocity {
                     if (!dragging) return Velocity.Zero
@@ -250,6 +259,21 @@ private fun MochiGlassSheetHost(
                 .focusRequester(sheetFocus)
                 .focusProperties { onExit = { cancelFocusChange() } }
                 .focusable()
+                .pointerInput(Unit) {
+                    // Accessibility/semantics scrolling is also UserInput but has
+                    // no paired fling. Only a real pointer stream may drag the sheet.
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        pointerGestureActive = true
+                        try {
+                            do {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                            } while (event.changes.any { it.pressed })
+                        } finally {
+                            pointerGestureActive = false
+                        }
+                    }
+                }
                 .pointerInput(Unit) { detectTapGestures { } }) {
                 // S records only the final native sheet material. Foreground controls
                 // are a sibling: no self-sampling, original-page shortcut or text echo.

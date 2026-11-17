@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onNodeWithText
@@ -506,8 +507,8 @@ class RealPageCaptureTest {
 
     @Test fun sceneRouteGlassButtonsOpenDismissAndNavigateInBothDirections() {
         val directory = File(System.getProperty("ui.capture.output"), "scene-route-controls")
-        val stableNativeFills = mutableMapOf<String, Int>()
         for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) for (rtl in listOf(false, true)) for (scrolled in listOf(false, true)) {
+            println("ROUTE_EDITOR_MATRIX backend=$backend dark=$dark rtl=$rtl scrolled=$scrolled")
             compose.mainClock.autoAdvance = false
             compose.runOnUiThread {
                 activity?.close()
@@ -532,7 +533,7 @@ class RealPageCaptureTest {
             org.junit.Assert.assertEquals(rtl, backBounds.center.x > addBounds.center.x)
             val folder = File(directory, "$backend/${if (dark) "dark" else "light"}/${if (rtl) "rtl" else "ltr"}/${if (scrolled) "scrolled" else "top"}").apply { mkdirs() }
             if (scrolled) {
-                compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }
+                compose.onNodeWithTag("scene-route-list").performTouchInput { swipeUp() }
                 repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             }
             save(folder, "initial.png")
@@ -544,44 +545,23 @@ class RealPageCaptureTest {
             File(folder, "add-dialog.png").outputStream().use {
                 check(dialogImage.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
-            // Inspect actual rendered controls, not just tokens: the native glass container
-            // remains visible between them. Both renderers and both text directions are covered.
-            compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().indices.forEach { index ->
-                val image = compose.onAllNodes(hasSetTextAction())[index].captureToImage().asAndroidBitmap()
-                assertRenderedTextContrast(image, "native field $index ($backend/$dark/$rtl)")
-                if (backend == "miuix") {
-                    val fill = dominantOpaqueColor(image)
-                    val key = "$dark/$rtl/field-$index"
-                    if (!scrolled) stableNativeFills[key] = fill
-                    else org.junit.Assert.assertEquals("Opaque ordinary field fill must not sample changing backdrop", stableNativeFills[key], fill)
-                    if (!dark) {
-                        val fieldBounds = compose.onAllNodes(hasSetTextAction())[index].fetchSemanticsNode().boundsInRoot
-                        val rootBounds = compose.onNode(isRoot() and hasAnyDescendant(hasSetTextAction()), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-                        val outside = dialogImage.getPixel((fieldBounds.center.x - rootBounds.left).toInt().coerceIn(0, dialogImage.width - 1),
-                            (fieldBounds.top - rootBounds.top - 4).toInt().coerceIn(0, dialogImage.height - 1)) and 0xFFFFFF
-                        org.junit.Assert.assertTrue("Light ordinary field must remain distinct from glass: fill=${fill.toString(16)} outside=${outside.toString(16)}",
-                            contrastRatio(fill, outside) >= 1.15)
-                        File(folder, "field-$index-colors.txt").writeText("opaque fill=#${fill.toString(16)}; adjacent glass=#${outside.toString(16)}; surface ratio=${contrastRatio(fill, outside)}")
-                    }
-                }
+            // Labels now live outside the transparent input, so empty fields no
+            // longer contain opaque placeholder rectangles or text to sample.
+            compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().forEach { field ->
+                org.junit.Assert.assertFalse("Route editing is a Sheet, not a Dialog", field.parent?.config?.contains(androidx.compose.ui.semantics.SemanticsProperties.IsDialog) == true)
             }
-            val cancel = compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_cancel))
-            val confirm = compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_confirm))
+            val cancelText = context.getString(hk.uwu.reareye.R.string.rear_widget_cancel)
+            val confirmText = context.getString(hk.uwu.reareye.R.string.rear_widget_confirm)
+            val cancel = compose.onNodeWithContentDescription(cancelText)
+            val confirm = compose.onNodeWithContentDescription(confirmText)
             val cancelBounds = cancel.fetchSemanticsNode().boundsInRoot
             val confirmBounds = confirm.fetchSemanticsNode().boundsInRoot
-            org.junit.Assert.assertEquals("System-style dialog actions share one row", cancelBounds.center.y, confirmBounds.center.y, 1f)
+            org.junit.Assert.assertEquals("Sheet actions share the native fixed header", cancelBounds.center.y, confirmBounds.center.y, 1f)
             org.junit.Assert.assertEquals("Cancel precedes confirm in layout direction", !rtl, cancelBounds.center.x < confirmBounds.center.x)
             org.junit.Assert.assertTrue("Actions must not overlap", if (rtl) confirmBounds.right <= cancelBounds.left else cancelBounds.right <= confirmBounds.left)
-            assertRenderedTextContrast(cancel.captureToImage().asAndroidBitmap(),
-                "native cancel ($backend/$dark/$rtl)")
-            if (backend == "miuix") {
-                val fill = dominantOpaqueColor(cancel.captureToImage().asAndroidBitmap())
-                val key = "$dark/$rtl/cancel"
-                if (!scrolled) stableNativeFills[key] = fill
-                else org.junit.Assert.assertEquals("Ordinary cancel fill must be independent of backdrop", stableNativeFills[key], fill)
-            }
+            confirm.assertIsEnabled()
             // Blank submission must retain the form instead of the native action auto-dismiss.
-            compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_confirm)).performClick()
+            confirm.performClick()
             repeat(5) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             compose.onAllNodes(hasSetTextAction()).assertCountEquals(3)
             compose.onAllNodes(hasSetTextAction())[0].performClick()
@@ -599,7 +579,7 @@ class RealPageCaptureTest {
             repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
             if (scrolled) {
-                compose.onNode(hasScrollAction()).performScrollToIndex(0)
+                compose.onNodeWithTag("scene-route-list").performScrollToIndex(0)
                 repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             }
             compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_badge_scene_route_count, 16)).assertIsDisplayed()
@@ -621,9 +601,32 @@ class RealPageCaptureTest {
                 fields[index].performTextReplacement(value)
                 compose.mainClock.advanceTimeBy(100); compose.waitForIdle()
             }
-            compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_confirm)).performClick()
+            confirm.performClick()
             repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+            compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_badge_scene_route_count, 17)).assertIsDisplayed()
+            // Reopen the actual persisted route through its production list card,
+            // then update without duplicating the package+scene key.
+            compose.mainClock.autoAdvance = true
+            compose.onNodeWithTag("scene-route-list").performScrollToIndex(18)
+            compose.mainClock.autoAdvance = false
+            repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+            compose.onNodeWithText("example.saved").performClick()
+            repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+            val editFields = compose.onAllNodes(hasSetTextAction())
+            listOf("example.saved", "saved_scene", "saved_widget").forEachIndexed { index, value ->
+                org.junit.Assert.assertEquals(value, editFields.fetchSemanticsNodes()[index].config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text)
+            }
+            save(folder, "edit-sheet.png")
+            editFields[2].performTextReplacement("updated_widget")
+            repeat(5) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+            confirm.performClick()
+            repeat(10) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
+            compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+            compose.mainClock.autoAdvance = true
+            compose.onNodeWithTag("scene-route-list").performScrollToIndex(0)
+            compose.mainClock.autoAdvance = false
+            repeat(5) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
             compose.onNodeWithText(context.getString(hk.uwu.reareye.R.string.rear_widget_badge_scene_route_count, 17)).assertIsDisplayed()
             back.performTouchInput { down(center) }
             repeat(8) { compose.mainClock.advanceTimeBy(16); compose.waitForIdle() }

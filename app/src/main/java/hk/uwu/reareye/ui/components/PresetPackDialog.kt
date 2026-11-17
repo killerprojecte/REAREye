@@ -1,6 +1,5 @@
 package hk.uwu.reareye.ui.components
 
-import hk.uwu.mixui.components.GlassOverlayDialog
 import hk.uwu.mixui.icons.Icons as UiIcons
 
 import android.Manifest
@@ -12,10 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.runtime.Composable
@@ -36,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.presetpack.PresetPackInstalled
-import hk.uwu.reareye.repository.presetpack.PresetPackManifest
 import hk.uwu.reareye.repository.presetpack.PresetPackRelease
 import hk.uwu.reareye.repository.presetpack.PresetPackRepository
 import hk.uwu.reareye.service.PresetPackDownloadService
@@ -44,8 +39,6 @@ import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import hk.uwu.mixui.components.Button
-import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.CardDefaults
 import hk.uwu.mixui.components.Icon
@@ -255,253 +248,156 @@ fun PresetPackDialog(
     val prefs = remember { context.getPrefsManager() }
     val repository = remember { PresetPackRepository(context, prefs) }
     val scope = rememberCoroutineScope()
-    var installed by remember { mutableStateOf<PresetPackInstalled?>(null) }
-    var staged by remember { mutableStateOf<PresetPackManifest?>(null) }
-    var latest by remember { mutableStateOf<PresetPackRelease?>(null) }
-    var localBusy by remember { mutableStateOf(false) }
-    var progress by remember { mutableStateOf<Pair<Long, Long>?>(null) }
-    var message by remember { mutableStateOf<String?>(null) }
+    var ui by remember { mutableStateOf(PresetPackSheetState(operation = PresetPackOperation.LOAD)) }
     val downloadState by PresetPackDownloadService.state.collectAsState()
-    val busy = localBusy || downloadState.running
-    val displayedProgress = if (downloadState.running) {
-        downloadState.downloaded to downloadState.total
-    } else progress
 
-    LaunchedEffect(downloadState.release, downloadState.running, downloadState.message) {
-        downloadState.release?.let { latest = it }
-        downloadState.message?.let { message = it }
-        if (!downloadState.running && downloadState.manifest != null) {
-            staged = downloadState.manifest
+    fun notice(resource: Int, severity: PresetPackNoticeSeverity, vararg args: Any) {
+        ui = ui.copy(notice = PresetPackNotice(context.getString(resource, *args), severity))
+    }
+    fun failure(error: Throwable) {
+        notice(R.string.preset_sheet_error, PresetPackNoticeSeverity.ERROR,
+            error.localizedMessage ?: error.javaClass.simpleName)
+    }
+    suspend fun refreshInstalled(reportSuccess: Boolean = false) {
+        val result = withContext(Dispatchers.IO) {
+            repository.readInstalled().map { value -> value?.toDetails() }
+        }
+        ui = ui.copy(current = result.getOrNull(), localStatus = when {
+            result.isFailure -> PresetPackLocalStatus.INVALID
+            result.getOrNull() == null -> PresetPackLocalStatus.NOT_INSTALLED
+            else -> PresetPackLocalStatus.READY
+        })
+        result.exceptionOrNull()?.let(::failure)
+        if (reportSuccess && result.isSuccess && result.getOrNull() != null) {
+            notice(R.string.preset_sheet_validated, PresetPackNoticeSeverity.SUCCESS)
+        }
+    }
+    // Acquire the local gate synchronously, before launching: rapid taps cannot race recomposition.
+    fun localTask(operation: PresetPackOperation, block: suspend () -> Unit) {
+        if (ui.localBusy || PresetPackDownloadService.state.value.running) return
+        ui = ui.copy(operation = operation, notice = null)
+        scope.launch {
+            try { block() }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) { failure(error) }
+            finally { ui = ui.copy(operation = null) }
+        }
+    }
+
+    LaunchedEffect(downloadState.release, downloadState.running, downloadState.manifest) {
+        ui = ui.copy(
+            latest = downloadState.release ?: ui.latest,
+            staged = if (!downloadState.running && downloadState.manifest != null) downloadState.manifest else ui.staged,
+        )
+    }
+    LaunchedEffect(show) {
+        if (show) {
+            // Reopening observes service-owned progress; it neither starts nor pauses a download.
+            ui = ui.copy(operation = PresetPackOperation.LOAD)
+            try {
+                refreshInstalled()
+                val staged = withContext(Dispatchers.IO) {
+                    runCatching {
+                        repository.stagedFile().takeIf { it.isFile }
+                            ?.let { hk.uwu.reareye.repository.presetpack.PresetPackValidator.validate(it) }
+                    }.getOrNull()
+                }
+                ui = ui.copy(staged = staged)
+            } finally { ui = ui.copy(operation = null) }
         }
     }
 
     var pendingDownload by remember { mutableStateOf<PresetPackRelease?>(null) }
-    val notificationPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) {
-        // Permission controls notification visibility, not whether the user can download.
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        // Permission affects notification visibility, not whether download may start.
         pendingDownload?.let { PresetPackDownloadService.start(context, it) }
         pendingDownload = null
-        localBusy = false
+        ui = ui.copy(operation = null)
     }
-
-    fun refreshInstalled() {
-        scope.launch(Dispatchers.IO) {
-            val result = repository.readInstalled()
-            withContext(Dispatchers.Main) {
-                installed = result.getOrNull()
-                result.exceptionOrNull()?.let { message = it.message }
-            }
+    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) {
+            ui = ui.copy(operation = null)
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch {
+            try {
+                val manifest = withContext(Dispatchers.IO) { repository.import(uri).getOrThrow() }
+                PresetPackDownloadService.clearResult()
+                ui = ui.copy(staged = manifest)
+                notice(R.string.preset_sheet_imported, PresetPackNoticeSeverity.SUCCESS, manifest.packVersion)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) { failure(error) }
+            finally { ui = ui.copy(operation = null) }
         }
     }
 
-    LaunchedEffect(show) {
-        if (show) {
-            staged = withContext(Dispatchers.IO) {
-                runCatching {
-                    repository.stagedFile().takeIf { it.isFile }
-                        ?.let { hk.uwu.reareye.repository.presetpack.PresetPackValidator.validate(it) }
+    PresetPackSheet(show, ui.copy(download = downloadState),
+        onDismissRequest = { if (!ui.localBusy) onDismissRequest() },
+        onAction = action@{ action ->
+            if (ui.localBusy) return@action
+            if (action != PresetPackAction.CLOUD && action != PresetPackAction.PAUSE &&
+                PresetPackDownloadService.state.value.running) return@action
+            when (action) {
+                PresetPackAction.CHECK -> localTask(PresetPackOperation.CHECK) {
+                    val release = withContext(Dispatchers.IO) { repository.checkLatest() }
+                    ui = ui.copy(latest = release)
+                    notice(R.string.preset_sheet_found, PresetPackNoticeSeverity.INFO, release.version)
                 }
-                    .getOrNull()
-            }
-            refreshInstalled()
-        }
-    }
-
-    val importer =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            localBusy = true
-            message = null
-            scope.launch {
-                val result = withContext(Dispatchers.IO) {
-                    repository.import(uri) { done, total ->
-                        progress = done to total
+                PresetPackAction.DOWNLOAD -> ui.latest?.let { release ->
+                    ui = ui.copy(notice = null)
+                    if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                        pendingDownload = release
+                        ui = ui.copy(operation = PresetPackOperation.PERMISSION)
+                        try { notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                        catch (error: Exception) { pendingDownload = null; ui = ui.copy(operation = null); failure(error) }
+                    } else PresetPackDownloadService.start(context, release)
+                }
+                PresetPackAction.CLOUD -> {
+                    if (!openPresetPackCloud(context)) {
+                        notice(R.string.preset_sheet_cloud_unavailable, PresetPackNoticeSeverity.ERROR)
                     }
                 }
-                localBusy = false
-                progress = null
-                result.fold(
-                    onSuccess = { manifest ->
-                        PresetPackDownloadService.clearResult()
-                        staged = manifest; message =
-                        "已导入 ${manifest.packVersion}，点击应用覆盖当前版本"
-                    },
-                    onFailure = { error -> message = error.message ?: "导入失败" },
-                )
-            }
-        }
-
-    GlassOverlayDialog(
-        show = show,
-        title = androidx.compose.ui.res.stringResource(R.string.preset_pack_title),
-        summary = androidx.compose.ui.res.stringResource(R.string.preset_pack_dialog_summary),
-        // Read localBusy again at invocation: another action can set it before
-        // this frame's recomposition refreshes the host's nullable callback.
-        onDismissRequest = if (localBusy) null else ({ if (!localBusy) onDismissRequest() }),
-    ) {
-        Column(
-            modifier = Modifier.verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text("当前版本：${installed?.manifest?.packVersion ?: "未安装"}")
-                    installed?.let { Text("文件：${formatBytes(it.file.length())}") }
-                    installed?.let { Text("SHA-256：${it.sha256.take(16)}…") }
-                    staged?.let { Text("待应用版本：${it.packVersion}") }
-                    displayedProgress?.let { (done, total) ->
-                        Text(
-                            if (total > 0) "处理中：${formatBytes(done)} / ${formatBytes(total)}" else "处理中：${
-                                formatBytes(
-                                    done
-                                )
-                            }"
-                        )
-                    }
-                    message?.let { Text(it, color = MixTheme.colorScheme.error) }
-                    if (downloadState.running) Text("正在后台下载，可息屏或关闭弹窗；中断后再次下载会自动续传。")
+                PresetPackAction.IMPORT -> {
+                    ui = ui.copy(operation = PresetPackOperation.IMPORT, notice = null)
+                    try { importer.launch(arrayOf("application/octet-stream", "application/zip", "*/*")) }
+                    catch (error: Exception) { ui = ui.copy(operation = null); failure(error) }
+                }
+                PresetPackAction.PAUSE -> PresetPackDownloadService.pause(context)
+                PresetPackAction.APPLY -> localTask(PresetPackOperation.APPLY) {
+                    val value = withContext(Dispatchers.IO) { repository.applyStaged().getOrThrow().toDetails() }
+                    PresetPackDownloadService.clearResult()
+                    ui = ui.copy(current = value, staged = null, localStatus = PresetPackLocalStatus.READY)
+                    notice(R.string.preset_sheet_applied, PresetPackNoticeSeverity.SUCCESS, value.version)
+                    onApplied()
+                }
+                PresetPackAction.REVALIDATE -> localTask(PresetPackOperation.REVALIDATE) { refreshInstalled(reportSuccess = true) }
+                PresetPackAction.REMOVE -> localTask(PresetPackOperation.REMOVE) {
+                    withContext(Dispatchers.IO) { repository.removeInstalled().getOrThrow() }
+                    PresetPackDownloadService.clearResult()
+                    ui = ui.copy(current = null, staged = null, localStatus = PresetPackLocalStatus.NOT_INSTALLED)
+                    notice(R.string.preset_sheet_removed, PresetPackNoticeSeverity.SUCCESS)
+                    onApplied()
                 }
             }
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Button(
-                    onClick = {
-                        localBusy = true
-                        message = null
-                        scope.launch {
-                            runCatching { withContext(Dispatchers.IO) { repository.checkLatest() } }
-                                .onSuccess { release ->
-                                    latest = release
-                                    message = "发现版本 ${release.version}"
-                                }
-                                .onFailure { message = it.message ?: "检查更新失败" }
-                            localBusy = false
-                        }
-                    },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
-                ) { Text("检查 GitHub") }
-                Button(
-                    onClick = {
-                        importer.launch(
-                            arrayOf(
-                                "application/octet-stream",
-                                "application/zip",
-                                "*/*"
-                            )
-                        )
-                    },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
-                ) { Text("手动导入") }
-            }
-
-            latest?.let { release ->
-                Button(
-                    onClick = {
-                        message = null
-                        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                            pendingDownload = release
-                            localBusy = true
-                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            PresetPackDownloadService.start(context, release)
-                        }
-                    },
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text("下载 / 继续下载 ${release.version}")
-                        Icon(imageVector = UiIcons.Download, contentDescription = null)
-                    }
-                }
-            }
-
-            if (downloadState.running) {
-                Button(
-                    onClick = { PresetPackDownloadService.pause(context) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("暂停下载（保留进度）") }
-            }
-
-            staged?.let { manifest ->
-                Button(
-                    onClick = {
-                        localBusy = true
-                        message = null
-                        scope.launch {
-                            val result = withContext(Dispatchers.IO) { repository.applyStaged() }
-                            localBusy = false
-                            result.fold(
-                                onSuccess = { value ->
-                                    installed = value
-                                    staged = null
-                                    PresetPackDownloadService.clearResult()
-                                    message = "已应用 ${manifest.packVersion}，重启目标应用后生效"
-                                    onApplied()
-                                },
-                                onFailure = { message = it.message ?: "应用失败，当前版本未改变" },
-                            )
-                        }
-                    },
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("应用并覆盖当前版本") }
-            }
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Button(
-                    onClick = { refreshInstalled() },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
-                ) { Text("重新校验") }
-                Button(
-                    onClick = {
-                        localBusy = true
-                        scope.launch {
-                            val result =
-                                withContext(Dispatchers.IO) { repository.removeInstalled() }
-                            localBusy = false
-                            result.fold(
-                                onSuccess = {
-                                    PresetPackDownloadService.clearResult()
-                                    installed = null; staged = null; message =
-                                    "已删除活动资源包，目标侧不会注入"
-                                },
-                                onFailure = { message = it.message ?: "删除失败" },
-                            )
-                            if (result.isSuccess) onApplied()
-                        }
-                    },
-                    enabled = !busy && installed != null,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        color = MixTheme.colorScheme.error,
-                        contentColor = MixTheme.colorScheme.onError,
-                    ),
-                ) { Text("删除") }
-            }
-        }
-    }
+        },
+    )
 }
 
-private fun formatBytes(value: Long): String {
-    if (value < 1024L) return "$value B"
-    if (value < 1024L * 1024L) return "%.1f KB".format(value / 1024f)
-    if (value < 1024L * 1024L * 1024L) return "%.1f MB".format(value / (1024f * 1024f))
-    return "%.1f GB".format(value / (1024f * 1024f * 1024f))
+private fun PresetPackInstalled.toDetails() = PresetPackDetails(
+    version = manifest.packVersion, bytes = file.length(), entryCount = manifest.entryCount,
+    generatedAt = manifest.generatedAt, sha256 = sha256,
+)
+
+internal fun presetPackCloudIntent(): android.content.Intent = android.content.Intent(
+    android.content.Intent.ACTION_VIEW,
+    android.net.Uri.parse(hk.uwu.reareye.repository.presetpack.PresetPackContract.CLOUD_SHARE_URL),
+).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+
+internal fun openPresetPackCloud(context: android.content.Context): Boolean = try {
+    context.startActivity(presetPackCloudIntent())
+    true
+} catch (_: android.content.ActivityNotFoundException) {
+    false
+} catch (_: SecurityException) {
+    false
 }

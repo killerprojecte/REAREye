@@ -41,7 +41,7 @@ fun ArrowPreference(
     if (LocalMixUiBackend.current == MixUiBackend.Miuix) {
         top.yukonga.miuix.kmp.preference.ArrowPreference(
             title = title,
-            modifier = rowModifier,
+            modifier = rowModifier.miuixSheetPreferenceSurface(enabled),
             summary = summary,
             startAction = startAction,
             onClick = onClick,

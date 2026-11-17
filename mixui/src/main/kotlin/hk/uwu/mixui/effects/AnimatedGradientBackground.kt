@@ -13,8 +13,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import top.yukonga.miuix.kmp.blur.asBrush
-import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.material.asBrush
+import top.yukonga.miuix.kmp.material.isRuntimeShaderSupported
 import hk.uwu.mixui.theme.MixTheme
 
 /**

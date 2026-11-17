@@ -1,7 +1,6 @@
 package hk.uwu.mixui.components
 
 import androidx.compose.foundation.layout.fillMaxWidth
-import top.yukonga.miuix.kmp.blur.Backdrop
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -10,6 +9,7 @@ import androidx.compose.ui.platform.testTag
 import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
 import kotlinx.collections.immutable.toImmutableList
+import top.yukonga.miuix.kmp.blur.Backdrop
 import ui.feice.mochi.effect.glass.LocalMochiBackdrop
 import ui.feice.mochi.effect.glass.MochiGlassSurface
 import ui.feice.mochi.theme.MochiTheme
@@ -23,11 +23,15 @@ internal val LocalGlassTabsMochiBackdrop = staticCompositionLocalOf<ui.feice.moc
 
 internal val LocalGlassTabsSurfaceAlpha = staticCompositionLocalOf<Float?> { null }
 
+/** Only native MIUIX sheet bodies promote ordinary Tabs to a joined glass track. */
+internal val LocalMiuixSheetTabs = staticCompositionLocalOf { false }
+
 /**
  * Header tabs using each backend's native glass material over the host's body-only
  * recording. Without an explicit glass host context, use ordinary native tabs.
  *
- * MIUIX uses the native GlassSegmentedTabRow joined track and its moving indicator. Mochi's native
+ * MIUIX adapts the fixed native GlassSegmentedTabRow rendering with release-only drag selection.
+ * Mochi's native
  * segmented control has no glass API: its transparent track sits on the public
  * MochiGlassSurface with the same controlGlass material as toolbar buttons. Its
  * selection thumb, animation, gestures and semantics remain vendor-owned.
@@ -52,9 +56,9 @@ fun GlassTabs(
             if (backdrop == null) {
                 Tabs(tabs, selected, onTabSelected, modifier)
             } else {
-                // Same joined-track component as the upstream Privacy / Security
-                // example: one glass outline with a travelling native indicator.
-                top.yukonga.miuix.kmp.glass.GlassSegmentedTabRow(
+                // Same fixed-version native optics, with a pointer preview that never
+                // switches business content until the horizontal gesture is released.
+                MiuixDraggableGlassTabs(
                     tabs = tabs,
                     selectedIndex = selected,
                     onSelect = onTabSelected,

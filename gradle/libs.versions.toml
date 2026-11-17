@@ -20,7 +20,7 @@ compose-bom = "2026.09.00"
 compose-foundation-style = "1.12.1"
 androidx-activity-compose = "1.13.0"
 androidx-lifecycle-runtime-compose = "2.11.0"
-miuix = "0.9.4-ea1b935d-SNAPSHOT"
+miuix = "0.9.4-3a980f7c-SNAPSHOT"
 mochi = "0.2.0"
 markdown-renderer = "0.46.0"
 coil = "3.6.3"
@@ -97,7 +97,7 @@ miuix-preference = { group = "top.yukonga.miuix.kmp", name = "miuix-preference",
 miuix-glassicons = { group = "top.yukonga.miuix.kmp", name = "miuix-glass-icons", version.ref = "miuix" }
 miuix-icons = { group = "top.yukonga.miuix.kmp", name = "miuix-icons", version.ref = "miuix" }
 miuix-blur = { group = "top.yukonga.miuix.kmp", name = "miuix-blur", version.ref = "miuix" }
-miuix-shader = { group = "top.yukonga.miuix.kmp", name = "miuix-shader", version.ref = "miuix" }
+miuix-material = { group = "top.yukonga.miuix.kmp", name = "miuix-material", version.ref = "miuix" }
 
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }

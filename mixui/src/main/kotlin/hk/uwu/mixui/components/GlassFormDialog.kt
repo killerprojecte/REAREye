@@ -46,6 +46,8 @@ fun GlassFormDialog(
         CompositionLocalProvider(
             LocalLayoutDirection provides direction,
             LocalGlassFormControlContrast provides true,
+            LocalMiuixSheetTabs provides false,
+            LocalFormPresentation provides FormPresentation.Dialog,
             content = content,
         )
     }
@@ -56,8 +58,8 @@ fun GlassFormDialog(
             onDismissRequest = onDismissRequest,
             modifier = modifier,
             backdrop = backdrop.value,
-            // Match the official dialog material; extra white tint hides the page blur.
-            renderInRootScaffold = true,
+            material = modalGlassMaterial(),
+            renderInRootScaffold = LocalFormPresentation.current != FormPresentation.Sheet,
             content = styledContent,
         )
         is GlassFormBackdrop.Mochi -> CompositionLocalProvider(

@@ -34,7 +34,7 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.glass.GlassMotion
 import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
-import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.material.isRuntimeShaderSupported
 import ui.feice.mochi.effect.glass.mochiBackdropSource
 import ui.feice.mochi.effect.glass.rememberMochiBackdrop
 import ui.feice.mochi.effect.mask.mochiScrollEdgeBlur
@@ -190,7 +190,7 @@ fun CompactTopBarIconButton(
                     size = 48.dp,
                     fill = Color.Transparent,
                     stroke = if (scrolled) top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults.buttonStroke() else null,
-                    shadow = if (scrolled) top.yukonga.miuix.kmp.glass.GlassShadows.Regular else null,
+                    shadow = if (scrolled) top.yukonga.miuix.kmp.material.GlassShadows.Regular else null,
                     content = content,
                 )
             } else {

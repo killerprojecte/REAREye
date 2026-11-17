@@ -23,6 +23,10 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import hk.uwu.mixui.components.Text
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.components.config.ConfigDashboard
@@ -50,6 +54,7 @@ import java.io.File
 class ConfigDashboardTopBarTest {
     @get:Rule val compose = createEmptyComposeRule()
     private var activity: ActivityController<ComponentActivity>? = null
+    private var compositionScope: CoroutineScope? = null
     private var searchClicks = 0
     private var storeClicks = 0
     private var categoryClicks = 0
@@ -72,20 +77,32 @@ class ConfigDashboardTopBarTest {
     private fun settle() {
         repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
     }
-    private fun open(backend: String, dark: Boolean, managers: Boolean = false) {
+    private fun open(backend: String, dark: Boolean, managers: Boolean = false, linkTargetBusiness: String? = null) {
         compose.runOnUiThread {
             activity?.close()
             searchClicks = 0; storeClicks = 0; categoryClicks = 0
             favoriteClicks = 0; scriptClicks = 0; scrollPosition = 0 to 0
+            cardPage = null; businessPage = null; compositionScope = null
             selectedTab.value = if (managers) 0 else 3
             val fixture = FeatureGuideDemoState("Fixture clock").apply {
-                cards = (1..16).map { cards.first().copy(id = "fixture-card-$it", title = "Fixture clock $it") }
-                businesses = (1..16).map { businesses.first().copy(id = "fixture-business-$it", business = "fixture_widget_$it") }
+                cards = (1..16).map {
+                    cards.first().copy(id = "fixture-card-$it", title = "Fixture clock $it",
+                        business = linkTargetBusiness ?: cards.first().business)
+                }
+                businesses = (1..16).map {
+                    // Production loadBusinesses sorts by ID, not insertion/numeric order.
+                    // Keep the linked widget_12 at index 11 rather than lexicographic index 3.
+                    val id = if (linkTargetBusiness != null) "fixture-business-${it.toString().padStart(2, '0')}"
+                        else "fixture-business-$it"
+                    businesses.first().copy(id = id, business = "fixture_widget_$it")
+                }
             }
             fixture.prefsManager.putString(ConfigKeys.REAR_WIDGET_CARD_DATA, RearWidgetConfigCodec.encodeCards(fixture.cards))
             fixture.prefsManager.putString(ConfigKeys.REAR_WIDGET_BUSINESS_DATA, RearWidgetConfigCodec.encodeBusinesses(fixture.businesses))
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().setContent {
+                val scope = rememberCoroutineScope()
+                SideEffect { compositionScope = scope }
                 CaptureTheme(backend, dark) {
                     Column(Modifier.fillMaxSize()) {
                         Text("FIXTURE HOST · production ConfigDashboard · $backend · ${if (dark) "dark" else "light"}")
@@ -106,6 +123,7 @@ class ConfigDashboardTopBarTest {
                                 androidx.compose.runtime.SideEffect { cardPage = page }
                                 if (managers) CardManagerScreen(
                                     prefsManager = fixture.prefsManager, onBack = {}, embedded = true,
+                                    focusCardId = focus, onFocusCardHandled = handled, onOpenComponent = openBusiness,
                                     actionRequest = action, onActionHandled = actionHandled,
                                 )
                             },
@@ -114,6 +132,7 @@ class ConfigDashboardTopBarTest {
                                 androidx.compose.runtime.SideEffect { businessPage = page }
                                 if (managers) BusinessManagerScreen(
                                     prefsManager = fixture.prefsManager, onBack = {}, embedded = true,
+                                    focusBusiness = focus, onFocusBusinessHandled = handled, onOpenCard = openCard,
                                     actionRequest = action, onActionHandled = actionHandled,
                                 )
                             },
@@ -219,6 +238,72 @@ class ConfigDashboardTopBarTest {
             )
         }
     }
+    @Test fun realCardToComponentColdAndWarmJumpsRestoreGlassWithoutTouch() {
+        val output = File(System.getProperty("ui.capture.output"), "glass-interaction-refinement/dashboard-card-component")
+        for (dark in listOf(false, true)) {
+            open("miuix", dark, managers = true, linkTargetBusiness = "fixture_widget_12")
+            val folder = File(output, if (dark) "dark" else "light")
+            fun openLinkedComponent() {
+                // Real card action and the Dashboard navigation callback, not a fixture tab/scroll mutation.
+                compose.onNode(hasContentDescription(text(R.string.rear_widget_action_open_component)) and
+                    hasAnyAncestor(hasTestTag("rear-card-item-fixture-card-1")), useUnmergedTree = true)
+                    .assertIsDisplayed().performClick()
+                try {
+                    compose.waitUntil(10_000) {
+                        compose.mainClock.advanceTimeBy(100)
+                        // Direct state reads do not synchronize the Android layout of the
+                        // newly composed Components page; semantics queries elsewhere do.
+                        compose.waitForIdle()
+                        businessPage?.listState?.let { it.firstVisibleItemIndex >= 10 && !it.isScrollInProgress } == true
+                    }
+                } catch (timeout: ComposeTimeoutException) {
+                    val list = businessPage?.listState
+                    throw AssertionError("Real card->component dark=$dark selectedTab=${selectedTab.value}, " +
+                        "measured items=${list?.layoutInfo?.totalItemsCount}, " +
+                        "position=${list?.firstVisibleItemIndex}:${list?.firstVisibleItemScrollOffset}, " +
+                        "scrolling=${list?.isScrollInProgress}, canScrollBack=${list?.canScrollBackward}", timeout)
+                }
+                settle()
+                assertEquals(1, selectedTab.value)
+                assertTrue("BusinessManager's data-loaded animateScrollToItem must finish without a body gesture",
+                    businessPage!!.listState!!.firstVisibleItemIndex >= 10)
+                compose.onNode(hasText("fixture_widget_12") and
+                    hasAnyAncestor(hasTestTag("BusinessManagerScreen-list"))).assertIsDisplayed()
+            }
+            save(folder, "cards-before-cold-navigation.png")
+            openLinkedComponent()
+            val state = businessPage!!.listState!!
+            val firstTarget = state.firstVisibleItemIndex to state.firstVisibleItemScrollOffset
+            save(folder, "components-cold-jump-no-touch.png")
+            // Programmatic return-to-top, without a compensating gesture on the body.
+            compose.runOnIdle { requireNotNull(compositionScope).launch { state.animateScrollToItem(0) } }
+            settle()
+            compose.mainClock.advanceTimeUntil(timeoutMillis = 5000) { !state.isScrollInProgress }
+            compose.waitForIdle()
+            assertEquals(0, state.firstVisibleItemIndex)
+            assertEquals(0, state.firstVisibleItemScrollOffset)
+            save(folder, "components-programmatic-top.png")
+            tapText(R.string.config_tab_cards)
+            openLinkedComponent()
+            assertEquals(firstTarget, state.firstVisibleItemIndex to state.firstVisibleItemScrollOffset)
+            save(folder, "components-warm-jump-no-touch.png")
+            // Native gesture reference, then restore the selected page without losing its anchor.
+            compose.onNodeWithTag("BusinessManagerScreen-list").performTouchInput { swipeUp() }; settle()
+            compose.mainClock.advanceTimeUntil(timeoutMillis = 5000) { !state.isScrollInProgress }
+            compose.waitForIdle()
+            val manual = state.firstVisibleItemIndex to state.firstVisibleItemScrollOffset
+            save(folder, "components-native-scroll-reference.png")
+            tapText(R.string.config_tab_cards)
+            tapText(R.string.config_tab_components)
+            assertEquals(manual, state.firstVisibleItemIndex to state.firstVisibleItemScrollOffset)
+            save(folder, "components-restored-page-no-touch.png")
+            File(folder, "evidence.txt").writeText(
+                "Real card ModuleStyleIconAction -> Dashboard focus -> BusinessManager data-loaded animateScrollToItem.\n" +
+                    "Cold target=$firstTarget; repeated loaded target, programmatic top, native scroll reference and page restoration.\n" +
+                    "No body gesture occurs before either jump capture. Native graphics Robolectric, not physical-device shader proof.\n")
+        }
+    }
+
     @Test fun realManagersShareDashboardGlassAndPreserveIndependentScroll() {
         val output = File(System.getProperty("ui.capture.output"), "dashboard-real-managers")
         for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) {

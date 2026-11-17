@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -39,6 +40,7 @@ class GlassHeaderTabsTest {
     private var activity: ActivityController<ComponentActivity>? = null
     private val selected = mutableStateOf(3)
     private var scrollPosition = 0 to 0
+    private var tabCommitCount = 0
 
     @Before fun requireCaptureProfile() {
         assumeTrue(java.lang.Boolean.getBoolean("ui.capture.enabled"))
@@ -63,6 +65,7 @@ class GlassHeaderTabsTest {
                 activity?.close()
                 selected.value = 3
                 scrollPosition = 0 to 0
+                tabCommitCount = 0
                 activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
                 activity!!.get().setContent {
                     CaptureTheme(backend, dark) {
@@ -70,7 +73,7 @@ class GlassHeaderTabsTest {
                             moreCategories = buildMoreCategories(REAREyeConfig),
                             contentPadding = PaddingValues(bottom = 24.dp),
                             selectedTabIndex = selected.value,
-                            onSelectedTabIndexChange = { selected.value = it },
+                            onSelectedTabIndexChange = { tabCommitCount++; selected.value = it },
                             onOpenCategory = {},
                             onOpenScriptManagement = {},
                             onMoreSearchRequested = {},
@@ -85,6 +88,12 @@ class GlassHeaderTabsTest {
             settle()
             val folder = File(output, "$backend/${if (dark) "dark" else "light"}")
             compose.onNodeWithTag("glass-tabs-$backend").assertIsDisplayed()
+            if (backend == "miuix") {
+                // Dashboard retains its original 12dp insets; the 352dp/24dp contract
+                // belongs to Sheet tabs and must not resize the existing page header.
+                compose.onNodeWithTag("glass-tabs-miuix").assertWidthIsEqualTo(376.dp)
+                    .assertHeightIsEqualTo(40.dp).assertLeftPositionInRootIsEqualTo(12.dp)
+            }
             compose.onNode(hasText(label(R.string.config_tab_more)) and hasClickAction()).assertIsSelected()
             save(folder, "initial-more.png")
             val list = compose.onNodeWithTag("config-more-list")
@@ -106,10 +115,34 @@ class GlassHeaderTabsTest {
             save(folder, "returned-scrolled-more.png")
             list.performTouchInput { swipeDown() }; settle()
             save(folder, "scroll-back-more.png")
+            if (backend == "miuix") {
+                val track = compose.onNodeWithTag("glass-tabs-miuix")
+                val commitsBeforeDrag = tabCommitCount
+                val indicator = compose.onNodeWithTag("glass-tabs-miuix-indicator", useUnmergedTree = true)
+                val originalLeft = indicator.fetchSemanticsNode().boundsInRoot.left
+                track.performTouchInput {
+                    down(Offset(width - 44f, height / 2f))
+                    moveBy(Offset(-65f, 0f))
+                }
+                compose.mainClock.advanceTimeByFrame(); compose.waitForIdle()
+                assertEquals("Crossing tabs must not switch the real dashboard body", 3, selected.value)
+                assertEquals(commitsBeforeDrag, tabCommitCount)
+                assertTrue(indicator.fetchSemanticsNode().boundsInRoot.left < originalLeft)
+                save(folder, "drag-preview-more.png")
+                track.performTouchInput { moveTo(Offset(32f, height / 2f)) }
+                compose.mainClock.advanceTimeByFrame(); compose.waitForIdle()
+                assertEquals(3, selected.value)
+                assertEquals(commitsBeforeDrag, tabCommitCount)
+                track.performTouchInput { up() }; settle()
+                assertEquals(0, selected.value)
+                assertEquals("Release produces exactly one business selection", commitsBeforeDrag + 1, tabCommitCount)
+                compose.onNode(hasText(label(R.string.config_tab_cards)) and hasClickAction()).assertIsSelected()
+            }
             File(folder, "evidence.txt").writeText(
                 "Production ConfigDashboard; $backend; dark=$dark; API 36 native graphics.\n" +
                     "Verified native glass adapter, pointer selection, selected semantics and preserved More scroll.\n" +
                     "PNGs cover rest, scrolling backgrounds, changed selection and return.\n" +
+                    (if (backend == "miuix") "MIUIX continuous pointer preview leaves the production body unchanged until one release commit.\n" else "") +
                     "Robolectric captures are not physical-device shader certification.\n",
             )
         }

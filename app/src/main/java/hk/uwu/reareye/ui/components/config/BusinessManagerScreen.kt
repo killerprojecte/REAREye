@@ -61,8 +61,7 @@ import hk.uwu.reareye.repository.rearwidget.RearWidgetConfigCodec
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.ui.FeatureGuideAction
 import hk.uwu.reareye.ui.LocalFeatureGuideDemo
-import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.GlassEditorSheet
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
@@ -89,7 +88,7 @@ import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.pageScrollFeedback
 import androidx.compose.ui.platform.testTag
 import hk.uwu.mixui.components.Text
-import hk.uwu.mixui.components.TextField
+import hk.uwu.mixui.components.EditorTextField
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
 
@@ -126,6 +125,7 @@ fun BusinessManagerScreen(
     val remotePrefsStatusRevision = rememberRemotePrefsStatusRevision()
 
     val showDialog = remember { mutableStateOf(false) }
+    var dialogSessionId by remember { mutableIntStateOf(0) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var draftWidget by remember { mutableStateOf("") }
     var draftFilePath by remember { mutableStateOf("") }
@@ -206,6 +206,7 @@ fun BusinessManagerScreen(
         draftWidget = ""
         draftFilePath = ""
         draftHideTimeTip = false
+        dialogSessionId++
         showDialog.value = true
     }
 
@@ -253,6 +254,7 @@ fun BusinessManagerScreen(
         draftHideTimeTip = demo?.state?.hideTimeTip ?: !RearBusinessExtraConfigRepository
             .getConfigForBusiness(prefsManager, item.business)
             .getShowTimeTipOrDefault()
+        dialogSessionId++
         showDialog.value = true
         if (demo?.action == FeatureGuideAction.OPEN_COMPONENT) demo.onAction(FeatureGuideAction.OPEN_COMPONENT)
     }
@@ -441,7 +443,6 @@ fun BusinessManagerScreen(
                     componentBusiness = business,
                 )
             }
-            appRegistrationPending = false
             Toast.makeText(
                 context,
                 if (result.success) {
@@ -461,6 +462,7 @@ fun BusinessManagerScreen(
                 appCards.addAll(refreshed)
                 if (draftCardId == submittedCardId) showRegisterCardDialog.value = false
             }
+            appRegistrationPending = false
         }
     }
 
@@ -755,20 +757,25 @@ fun BusinessManagerScreen(
     }
 
     val businessDialog: @Composable () -> Unit = {
-        GlassFormDialog(
+        GlassEditorSheet(
             show = showDialog.value && lockedDialogBusiness == null,
             title = stringResource(
                 if (editingId == null) R.string.rear_widget_add_business else R.string.rear_widget_edit_business,
             ),
             onDismissRequest = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
+            onConfirm = ::submitDialog,
+            cancelText = stringResource(R.string.rear_widget_cancel),
+            confirmText = stringResource(R.string.rear_widget_confirm),
+            sessionKey = dialogSessionId,
+            modifier = Modifier.testTag("business-form"),
         ) {
             val lockedBusiness = dialogEditingBusiness?.takeIf { !it.renameable }
-            DialogFormColumn(modifier = Modifier.testTag("business-form")) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (demo != null) {
                     Text(stringResource(R.string.guide_demo_notice))
                     Text(stringResource(R.string.guide_demo_edit_component))
                 }
-                TextField(
+                EditorTextField(
                     value = draftWidget,
                     onValueChange = { draftWidget = it },
                     modifier = Modifier.fillMaxWidth().testTag("business-form-name"),
@@ -777,7 +784,7 @@ fun BusinessManagerScreen(
                     readOnly = lockedBusiness != null,
                     singleLine = true,
                 )
-                TextField(
+                EditorTextField(
                     value = draftFilePath,
                     onValueChange = { draftFilePath = it },
                     modifier = Modifier.fillMaxWidth().testTag("business-form-path"),
@@ -803,24 +810,6 @@ fun BusinessManagerScreen(
                     checked = draftHideTimeTip,
                     onCheckedChange = { draftHideTimeTip = it },
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Button(
-                        onClick = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
-                        modifier = Modifier.weight(1f).testTag("business-form-cancel"),
-                    ) {
-                        Text(stringResource(R.string.rear_widget_cancel))
-                    }
-                    Button(
-                        onClick = { submitDialog() },
-                        colors = ButtonDefaults.buttonColorsPrimary(),
-                        modifier = Modifier.weight(1f).testTag("business-form-confirm"),
-                    ) {
-                        Text(stringResource(R.string.rear_widget_confirm))
-                    }
-                }
             }
         }
     }
@@ -850,6 +839,7 @@ fun BusinessManagerScreen(
             onConfirmNormal = ::submitRegisterCardDialog,
             onConfirmApp = ::submitRegisterAppCardDialog,
             submitting = appRegistrationPending,
+            sessionKey = draftCardId,
             onDismissRequest = { showRegisterCardDialog.value = false },
         )
     }

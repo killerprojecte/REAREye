@@ -43,7 +43,9 @@ fun BottomSheet(
                 // The native sheet handles top/IME. Reserve the visible viewport
                 // once for horizontal cutouts and bottom navigation/caption bars.
                 Box(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))) {
-                    content()
+                    CompositionLocalProvider(LocalFormPresentation provides FormPresentation.Sheet) {
+                        content()
+                    }
                 }
             }
             if (scene != null) {

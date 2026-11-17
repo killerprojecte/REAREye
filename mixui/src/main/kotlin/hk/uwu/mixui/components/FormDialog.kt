@@ -1,6 +1,7 @@
 package hk.uwu.mixui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
@@ -24,8 +25,14 @@ fun FormDialog(
             title = title,
             onDismissRequest = onDismissRequest,
             modifier = modifier,
-            renderInRootScaffold = true,
-            content = content,
+            // A scene-backed Sheet already owns a full-window local Scaffold;
+            // the page's root popup host is underneath that Sheet.
+            renderInRootScaffold = LocalFormPresentation.current != FormPresentation.Sheet,
+            content = {
+                CompositionLocalProvider(LocalFormPresentation provides FormPresentation.Dialog) {
+                    content()
+                }
+            },
         )
         MixUiBackend.Mochi -> StableMochiFormDialog(
             show = show,

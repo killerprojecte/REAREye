@@ -210,24 +210,34 @@ class ColorEditorInteractionTest {
             val confirm = activity!!.get().getString(R.string.rear_widget_confirm)
             compose.onNodeWithText(open).performTouchInput { click(center) }
             settle()
-            compose.onNodeWithText(confirm).assertIsDisplayed()
+            compose.onNodeWithContentDescription(confirm).assertIsDisplayed()
             if (backend == "mochi") {
                 progress(hk.uwu.mixui.R.string.mixui_color_hue, 120f, inDialog = true)
                 assertEquals("#8000FF00", value.value.uppercase())
                 progress(hk.uwu.mixui.R.string.mixui_color_alpha, 0.25f, inDialog = true)
                 assertEquals("#4000FF00", value.value.uppercase())
             }
-            save(backend, dark, "template-advanced", dialog = true)
+            compose.onNode(isDialog()).assertDoesNotExist()
+            val sheet = compose.onNodeWithTag("template-advanced-color").assert(hasScrollAction())
+            val saveBounds = compose.onNodeWithContentDescription(confirm)
+                .fetchSemanticsNode().boundsInRoot
+            save(backend, dark, "template-advanced-top", dialog = true)
+            sheet.performSemanticsAction(SemanticsActions.ScrollBy) { scroll -> scroll(0f, 10_000f) }
+            settle()
+            assertEquals("Confirm stays fixed outside the scrolling color picker", saveBounds,
+                compose.onNodeWithContentDescription(confirm).assertIsDisplayed()
+                    .fetchSemanticsNode().boundsInRoot)
+            save(backend, dark, "template-advanced-bottom", dialog = true)
             val count = writes.size
             val committed = value.value
-            compose.onNodeWithText(confirm).performClick()
+            compose.onNodeWithContentDescription(confirm).performClick()
             settle()
-            compose.onNodeWithText(confirm).assertDoesNotExist()
+            compose.onNodeWithContentDescription(confirm).assertDoesNotExist()
             assertEquals("Confirm closes, it must not commit again", count, writes.size)
             assertEquals(committed, value.value)
             compose.onNodeWithText(open).performClick()
             settle()
-            compose.onNodeWithText(confirm).assertIsDisplayed()
+            compose.onNodeWithContentDescription(confirm).assertIsDisplayed()
             if (backend == "mochi") {
                 progress(hk.uwu.mixui.R.string.mixui_color_hue, 240f, inDialog = true)
                 assertEquals("#400000FF", value.value.uppercase())
@@ -238,7 +248,7 @@ class ColorEditorInteractionTest {
                 activity!!.get().onBackPressedDispatcher.onBackPressed()
             }
             settle()
-            compose.onNodeWithText(confirm).assertDoesNotExist()
+            compose.onNodeWithContentDescription(confirm).assertDoesNotExist()
             assertEquals("Dismiss does not roll back already committed colors", beforeBack, value.value)
             assertEquals(beforeBackCount, writes.size)
         }

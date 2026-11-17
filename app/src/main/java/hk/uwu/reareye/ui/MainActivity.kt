@@ -346,8 +346,9 @@ class MainActivity : ComponentActivity() {
                                         enabled = currentScreen == "mary" && !showPresetPackDialog && !featureGuideVisible)
                                     .marySidebarBackground(marySidebarGestureHost)
                                     .then(
-                                        if (enableNavigationGlass) {
-                                            Modifier.navigationBackdrop(backdrop)
+                                        if (enableNavigationGlass || backdrop.isQuickActionRecordingRequested) {
+                                            // Only page content: never record the sibling bar, Popup or scrim.
+                                            Modifier.navigationBackdrop(backdrop, recordNavigation = enableNavigationGlass)
                                         } else {
                                             Modifier
                                         }

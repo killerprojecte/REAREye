@@ -67,6 +67,7 @@ import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.IconButton
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.TextField
+import hk.uwu.mixui.components.EditorTextField
 import hk.uwu.mixui.components.DialogActions
 import hk.uwu.mixui.components.GlassPreferenceFormDialog
 import hk.uwu.mixui.components.PreferenceRow
@@ -602,7 +603,10 @@ internal fun MarySettingsField(
     ) {
         androidx.compose.runtime.key(token) {
             DialogFormColumn {
-                TextField(
+                EditorTextField(
+                    autoFocus = editing && editToken === token,
+                    selectAllOnFocus = true,
+                    focusSessionKey = token,
                     value = input, onValueChange = { input = it }, label = fieldTitle,
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
                     visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None

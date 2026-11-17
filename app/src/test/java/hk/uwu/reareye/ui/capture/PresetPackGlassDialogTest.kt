@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -50,8 +50,9 @@ import java.util.zip.ZipOutputStream
 
 /**
  * Actual PresetPackDialog and repository local reads over an isolated filesDir. No check/download,
- * import, permission, apply, remove, or service action is invoked. Long synthetic local metadata
- * makes the real body scroll on a 480dp viewport. This is not a busy-task or full-app/device test.
+ * import, permission, apply, remove, or service action is invoked. Only tab switches and dismissal
+ * are exercised. Compact content is allowed to fit without overflow. Captures are explicitly labelled
+ * actual-isolated-dialog rather than component fixtures or full-app/device evidence.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], manifest = Config.NONE, application = Application::class,
@@ -83,15 +84,19 @@ class PresetPackGlassDialogTest {
     private fun awaitLocalData() {
         compose.waitUntil(10_000) {
             compose.mainClock.advanceTimeBy(100)
-            compose.onAllNodesWithText("当前版本：$installedVersion").fetchSemanticsNodes().isNotEmpty() &&
-                compose.onAllNodesWithText("待应用版本：$stagedVersion").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText(installedVersion).fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithText(stagedVersion).fetchSemanticsNodes().isNotEmpty()
         }
         settle()
     }
     private fun capture(backend: MixUiBackend, dark: Boolean, state: String) {
-        val directory = File(System.getProperty("ui.capture.output"), "preset-pack-dialog").apply { mkdirs() }
+        val directory = File(System.getProperty("ui.capture.output"), "preset-pack-store-redesign").apply { mkdirs() }
+        // Match the component fixture's native draw flush, without reopening the real dialog.
+        compose.runOnUiThread { primePresetWindowCapture(activity!!.get().window) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
         val bitmap = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }
-        File(directory, "${backend.name.lowercase()}-${if (dark) "dark" else "light"}-480dp-$state.png")
+        File(directory, "actual-isolated-dialog-${backend.name.lowercase()}-${if (dark) "dark" else "light"}-400x480dp-$state.png")
             .outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
     }
 
@@ -137,33 +142,62 @@ class PresetPackGlassDialogTest {
         awaitLocalData()
         val title = activity!!.get().getString(R.string.preset_pack_title)
         compose.onNodeWithText(title).assertIsDisplayed()
-        compose.onNodeWithText("检查 GitHub").assertExists()
+        compose.onNodeWithTag("preset-pack-check", useUnmergedTree = true)
+            .assertExists().assertContentDescriptionEquals("检查更新")
+        compose.onNodeWithText("GitHub").assertExists()
+        compose.onNodeWithText("从网盘获取").assertDoesNotExist()
+        compose.onNodeWithText("手动导入").assertDoesNotExist()
+        compose.onNodeWithTag("preset-pack-apply", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("应用").assertExists()
+        compose.onNodeWithText("覆盖当前版本", substring = true).assertExists()
+        compose.onAllNodes(isDialog()).assertCountEquals(0)
+        compose.onAllNodes(hasScrollAction(), useUnmergedTree = true).assertCountEquals(1)
+        capture(backend, dark, "cloud-staged")
+
+        compose.onNodeWithText("本地").performClick()
+        settle()
         compose.onNodeWithText("手动导入").assertExists()
-        compose.onNodeWithText("应用并覆盖当前版本").assertExists()
-        val scroll = compose.onNode(hasScrollAction(), useUnmergedTree = true)
-        val before = scroll.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
-        assertTrue("Real long body must overflow the short viewport", before.maxValue() > 0f)
-        val initialScroll = before.value()
-        capture(backend, dark, "open")
-        // performScrollTo loops until semantics ScrollBy moves the target, but that async
-        // animation cannot advance under our manual clock. Exercise real pointer scrolling
-        // instead, with a bounded number of drags and explicit clock advancement between them.
-        var swipes = 0
-        while (swipes < 6 && (!compose.onNodeWithText("删除").isDisplayed() ||
-                    !compose.onNodeWithText("重新校验").isDisplayed())) {
-            scroll.performTouchInput {
-                swipeUp(startY = height * 0.8f, endY = height * 0.2f, durationMillis = 400L)
-            }
-            swipes++
-            settle()
+        compose.onNodeWithText("从网盘获取").assertExists()
+        compose.onNodeWithText("下载后需手动导入").assertExists()
+        compose.onNodeWithTag("preset-pack-import", useUnmergedTree = true).assertExists().assertIsEnabled()
+        compose.onNodeWithTag("preset-pack-cloud-drive", useUnmergedTree = true).assertExists().assertIsEnabled()
+        compose.onNodeWithTag("preset-pack-check", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("preset-pack-apply", useUnmergedTree = true).assertExists()
+        capture(backend, dark, "local-staged")
+        val fixedTags = listOf("preset-pack-current", "preset-pack-tabs", "preset-pack-uninstall", "preset-pack-close")
+        val fixedBefore = fixedTags.associateWith {
+            compose.onNodeWithTag(it, useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         }
-        assertTrue("The real short-screen body must require pointer scrolling", swipes > 0)
-        compose.onNodeWithText("删除").assertIsDisplayed()
-        compose.onNodeWithText("重新校验").assertIsDisplayed()
+        val titleBefore = compose.onNodeWithText(title).fetchSemanticsNode().boundsInRoot
+
+        val scroll = compose.onNodeWithTag("preset-pack-body", useUnmergedTree = true)
+        val before = scroll.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+        // A compact body may fit. Exercise its real scroll owner without manufacturing overflow.
+        compose.mainClock.autoAdvance = true
+        scroll.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, before.maxValue()) }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        settle()
         val after = scroll.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
-        assertTrue("The production body really scrolled", after.value() > initialScroll + 1f)
+        assertTrue("The body reaches its actual end (${after.value()} / ${after.maxValue()})",
+            after.maxValue() - after.value() <= 1f)
+        assertEquals("Version, tabs and header actions remain outside the scrolling body", fixedBefore,
+            fixedTags.associateWith {
+                compose.onNodeWithTag(it, useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            })
+        assertEquals(titleBefore, compose.onNodeWithText(title).assertIsDisplayed().fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithTag("preset-pack-close", useUnmergedTree = true).assertIsEnabled()
+        compose.onNodeWithTag("preset-pack-uninstall", useUnmergedTree = true).assertIsEnabled()
+        listOf("SHA", "查看校验详情", "重新校验", "维护").forEach {
+            compose.onAllNodesWithText(it, substring = true, useUnmergedTree = true).assertCountEquals(0)
+        }
+        capture(backend, dark, "local-body-end")
+        compose.onNodeWithText("云端").performClick()
+        settle()
+        compose.onNodeWithTag("preset-pack-check", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("preset-pack-apply", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("手动导入").assertDoesNotExist()
         assertEquals(0, applied)
-        capture(backend, dark, "scrolled-bottom")
 
         compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }
         settle()
@@ -175,9 +209,9 @@ class PresetPackGlassDialogTest {
         awaitLocalData()
         compose.onNodeWithText(title).assertIsDisplayed()
         capture(backend, dark, "reopened")
-        compose.onNode(isDialog()).performTouchInput { click(Offset(2f, 2f)) }
+        compose.onNodeWithTag("preset-pack-close", useUnmergedTree = true).performClick()
         settle()
-        assertEquals("Outside closes the actual idle dialog", 2, dismisses)
+        assertEquals("Glass header closes the actual idle sheet", 2, dismisses)
         assertEquals(0, pageBacks)
         assertEquals(0, pageTaps)
         assertEquals(0, applied)

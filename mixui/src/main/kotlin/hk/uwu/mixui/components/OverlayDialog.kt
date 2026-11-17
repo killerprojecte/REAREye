@@ -261,7 +261,10 @@ fun OverlayDialog(
                                 color = summaryColor,
                             )
                         }
-                        CompositionLocalProvider(LocalOverlayDialogBounds provides dialogBounds) {
+                        CompositionLocalProvider(
+                            LocalOverlayDialogBounds provides dialogBounds,
+                            LocalFormPresentation provides FormPresentation.Dialog,
+                        ) {
                             content()
                         }
                     }

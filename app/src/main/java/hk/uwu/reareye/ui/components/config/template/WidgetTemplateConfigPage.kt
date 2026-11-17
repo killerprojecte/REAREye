@@ -1528,11 +1528,15 @@ internal fun ColorValueEditor(
         }
     }
 
-    hk.uwu.mixui.components.GlassPreferenceFormDialog(
+    hk.uwu.mixui.components.GlassEditorSheet(
         modifier = Modifier.testTag("template-advanced-color"),
         show = showAdvancedPicker,
         title = stringResource(R.string.rear_widget_card_template_color_advanced),
         onDismissRequest = { showAdvancedPicker = false },
+        onConfirm = { showAdvancedPicker = false },
+        confirmText = stringResource(R.string.rear_widget_confirm),
+        cancelText = null,
+        sessionKey = title,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -1543,13 +1547,6 @@ internal fun ColorValueEditor(
                 onColorChanged = { commitColor(it) },
                 modifier = Modifier.fillMaxWidth(),
             )
-            Button(
-                onClick = { showAdvancedPicker = false },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary(),
-            ) {
-                Text(text = stringResource(R.string.rear_widget_confirm))
-            }
         }
     }
 }

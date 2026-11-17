@@ -55,7 +55,7 @@ fun GlassSelectPreference(
         is GlassFormBackdrop.Miuix -> top.yukonga.miuix.kmp.glass.GlassDropdownPreference(
             title = title, items = items, selectedIndex = selectedIndex,
             onSelectedIndexChange = onSelectedIndexChange,
-            modifier = rowModifier, summary = summary, enabled = actualEnabled,
+            modifier = rowModifier.miuixSheetPreferenceSurface(), summary = summary, enabled = actualEnabled,
             showValue = false, backdrop = backdrop.value, renderInRootScaffold = true,
         )
         is GlassFormBackdrop.Mochi -> CompositionLocalProvider(LocalMochiBackdrop provides backdrop.value) {

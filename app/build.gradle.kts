@@ -309,7 +309,11 @@ tasks.withType<Test>().configureEach {
         .map(String::toBoolean).getOrElse(false)
     val uiCapture = providers.gradleProperty("uiCapture").map(String::toBoolean).getOrElse(false)
     // Native graphics plus both page suites exceeds Gradle's default 512 MiB test heap.
-    if (uiCapture) maxHeapSize = "2g"
+    // Android 16 native/Compose popup state must not leak between capture classes.
+    if (uiCapture) {
+        maxHeapSize = "2g"
+        forkEvery = 1
+    }
     systemProperty("ui.capture.enabled", uiCapture.toString())
     systemProperty("ui.capture.backends", providers.gradleProperty("uiCaptureBackends").getOrElse("miuix,mochi"))
     // Opt-in static matrix. Empty variants skips it during ordinary capture suites.
@@ -337,6 +341,10 @@ tasks.withType<Test>().configureEach {
             includeTestsMatching("hk.uwu.reareye.ui.capture.StableMochiFormDialogTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.ProtectedGlassDialogTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.PresetPackGlassDialogTest")
+            includeTestsMatching("hk.uwu.reareye.ui.capture.PresetPackSheetPresentationTest")
+            includeTestsMatching("hk.uwu.reareye.ui.capture.MiuixGlassTabsDragTest")
+            includeTestsMatching("hk.uwu.reareye.ui.components.navigation.NavigationQuickActionsGlassTest")
+            includeTestsMatching("hk.uwu.reareye.ui.capture.RearCardPriorityDisabledTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.GlassHeaderTabsTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.ScriptRenameHeaderTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.ScriptOverwriteDialogTest")
@@ -356,6 +364,7 @@ tasks.withType<Test>().configureEach {
             includeTestsMatching("hk.uwu.reareye.ui.capture.MiuixSheetMaterialSourceTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.ReasoningGlassSheetTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.GlassBottomSheetInteractionTest")
+            includeTestsMatching("hk.uwu.reareye.ui.capture.GlassEditorSheetContractTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.MoreSearchBottomSheetTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.HomeNativeTitleTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.MochiTitleAlignmentContractTest")
@@ -367,6 +376,7 @@ tasks.withType<Test>().configureEach {
             includeTestsMatching("hk.uwu.reareye.ui.capture.SurfacePrimitivesContractTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.FinalGlassPopupPagesTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.RearCardSuggestionsTest")
+            includeTestsMatching("hk.uwu.reareye.ui.components.config.RearBusinessSuggestionsTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.RearCardGlassDialogTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.NativePickerMusicCandidateTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.NativeWholePreferenceFeedbackTest")
@@ -374,6 +384,7 @@ tasks.withType<Test>().configureEach {
             includeTestsMatching("hk.uwu.reareye.ui.components.navigation.MainNavigationHostInteractionTest")
             includeTestsMatching("hk.uwu.reareye.ui.components.navigation.MainActivityNavigationInteractionTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.RearAppCardRenameGlassTest")
+            includeTestsMatching("hk.uwu.reareye.ui.capture.RearAppCardRenameSessionTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.RearWallpaperGlassDialogsTest")
             includeTestsMatching("hk.uwu.reareye.ui.components.config.draggable.library.draggable.DraggableStateLifecycleTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.OverlayDialogContractTest")
@@ -405,6 +416,10 @@ tasks.withType<Test>().configureEach {
             excludeTestsMatching("hk.uwu.reareye.ui.capture.StableMochiFormDialogTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.ProtectedGlassDialogTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.PresetPackGlassDialogTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.capture.PresetPackSheetPresentationTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.capture.MiuixGlassTabsDragTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.components.navigation.NavigationQuickActionsGlassTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.capture.RearCardPriorityDisabledTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.GlassHeaderTabsTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.ScriptRenameHeaderTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.ScriptOverwriteDialogTest")
@@ -424,6 +439,7 @@ tasks.withType<Test>().configureEach {
             excludeTestsMatching("hk.uwu.reareye.ui.capture.MiuixSheetMaterialSourceTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.ReasoningGlassSheetTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.GlassBottomSheetInteractionTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.capture.GlassEditorSheetContractTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.MoreSearchBottomSheetTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.HomeNativeTitleTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.MochiTitleAlignmentContractTest")
@@ -439,6 +455,7 @@ tasks.withType<Test>().configureEach {
             excludeTestsMatching("hk.uwu.reareye.ui.capture.NativeWholePreferenceFeedbackTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.MaryNativeTopBarTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.RearAppCardRenameGlassTest")
+            excludeTestsMatching("hk.uwu.reareye.ui.capture.RearAppCardRenameSessionTest")
             excludeTestsMatching("hk.uwu.reareye.ui.capture.RearWallpaperGlassDialogsTest")
             excludeTestsMatching("hk.uwu.reareye.ui.components.navigation.MainNavigationHostInteractionTest")
             excludeTestsMatching("hk.uwu.reareye.ui.components.navigation.MainActivityNavigationInteractionTest")
@@ -478,6 +495,10 @@ dependencies {
     implementation(libs.mmkv)
 
     // Native vendor/scaffold comparisons are test-only; app production stays behind mixui.
+    testImplementation(libs.miuix.ui)
+    testImplementation(libs.miuix.glass)
+    testImplementation(libs.miuix.blur)
+    testImplementation(libs.miuix.material)
     testImplementation("io.github.feice11.mochi-compose:mochi-compose:${libs.versions.mochi.get()}") {
         exclude(group = "com.materialkolor")
     }

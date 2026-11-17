@@ -242,6 +242,28 @@ class RearWallpaperGlassDialogsTest {
         }
         node.performClick(); settle()
         compose.onNodeWithTag("wallpaper-$kind-dialog").assertIsDisplayed()
+        if (kind == "import" || kind == "metadata") {
+            compose.onNodeWithTag("wallpaper-$kind-dialog").assert(hasScrollAction())
+            compose.onNode(isDialog()).assertDoesNotExist()
+        }
+    }
+    private fun captureFormEnds(prefix: String, kind: String) {
+        val initialSave = action(kind, true).fetchSemanticsNode().boundsInRoot
+        capture("$prefix-$kind-top")
+        val body = compose.onNodeWithTag("wallpaper-$kind-dialog")
+        val step = body.fetchSemanticsNode().boundsInRoot.height * 0.7f
+        body.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) { it(0f, step) }
+        settle()
+        capture("$prefix-$kind-middle")
+        body.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) { scroll ->
+            scroll(0f, 10_000f)
+        }
+        settle()
+        assertEquals("Save stays fixed while the body scrolls", initialSave,
+            action(kind, true).fetchSemanticsNode().boundsInRoot)
+        action(kind, false).assertIsDisplayed()
+        capture("$prefix-$kind-bottom")
+        reveal("wallpaper-title-fallback")
     }
     private fun reveal(tag: String) {
         val wasAutoAdvance = compose.mainClock.autoAdvance
@@ -254,11 +276,10 @@ class RearWallpaperGlassDialogsTest {
         settle()
     }
     private fun action(kind: String, confirm: Boolean): SemanticsNodeInteraction {
-        if (kind == "import" || kind == "metadata") {
-            reveal("wallpaper-$kind-actions")
-        }
         val text = if (!confirm) R.string.rear_widget_cancel else if (kind == "delete") R.string.rear_widget_action_delete else R.string.rear_widget_confirm
-        return compose.onNode(hasText(label(text)) and hasAnyAncestor(hasTestTag("wallpaper-$kind-actions")))
+        return if (kind == "import" || kind == "metadata") {
+            compose.onNodeWithContentDescription(label(text)).assertIsDisplayed()
+        } else compose.onNode(hasText(label(text)) and hasAnyAncestor(hasTestTag("wallpaper-$kind-actions")))
     }
     private fun horizontalActions(kind: String) {
         val cancel = action(kind, false).fetchSemanticsNode().boundsInRoot
@@ -316,7 +337,7 @@ class RearWallpaperGlassDialogsTest {
                 hasAnyAncestor(hasTestTag("wallpaper-card-2"))).assertDoesNotExist()
             compose.onNodeWithTag("RearWallpaperManagerScreen-list")
                 .performScrollToNode(hasTestTag("wallpaper-card-1")); settle()
-            open("metadata"); capture("$prefix-metadata-top")
+            open("metadata"); captureFormEnds(prefix, "metadata")
             replace("wallpaper-title-fallback", "")
             replace("wallpaper-title-zh", "")
             action("metadata", true).assertIsNotEnabled()
@@ -377,12 +398,14 @@ class RearWallpaperGlassDialogsTest {
             val metadata = "{\"titles\":{\"fallback\":\"Fixture metadata\"}}"
             val metadataUri = fixtureFile(".json", metadata.toByteArray())
             val previewUri = fixtureFile(".png", fake.getPreview(1))
-            open("import"); capture("$prefix-import-top")
+            open("import"); captureFormEnds(prefix, "import")
             horizontalActions("import")
             action("import", true).assertIsNotEnabled()
             action("import", false).performClick(); closed("import")
             open("import")
+            replace("wallpaper-title-fallback", "Draft before picker")
             pick("wallpaper-package-file", null, packageTypes)
+            editor("wallpaper-title-fallback").assertTextContains("Draft before picker")
             action("import", true).assertIsNotEnabled()
             pick("wallpaper-package-file", source, packageTypes)
             // Cancelling the package picker must retain the already selected package.
@@ -394,6 +417,8 @@ class RearWallpaperGlassDialogsTest {
             settle()
             compose.onNode(hasText(label(R.string.rear_wallpaper_clear_file)) and hasAnyAncestor(hasTestTag("wallpaper-preview-file"))).assertDoesNotExist()
             pick("wallpaper-preview-file", previewUri, previewTypes)
+            editor("wallpaper-title-fallback").assertTextContains("Draft before picker")
+            capture("$prefix-import-picker-return-draft")
             replace("wallpaper-title-fallback", "Imported fixture")
             action("import", true).performClick(); closed("import")
             await { fake.imports == 1 }
@@ -430,6 +455,12 @@ class RearWallpaperGlassDialogsTest {
         for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) {
             host(backend, dark); open("interval")
             horizontalActions("interval")
+            editor("wallpaper-interval-input").assertIsFocused()
+            val selection = editor("wallpaper-interval-input").fetchSemanticsNode()
+                .config[SemanticsProperties.TextSelectionRange]
+            assertEquals(0, selection.min); assertEquals("60000".length, selection.max)
+            editor("wallpaper-interval-input").performTextInput("123"); settle()
+            editor("wallpaper-interval-input").assertTextEquals("123")
             capture("$backend-${if (dark) "dark" else "light"}-interval")
             for (invalid in listOf("", "99", "999999999999999999999999999")) {
                 replace("wallpaper-interval-input", invalid)

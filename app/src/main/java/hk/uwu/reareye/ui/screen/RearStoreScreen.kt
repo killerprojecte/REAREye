@@ -120,6 +120,7 @@ import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperRepository
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.GlassEditorSheet
 import hk.uwu.mixui.components.DialogActions
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.mixui.components.BadgeItem
@@ -154,6 +155,7 @@ import hk.uwu.mixui.components.InfiniteProgressIndicator
 import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.LargeTitleLazyScaffold
 import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.LocalPageTopBarScrollConnection
 import hk.uwu.mixui.components.pageScrollFeedback
 import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.Surface
@@ -1323,6 +1325,7 @@ internal fun RearStoreDetailContent(
             ?: stringResource(R.string.store_navigation),
         isContentScrolled = listState.canScrollBackward,
         contentListState = listState,
+        attachNestedScrollToContent = false,
         pinnedHeader = {
             if (!loading && !loadFailed && detail != null) {
                 GlassTabs(
@@ -1481,7 +1484,7 @@ internal fun RearStoreDetailContent(
 
             val wallpaperDraft = wallpaperMetadataDraft
             val pendingWallpaper = pendingWallpaperInstall
-            GlassFormDialog(
+            GlassEditorSheet(
                 modifier = Modifier.testTag("store-wallpaper-dialog"),
                 show = pendingWallpaper != null && wallpaperDraft != null,
                 title = stringResource(R.string.rear_store_wallpaper_metadata_title),
@@ -1489,8 +1492,27 @@ internal fun RearStoreDetailContent(
                     pendingWallpaperInstall = null
                     wallpaperMetadataDraft = null
                 },
+                confirmText = stringResource(R.string.rear_widget_confirm),
+                cancelText = stringResource(R.string.rear_widget_cancel),
+                sessionKey = pendingWallpaper?.preparedAsset,
+                onConfirm = confirm@{
+                    val currentDraft = wallpaperMetadataDraft ?: return@confirm
+                    val prepared = pendingWallpaperInstall?.preparedAsset ?: return@confirm
+                    val release = prepared.release
+                    val asset = prepared.asset
+                    pendingWallpaperInstall = null
+                    wallpaperMetadataDraft = null
+                    scope.launch {
+                        performInstall(
+                            release = release,
+                            asset = asset,
+                            preparedAsset = prepared,
+                            wallpaperMetadataOptions = currentDraft,
+                        )
+                    }
+                },
             ) {
-                DialogFormColumn(maxHeight = 620.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     WallpaperMetadataFields(
                         titleFallback = wallpaperDraft?.titleFallback.orEmpty(),
                         titleZhCn = wallpaperDraft?.titleZhCn.orEmpty(),
@@ -1535,31 +1557,6 @@ internal fun RearStoreDetailContent(
                         },
                         onSupportAonChange = {
                             wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(supportAon = it)
-                        },
-                    )
-                    DialogActions(
-                        modifier = Modifier.testTag("store-wallpaper-actions"),
-                        cancelText = stringResource(R.string.rear_widget_cancel),
-                        confirmText = stringResource(R.string.rear_widget_confirm),
-                        onCancel = {
-                            pendingWallpaperInstall = null
-                            wallpaperMetadataDraft = null
-                        },
-                        onConfirm = confirm@{
-                            val currentDraft = wallpaperMetadataDraft ?: return@confirm
-                            val prepared = pendingWallpaperInstall?.preparedAsset ?: return@confirm
-                            val release = prepared.release
-                            val asset = prepared.asset
-                            pendingWallpaperInstall = null
-                            wallpaperMetadataDraft = null
-                            scope.launch {
-                                performInstall(
-                                    release = release,
-                                    asset = asset,
-                                    preparedAsset = prepared,
-                                    wallpaperMetadataOptions = currentDraft,
-                                )
-                            }
                         },
                     )
                 }
@@ -1641,12 +1638,16 @@ internal fun RearStoreDetailContent(
                 latestReleaseTag != null &&
                 installedReleaseTag != latestReleaseTag
 
+        val topBarScrollConnection = LocalPageTopBarScrollConnection.current
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("store-detail-list")
                 .pageScrollFeedback()
+                // The native bar must receive top-edge post-scroll before elastic feedback
+                // consumes it. Attach here (not the scaffold's outer Box), exactly once.
+                .then(topBarScrollConnection?.let { Modifier.nestedScroll(it) } ?: Modifier)
                 .padding(horizontal = 12.dp),
             contentPadding = PaddingValues(
                 top = paddingValues.calculateTopPadding(),
@@ -2171,30 +2172,7 @@ internal fun RearStoreDownloadBadge(
     text: String,
     onClick: () -> Unit,
 ) {
-    Surface(
-        color = MixTheme.colorScheme.primary.copy(alpha = 0.18f),
-        shape = RoundedCornerShape(18.dp),
-        onClick = onClick,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = text,
-                color = MixTheme.colorScheme.primary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Icon(
-                imageVector = UiIcons.Download,
-                contentDescription = null,
-                tint = MixTheme.colorScheme.primary,
-                modifier = Modifier.size(15.dp),
-            )
-        }
-    }
+    hk.uwu.reareye.ui.components.StoreDownloadBadge(text = text, onClick = onClick)
 }
 
 @Composable
@@ -2353,61 +2331,18 @@ private fun RearStoreInstallProgressChip(installState: RearStoreActiveInstall) {
     val downloadedBytes = installState.downloadedBytes.coerceAtLeast(0L)
     val determinateProgress = if (totalBytes > 0L) {
         (downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
-    } else {
-        null
-    }
+    } else null
     val statusText = when (installState.phase) {
-        RearStoreInstallProgressStage.CONNECTING -> {
-            stringResource(R.string.rear_store_install_progress_connecting)
-        }
-
-        RearStoreInstallProgressStage.DOWNLOADING -> {
-            determinateProgress?.let {
-                stringResource(
-                    R.string.rear_store_install_progress_downloading_percent,
-                    (it * 100f).roundToInt(),
-                )
-            } ?: stringResource(R.string.rear_store_install_progress_downloading)
-        }
-
-        RearStoreInstallProgressStage.INSTALLING -> {
-            stringResource(R.string.rear_store_install_progress_installing)
-        }
+        RearStoreInstallProgressStage.CONNECTING -> stringResource(R.string.rear_store_install_progress_connecting)
+        RearStoreInstallProgressStage.DOWNLOADING -> determinateProgress?.let {
+            stringResource(R.string.rear_store_install_progress_downloading_percent, (it * 100f).roundToInt())
+        } ?: stringResource(R.string.rear_store_install_progress_downloading)
+        RearStoreInstallProgressStage.INSTALLING -> stringResource(R.string.rear_store_install_progress_installing)
     }
-    Surface(
-        color = MixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (determinateProgress != null && installState.phase == RearStoreInstallProgressStage.DOWNLOADING) {
-                androidx.compose.material3.CircularProgressIndicator(
-                    progress = { determinateProgress },
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.2.dp,
-                    color = MixTheme.colorScheme.primary,
-                    trackColor = MixTheme.colorScheme.primary.copy(alpha = 0.16f),
-                )
-            } else {
-                androidx.compose.material3.CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.2.dp,
-                    color = MixTheme.colorScheme.primary,
-                    trackColor = MixTheme.colorScheme.primary.copy(alpha = 0.16f),
-                )
-            }
-            Text(
-                text = statusText,
-                color = MixTheme.colorScheme.primary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-            )
-        }
-    }
+    hk.uwu.reareye.ui.components.StoreProgressChip(
+        text = statusText,
+        progress = determinateProgress.takeIf { installState.phase == RearStoreInstallProgressStage.DOWNLOADING },
+    )
 }
 
 private enum class RearStoreInstallInfoBadgeGroup {

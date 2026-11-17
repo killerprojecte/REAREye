@@ -63,7 +63,7 @@ internal fun rememberNativeSheetMaterialSurface(
     page: Backdrop?,
     source: NativeSheetMaterialSource,
 ): @Composable BottomSheetSurfaceScope.() -> Modifier {
-    val nativeSurface = glassBottomSheetSurface(page)
+    val nativeSurface = glassBottomSheetSurface(page, material = modalGlassMaterial())
     return {
         val panelScope = this
         val material = nativeSurface()
@@ -92,7 +92,7 @@ internal fun rememberNativeSheetMaterialSurface(
  */
 @Composable
 internal fun NativeSheetMaterialRecorder(page: Backdrop?, source: NativeSheetMaterialSource) {
-    val nativeSurface = glassBottomSheetSurface(page)
+    val nativeSurface = glassBottomSheetSurface(page, material = modalGlassMaterial())
     val scope = source.scope
     val size = source.size
     val discard = rememberGraphicsLayer()

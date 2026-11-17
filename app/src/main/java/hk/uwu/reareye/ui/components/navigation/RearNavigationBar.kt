@@ -1,6 +1,5 @@
 package hk.uwu.reareye.ui.components.navigation
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -27,6 +26,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BorderStyle
 import androidx.compose.material.icons.rounded.Cottage
@@ -55,7 +56,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -76,29 +76,18 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
-import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.zIndex
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.rounded.Stacks
-import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
-import com.kyant.backdrop.highlight.Highlight
-import com.kyant.backdrop.shadow.InnerShadow
-import com.kyant.backdrop.shadow.Shadow
 import com.kyant.capsule.ContinuousCapsule
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.config.ConfigType
 import hk.uwu.reareye.ui.theme.AppNavigationBarStyle
 import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
-import hk.uwu.mixui.components.Button
-import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.BottomSheetAction
+import hk.uwu.mixui.components.BottomSheetActionButton
+import hk.uwu.mixui.components.BottomSheetActionIcon
 import hk.uwu.mixui.components.GlassBottomSheet
 import hk.uwu.mixui.components.GlassBottomSheetSize
 import androidx.compose.ui.platform.testTag
@@ -130,19 +119,6 @@ private data class NavigationDestination(
     val label: String,
     val icon: ImageVector,
     val quickActions: List<NavigationQuickAction> = emptyList(),
-)
-
-@Immutable
-private data class NavigationQuickActionStyle(
-    val containerColor: Color,
-    val contentColor: Color,
-    val borderColor: Color,
-    val hoveredContainerColor: Color,
-    val selectedContainerColor: Color,
-    val selectedBorderColor: Color,
-    val shadowAlpha: Float,
-    val shadowElevation: Dp,
-    val usesGlass: Boolean,
 )
 
 private const val HOME_ROUTE = "home"
@@ -243,9 +219,12 @@ fun AppNavigationBar(
     }
 
     fun selectQuickAction(target: NavigationQuickTarget) {
+        // Retire ownership before invoking application code; retained closing callbacks
+        // and a release following Back/cancel must never execute the same action again.
+        if (expandedQuickActionsRoute == null) return
+        expandedQuickActionsRoute = null
         quickMenuController.reset()
         onQuickActionSelected(target)
-        expandedQuickActionsRoute = null
     }
 
     BackHandler(enabled = expandedQuickActionsRoute != null) { closeQuickActions() }
@@ -312,7 +291,7 @@ fun AppNavigationBar(
             NavigationQuickActionsPopup(
                 expanded = expandedQuickActionsRoute == item.route,
                 actions = item.quickActions,
-                navigationBarMode = navigationBarMode,
+                backdrop = backdrop,
                 editLabel = editLabel,
                 quickMenuController = quickMenuController,
                 anchor = menuAnchor,
@@ -389,7 +368,7 @@ private fun NavigationQuickActionsPopup(
     hostPosition: Offset,
     expanded: Boolean,
     actions: List<NavigationQuickAction>,
-    navigationBarMode: ModuleNavigationBarMode,
+    backdrop: NavigationBackdrop,
     editLabel: String,
     quickMenuController: NavigationQuickMenuController,
     onDismissRequest: () -> Unit,
@@ -397,7 +376,6 @@ private fun NavigationQuickActionsPopup(
     onActionSelected: (NavigationQuickTarget) -> Unit,
 ) {
     val density = LocalDensity.current
-    val menuBackdrop = rememberLayerBackdrop()
     val positionProvider = remember(density, anchor, hostPosition) {
         NavigationQuickActionsPopupPositionProvider(
             anchor = anchor,
@@ -427,14 +405,9 @@ private fun NavigationQuickActionsPopup(
 
     if ((!expanded && !popupVisible) || actions.isEmpty()) return
 
-    Popup(
-        popupPositionProvider = positionProvider,
+    hk.uwu.mixui.components.NavigationQuickActionPopup(
+        positionProvider = positionProvider,
         onDismissRequest = onDismissRequest,
-        properties = PopupProperties(
-            focusable = false,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-        ),
     ) {
         val progressValue = progress.value
         Box(
@@ -461,13 +434,6 @@ private fun NavigationQuickActionsPopup(
                 label = "QuickActionEditTargetProgress",
             )
 
-            NavigationQuickActionsBackdropLayer(
-                actionsCount = actions.size,
-                editTargetProgress = editTargetProgress,
-                width = buttonWidth,
-                modifier = Modifier.layerBackdrop(menuBackdrop),
-            )
-
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -482,8 +448,9 @@ private fun NavigationQuickActionsPopup(
                         NavigationQuickActionButton(
                             label = editLabel,
                             icon = Icons.Rounded.Edit,
-                            navigationBarMode = navigationBarMode,
-                            backdrop = menuBackdrop,
+                            backdrop = backdrop,
+                            enabled = expanded,
+                            testTag = "navigation-quick-edit-target",
                             width = buttonWidth,
                             hovered = quickMenuController.hoveredKey == EDIT_QUICK_ACTIONS_KEY,
                             isEditTarget = true,
@@ -506,8 +473,9 @@ private fun NavigationQuickActionsPopup(
                         NavigationQuickActionButton(
                             label = action.label,
                             icon = action.icon,
-                            navigationBarMode = navigationBarMode,
-                            backdrop = menuBackdrop,
+                            backdrop = backdrop,
+                            enabled = expanded,
+                            testTag = "navigation-quick-action-${action.id}",
                             width = buttonWidth,
                             hovered = quickMenuController.hoveredKey == action.id,
                             delayProgress = ((progressValue - index * 0.05f).coerceIn(0f, 1f)),
@@ -522,47 +490,12 @@ private fun NavigationQuickActionsPopup(
 }
 
 @Composable
-private fun NavigationQuickActionsBackdropLayer(
-    actionsCount: Int,
-    editTargetProgress: Float,
-    width: Dp,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            modifier = Modifier
-                .width(width)
-                .height(40.dp)
-                .graphicsLayer { alpha = editTargetProgress }
-                .background(
-                    MixTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f),
-                    ContinuousCapsule
-                ),
-        )
-        repeat(actionsCount) {
-            Box(
-                modifier = Modifier
-                    .width(width)
-                    .height(40.dp)
-                    .background(
-                        MixTheme.colorScheme.surfaceContainer.copy(alpha = 0.66f),
-                        ContinuousCapsule
-                    ),
-            )
-        }
-    }
-}
-
-@Composable
 private fun NavigationQuickActionButton(
     label: String,
     icon: ImageVector,
-    navigationBarMode: ModuleNavigationBarMode,
-    backdrop: Backdrop,
+    backdrop: NavigationBackdrop,
+    enabled: Boolean,
+    testTag: String,
     width: Dp,
     hovered: Boolean,
     onClick: () -> Unit,
@@ -571,24 +504,7 @@ private fun NavigationQuickActionButton(
     isEditTarget: Boolean = false,
     onPositioned: (LayoutCoordinates) -> Unit = {},
 ) {
-    val density = LocalDensity.current
-    val style = rememberNavigationQuickActionStyle(navigationBarMode)
-    val shouldUseGlass = style.usesGlass
-    val targetContainerColor = when {
-        hovered && shouldUseGlass -> style.selectedContainerColor
-        hovered -> style.hoveredContainerColor
-        else -> style.containerColor
-    }
-    val containerColor by animateColorAsState(
-        targetValue = targetContainerColor,
-        animationSpec = tween(160, easing = FastOutSlowInEasing),
-        label = "QuickActionContainerColor",
-    )
-    val borderColor by animateColorAsState(
-        targetValue = if (hovered && shouldUseGlass) style.selectedBorderColor else style.borderColor,
-        animationSpec = tween(160, easing = FastOutSlowInEasing),
-        label = "QuickActionBorderColor",
-    )
+    val contentColor = MixTheme.colorScheme.onSurface
     val targetScale = when {
         hovered && isEditTarget -> 1.12f
         hovered -> 1.08f
@@ -611,59 +527,19 @@ private fun NavigationQuickActionButton(
             clip = true
             scaleX = animatedScale * progressScale
             scaleY = animatedScale * progressScale
-            shadowElevation =
-                with(density) { (style.shadowElevation + if (hovered) 8.dp else 0.dp).toPx() }
-            ambientShadowColor = Color.Black.copy(alpha = style.shadowAlpha)
-            spotShadowColor = Color.Black.copy(alpha = style.shadowAlpha)
         }
-        .then(
-            if (shouldUseGlass) {
-                Modifier.drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { ContinuousCapsule },
-                    effects = {
-                        vibrancy()
-                        blur(if (hovered) 10f.dp.toPx() else 8f.dp.toPx())
-                        lens(
-                            if (hovered) 34f.dp.toPx() else 24f.dp.toPx(),
-                            if (hovered) 38f.dp.toPx() else 26f.dp.toPx(),
-                        )
-                    },
-                    highlight = {
-                        Highlight.Default.copy(alpha = if (hovered) 1f else 0.86f)
-                    },
-                    shadow = {
-                        Shadow.Default.copy(
-                            color = Color.Black.copy(alpha = 0.18f),
-                            alpha = if (hovered) 0.58f else 0.32f,
-                        )
-                    },
-                    innerShadow = {
-                        InnerShadow(
-                            radius = if (hovered) 12.dp else 7.dp,
-                            alpha = if (hovered) 0.42f else 0.22f,
-                        )
-                    },
-                    onDrawSurface = {
-                        drawRect(containerColor)
-                        drawRect(Color.White.copy(alpha = if (hovered) 0.16f else 0.055f))
-                        drawRect(Color.Black.copy(alpha = if (hovered) 0.025f else 0.012f))
-                    },
-                )
-            } else {
-                Modifier.background(containerColor, ContinuousCapsule)
-            }
-        )
-        .border(0.75.dp, borderColor, ContinuousCapsule)
+        .testTag(testTag)
         .clickable(
             interactionSource = remember { MutableInteractionSource() },
             indication = null,
+            enabled = enabled,
             onClick = onClick,
         )
 
-    Box(
+    hk.uwu.mixui.components.NavigationQuickActionSurface(
+        backdrop = backdrop,
         modifier = baseModifier,
-        contentAlignment = Alignment.Center,
+        hovered = hovered,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp),
@@ -673,12 +549,12 @@ private fun NavigationQuickActionButton(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = style.contentColor,
+                tint = contentColor,
                 modifier = Modifier.size(19.dp),
             )
             AutoShrinkText(
                 text = label,
-                color = style.contentColor,
+                color = contentColor,
                 maxFontSize = 12.sp,
                 minFontSize = 9.sp,
                 fontWeight = FontWeight.Medium,
@@ -686,98 +562,6 @@ private fun NavigationQuickActionButton(
             )
         }
     }
-}
-
-@Composable
-private fun rememberNavigationQuickActionStyle(
-    navigationBarMode: ModuleNavigationBarMode,
-): NavigationQuickActionStyle {
-    val isLight = MixTheme.colorScheme.surface.luminance() >= 0.5f
-    val outline = MixTheme.colorScheme.dividerLine.copy(alpha = if (isLight) 0.7f else 0.86f)
-    val primaryTint = MixTheme.colorScheme.primary.copy(alpha = if (isLight) 0.14f else 0.2f)
-    return when (navigationBarMode) {
-        ModuleNavigationBarMode.NORMAL -> NavigationQuickActionStyle(
-            containerColor = MixTheme.colorScheme.surface,
-            contentColor = MixTheme.colorScheme.onSurface,
-            borderColor = outline,
-            hoveredContainerColor = blendColors(MixTheme.colorScheme.surface, primaryTint),
-            selectedContainerColor = blendColors(MixTheme.colorScheme.surface, primaryTint),
-            selectedBorderColor = outline,
-            shadowAlpha = if (isLight) 0.13f else 0.28f,
-            shadowElevation = 10.dp,
-            usesGlass = false,
-        )
-
-        ModuleNavigationBarMode.SEMI_TRANSPARENT -> NavigationQuickActionStyle(
-            containerColor = MixTheme.colorScheme.surface.copy(alpha = 0.9f),
-            contentColor = MixTheme.colorScheme.onSurface,
-            borderColor = outline.copy(alpha = 0.9f),
-            hoveredContainerColor = blendColors(
-                MixTheme.colorScheme.surface.copy(alpha = 0.94f),
-                primaryTint
-            ),
-            selectedContainerColor = blendColors(
-                MixTheme.colorScheme.surface.copy(alpha = 0.94f),
-                primaryTint
-            ),
-            selectedBorderColor = outline.copy(alpha = 0.9f),
-            shadowAlpha = if (isLight) 0.16f else 0.3f,
-            shadowElevation = 12.dp,
-            usesGlass = false,
-        )
-
-        ModuleNavigationBarMode.FLOATING -> NavigationQuickActionStyle(
-            containerColor = MixTheme.colorScheme.surfaceContainer,
-            contentColor = MixTheme.colorScheme.onSurfaceContainer,
-            borderColor = outline,
-            hoveredContainerColor = blendColors(
-                MixTheme.colorScheme.surfaceContainer,
-                primaryTint
-            ),
-            selectedContainerColor = blendColors(
-                MixTheme.colorScheme.surfaceContainer,
-                primaryTint
-            ),
-            selectedBorderColor = outline,
-            shadowAlpha = if (isLight) 0.18f else 0.34f,
-            shadowElevation = 14.dp,
-            usesGlass = false,
-        )
-
-        ModuleNavigationBarMode.FLOATING_GLASS -> NavigationQuickActionStyle(
-            containerColor = if (isLight) {
-                Color.White.copy(alpha = 0.115f)
-            } else {
-                Color.White.copy(alpha = 0.065f)
-            },
-            contentColor = MixTheme.colorScheme.onSurface,
-            borderColor = Color.White.copy(alpha = if (isLight) 0.34f else 0.15f),
-            hoveredContainerColor = if (isLight) {
-                Color.White.copy(alpha = 0.18f)
-            } else {
-                Color.White.copy(alpha = 0.105f)
-            },
-            selectedContainerColor = if (isLight) {
-                Color.White.copy(alpha = 0.245f)
-            } else {
-                Color.White.copy(alpha = 0.145f)
-            },
-            selectedBorderColor = Color.White.copy(alpha = if (isLight) 0.58f else 0.28f),
-            shadowAlpha = if (isLight) 0.14f else 0.3f,
-            shadowElevation = 16.dp,
-            usesGlass = true,
-        )
-    }
-}
-
-private fun blendColors(base: Color, overlay: Color): Color {
-    val alpha = overlay.alpha.coerceIn(0f, 1f)
-    return Color(
-        red = base.red * (1f - alpha) + overlay.red * alpha,
-        green = base.green * (1f - alpha) + overlay.green * alpha,
-        blue = base.blue * (1f - alpha) + overlay.blue * alpha,
-        alpha = base.alpha,
-    )
 }
 
 @Composable
@@ -899,6 +683,8 @@ internal fun NavigationQuickActionEditor(
     val maxHint = stringResource(R.string.navigation_quick_max_hint, MaxNavigationQuickActions)
     val scrollState = rememberScrollState()
     LaunchedEffect(show) { if (show) scrollState.scrollTo(0) }
+    // Retained native header callbacks must not commit the same session twice.
+    var submitted by remember(show) { mutableStateOf(false) }
 
     GlassBottomSheet(
         show = show,
@@ -908,6 +694,37 @@ internal fun NavigationQuickActionEditor(
         isContentScrolled = scrollState.value > 0,
         title = stringResource(R.string.navigation_quick_edit_title),
         onDismissRequest = onDismissRequest,
+        startAction = {
+            BottomSheetActionButton(
+                onClick = { if (show) onDismissRequest() },
+                modifier = Modifier.testTag("quick-editor-cancel"),
+                enabled = show,
+            ) {
+                BottomSheetActionIcon(
+                    BottomSheetAction.Close,
+                    Icons.Outlined.Close,
+                    contentDescription = stringResource(R.string.navigation_quick_cancel),
+                )
+            }
+        },
+        endAction = {
+            BottomSheetActionButton(
+                onClick = {
+                    if (show && !submitted) {
+                        submitted = true
+                        onSave(selectedState.toList())
+                    }
+                },
+                modifier = Modifier.testTag("quick-editor-save"),
+                enabled = show && !submitted,
+            ) {
+                BottomSheetActionIcon(
+                    BottomSheetAction.Save,
+                    Icons.Outlined.Check,
+                    contentDescription = stringResource(R.string.navigation_quick_save),
+                )
+            }
+        },
     ) {
         Column(
             modifier = Modifier
@@ -931,27 +748,6 @@ internal fun NavigationQuickActionEditor(
                 availableActions = availableActions,
                 allActionLookup = allActionLookup,
             )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Button(
-                    modifier = Modifier.weight(1f).testTag("quick-editor-cancel"),
-                    onClick = onDismissRequest,
-                ) {
-                    Text(text = stringResource(R.string.navigation_quick_cancel))
-                }
-                Button(
-                    onClick = { onSave(selectedState.toList()) },
-                    modifier = Modifier.weight(1f).testTag("quick-editor-save"),
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                ) {
-                    Text(text = stringResource(R.string.navigation_quick_save))
-                }
-            }
         }
     }
 }

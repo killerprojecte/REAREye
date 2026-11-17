@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.core.app.ActivityOptionsCompat
@@ -90,6 +91,29 @@ class RemainingManagerGlassDialogsTest {
         }
     }
     private var backs = 0
+    private var captureBackend = "unhosted"
+    private var captureDark = false
+    private fun geometry(phase: String, screenshot: Boolean = false) {
+        runCatching {
+            System.err.println("MANAGER_GEOMETRY backend=$captureBackend dark=$captureDark phase=$phase backs=$backs action=${action.value}")
+            val probes = listOf("roots" to isRoot(), "editors" to hasSetTextAction(),
+                "actions" to (hasContentDescription(label(R.string.rear_widget_confirm)) or
+                    hasContentDescription(label(R.string.rear_widget_cancel)))) +
+                listOf("business-form", "bounds-edit-form", "mochi-glass-sheet-host", "mochi-glass-sheet",
+                    "mixui-native-glass-sheet-host", "mixui-native-glass-sheet").map { it to hasTestTag(it) }
+            for ((name, matcher) in probes) {
+                val nodes = compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes()
+                System.err.println("MANAGER_GEOMETRY $name count=${nodes.size}")
+                nodes.forEach { node -> System.err.println("MANAGER_GEOMETRY $name id=${node.id} " +
+                    "clipped=${node.boundsInRoot} root=${node.positionInRoot} screen=${node.positionOnScreen} size=${node.size} " +
+                    "scroll=${node.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange)} " +
+                    "focused=${node.config.getOrNull(SemanticsProperties.Focused)}") }
+            }
+            if (screenshot) capture(captureBackend, captureDark, "failure-$phase")
+        }.onFailure { System.err.println("MANAGER_GEOMETRY diagnostic failed: $it") }
+    }
+    private inline fun <T> inspectFailure(phase: String, block: () -> T): T = try { block() }
+        catch (failure: AssertionError) { geometry(phase, screenshot = true); throw failure }
     private var nextUri: Uri? = null
     private val files = mutableListOf<File>()
     private val action = mutableStateOf<ConfigDashboardAction?>(null)
@@ -110,6 +134,7 @@ class RemainingManagerGlassDialogsTest {
     }
     private fun present(tag: String) = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
     private fun host(backend: String, dark: Boolean, content: @Composable () -> Unit) {
+        captureBackend = backend; captureDark = dark
         val registry = object : ActivityResultRegistry() {
             override fun <I, O> onLaunch(requestCode: Int, contract: ActivityResultContract<I, O>, input: I,
                 options: ActivityOptionsCompat?) { dispatchResult(requestCode, requireNotNull(nextUri)) }
@@ -149,7 +174,33 @@ class RemainingManagerGlassDialogsTest {
         settle()
         return this
     }
-    private fun button(tag: String) = compose.onNodeWithTag(tag).reveal()
+    private fun isSheet(tag: String) = tag == "business-form" || tag == "bounds-edit-form"
+    private fun button(tag: String): SemanticsNodeInteraction = inspectFailure("button-$tag") {
+        val form = tag.removeSuffix("-cancel").removeSuffix("-confirm")
+        if (isSheet(form)) compose.onNodeWithContentDescription(
+            label(if (tag.endsWith("-cancel")) R.string.rear_widget_cancel else R.string.rear_widget_confirm))
+            .assertIsDisplayed()
+        else compose.onNodeWithTag(tag).reveal()
+    }
+    private fun captureSheetEnds(backend: String, dark: Boolean, tag: String, name: String) {
+        val body = compose.onNodeWithTag(tag).assert(hasScrollAction())
+        compose.onNode(isDialog()).assertDoesNotExist()
+        val save = button("$tag-confirm").fetchSemanticsNode().boundsInRoot
+        capture(backend, dark, "$name-top")
+        val step = body.fetchSemanticsNode().boundsInRoot.height * 0.7f
+        body.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, step) }
+        settle()
+        capture(backend, dark, "$name-middle")
+        body.performSemanticsAction(SemanticsActions.ScrollBy) { scroll -> scroll(0f, 10_000f) }
+        settle()
+        assertEquals("Header save must not scroll with body", save,
+            button("$tag-confirm").fetchSemanticsNode().boundsInRoot)
+        capture(backend, dark, "$name-bottom")
+        geometry("$tag-before-return-top")
+        body.performSemanticsAction(SemanticsActions.ScrollBy) { scroll -> scroll(0f, -10_000f) }
+        settle()
+        geometry("$tag-after-return-top")
+    }
     private fun edit(tag: String, value: String) {
         compose.onNode(hasSetTextAction() and (hasTestTag(tag) or hasAnyAncestor(hasTestTag(tag))),
             useUnmergedTree = true).reveal().performTextReplacement(value)
@@ -160,7 +211,9 @@ class RemainingManagerGlassDialogsTest {
         val confirm = button("$tag-confirm").fetchSemanticsNode().boundsInRoot
         assertTrue("Cancel and confirm must be horizontal", abs(cancel.center.y - confirm.center.y) < 2f)
         assertTrue("Cancel must precede confirm in LTR", cancel.right <= confirm.left)
-        assertTrue("Both actions must retain a touch target", cancel.width >= 48f && confirm.width >= 48f)
+        val minimumWidth = if (isSheet(tag)) 44f else 48f
+        assertTrue("Both native header/form actions retain their target width",
+            cancel.width >= minimumWidth && confirm.width >= minimumWidth)
     }
     private fun capture(backend: String, dark: Boolean, name: String) {
         val folder = File(System.getProperty("ui.capture.output"),
@@ -168,7 +221,9 @@ class RemainingManagerGlassDialogsTest {
         val bitmap = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }
         File(folder, "$name.png").outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
     }
-    private fun closed(tag: String) { settle(); compose.onNodeWithTag(tag).assertDoesNotExist(); assertEquals(0, backs) }
+    private fun closed(tag: String) = inspectFailure("closed-$tag") {
+        settle(); compose.onNodeWithTag(tag).assertDoesNotExist(); assertEquals(0, backs)
+    }
     private fun cancelBackAndOutside(tag: String, open: () -> Unit, unchanged: () -> Unit) {
         open()
         button("$tag-cancel").performTouchInput { down(center); advanceEventTime(32); cancel() }
@@ -176,8 +231,18 @@ class RemainingManagerGlassDialogsTest {
         button("$tag-cancel").performClick(); closed(tag); unchanged()
         open(); back(); closed(tag); unchanged()
         open()
-        compose.onNode(isRoot() and hasAnyDescendant(hasTestTag(tag)), useUnmergedTree = true)
-            .performTouchInput { click(Offset(2f, 2f)) }
+        geometry("$tag-before-outside")
+        val root = compose.onNode(isRoot() and hasAnyDescendant(hasTestTag(tag)), useUnmergedTree = true)
+        val outside = if (isSheet(tag)) {
+            val host = root.fetchSemanticsNode().boundsInRoot
+            val panelTag = if (captureBackend == "miuix") "mixui-native-glass-sheet" else "mochi-glass-sheet"
+            val panel = compose.onNodeWithTag(panelTag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val scrimHeight = panel.top - host.top
+            assertTrue("Outside dismissal requires a visible scrim, not a tap inside the header", scrimHeight > 2f)
+            Offset(host.width / 2f, scrimHeight / 2f)
+        } else Offset(2f, 2f)
+        root.performTouchInput { click(outside) }
+        geometry("$tag-after-outside")
         closed(tag); unchanged()
     }
 
@@ -210,7 +275,7 @@ class RemainingManagerGlassDialogsTest {
             compose.onNodeWithTag("business-form").assertExists() // Locked-name collision cannot be saved.
             edit("business-form-name", "new_widget")
             horizontalActions("business-form")
-            capture(backend, dark, "business-create-$embedded")
+            captureSheetEnds(backend, dark, "business-form", "business-create-$embedded")
             val submit = button("business-form-confirm").fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
             val writesBefore = memory.writes[ConfigKeys.REAR_WIDGET_BUSINESS_DATA] ?: 0
             compose.runOnUiThread { submit(); submit() }
@@ -222,7 +287,7 @@ class RemainingManagerGlassDialogsTest {
             assertEquals(locked, RearWidgetManagerRepository.loadBusinesses(prefs).first { it.id == locked.id })
             compose.onNodeWithText("fixture_widget").reveal().performClick(); settle()
             edit("business-form-name", "renamed_widget")
-            capture(backend, dark, "business-edit-$embedded")
+            captureSheetEnds(backend, dark, "business-form", "business-edit-$embedded")
             button("business-form-confirm").performClick(); closed("business-form")
             await { RearWidgetManagerRepository.loadBusinesses(prefs).any { it.id == original.id && it.business == "renamed_widget" } }
             assertEquals(listOf(RearWidgetConfigCodec.businessBlobRemoteFileName(original.business)), memory.deletedRemoteFiles)
@@ -246,7 +311,13 @@ class RemainingManagerGlassDialogsTest {
             open(); button("business-extra-form-confirm").performClick(); settle()
             compose.onNodeWithTag("business-extra-form").assertExists()
             assertTrue(RearBusinessExtraConfigRepository.getAllConfigs(prefs).isEmpty())
-            edit("business-extra-form-name", "new.extra")
+            val field = compose.onNode(hasSetTextAction() and
+                (hasTestTag("business-extra-form-name") or hasAnyAncestor(hasTestTag("business-extra-form-name"))),
+                useUnmergedTree = true).assertIsFocused()
+            val selection = field.fetchSemanticsNode().config[SemanticsProperties.TextSelectionRange]
+            assertEquals(0, selection.min); assertEquals(0, selection.max)
+            field.performTextInput("new.extra"); settle()
+            field.assertTextEquals("new.extra")
             horizontalActions("business-extra-form"); capture(backend, dark, "business-extra-create")
             button("business-extra-form-confirm").performClick(); settle()
             await { RearBusinessExtraConfigRepository.getAllConfigs(prefs).any { it.business == "new.extra" } }
@@ -263,7 +334,12 @@ class RemainingManagerGlassDialogsTest {
         }
     }
 
-    @Test fun boundsEditAndOverwriteKeepValidationAndDestructiveConfirmation() {
+    // A long native sheet fills an 800dp inset-free Robolectric viewport, so
+    // (2,2) is inside its header, not outside. Exercise scrim dismissal only in
+    // a window with actual space above the panel; short/IME layout is contracted separately.
+    @Test
+    @Config(qualifiers = "en-rUS-w400dp-h1000dp-mdpi")
+    fun boundsEditAndOverwriteKeepValidationAndDestructiveConfirmation() {
         for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) {
             memory = CountingPrefs()
             prefs = PrefsManager(memory)
@@ -285,7 +361,8 @@ class RemainingManagerGlassDialogsTest {
             compose.onNodeWithTag("bounds-edit-form").assertExists()
             assertEquals(baseline, prefs.getString(ConfigKeys.CUSTOM_BOUNDS_COMPAT_CONFIG_DATA))
             edit("bounds-edit-form-scale", "0.85")
-            horizontalActions("bounds-edit-form"); capture(backend, dark, "bounds-edit")
+            horizontalActions("bounds-edit-form")
+            captureSheetEnds(backend, dark, "bounds-edit-form", "bounds-edit")
             button("bounds-edit-form-confirm").performClick(); closed("bounds-edit-form")
             val saved = CustomBoundsCompatConfigCodec.parse(prefs.getString(ConfigKeys.CUSTOM_BOUNDS_COMPAT_CONFIG_DATA)).single()
             assertEquals(0.85f, saved.scale, 0.0001f)

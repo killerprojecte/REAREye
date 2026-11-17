@@ -34,6 +34,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -52,16 +53,22 @@ import kotlinx.collections.immutable.toImmutableList
 import top.yukonga.miuix.kmp.basic.NavigationBarItem as MiuixNavigationBarItem
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.material.isRuntimeShaderSupported
 import ui.feice.mochi.effect.glass.mochiBackdropSource
-import ui.feice.mochi.effect.glass.rememberMochiBarBackdrop
+import ui.feice.mochi.effect.glass.rememberMochiBackdrop
 
 /** No vendor state escapes into the application. Record the page, never the bar or popups. */
 class NavigationBackdrop internal constructor(
     internal val ios: com.kyant.backdrop.backdrops.LayerBackdrop? = null,
     internal val miuix: top.yukonga.miuix.kmp.blur.LayerBackdrop? = null,
     internal val mochi: ui.feice.mochi.effect.glass.MochiBackdrop? = null,
-)
+) {
+    internal var quickActionConsumers by mutableIntStateOf(0)
+
+    /** Includes the popup's exit animation; the page host can stop idle recordings. */
+    val isQuickActionRecordingRequested: Boolean
+        get() = quickActionConsumers > 0
+}
 
 @Composable
 fun rememberNavigationBackdrop(): NavigationBackdrop = when (LocalMixUiBackend.current) {
@@ -75,18 +82,29 @@ fun rememberNavigationBackdrop(): NavigationBackdrop = when (LocalMixUiBackend.c
         remember(layer, ios) { NavigationBackdrop(miuix = layer, ios = ios) }
     }
     MixUiBackend.Mochi -> {
-        val layer = rememberMochiBarBackdrop(MixTheme.colorScheme.surface)
+        // Menu glass is independent of a bar's Control glass setting.
+        // rememberMochiBarBackdrop returns null when Control is disabled, which would
+        // silently turn a still-enabled quick-action menu into an opaque fallback.
+        // Recording itself remains lazy at navigationBackdrop's page-only call site.
+        val layer = rememberMochiBackdrop(MixTheme.colorScheme.surface)
         remember(layer) { NavigationBackdrop(mochi = layer) }
     }
 }
 
-fun Modifier.navigationBackdrop(backdrop: NavigationBackdrop): Modifier = when {
-    backdrop.ios != null -> with(backdrop.ios) {
-        val iosModifier = this@navigationBackdrop.iosLayerBackdrop(this)
-        if (backdrop.miuix != null) iosModifier.layerBackdrop(backdrop.miuix) else iosModifier
+/** [recordNavigation] is false for popup-only recording: do not record a second IOS layer. */
+fun Modifier.navigationBackdrop(
+    backdrop: NavigationBackdrop,
+    recordNavigation: Boolean = true,
+): Modifier {
+    val source = this
+    return when {
+        backdrop.ios != null -> {
+            val iosModifier = if (recordNavigation) source.iosLayerBackdrop(backdrop.ios) else source
+            if (backdrop.miuix != null) iosModifier.layerBackdrop(backdrop.miuix) else iosModifier
+        }
+        backdrop.mochi != null -> source.mochiBackdropSource(backdrop.mochi)
+        else -> this
     }
-    backdrop.mochi != null -> mochiBackdropSource(backdrop.mochi)
-    else -> this
 }
 
 enum class NavigationBarStyle { IOS, HyperOS }
@@ -180,6 +198,7 @@ fun NavigationBar(
     val navigationPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val captionPadding = WindowInsets.captionBar.asPaddingValues().calculateBottomPadding()
     val barModifier = Modifier
+        .testTag("navigation-bar-material")
         .onGloballyPositioned { bridge.origin = it.positionInRoot(); bridge.width = it.size.width.toFloat() }
         .semantics {
             customActions = renderedItems.flatMapIndexed { index, item ->
@@ -405,16 +424,16 @@ fun NavigationBar(
                                 }
                             }
                         } else {
-                            val shadow = top.yukonga.miuix.kmp.glass.GlassShadows.Float
+                            val shadow = top.yukonga.miuix.kmp.material.GlassShadows.Float
                             top.yukonga.miuix.kmp.glass.GlassNavigationBar(
                                 modifier = Modifier,
                                 items = renderedItems.map { top.yukonga.miuix.kmp.glass.GlassNavigationItem(it.icon, it.label, it.label) },
                                 selectedIndex = selectedIndex, onSelect = select,
                                 backdrop = if (glass) backdrop.miuix else null,
                                 defaultWindowInsetsPadding = false,
-                                shape = if (floating) top.yukonga.miuix.kmp.glass.GlassShape(
+                                shape = if (floating) top.yukonga.miuix.kmp.material.GlassShape(
                                     CornerSize(50), CornerSize(50), CornerSize(50), CornerSize(50),
-                                ) else top.yukonga.miuix.kmp.glass.GlassShape(
+                                ) else top.yukonga.miuix.kmp.material.GlassShape(
                                     CornerSize(0), CornerSize(0), CornerSize(0), CornerSize(0),
                                 ),
                                 shadow = if (floating) shadow.copy(color = shadow.color.copy(

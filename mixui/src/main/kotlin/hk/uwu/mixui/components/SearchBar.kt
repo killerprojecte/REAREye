@@ -6,10 +6,14 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.glass.*
+import top.yukonga.miuix.kmp.material.GlassDefaults
+import top.yukonga.miuix.kmp.material.GlassShadows
+import top.yukonga.miuix.kmp.material.GlassShape
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +36,9 @@ import ui.feice.mochi.basic.MochiSearchBar
 
 /** Only a sibling viewport recorder may supply this source; never record the search itself. */
 internal val LocalSearchBackdrop = staticCompositionLocalOf<Backdrop?> { null }
+
+/** Page overlap only: focusing, typing and clearing never raise the material or its shadow. */
+internal val LocalSearchSurfaceAlpha = staticCompositionLocalOf { 0f }
 
 /** Controlled native search control selected solely by the current UI backend. */
 @Composable
@@ -70,24 +77,36 @@ private fun NativeMiuixSearchBar(
     }
 
     val backdrop = LocalSearchBackdrop.current
-    val dark = MiuixTheme.colorScheme.background.luminance() < 0.5f
+    val ramp = if (backdrop != null) LocalSearchSurfaceAlpha.current.coerceIn(0f, 1f) else 0f
+    val density = LocalDensity.current
+    var measuredHeight by remember { mutableStateOf(0.dp) }
+    // The vendor segmented track uses height / 2 with zero smoothing: true capsule caps.
+    // Measure the native input instead of changing its dimensions to match a tab's height.
+    val shape = GlassShape(measuredHeight / 2, smoothing = 0f)
+    val restingFill = MiuixTheme.colorScheme.surfaceContainerHigh
     MiuixSearchBar(
         modifier = modifier.fillMaxWidth(),
         insideMargin = DpSize(0.dp, 0.dp),
         inputField = {
             InputField(
-                // Match the wide native GlassSegmentedTabRow track. Keep the
-                // shadow outside glass's clipping, just as the vendor does.
-                modifier = if (backdrop != null) Modifier
-                    .glassShadow(GlassShape(50.dp), GlassShadows.Float)
+                // Same order/ramp as 3a980f7c GlassSegmentedTabRow: shadow outside
+                // clip, then glass, then resting fill. At rest no sampling is enabled.
+                modifier = Modifier.onSizeChanged { size ->
+                    measuredHeight = with(density) { size.height.toDp() }
+                }.then(if (backdrop != null) Modifier
+                    .glassShadow(shape, GlassShadows.Float, ramp)
+                    .clip(shape)
                     .glass(
                         backdrop = backdrop,
-                        shape = GlassShape(50.dp),
-                        style = GlassDefaults.style(dark),
-                        material = GlassMaterials.puredThinGlass(dark),
+                        shape = shape,
+                        style = GlassDefaults.Style,
+                        alpha = ramp,
+                        material = GlassSegmentedTabRowDefaults.material(),
+                        stroke = GlassSegmentedTabRowDefaults.stroke(),
+                        enabled = ramp > 0f,
                         shading = false,
-                    ) else Modifier,
-                color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surfaceContainerHigh,
+                    ) else Modifier),
+                color = restingFill.copy(alpha = restingFill.alpha * (1f - ramp)),
                 query = query,
                 onQueryChange = onQueryChange,
                 onSearch = {

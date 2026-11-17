@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,7 +66,7 @@ import hk.uwu.mixui.components.GlassTopBarScaffold
 import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.pageScrollFeedback
 import hk.uwu.mixui.components.Text
-import hk.uwu.mixui.components.TextField
+import hk.uwu.mixui.components.EditorTextField
 import hk.uwu.mixui.components.SwitchPreference
 
 private val BusinessExtraConfigNodes = listOf<ConfigNode>(
@@ -94,6 +95,7 @@ fun BusinessExtraConfigManagerScreen(
     var dataCardsVisible by remember { mutableStateOf(false) }
     val remotePrefsStatusRevision = rememberRemotePrefsStatusRevision()
     var showDialog by remember { mutableStateOf(false) }
+    var dialogSessionId by remember { mutableIntStateOf(0) }
     var draftBusiness by remember { mutableStateOf("") }
     var editingBusiness by remember { mutableStateOf<String?>(null) }
 
@@ -133,6 +135,7 @@ fun BusinessExtraConfigManagerScreen(
 
     fun openCreateDialog() {
         draftBusiness = ""
+        dialogSessionId++
         showDialog = true
     }
 
@@ -211,12 +214,15 @@ fun BusinessExtraConfigManagerScreen(
                         onDismissRequest = { showDialog = false },
                     ) {
                         DialogFormColumn(modifier = Modifier.testTag("business-extra-form")) {
-                            TextField(
+                            EditorTextField(
                                 value = draftBusiness,
                                 onValueChange = { draftBusiness = it },
                                 modifier = Modifier.fillMaxWidth().testTag("business-extra-form-name"),
                                 label = stringResource(R.string.rear_widget_business_name),
                                 singleLine = true,
+                                autoFocus = showDialog,
+                                selectAllOnFocus = true,
+                                focusSessionKey = dialogSessionId,
                             )
                             Row(
                                 modifier = Modifier.fillMaxWidth(),

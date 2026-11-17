@@ -14,7 +14,7 @@ import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.material.isRuntimeShaderSupported
 import ui.feice.mochi.effect.glass.mochiBackdropSource
 import ui.feice.mochi.effect.glass.rememberMochiBackdrop
 
@@ -33,21 +33,26 @@ fun GlassPreferenceScene(
     overlayContent: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
-    when (LocalMixUiBackend.current) {
-        MixUiBackend.Miuix -> {
-            val source = if (isRuntimeShaderSupported()) rememberLayerBackdrop() else null
-            PreferenceScene(
-                modifier = modifier, backgroundColor = backgroundColor,
-                sourceModifier = if (source != null) Modifier.layerBackdrop(source) else Modifier,
-                backdrop = remember(source) { GlassFormBackdrop.Miuix(source) }, overlayContent = overlayContent, content = content,
-            )
-        }
-        MixUiBackend.Mochi -> {
-            val source = rememberMochiBackdrop(backgroundColor)
-            PreferenceScene(
-                modifier = modifier, backgroundColor = backgroundColor, sourceModifier = Modifier.mochiBackdropSource(source),
-                backdrop = remember(source) { GlassFormBackdrop.Mochi(source) }, overlayContent = overlayContent, content = content,
-            )
+    WithGlassSheetScene {
+        when (LocalMixUiBackend.current) {
+            MixUiBackend.Miuix -> {
+                val source = if (isRuntimeShaderSupported()) rememberLayerBackdrop() else null
+                PreferenceScene(
+                    modifier = modifier, backgroundColor = backgroundColor,
+                    sourceModifier = if (source != null) Modifier.layerBackdrop(source) else Modifier,
+                    backdrop = remember(source) { GlassFormBackdrop.Miuix(source) },
+                    overlayContent = overlayContent, content = content,
+                )
+            }
+            MixUiBackend.Mochi -> {
+                val source = rememberMochiBackdrop(backgroundColor)
+                PreferenceScene(
+                    modifier = modifier, backgroundColor = backgroundColor,
+                    sourceModifier = Modifier.mochiBackdropSource(source),
+                    backdrop = remember(source) { GlassFormBackdrop.Mochi(source) },
+                    overlayContent = overlayContent, content = content,
+                )
+            }
         }
     }
 }

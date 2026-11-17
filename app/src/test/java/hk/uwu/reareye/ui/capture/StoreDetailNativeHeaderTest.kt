@@ -7,6 +7,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -282,6 +284,108 @@ class StoreDetailNativeHeaderTest {
             capture("${backend.name}-$dark-restored")
             compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back)).performClick()
             assertEquals(1, backs)
+        }
+    }
+
+    private fun detailList() = compose.onNodeWithTag("store-detail-list")
+    private fun detailTabs(backend: MixUiBackend) = compose.onNodeWithTag(
+        if (backend == MixUiBackend.Miuix) "glass-tabs-miuix" else "glass-tabs-mochi",
+    )
+    private fun detailScrollRange() = detailList().fetchSemanticsNode()
+        .config[SemanticsProperties.VerticalScrollAxisRange]
+
+    private fun openScrollDetail(backend: MixUiBackend, short: Boolean = false) {
+        val fixture = if (short) detail().copy(releases = emptyList()) else detail()
+        open(backend) {
+            RearStoreDetailContent(
+                widgetId = fixture.widgetId, prefsManager = remember { PrefsManager(GuideMemoryPrefs()) },
+                bottomInnerPadding = 0.dp, installedWidget = null, onBack = {},
+                onInstalled = { error("Scroll regression must not install") },
+                loadDetail = { _, _, _ -> fixture }, loadReadme = { _, _ -> RearStoreReadme() },
+            )
+        }
+        awaitText(fixture.name)
+        compose.onNodeWithText(label(if (short) R.string.rear_store_tab_downloads else R.string.rear_store_tab_info))
+            .performClick()
+        frames()
+    }
+
+    private fun dragDetailUp() {
+        detailList().performTouchInput {
+            swipe(Offset(center.x, height * 0.85f), Offset(center.x, height * 0.45f), durationMillis = 700)
+        }
+        frames()
+    }
+
+    private fun pullDetailDown(backend: MixUiBackend) {
+        // A list fills the viewport behind the pinned header. Start on its exposed body,
+        // not on tabs/buttons, so this exercises the real list's nested-scroll connection.
+        val listBounds = detailList().fetchSemanticsNode().boundsInRoot
+        val tabsBottom = detailTabs(backend).fetchSemanticsNode().boundsInRoot.bottom
+        val startY = maxOf(listBounds.height * 0.4f, tabsBottom - listBounds.top + 16f)
+        assertTrue("Detail has an exposed drag area", startY < listBounds.height * 0.9f)
+        detailList().performTouchInput {
+            swipe(Offset(center.x, startY), Offset(center.x, height * 0.9f), durationMillis = 700)
+        }
+        frames()
+    }
+
+    @Test(timeout = 60_000)
+    @Config(qualifiers = "zh-rCN-w400dp-h480dp-mdpi")
+    fun actualInfoTouchReturnRestoresListAndExpandedTopBar() {
+        for (backend in MixUiBackend.entries) {
+            openScrollDetail(backend)
+            val initialTabsTop = detailTabs(backend).fetchSemanticsNode().boundsInRoot.top
+            val initialHeroTop = compose.onNodeWithText("Fixture detailed clock").fetchSemanticsNode().boundsInRoot.top
+            dragDetailUp()
+            assertTrue("Info list must actually move before return", detailScrollRange().value() > 0f)
+            if (backend == MixUiBackend.Miuix) {
+                assertTrue("Native title must actually collapse", detailTabs(backend).fetchSemanticsNode().boundsInRoot.top < initialTabsTop - 20f)
+            }
+            capture("${backend.name}-info-touch-collapsed")
+            repeat(6) { pullDetailDown(backend) }
+            assertEquals("Pointer scrolling restores the real first item", 0f, detailScrollRange().value(), 0f)
+            assertEquals("Top-edge surplus reaches and expands the native title", initialTabsTop,
+                detailTabs(backend).fetchSemanticsNode().boundsInRoot.top, 1.5f)
+            assertEquals("No collapsed header inset remains above the hero", initialHeroTop,
+                compose.onNodeWithText("Fixture detailed clock").fetchSemanticsNode().boundsInRoot.top, 1.5f)
+            capture("${backend.name}-info-touch-restored")
+        }
+    }
+
+    @Test(timeout = 60_000)
+    @Config(qualifiers = "zh-rCN-w400dp-h480dp-mdpi")
+    fun actualInfoProgrammaticReturnExpandsTopBarWithoutExtraPull() {
+        for (backend in MixUiBackend.entries) {
+            openScrollDetail(backend)
+            val initialTabsTop = detailTabs(backend).fetchSemanticsNode().boundsInRoot.top
+            dragDetailUp()
+            detailList().performScrollToIndex(1); frames()
+            assertTrue("Programmatic destination is away from top", detailScrollRange().value() > 0f)
+            detailList().performScrollToIndex(0); frames()
+            assertEquals("Programmatic return restores the list", 0f, detailScrollRange().value(), 0f)
+            assertEquals("Programmatic return needs no follow-up gesture to expand", initialTabsTop,
+                detailTabs(backend).fetchSemanticsNode().boundsInRoot.top, 1.5f)
+            capture("${backend.name}-info-programmatic-restored")
+        }
+    }
+
+    @Test(timeout = 60_000) fun actualShortDetailRetainsNativeCollapseAndCanPullFullyOpen() {
+        for (backend in MixUiBackend.entries) {
+            openScrollDetail(backend, short = true)
+            val initialTabsTop = detailTabs(backend).fetchSemanticsNode().boundsInRoot.top
+            assertEquals("Fixture really fits without list scrolling", 0f, detailScrollRange().maxValue(), 0f)
+            dragDetailUp()
+            assertEquals("A short page does not invent scroll distance", 0f, detailScrollRange().value(), 0f)
+            if (backend == MixUiBackend.Miuix) {
+                assertTrue("Native title-only collapse must survive idle frames",
+                    detailTabs(backend).fetchSemanticsNode().boundsInRoot.top < initialTabsTop - 20f)
+            }
+            repeat(2) { pullDetailDown(backend) }
+            assertEquals("Short-page pull restores the full header", initialTabsTop,
+                detailTabs(backend).fetchSemanticsNode().boundsInRoot.top, 1.5f)
+            assertEquals(0f, detailScrollRange().value(), 0f)
+            capture("${backend.name}-short-touch-restored")
         }
     }
 

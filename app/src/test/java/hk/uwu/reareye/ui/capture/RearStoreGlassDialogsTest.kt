@@ -19,6 +19,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.unit.dp
@@ -66,6 +68,28 @@ class RearStoreGlassDialogsTest {
     private var pageBacks = 0
     private var installedCallbacks = 0
     private var prefix = ""
+    private fun geometry(phase: String, screenshot: Boolean = false) {
+        runCatching {
+            System.err.println("STORE_GEOMETRY fixture=$prefix phase=$phase backs=$pageBacks " +
+                "prepareCalls=${fake.prepareCalls} installCalls=${fake.installCalls} callbacks=$installedCallbacks")
+            val probes = listOf("roots" to isRoot(), "editors" to hasSetTextAction(),
+                "actions" to (hasContentDescription(label(R.string.rear_widget_confirm)) or
+                    hasContentDescription(label(R.string.rear_widget_cancel)))) +
+                listOf("store-wallpaper-dialog", "mochi-glass-sheet-host", "mochi-glass-sheet",
+                    "mixui-native-glass-sheet-host", "mixui-native-glass-sheet").map { it to hasTestTag(it) }
+            for ((name, matcher) in probes) {
+                val nodes = compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes()
+                System.err.println("STORE_GEOMETRY $name count=${nodes.size}")
+                nodes.forEach { node -> System.err.println("STORE_GEOMETRY $name id=${node.id} " +
+                    "clipped=${node.boundsInRoot} root=${node.positionInRoot} screen=${node.positionOnScreen} size=${node.size} " +
+                    "scroll=${node.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange)} " +
+                    "focused=${node.config.getOrNull(SemanticsProperties.Focused)}") }
+            }
+            if (screenshot) capture("failure-$phase")
+        }.onFailure { System.err.println("STORE_GEOMETRY diagnostic failed: $it") }
+    }
+    private inline fun <T> inspectFailure(phase: String, block: () -> T): T = try { block() }
+        catch (failure: AssertionError) { geometry(phase, screenshot = true); throw failure }
 
     private class StoreFixture(type: String = "widget", postInstall: String? = null) {
         val asset = RearStoreReleaseAsset(name = "fixture.zip", size = 1024L)
@@ -188,6 +212,33 @@ class RearStoreGlassDialogsTest {
     private fun shown(kind: String) {
         await { compose.onAllNodesWithTag("store-$kind-dialog").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("store-$kind-dialog").assertIsDisplayed()
+        if (kind == "wallpaper") {
+            compose.onNodeWithTag("store-wallpaper-dialog").assert(hasScrollAction())
+            compose.onNode(isDialog()).assertDoesNotExist()
+        }
+    }
+    private fun captureWallpaperEnds(name: String, requireOverflow: Boolean = false) {
+        val body = compose.onNodeWithTag("store-wallpaper-dialog")
+        if (requireOverflow) {
+            val range = body.fetchSemanticsNode().config[
+                androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange]
+            assertTrue("The long metadata form must overflow the short window", range.maxValue() > 0f)
+        }
+        val save = action("wallpaper", R.string.rear_widget_confirm).fetchSemanticsNode().boundsInRoot
+        capture("$name-top")
+        val step = body.fetchSemanticsNode().boundsInRoot.height * 0.7f
+        body.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) { it(0f, step) }
+        settle()
+        capture("$name-middle")
+        body.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) { scroll ->
+            scroll(0f, 10_000f)
+        }
+        settle()
+        assertEquals("Save stays fixed while wallpaper metadata scrolls", save,
+            action("wallpaper", R.string.rear_widget_confirm).fetchSemanticsNode().boundsInRoot)
+        capture("$name-bottom")
+        body.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) { scroll -> scroll(0f, -10_000f) }
+        settle()
     }
     private fun closed(kind: String) {
         settle(); compose.onNodeWithTag("store-$kind-dialog").assertDoesNotExist()
@@ -208,6 +259,9 @@ class RearStoreGlassDialogsTest {
             try { performScrollTo() } finally { compose.mainClock.autoAdvance = wasAutoAdvance }
         }
     private fun action(kind: String, id: Int): SemanticsNodeInteraction {
+        if (kind == "wallpaper") return inspectFailure("$kind-action-$id") {
+            compose.onNodeWithContentDescription(label(id)).assertIsDisplayed()
+        }
         compose.onNodeWithTag("store-$kind-actions").reveal("$kind.actions.scroll.$id")
         traceStep("$kind.actions.settle.$id") { settle() }
         return compose.onNode(hasText(label(id)) and hasClickAction() and
@@ -232,8 +286,10 @@ class RearStoreGlassDialogsTest {
     private fun titleEditor() = compose.onAllNodes(hasSetTextAction() and
         hasAnyAncestor(hasTestTag("store-wallpaper-dialog")), useUnmergedTree = true).onFirst()
     private fun changeTitle(value: String) {
+        geometry("before-title-reveal")
         titleEditor().reveal("title.scroll")
         traceStep("title.scroll.settle") { settle() }
+        geometry("after-title-reveal")
         traceStep("title.replace") { titleEditor().performTextReplacement(value) }
         traceStep("title.replace.settle") { settle() }
     }
@@ -323,7 +379,7 @@ class RearStoreGlassDialogsTest {
         compose.onNodeWithText(label(R.string.rear_store_asset_install)).assertDoesNotExist()
         compose.onNodeWithTag("store-wallpaper-dialog").assertDoesNotExist()
         fake.prepareGate!!.complete(Unit); shown("wallpaper")
-        capture("wallpaper-top")
+        captureWallpaperEnds("wallpaper")
         changeTitle("Discard me")
         horizontal("wallpaper", R.string.rear_widget_confirm); capture("wallpaper-actions")
         cancel("wallpaper"); assertEquals(0, fake.installCalls)
@@ -389,7 +445,7 @@ class RearStoreGlassDialogsTest {
         clickInstall(); shown("wallpaper")
         horizontal("wallpaper", R.string.rear_widget_confirm)
         action("wallpaper", R.string.rear_widget_confirm).assertIsDisplayed()
-        capture("wallpaper-short-window-actions"); back("wallpaper")
+        captureWallpaperEnds("wallpaper-short-window", requireOverflow = true); back("wallpaper")
         fake = StoreFixture(postInstall = "https://example.invalid/local-fixture")
         host(backend, dark); clickInstall(); shown("browser")
         horizontal("browser", R.string.rear_store_postinstall_open_in_browser)

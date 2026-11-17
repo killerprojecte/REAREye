@@ -65,10 +65,8 @@ import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateConfigRepository
 import hk.uwu.reareye.ui.FeatureGuideAction
 import hk.uwu.reareye.ui.LocalFeatureGuideDemo
-import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.GlassEditorSheet
 import hk.uwu.mixui.components.GlassPreferenceScene
-import hk.uwu.mixui.components.DialogActions
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
@@ -101,7 +99,7 @@ import androidx.compose.ui.platform.testTag
 import hk.uwu.mixui.components.Switch
 import hk.uwu.mixui.components.GlassTabs
 import hk.uwu.mixui.components.Text
-import hk.uwu.mixui.components.TextField
+import hk.uwu.mixui.components.EditorTextField
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
 
@@ -943,38 +941,43 @@ fun CardManagerScreen(
                     onConfirmNormal = ::submitDialog,
                     onConfirmApp = ::submitAppCardDialog,
                     submitting = appRegistrationPending,
+                    sessionKey = dialogSessionId,
                     onDismissRequest = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
                 )
 
                 val editingCard = editingCardId?.let { id -> cards.firstOrNull { it.id == id } }
                 val lockedCard = editingCard?.takeIf { !it.renameable }
-                GlassFormDialog(
+                GlassEditorSheet(
                     show = showDialog.value && editingCard != null,
                     title = stringResource(R.string.rear_widget_edit_card),
                     onDismissRequest = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
+                    onConfirm = ::submitDialog,
+                    cancelText = stringResource(R.string.rear_widget_cancel),
+                    confirmText = stringResource(R.string.rear_widget_confirm),
+                    sessionKey = dialogSessionId,
                     modifier = Modifier.testTag("rear-card-edit-dialog"),
                 ) {
-                    DialogFormColumn {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         if (demo != null) {
                             Text(stringResource(R.string.guide_demo_notice))
                             Text(stringResource(R.string.guide_demo_edit_card))
                         }
                         if (lockedCard == null) {
-                            TextField(
+                            EditorTextField(
                                 value = draftTitle,
                                 onValueChange = { draftTitle = it },
                                 modifier = Modifier.fillMaxWidth().testTag("rear-card-edit-title"),
                                 label = stringResource(R.string.rear_widget_card_title),
                                 singleLine = true,
                             )
-                            TextField(
+                            EditorTextField(
                                 value = draftPackageName,
                                 onValueChange = { draftPackageName = it },
                                 modifier = Modifier.fillMaxWidth().testTag("rear-card-edit-package"),
                                 label = stringResource(R.string.rear_widget_target_package),
                                 singleLine = true,
                             )
-                            TextField(
+                            EditorTextField(
                                 value = draftBusiness,
                                 onValueChange = { draftBusiness = it },
                                 modifier = Modifier.fillMaxWidth().testTag("rear-card-edit-business"),
@@ -1022,7 +1025,7 @@ fun CardManagerScreen(
                             checked = draftAutomaticPriority,
                             onCheckedChange = { draftAutomaticPriority = it },
                         )
-                        TextField(
+                        EditorTextField(
                             value = draftPriorityText,
                             onValueChange = { draftPriorityText = it },
                             modifier = Modifier.fillMaxWidth().testTag("rear-card-edit-priority"),
@@ -1038,13 +1041,6 @@ fun CardManagerScreen(
                                 onCheckedChange = { draftSticky = it },
                             )
                         }
-                        DialogActions(
-                            modifier = Modifier.testTag("rear-card-edit-actions"),
-                            cancelText = stringResource(R.string.rear_widget_cancel),
-                            confirmText = stringResource(R.string.rear_widget_confirm),
-                            onCancel = { showDialog.value = false; demo?.onCancelEdit?.invoke() },
-                            onConfirm = ::submitDialog,
-                        )
                     }
                 }
             }

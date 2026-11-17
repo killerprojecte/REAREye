@@ -17,7 +17,7 @@ import ui.feice.mochi.effect.glass.rememberMochiBackdrop
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.material.isRuntimeShaderSupported
 
 internal class GlassSheetScene(
     val backdrop: Backdrop?,
@@ -53,27 +53,29 @@ fun GlassBottomSheetScene(content: @Composable () -> Unit) {
     // the draft theme can open a Mochi sheet without changing the underlying page.
     val mochiBackdrop = rememberMochiBackdrop(background)
     val scene = remember(backdrop, mochiBackdrop) { GlassSheetScene(backdrop, mochiBackdrop) }
-    Box(Modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalGlassSheetScene provides scene) {
-            // Both native overlays and our explicit glass-sheet entries are outside
-            // this page/scrim source, so neither can record itself.
-            Box(Modifier.fillMaxSize()
-                // Semantics masking alone does not block keyboard focus. Reject entry into
-                // page targets while a protected dialog (including its exit) is retained.
-                .focusProperties {
-                    onEnter = { if (scene.modalDialogs.isNotEmpty()) cancelFocusChange() }
-                }
-                .focusGroup()
-                .then(if (scene.glassSheetScrims.isNotEmpty() || scene.modalDialogs.isNotEmpty()) Modifier.clearAndSetSemantics {} else Modifier)
-                .mochiBackdropSource(mochiBackdrop)
-                .then(if (backdrop != null && scene.entries.isNotEmpty()) Modifier.layerBackdrop(backdrop) else Modifier)) {
-                content()
-                scene.glassSheetScrims.values.forEach { alpha ->
-                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = alpha)))
+    SuggestionOverlayHost {
+        Box(Modifier.fillMaxSize()) {
+            CompositionLocalProvider(LocalGlassSheetScene provides scene) {
+                // Both native overlays and our explicit glass-sheet entries are outside
+                // this page/scrim source, so neither can record itself.
+                Box(Modifier.fillMaxSize()
+                    // Semantics masking alone does not block keyboard focus. Reject entry into
+                    // page targets while a protected dialog (including its exit) is retained.
+                    .focusProperties {
+                        onEnter = { if (scene.modalDialogs.isNotEmpty()) cancelFocusChange() }
+                    }
+                    .focusGroup()
+                    .then(if (scene.glassSheetScrims.isNotEmpty() || scene.modalDialogs.isNotEmpty()) Modifier.clearAndSetSemantics {} else Modifier)
+                    .mochiBackdropSource(mochiBackdrop)
+                    .then(if (backdrop != null && scene.entries.isNotEmpty()) Modifier.layerBackdrop(backdrop) else Modifier)) {
+                    content()
+                    scene.glassSheetScrims.values.forEach { alpha ->
+                        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = alpha)))
+                    }
                 }
             }
+            scene.entries.forEach { (id, entry) -> key(id) { entry() } }
         }
-        scene.entries.forEach { (id, entry) -> key(id) { entry() } }
     }
 }
 
@@ -111,6 +113,12 @@ internal fun NativeGlassSheet(
     val currentShow by rememberUpdatedState(show)
     val entry by rememberUpdatedState<@Composable () -> Unit>({
         CompositionLocalProvider(callerLocals) {
+            // The native handler is disabled as soon as show=false, although its
+            // scrim/panel remain until the exit animation finishes. Keep Back
+            // modal for that retained interval instead of navigating the page.
+            androidx.activity.compose.PredictiveBackHandler(enabled = !show) { events ->
+                events.collect { }
+            }
             val sheetSource = rememberNativeSheetMaterialSource()
             val sheetMaterial = rememberNativeSheetMaterialSurface(scene.backdrop, sheetSource)
             // A local popup owner preserves the caller's theme for MIUIX's native
@@ -155,6 +163,7 @@ internal fun NativeGlassSheet(
                             CompositionLocalProvider(
                                 LocalGlassTabsBackdrop provides sheetSource.backdrop,
                                 LocalGlassTabsSurfaceAlpha provides 1f,
+                                LocalMiuixSheetTabs provides true,
                             ) { content() }
                         },
                     )

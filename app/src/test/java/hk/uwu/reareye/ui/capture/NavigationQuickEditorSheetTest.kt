@@ -17,6 +17,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.core.graphics.Insets
@@ -28,6 +31,7 @@ import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.MixUiHost
 import hk.uwu.mixui.components.GlassBottomSheetScene
 import hk.uwu.mixui.components.Scaffold
+import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.components.navigation.NavigationQuickAction
 import hk.uwu.reareye.ui.components.navigation.NavigationQuickActionEditor
 import hk.uwu.reareye.ui.components.navigation.NavigationQuickTarget
@@ -65,10 +69,13 @@ class NavigationQuickEditorSheetTest {
     @Before fun resources() { assumeTrue(java.lang.Boolean.getBoolean("mary.ui.resources")) }
     @After fun close() { compose.runOnUiThread { activity?.close() } }
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true)
+    private fun action(label: Int) = compose.onNodeWithContentDescription(activity!!.get().getString(label))
+    private val actionLabels = listOf(R.string.navigation_quick_cancel, R.string.navigation_quick_save)
     private fun settle() { compose.mainClock.advanceTimeBy(2_000); compose.waitForIdle() }
     private fun open(backend: MixUiBackend, dark: Boolean,
         colorMode: MixColorSchemeMode = if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light,
-        mochiStyle: MixMochiStyle = MixMochiStyle.Default) {
+        mochiStyle: MixMochiStyle = MixMochiStyle.Default,
+        actionOptions: List<NavigationQuickAction> = actions) {
         compose.runOnUiThread {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity!!.get().enableEdgeToEdge()
@@ -77,7 +84,7 @@ class NavigationQuickEditorSheetTest {
                     Scaffold {
                         GlassBottomSheetScene {
                             Box(Modifier.fillMaxSize().background(Color(0xFF246899)))
-                            NavigationQuickActionEditor(visible, selected, actions,
+                            NavigationQuickActionEditor(visible, selected, actionOptions,
                                 { dismissals++; visible = false }, {
                                     saved += it
                                     selected = it
@@ -98,7 +105,7 @@ class NavigationQuickEditorSheetTest {
         }
     }
     private fun reopen() { compose.runOnIdle { visible = true }; settle() }
-    private fun save() { node("quick-editor-save").performScrollTo().performClick(); settle() }
+    private fun save() { action(R.string.navigation_quick_save).assertIsDisplayed().performClick(); settle() }
     private fun drag(cancelGesture: Boolean = false) {
         val first = node("quick-editor-drag-a")
         val from = first.fetchSemanticsNode().boundsInRoot
@@ -125,7 +132,7 @@ class NavigationQuickEditorSheetTest {
         drag()
         assertEquals("Reorder never transfers to sheet drag", restingTop,
             sheet.fetchSemanticsNode().boundsInRoot.top, 1f)
-        node("quick-editor-cancel").performScrollTo().performClick()
+        action(R.string.navigation_quick_cancel).assertIsDisplayed().performClick()
         settle()
         assertEquals(1, saved.size)
         reopen()
@@ -158,6 +165,170 @@ class NavigationQuickEditorSheetTest {
         try { exercise(backend, dark, colors, style) } finally { fullStyleFolder = null }
     }
 
+    private fun assertHeaderActions() {
+        val bodyTop = node("quick-editor-body").fetchSemanticsNode().boundsInRoot.top
+        actionLabels.forEach { label ->
+            val control = action(label)
+            control.assertIsDisplayed().assertIsEnabled().assertHasClickAction()
+                .assert(hasAnyAncestor(hasTestTag("quick-editor-body")).not())
+            assertTrue("Native header action must be above, not inside, the scroll body",
+                control.fetchSemanticsNode().boundsInRoot.bottom <= bodyTop + 1f)
+        }
+    }
+
+    private fun assertMiuixActionMaterial(scrolled: Boolean) {
+        val expected = if (scrolled) "mixui-sheet-glass-action" else "mixui-sheet-plain-action"
+        actionLabels.forEach { label ->
+            // Caller and mixui testTag modifiers share one semantics node; the caller
+            // tag may win the merge. Inspect the actual native modifier, never add a
+            // synthetic material tag to the editor just to satisfy this assertion.
+            val info = action(label).fetchSemanticsNode().layoutInfo
+            compose.runOnIdle {
+                val tags = info.getModifierInfo().mapNotNull { entry ->
+                    val element = entry.modifier
+                    if (element.javaClass.name != "androidx.compose.ui.platform.TestTagElement") null
+                    else element.javaClass.getDeclaredField("tag").apply { isAccessible = true }
+                        .get(element) as String
+                }
+                assertTrue("Native action must expose real $expected; found $tags", expected in tags)
+            }
+        }
+    }
+
+    private fun fixedHeaderActions(backend: MixUiBackend, dark: Boolean) {
+        val longActions = actions + (1..24).map { index ->
+            NavigationQuickAction("extra-$index", "Extra action $index", Icons.Rounded.Settings,
+                NavigationQuickTarget.ConfigManager(ConfigType.ManagerType.BUSINESS))
+        }
+        open(backend, dark, actionOptions = longActions)
+        val sheetTag = if (backend == MixUiBackend.Mochi) "mochi-glass-sheet" else "mixui-native-glass-sheet"
+        node(sheetTag).assertIsDisplayed()
+        assertHeaderActions()
+        if (backend == MixUiBackend.Miuix) assertMiuixActionMaterial(scrolled = false)
+        val before = actionLabels.map { action(it).fetchSemanticsNode().boundsInRoot }
+        val body = node("quick-editor-body")
+        val range = body.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+        assertTrue("Long editor body must actually overflow", range.maxValue() > 0f)
+        assertEquals(0f, range.value(), 0f)
+        val folder = File(requireNotNull(System.getProperty("ui.capture.output")),
+            "sheet-glass-controls-3a980f7c/QUICK-EDITOR")
+        val prefix = "Robolectric-${backend.name}-${if (dark) "dark" else "light"}"
+        fullStyleFolder = folder
+        try {
+            capture("$prefix-at-top")
+            body.performTouchInput { swipeUp() }
+            settle()
+            assertTrue("Body must move independently of header", range.value() > 0f)
+            assertHeaderActions()
+            actionLabels.forEachIndexed { index, label ->
+                val after = action(label).fetchSemanticsNode().boundsInRoot
+                assertEquals("Header action x is fixed while body scrolls", before[index].left, after.left, 1f)
+                assertEquals("Header action y is fixed while body scrolls", before[index].top, after.top, 1f)
+                assertEquals(before[index].bottom, after.bottom, 1f)
+            }
+            if (backend == MixUiBackend.Miuix) assertMiuixActionMaterial(scrolled = true)
+            else compose.onAllNodesWithTag("mixui-sheet-glass-action", useUnmergedTree = true).assertCountEquals(0)
+            capture("$prefix-scrolled")
+            body.performSemanticsAction(SemanticsActions.ScrollBy) { assertTrue(it(0f, -10000f)) }
+            settle()
+            assertEquals(0f, range.value(), 0f)
+            if (backend == MixUiBackend.Miuix) assertMiuixActionMaterial(scrolled = false)
+            assertHeaderActions()
+            capture("$prefix-restored")
+            val manifest = org.json.JSONObject()
+                .put("capture", "Native Robolectric production component fixture; not a physical-device screenshot")
+                .put("backend", backend.name).put("dark", dark)
+                .put("fixture", "Quick editor native fixed header over a long scroll body; synthetic actions")
+                .put("images", org.json.JSONArray(listOf("$prefix-at-top.png", "$prefix-scrolled.png", "$prefix-restored.png")))
+            File(folder, "$prefix-manifest.json").writeText(manifest.toString(2) + "\n")
+        } finally {
+            fullStyleFolder = null
+        }
+        save()
+        assertEquals("Header save still commits once", listOf(listOf("a", "b")), saved)
+    }
+
+    @Test @Config(qualifiers = "en-w400dp-h400dp-mdpi")
+    fun miuixLightFixedHeaderActionsFollowRealScroll() = fixedHeaderActions(MixUiBackend.Miuix, false)
+    @Test @Config(qualifiers = "en-w400dp-h400dp-mdpi")
+    fun miuixDarkFixedHeaderActionsFollowRealScroll() = fixedHeaderActions(MixUiBackend.Miuix, true)
+    @Test @Config(qualifiers = "en-w400dp-h400dp-mdpi")
+    fun mochiFixedHeaderActionsStayNative() = fixedHeaderActions(MixUiBackend.Mochi, false)
+
+    private fun headerSaveDoesNotCommitDuringExit(backend: MixUiBackend) {
+        open(backend, false)
+        action(R.string.navigation_quick_save).performTouchInput { down(center); cancel() }
+        settle()
+        assertTrue("Canceled native action pointer must not save", saved.isEmpty())
+        assertTrue(visible)
+
+        fun assertExitingActions(expectedSaves: Int) {
+            // Raw accessibility activation first updates the caller, then the
+            // portaled sheet entry. Flush both while retaining the exit animation.
+            repeat(3) {
+                compose.mainClock.advanceTimeByFrame()
+                compose.waitForIdle()
+            }
+            assertFalse(visible)
+            actionLabels.forEach { label ->
+                // MIUIX removes OnClick entirely when disabled; Mochi retains
+                // a rejecting semantics action. Both must expose Disabled.
+                val click = action(label).assertIsNotEnabled().fetchSemanticsNode()
+                    .config.getOrNull(SemanticsActions.OnClick)?.action
+                if (click != null) compose.runOnUiThread {
+                    assertFalse("Disabled exit action must reject semantics activation", click())
+                }
+            }
+            assertEquals("Disabled exiting header cannot commit twice", expectedSaves, saved.size)
+            assertEquals("Disabled exiting close cannot dismiss again", 0, dismissals)
+        }
+
+        // Mochi's native pressed animation runs until release. Freeze before
+        // DOWN; waiting for automatic idle while holding it can never complete.
+        compose.mainClock.autoAdvance = false
+        var pointerHeld = false
+        try {
+            action(R.string.navigation_quick_save).performTouchInput { down(center) }
+            pointerHeld = true
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.runOnUiThread {
+                assertTrue("Held native action pointer must not save", saved.isEmpty())
+                assertTrue(visible)
+            }
+            action(R.string.navigation_quick_save).performTouchInput { up() }
+            pointerHeld = false
+            assertExitingActions(expectedSaves = 1)
+            assertEquals(listOf(listOf("a", "b")), saved)
+        } finally {
+            if (pointerHeld) action(R.string.navigation_quick_save).performTouchInput { cancel() }
+            compose.mainClock.autoAdvance = true
+            settle()
+        }
+        node("quick-editor-body").assertDoesNotExist()
+        reopen()
+
+        // Capture while attached, before the first click. Both callbacks run in
+        // one UI turn, before submitted/show can recompose or replace the node.
+        val saveClick = requireNotNull(action(R.string.navigation_quick_save)
+            .fetchSemanticsNode().config[SemanticsActions.OnClick].action)
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.runOnUiThread { saveClick(); saveClick() }
+            assertEquals("Same-frame native Save activation commits once", 2, saved.size)
+            assertExitingActions(expectedSaves = 2)
+        } finally {
+            compose.mainClock.autoAdvance = true
+            settle()
+        }
+        node("quick-editor-body").assertDoesNotExist()
+        reopen()
+        save()
+        assertEquals("Reopened editor can save exactly once again", 3, saved.size)
+    }
+
+    @Test fun miuixHeaderSaveIsDisabledDuringExit() = headerSaveDoesNotCommitDuringExit(MixUiBackend.Miuix)
+    @Test fun mochiHeaderSaveIsDisabledDuringExit() = headerSaveDoesNotCommitDuringExit(MixUiBackend.Mochi)
+
     @Test fun miuixLight() = exercise(MixUiBackend.Miuix, false)
     @Test fun miuixDark() = exercise(MixUiBackend.Miuix, true)
     @Test fun mochiLight() = exercise(MixUiBackend.Mochi, false)
@@ -176,15 +347,12 @@ class NavigationQuickEditorSheetTest {
             settle()
         }
         applyInset(0)
-        node("quick-editor-save").performScrollTo()
+        assertHeaderActions()
         val before = node("quick-editor-body").fetchSemanticsNode().boundsInRoot.bottom
         applyInset(48)
-        node("quick-editor-save").performScrollTo().assertIsDisplayed()
+        assertHeaderActions()
         val after = node("quick-editor-body").fetchSemanticsNode().boundsInRoot.bottom
         assertEquals("Bottom inset is reserved once, not caller plus host", 48f, before - after, 2f)
-        // performScrollTo ensures visibility, not alignment with the body end padding.
-        // Measure the actual viewport's inset, then separately assert the button is reachable.
-        assertTrue(node("quick-editor-save").fetchSemanticsNode().boundsInRoot.bottom <= after + 1f)
         capture("${backend.name}-short-navigation-inset")
         save()
         assertEquals(listOf(listOf("a", "b")), saved)

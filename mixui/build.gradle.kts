@@ -47,7 +47,7 @@ dependencies {
     implementation(libs.miuix.glass)
     implementation(libs.miuix.preference)
     implementation(libs.miuix.blur)
-    implementation(libs.miuix.shader)
+    implementation(libs.miuix.material)
     implementation("io.github.feice11.mochi-compose:mochi-ios:${libs.versions.mochi.get()}") {
         exclude(group = "com.materialkolor")
     }

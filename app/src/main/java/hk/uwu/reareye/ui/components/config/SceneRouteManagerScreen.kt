@@ -40,9 +40,9 @@ import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearWidgetConfigCodec
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.repository.rearwidget.RearWidgetSceneRouteConfig
-import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.mixui.components.GlassFormDialog
-import hk.uwu.mixui.components.DialogActions
+import hk.uwu.mixui.components.GlassEditorSheet
+import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.mutableIntStateOf
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
@@ -65,7 +65,7 @@ import hk.uwu.mixui.components.GlassTopBarScaffold
 import hk.uwu.mixui.components.TopBarIconButton
 import androidx.compose.foundation.lazy.rememberLazyListState
 import hk.uwu.mixui.components.Text
-import hk.uwu.mixui.components.TextField
+import hk.uwu.mixui.components.EditorTextField
 import hk.uwu.mixui.components.pageScrollFeedback
 
 private const val REAR_WIDGET_DEBUG_TAG = "RearWidgetDebug"
@@ -84,6 +84,7 @@ fun SceneRouteManagerScreen(
     var dataCardsVisible by remember { mutableStateOf(false) }
     val remotePrefsStatusRevision = rememberRemotePrefsStatusRevision()
     var showDialog by remember { mutableStateOf(false) }
+    var dialogSessionId by remember { mutableIntStateOf(0) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var draftPackageName by remember { mutableStateOf("") }
     var draftScene by remember { mutableStateOf("") }
@@ -143,6 +144,7 @@ fun SceneRouteManagerScreen(
         draftPackageName = ""
         draftScene = ""
         draftBusiness = ""
+        dialogSessionId++
         showDialog = true
     }
 
@@ -151,10 +153,12 @@ fun SceneRouteManagerScreen(
         draftPackageName = item.packageName
         draftScene = item.scene
         draftBusiness = item.business
+        dialogSessionId++
         showDialog = true
     }
 
     fun submitDialog() {
+        if (!showDialog) return
         val packageName = draftPackageName.trim()
         val scene = draftScene.trim()
         val business = draftBusiness.trim()
@@ -219,7 +223,7 @@ fun SceneRouteManagerScreen(
             }
         },
         overlayContent = {
-            GlassFormDialog(
+            GlassEditorSheet(
                 show = showDialog,
                 title = stringResource(
                     if (editingId == null) {
@@ -229,34 +233,33 @@ fun SceneRouteManagerScreen(
                     }
                 ),
                 onDismissRequest = { showDialog = false },
+                onConfirm = ::submitDialog,
+                cancelText = stringResource(R.string.rear_widget_cancel),
+                confirmText = stringResource(R.string.rear_widget_confirm),
+                sessionKey = dialogSessionId,
+                modifier = Modifier.testTag("scene-route-form"),
             ) {
-                DialogFormColumn {
-                    TextField(
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    EditorTextField(
                         value = draftPackageName,
                         onValueChange = { draftPackageName = it },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("scene-route-form-package"),
                         label = stringResource(R.string.rear_widget_target_package),
                         singleLine = true,
                     )
-                    TextField(
+                    EditorTextField(
                         value = draftScene,
                         onValueChange = { draftScene = it },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("scene-route-form-scene"),
                         label = stringResource(R.string.rear_widget_scene_name),
                         singleLine = true,
                     )
-                    TextField(
+                    EditorTextField(
                         value = draftBusiness,
                         onValueChange = { draftBusiness = it },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("scene-route-form-business"),
                         label = stringResource(R.string.rear_widget_business_name),
                         singleLine = true,
-                    )
-                    DialogActions(
-                        cancelText = stringResource(R.string.rear_widget_cancel),
-                        confirmText = stringResource(R.string.rear_widget_confirm),
-                        onCancel = { showDialog = false },
-                        onConfirm = { submitDialog() },
                     )
                 }
             }
@@ -267,6 +270,7 @@ fun SceneRouteManagerScreen(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
+                .testTag("scene-route-list")
                 .pageScrollFeedback(),
             contentPadding = PaddingValues(
                 start = paddingValues.calculateStartPadding(direction) + 12.dp,

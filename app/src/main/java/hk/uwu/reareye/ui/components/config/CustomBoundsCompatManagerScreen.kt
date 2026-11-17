@@ -56,6 +56,7 @@ import hk.uwu.reareye.repository.bounds.CustomBoundsFillMode
 import hk.uwu.reareye.repository.bounds.CustomBoundsMode
 import hk.uwu.reareye.ui.components.DialogFormColumn
 import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.GlassEditorSheet
 import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
@@ -81,7 +82,7 @@ import hk.uwu.mixui.components.TopBarIconButton
 import hk.uwu.mixui.components.pageScrollFeedback
 import hk.uwu.mixui.components.InfiniteProgressIndicator
 import hk.uwu.mixui.components.Text
-import hk.uwu.mixui.components.TextField
+import hk.uwu.mixui.components.EditorTextField
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.components.SpinnerPreference
 import hk.uwu.mixui.theme.MixTheme
@@ -406,13 +407,18 @@ fun CustomBoundsCompatManagerScreen(
     }
 
     val managerDialogs: @Composable () -> Unit = {
-        GlassFormDialog(
+        GlassEditorSheet(
             show = showDialog,
             title = stringResource(R.string.custom_bounds_edit_app),
             onDismissRequest = { showDialog = false },
+            onConfirm = { submitDialog() },
+            confirmText = stringResource(R.string.rear_widget_confirm),
+            cancelText = stringResource(R.string.rear_widget_cancel),
+            sessionKey = editingPackageName,
+            modifier = Modifier.testTag("bounds-edit-form"),
         ) {
-            DialogFormColumn(modifier = Modifier.testTag("bounds-edit-form")) {
-                TextField(
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                EditorTextField(
                     value = editingPackageName.orEmpty(),
                     onValueChange = {},
                     modifier = Modifier.fillMaxWidth(),
@@ -434,7 +440,7 @@ fun CustomBoundsCompatManagerScreen(
                     onSelected = { draftMode = it },
                 )
                 if (draftMode == 1) {
-                    TextField(
+                    EditorTextField(
                         value = draftAspectRatio,
                         onValueChange = { draftAspectRatio = it },
                         modifier = Modifier.fillMaxWidth(),
@@ -443,28 +449,28 @@ fun CustomBoundsCompatManagerScreen(
                     )
                 }
                 if (draftMode == 2) {
-                    TextField(
+                    EditorTextField(
                         value = draftInsetLeft,
                         onValueChange = { draftInsetLeft = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = stringResource(R.string.custom_bounds_inset_left),
                         singleLine = true,
                     )
-                    TextField(
+                    EditorTextField(
                         value = draftInsetTop,
                         onValueChange = { draftInsetTop = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = stringResource(R.string.custom_bounds_inset_top),
                         singleLine = true,
                     )
-                    TextField(
+                    EditorTextField(
                         value = draftInsetRight,
                         onValueChange = { draftInsetRight = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = stringResource(R.string.custom_bounds_inset_right),
                         singleLine = true,
                     )
-                    TextField(
+                    EditorTextField(
                         value = draftInsetBottom,
                         onValueChange = { draftInsetBottom = it },
                         modifier = Modifier.fillMaxWidth(),
@@ -484,14 +490,14 @@ fun CustomBoundsCompatManagerScreen(
                     selectedValue = draftGravity,
                     onSelected = { draftGravity = it },
                 )
-                TextField(
+                EditorTextField(
                     value = draftScale,
                     onValueChange = { draftScale = it },
                     modifier = Modifier.fillMaxWidth().testTag("bounds-edit-form-scale"),
                     label = stringResource(R.string.custom_bounds_scale),
                     singleLine = true,
                 )
-                TextField(
+                EditorTextField(
                     value = draftDensityDpi,
                     onValueChange = { draftDensityDpi = it },
                     modifier = Modifier.fillMaxWidth(),
@@ -534,24 +540,6 @@ fun CustomBoundsCompatManagerScreen(
                             },
                             error = draftFillColorError,
                         )
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Button(
-                        onClick = { showDialog = false },
-                        modifier = Modifier.weight(1f).testTag("bounds-edit-form-cancel"),
-                    ) {
-                        Text(stringResource(R.string.rear_widget_cancel))
-                    }
-                    Button(
-                        onClick = { submitDialog() },
-                        colors = ButtonDefaults.buttonColorsPrimary(),
-                        modifier = Modifier.weight(1f).testTag("bounds-edit-form-confirm"),
-                    ) {
-                        Text(stringResource(R.string.rear_widget_confirm))
                     }
                 }
             }
@@ -902,13 +890,15 @@ internal fun CustomBoundsColorEditor(
                     )
                     .background(parsedColor?.let(::Color) ?: Color.Transparent),
             )
-            TextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.weight(1f),
-                label = stringResource(R.string.custom_bounds_fill_color),
-                singleLine = true,
-            )
+            Box(Modifier.weight(1f)) {
+                EditorTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.custom_bounds_fill_color),
+                    singleLine = true,
+                )
+            }
         }
         if (error) {
             Text(

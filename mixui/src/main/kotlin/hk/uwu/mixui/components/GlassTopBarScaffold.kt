@@ -1,6 +1,5 @@
 package hk.uwu.mixui.components
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Column
@@ -11,12 +10,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyListState
-import kotlinx.coroutines.flow.first
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -34,7 +30,7 @@ import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.material.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import ui.feice.mochi.effect.glass.LocalMochiBackdrop
@@ -94,28 +90,17 @@ fun GlassTopBarScaffold(
             val nativeState = key(contentListState) {
                 top.yukonga.miuix.kmp.basic.rememberTopAppBarState()
             }
-            val scrollBehavior = rememberMiuixPageScrollBehavior(state = nativeState)
-            LaunchedEffect(contentListState, nativeState) {
-                val list = contentListState ?: return@LaunchedEffect
-                // Wait for the vendor bar to measure its finite collapse range. Restore
-                // a previously scrolled list only on selection, never on every idle frame.
-                snapshotFlow { nativeState.heightOffsetLimit }.first { it > -Float.MAX_VALUE }
-                if (list.canScrollBackward) {
-                    nativeState.heightOffset = nativeState.heightOffsetLimit
-                    nativeState.contentOffset = -1f
-                }
-            }
-            // Native pre-scroll can collapse the bar before a short list moves.
-            // Material must follow that motion as well as the list's own offset.
-            val materialVisible = isContentScrolled || nativeState.heightOffset < 0f
+            val scrollBehavior = rememberMiuixPageScrollBehavior(state = nativeState, listState = contentListState)
+            val visualOffset = rememberMiuixPageVisualOffset(scrollBehavior, contentListState)
+            // Real list pixels also cover cold-load animateScrollToItem and return-to-top.
+            // Title-only native motion remains visible even on a non-scrollable short page.
+            val materialVisible = (contentListState?.canScrollBackward ?: isContentScrolled) || visualOffset() < 0f
             val supported = isRuntimeShaderSupported()
             val backdrop = if (supported) rememberLayerBackdrop() else null
             val formBackdrop = if (supported) rememberLayerBackdrop() else null
             val headerOutsideBar = backdrop != null && !inheritMiuixBarMaterial
-            val tabSurfaceAlpha = animateFloatAsState(
-                targetValue = if (materialVisible) 1f else 0f,
-                animationSpec = top.yukonga.miuix.kmp.glass.GlassMotion.topBarButtonFloat(),
-                label = "headerTabMaterial",
+            val surfaceRamp = top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults.collapseRamp(
+                scrollBehavior, visualOffset,
             )
             GlassFormOverlayHost(
                 modifier = modifier,
@@ -144,6 +129,7 @@ fun GlassTopBarScaffold(
                                     // own material while retaining the bar's scroll motion.
                                     progressiveBlur = true,
                                     scrollBehavior = scrollBehavior,
+                                    visualContentOffset = visualOffset,
                                     navigationIcon = {
                                         CompositionLocalProvider(LocalInheritMiuixBarMaterial provides inheritMiuixBarMaterial) {
                                             navigationIcon()
@@ -161,8 +147,10 @@ fun GlassTopBarScaffold(
                                     // Keep it here only when bar material inheritance is requested.
                                     bottomContent = {
                                         if (!headerOutsideBar) CompositionLocalProvider(
-                                            LocalGlassTabsSurfaceAlpha provides tabSurfaceAlpha.value,
+                                            LocalGlassTabsSurfaceAlpha provides surfaceRamp.value,
+                                            LocalSearchSurfaceAlpha provides surfaceRamp.value,
                                             LocalGlassTabsBackdrop provides backdrop,
+                                            LocalSearchBackdrop provides backdrop,
                                         ) { pinnedHeader() }
                                     },
                                 )
@@ -178,8 +166,10 @@ fun GlassTopBarScaffold(
                                             },
                                     ) {
                                         CompositionLocalProvider(
-                                            LocalGlassTabsSurfaceAlpha provides tabSurfaceAlpha.value,
+                                            LocalGlassTabsSurfaceAlpha provides surfaceRamp.value,
+                                            LocalSearchSurfaceAlpha provides surfaceRamp.value,
                                             LocalGlassTabsBackdrop provides backdrop,
+                                            LocalSearchBackdrop provides backdrop,
                                         ) { pinnedHeader() }
                                     }
                                 }
@@ -252,11 +242,6 @@ fun GlassTopBarScaffold(
     }
 }
 
-/**
- * Full-window popup owner. Only the inner page is recorded; overlayContent is its
- * sibling. The inner Scaffold disables its popup host, while renderInRootScaffold
- * resolves to this outer host or an existing ancestor root, neither recorded here.
- */
 @Composable
 private fun GlassFormOverlayHost(
     modifier: Modifier,
@@ -266,17 +251,19 @@ private fun GlassFormOverlayHost(
     overlayContent: @Composable () -> Unit,
     page: @Composable (Modifier) -> Unit,
 ) {
-    Scaffold(
-        modifier = modifier,
-        containerColor = background,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-    ) {
-        Box(Modifier.fillMaxSize()) {
-            GlassPreferenceOverlayHost(backdrop = backdrop) {
-                page(Modifier.fillMaxSize().then(sceneModifier))
-            }
-            CompositionLocalProvider(LocalGlassFormBackdrop provides backdrop) {
-                overlayContent()
+    WithGlassSheetScene {
+        Scaffold(
+            modifier = modifier,
+            containerColor = background,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                GlassPreferenceOverlayHost(backdrop = backdrop) {
+                    page(Modifier.fillMaxSize().then(sceneModifier))
+                }
+                CompositionLocalProvider(LocalGlassFormBackdrop provides backdrop) {
+                    overlayContent()
+                }
             }
         }
     }

@@ -147,6 +147,33 @@ class RearAppCardRenameGlassTest {
         }
     }
 
+    @Test fun singleLineRenameSelectsOnceAndRespectsSubsequentCursorEdits() {
+        for (backend in listOf("miuix", "mochi")) for (dark in listOf(false, true)) {
+            host(backend, dark); open()
+            fun selected(length: Int) {
+                editor().assertIsFocused()
+                val range = editor().fetchSemanticsNode().config[SemanticsProperties.TextSelectionRange]
+                assertEquals(0, range.min); assertEquals(length, range.max)
+            }
+            selected("Original name".length)
+            editor().performTextInput("draft"); settle()
+            editor().assertTextEquals("draft")
+            editor().performTextInputSelection(androidx.compose.ui.text.TextRange(1, 4)); settle()
+            editor().performTextInput("X"); settle()
+            editor().assertTextEquals("dXt")
+            editor().performTextInput("Y"); settle()
+            editor().assertTextEquals("dXYt")
+            cancel().performClick(); closed()
+            assertEquals("Original name", saved); assertEquals(0, submits)
+            open(); selected("Original name".length)
+            editor().performTextInput("Saved"); settle()
+            confirm().performClick(); closed()
+            assertEquals("Saved", saved); assertEquals(1, submits)
+            open(); selected("Saved".length)
+            cancel().performClick(); closed()
+        }
+    }
+
     @Test fun realManagementListOpensAndRenamesThroughRepository() {
         val clientField = RearAppCardRepository::class.java.getDeclaredField("remoteClient").apply { isAccessible = true }
         val oldClient = clientField.get(RearAppCardRepository)

@@ -61,7 +61,8 @@ import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.InfiniteProgressIndicator
 import hk.uwu.mixui.components.Text
-import hk.uwu.mixui.components.TextField
+import hk.uwu.mixui.components.EditorTextField
+import androidx.compose.runtime.mutableIntStateOf
 import hk.uwu.mixui.theme.MixTheme
 
 @SuppressLint("LocalContextGetResourceValueCall")
@@ -81,6 +82,8 @@ internal fun RearAppCardManagementContent(
     var loading by remember { mutableStateOf(true) }
     var errorText by remember { mutableStateOf<String?>(null) }
     var editingCard by remember { mutableStateOf<RearAppCardInfo?>(null) }
+    var renameSessionId by remember { mutableIntStateOf(0) }
+    var renamePending by remember { mutableStateOf(false) }
     var draftTitle by remember { mutableStateOf("") }
     var orderChanged by remember { mutableStateOf(false) }
     var orderSaving by remember { mutableStateOf(false) }
@@ -163,21 +166,28 @@ internal fun RearAppCardManagementContent(
     RearAppCardRenameScene(
         show = editingCard != null,
         draftTitle = draftTitle,
+        focusSessionKey = renameSessionId,
+        submitting = renamePending,
         onTitleChange = { draftTitle = it },
         onDismissRequest = { editingCard = null },
         onConfirm = confirm@{
             val target = editingCard ?: return@confirm
+            if (renamePending) return@confirm
+            val submittedTitle = draftTitle.trim().takeIf { it.isNotBlank() } ?: return@confirm
+            val submittedSession = renameSessionId
+            renamePending = true
             scope.launch {
                 val result = withContext(Dispatchers.IO) {
-                    RearAppCardRepository.rename(context, target.appId, draftTitle)
+                    RearAppCardRepository.rename(context, target.appId, submittedTitle)
                 }
+                renamePending = false
                 showResult(
                     result.success,
                     result.error,
                     context.getString(R.string.rear_widget_app_name_updated),
                 )
                 if (result.success) {
-                    editingCard = null
+                    if (renameSessionId == submittedSession) editingCard = null
                     delay(350)
                     reload()
                 }
@@ -286,6 +296,7 @@ internal fun RearAppCardManagementContent(
                         onCardClick = if (card.canRename) {
                             {
                                 draftTitle = card.title
+                                renameSessionId++
                                 editingCard = card
                             }
                         } else {
@@ -338,6 +349,7 @@ internal fun RearAppCardManagementContent(
                                         ),
                                         onClick = {
                                             draftTitle = card.title
+                                            renameSessionId++
                                             editingCard = card
                                         },
                                     )
@@ -409,6 +421,8 @@ internal fun RearAppCardRenameScene(
     onDismissRequest: () -> Unit,
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
+    focusSessionKey: Any? = Unit,
+    submitting: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     GlassPreferenceScene(
@@ -420,12 +434,15 @@ internal fun RearAppCardRenameScene(
                 onDismissRequest = onDismissRequest,
             ) {
                 DialogFormColumn {
-                    TextField(
+                    EditorTextField(
                         value = draftTitle,
                         onValueChange = onTitleChange,
                         modifier = Modifier.fillMaxWidth().testTag("app-card-rename-title"),
                         label = stringResource(R.string.rear_widget_app_card_name),
                         singleLine = true,
+                        autoFocus = show,
+                        selectAllOnFocus = true,
+                        focusSessionKey = focusSessionKey,
                     )
                     DialogActions(
                         modifier = Modifier.testTag("app-card-rename-actions"),
@@ -433,7 +450,7 @@ internal fun RearAppCardRenameScene(
                         confirmText = stringResource(R.string.rear_widget_confirm),
                         onCancel = onDismissRequest,
                         onConfirm = onConfirm,
-                        confirmEnabled = draftTitle.isNotBlank(),
+                        confirmEnabled = !submitting && draftTitle.isNotBlank(),
                     )
                 }
             }
