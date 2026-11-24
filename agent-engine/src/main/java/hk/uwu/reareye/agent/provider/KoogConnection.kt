@@ -119,9 +119,9 @@ internal fun nativeConnection(client: OkHttpClient, config: ProviderConfig): Nat
             ),
                 config.protocol,
                 calls,
-                runCatching { java.net.URI(config.baseUrl).host == "api.openai.com" }.getOrDefault(
-                    false
-                ),
+                runCatching {
+                    java.net.URI(config.baseUrl).host.equals("api.openai.com", ignoreCase = true)
+                }.getOrDefault(false),
                 config
             )
                 .also { transport = it }

@@ -5,6 +5,8 @@ import android.app.LocaleManager
 import android.content.Context
 import android.content.res.Resources
 import android.os.Build
+import hk.uwu.reareye.agent.catalog.MaryReasoningCatalog
+import hk.uwu.reareye.agent.catalog.ReasoningCatalogIndex
 import hk.uwu.reareye.agent.context.ContextBudget
 import hk.uwu.reareye.agent.context.ContextBudgetDecision
 import hk.uwu.reareye.agent.context.ContextComposition
@@ -114,6 +116,8 @@ internal fun pendingInteractionToolRowId(entries: List<ChatEntry>, callId: Strin
     return entries.lastOrNull { it is ChatEntry.ToolCall && it.running && it.callId == callId }?.id
 }
 
+internal fun ProviderConfig.withReasoningCatalog(index: ReasoningCatalogIndex): ProviderConfig =
+    copy(reasoningCatalogCapability = index.capabilityFor(this))
 /** Session-scoped event ownership prevents a cancelled turn from mutating another conversation. */
 class MaryController(
     context: Context,
@@ -122,6 +126,7 @@ class MaryController(
     private val settings: AgentSettingsSource = AgentSettingsStore(context.applicationContext),
     private val store: AgentSessionStore = AgentSessionStore(context.applicationContext.filesDir),
     private val connectionOverride: ((ProviderConfig) -> KoogConnection)? = null,
+    internal val reasoningCatalog: StateFlow<ReasoningCatalogIndex> = MaryReasoningCatalog.index,
     private val resolveText: (Int) -> String = context.applicationContext::getString,
 ) {
     private val appContext = context.applicationContext
@@ -173,7 +178,7 @@ class MaryController(
     fun setReasoningEffort(effort: ReasoningEffort) {
         val current = _state.value
         if (current.running || current.locked || current.pendingApproval != null ||
-            effort !in ReasoningPolicy.support(current.provider).levels
+            effort !in ReasoningPolicy.support(current.provider.withReasoningCatalog(reasoningCatalog.value)).levels
         ) return
         configure(effort)
     }
@@ -225,7 +230,7 @@ class MaryController(
                         else settings.updateMarySettings { latest ->
                             val provider = latest.configuration.provider
                             val config = if (change.effort != null &&
-                                change.effort in ReasoningPolicy.support(provider).levels
+                                change.effort in ReasoningPolicy.support(provider.withReasoningCatalog(reasoningCatalog.value)).levels
                             )
                                 latest.configuration.copy(provider = provider.copy(reasoningEffort = change.effort))
                             else latest.configuration
@@ -475,16 +480,17 @@ class MaryController(
                 }
                 assertOwner(owner)
                 val original = preferences.configuration
+                val catalog = reasoningCatalog.value
+                val publicProvider = CapabilityScope.publicView(original.provider)
                 runtimeProtocol = original.provider.protocol
-                metadataConfig = original.copy(provider = CapabilityScope.publicView(original.provider))
+                metadataConfig = original.copy(provider = publicProvider)
                 _state.update {
-                    it.copy(
-                        provider = metadataConfig!!.provider,
-                        contextWindowTokens = original.provider.contextWindowTokens
-                    )
+                    it.copy(provider = publicProvider, contextWindowTokens = original.provider.contextWindowTokens)
                 }
-                val config =
-                    original.copy(systemPrompt = original.systemPrompt + languageInstruction())
+                val config = original.copy(
+                    provider = original.provider.withReasoningCatalog(catalog),
+                    systemPrompt = original.systemPrompt + languageInstruction(),
+                )
                 if (!config.provider.isUsable) {
                     appendNotice(
                         "Configure the model URL and model name in Mary settings first.",
@@ -516,7 +522,7 @@ class MaryController(
                 _state.update {
                     it.copy(
                         entries = it.entries + ChatEntry.UserMessage(newId(), prompt),
-                        provider = CapabilityScope.publicView(config.provider),
+                        provider = publicProvider,
                         contextWindowTokens = config.provider.contextWindowTokens
                     )
                 }
@@ -524,7 +530,8 @@ class MaryController(
                 val connection = connectionFor(config.provider).also { activeConnection = it }
                 runtimePhase = MaryRuntimePhase.ENGINE_RUN
                 val reviewConfig =
-                    if (preferences.inheritApprovalModel) config.provider else preferences.approvalProvider
+                    if (preferences.inheritApprovalModel) config.provider
+                    else preferences.approvalProvider.withReasoningCatalog(catalog)
                 // These are host-observed human answers for this turn, never model/tool claims.
                 val reviewUserDecisions = ArrayDeque<MaryApprovalUserDecision>()
                 logMaryApproval(
@@ -606,7 +613,7 @@ class MaryController(
                         _state.update {
                             // An externally refreshed configuration can change while this run is
                             // finishing. Never pair its old request estimate with the new model.
-                            if (it.provider == CapabilityScope.publicView(config.provider)) {
+                            if (it.provider == publicProvider) {
                                 it.copy(estimatedInputTokens = calibratedEstimate, contextComposition = composition,
                                     contextBudgetCorrectionTokens = inputCorrection)
                             } else it.copy(estimatedInputTokens = null, contextComposition = null,
@@ -715,7 +722,7 @@ class MaryController(
                             lastRequestEstimate = event.estimatedInputTokens
                             _state.update {
                                 it.copy(estimatedInputTokens = lastRequestEstimate.takeIf { _ ->
-                                    it.provider == CapabilityScope.publicView(config.provider)
+                                    it.provider == publicProvider
                                 }, contextComposition = null, contextBudgetCorrectionTokens = 0)
                             }
                             appendNotice(
@@ -729,7 +736,7 @@ class MaryController(
                                 inputCorrection = (actual - lastRequestEstimate).coerceAtLeast(0)
                             }
                             _state.update {
-                                if (it.provider == CapabilityScope.publicView(config.provider))
+                                if (it.provider == publicProvider)
                                     it.copy(usage = mergeUsage(it.usage, event.usage))
                                 else it.copy(usage = null)
                             }

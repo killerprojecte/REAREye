@@ -44,7 +44,7 @@ enum class ReasoningMapping {
 }
 
 @Serializable
-enum class CapabilitySource { MANUAL, SERVICE_METADATA, OFFLINE, UNKNOWN }
+enum class CapabilitySource { MANUAL, SERVICE_METADATA, CATALOG_METADATA, OFFLINE, UNKNOWN }
 
 /** Local routing identity only. The credential is never retained, only a one-way fingerprint. */
 @Serializable
@@ -81,6 +81,7 @@ data class ReasoningCapability(
     val source: CapabilitySource,
     /** Positive coarse support does not imply any particular adjustable effort level. */
     val supportsReasoning: Boolean? = null,
+    val catalogSourceName: String? = null,
 ) {
     fun validFor(config: ProviderConfig): Boolean =
         scope == CapabilityScope.from(config) && when (status) {

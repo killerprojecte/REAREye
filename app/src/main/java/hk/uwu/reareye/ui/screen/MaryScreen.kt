@@ -88,6 +88,7 @@ import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.ChatEntry
 import hk.uwu.reareye.agent.MaryViewModel
 import hk.uwu.reareye.agent.pendingInteractionToolRowId
+import hk.uwu.reareye.agent.withReasoningCatalog
 import hk.uwu.reareye.agent.voice.rememberMaryVoiceInput
 import hk.uwu.reareye.ui.components.ContextUsageButton
 import hk.uwu.reareye.ui.components.MaryComposer
@@ -136,6 +137,10 @@ fun MaryScreen(
     }
     val controller = owner.controller
     val uiState by controller.state.collectAsState()
+    val reasoningCatalog by controller.reasoningCatalog.collectAsState()
+    val reasoningProvider = remember(uiState.provider, reasoningCatalog) {
+        uiState.provider.withReasoningCatalog(reasoningCatalog)
+    }
 
     // Deliberately no MiuixScrollBehavior here. A collapsing large title changes the bar's measured
     // height, which the Scaffold reports as the top padding this screen feeds into the list's
@@ -338,7 +343,7 @@ fun MaryScreen(
                     running = uiState.running,
                     locked = uiState.locked,
                     configuring = uiState.configuring,
-                    provider = uiState.provider,
+                    provider = reasoningProvider,
                     onReasoningSelected = { controller.setReasoningEffort(it) },
                     approvalMode = uiState.approvalMode,
                     onApprovalModeSelected = { controller.setApprovalMode(it) },

@@ -102,6 +102,10 @@ import hk.uwu.reareye.agent.Protocol
 import hk.uwu.reareye.agent.ProviderConfig
 import hk.uwu.reareye.agent.ReasoningEffort
 import hk.uwu.reareye.agent.ReasoningPolicy
+import hk.uwu.reareye.agent.catalog.ModelsDevReasoningCatalog
+import hk.uwu.reareye.agent.catalog.ReasoningCatalogIndex
+import hk.uwu.reareye.agent.catalog.ReasoningCatalogRecord
+import hk.uwu.reareye.agent.catalog.ReasoningCatalogSnapshot
 import hk.uwu.reareye.agent.interaction.ApprovalMode
 import hk.uwu.reareye.agent.interaction.AskOption
 import hk.uwu.reareye.agent.interaction.AskRequest
@@ -118,6 +122,8 @@ import hk.uwu.reareye.ui.screen.MarySettingsScreen
 import hk.uwu.reareye.ui.screen.NoticeCard
 import hk.uwu.reareye.ui.screen.ReasoningCard
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -1524,6 +1530,26 @@ class MaryChatLayoutTest {
     }
 
     @Test
+    fun advancedModelSettingsShowPublishedCatalogWithoutEditingTheDraft() {
+        val provider = ProviderConfig(
+            baseUrl = "https://api.openai.com/v1", model = "gpt-catalog-test", protocol = Protocol.RESPONSES,
+        )
+        val catalog = MutableStateFlow(ReasoningCatalogIndex.Empty)
+        val draft = modelSettings(provider, catalog)
+        fieldLabel(R.string.mary_settings_advanced_model).performScrollTo().performClick()
+        fieldLabel(R.string.mary_capability_source_unknown).assertExists()
+
+        val record = ReasoningCatalogRecord("openai", provider.model, listOf(ReasoningEffort.LOW, ReasoningEffort.HIGH))
+        compose.runOnIdle {
+            catalog.value = ReasoningCatalogIndex.from(listOf(ReasoningCatalogSnapshot.from(ModelsDevReasoningCatalog, listOf(record))))
+        }
+        val context = requireNotNull(activity).get()
+        compose.onNodeWithText(context.getString(R.string.mary_capability_source_catalog, "Models.dev"))
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.mary_capability_status_levels, "low, high")).assertExists()
+        compose.runOnIdle { assertEquals(provider, draft.value.provider) }
+    }
+    @Test
     fun modelAdvancedFieldsAreInitiallyCollapsedAndToggleWithRealUiClick() {
         modelSettings()
         fieldLabel(R.string.mary_behaviour_temperature).assertDoesNotExist()
@@ -1889,14 +1915,11 @@ class MaryChatLayoutTest {
         }
     }
 
-    private fun modelSettings(): MutableState<ModelDraft> {
-        val draft = mutableStateOf(
-            ModelDraft(
-                provider = ProviderConfig(
-                    model = "custom-model", baseUrl = "https://example.invalid/v1", apiKey = "",
-                )
-            )
-        )
+    private fun modelSettings(
+        provider: ProviderConfig = ProviderConfig(model = "custom-model", baseUrl = "https://example.invalid/v1"),
+        catalog: StateFlow<ReasoningCatalogIndex> = MutableStateFlow(ReasoningCatalogIndex.Empty),
+    ): MutableState<ModelDraft> {
+        val draft = mutableStateOf(ModelDraft(provider = provider))
         host {
             Box(
                 Modifier
@@ -1918,6 +1941,7 @@ class MaryChatLayoutTest {
                             draft = draft.value,
                             onChange = { draft.value = it },
                             unreadable = false,
+                            reasoningCatalog = catalog,
                         )
                     }
                 }

@@ -42,6 +42,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import hk.uwu.mixui.components.navigationBackdrop
 import hk.uwu.mixui.components.rememberNavigationBackdrop
+import hk.uwu.reareye.application.DefaultApplication
 import hk.uwu.reareye.ui.components.PresetPackDialog
 import hk.uwu.reareye.ui.components.SubscreenNotificationAccessPrompt
 import hk.uwu.reareye.ui.components.TargetAppVersionDialog
@@ -145,6 +146,9 @@ class MainActivity : ComponentActivity() {
         // container silently rejects the hooks and template fields this module writes, so it is
         // safer to explain the requirement and leave than to half work.
         val versionViolations = AppVersionGate.evaluate(applicationContext)
+        if (versionViolations.isEmpty()) {
+            (application as? DefaultApplication)?.onUiOpened()
+        }
 
         setContent {
             if (versionViolations.isNotEmpty()) {

@@ -2,6 +2,7 @@ package hk.uwu.reareye.agent
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 @Serializable
 enum class Protocol { CHAT_COMPLETIONS, RESPONSES, ANTHROPIC }
@@ -33,6 +34,8 @@ data class ProviderConfig(
     val reasoningMetadata: ReasoningCapability? = null,
     /** Non-secret credential identity retained by explicitly sanitized UI views. */
     val credentialScopeTag: String? = null,
+    /** Resolved from the current local catalog snapshot, never part of saved model settings. */
+    @Transient val reasoningCatalogCapability: ReasoningCapability? = null,
 ) {
     val isUsable: Boolean
         get() = baseUrl.isNotBlank() && model.isNotBlank()

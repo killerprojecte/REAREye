@@ -34,6 +34,7 @@
     <string name="mary_capability_claude_adaptive">Claude adaptive thinking + effort</string>
     <string name="mary_capability_source_manual">Source: manual override</string>
     <string name="mary_capability_source_service">Source: current service model metadata</string>
+    <string name="mary_capability_source_catalog">Source: %1$s catalog cache (not verified by this service)</string>
     <string name="mary_capability_source_offline">Source: bundled model table (not verified by this service)</string>
     <string name="mary_capability_source_unknown">Capability unknown. Basic model listings do not advertise adjustable levels; configure manually if needed.</string>
     <string name="mary_capability_scope_hint">Overrides and service metadata apply only to this endpoint, protocol, model and credential. Changing any of these invalidates them. At least one manual level is required. No automatic paid probe is performed. Claude budgets are capped below the request output limit.</string>

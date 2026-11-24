@@ -1,6 +1,7 @@
 package hk.uwu.reareye.application
 
 import android.app.Application
+import hk.uwu.reareye.agent.catalog.MaryReasoningCatalog
 import hk.uwu.reareye.hook.support.XposedModuleStatus
 import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.reareye.repository.contributor.ContributorRepository
@@ -10,6 +11,9 @@ import hk.uwu.reareye.utils.effect.FrameSampler
 
 class DefaultApplication : Application() {
     private lateinit var legacyPreferenceMigrationCoordinator: LegacyPreferenceMigrationCoordinator
+
+    // Only a normal app UI launch triggers the sync; a tile/service starting the process does not.
+    internal fun onUiOpened() = MaryReasoningCatalog.start(this)
 
     override fun onCreate() {
         super.onCreate()

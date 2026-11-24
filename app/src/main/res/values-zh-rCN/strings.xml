@@ -34,6 +34,7 @@
     <string name="mary_capability_claude_adaptive">Claude adaptive thinking + effort</string>
     <string name="mary_capability_source_manual">来源：用户手动覆盖</string>
     <string name="mary_capability_source_service">来源：当前服务的模型能力元数据</string>
+    <string name="mary_capability_source_catalog">来源：%1$s 目录缓存（未经当前服务验证）</string>
     <string name="mary_capability_source_offline">来源：内置离线模型表（未经当前服务验证）</string>
     <string name="mary_capability_source_unknown">能力未知。基础模型目录不会公布可调推理档位，可按需手动配置。</string>
     <string name="mary_capability_scope_hint">手动覆盖和服务元数据仅对当前端点、协议、模型和凭据生效；任一变化即失效。手动模式须至少选择一个档位。不自动执行付费探测。Claude 预算会限制在请求输出上限之内。</string>

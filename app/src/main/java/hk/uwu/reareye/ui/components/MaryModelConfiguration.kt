@@ -33,6 +33,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.CapabilityScope
 import hk.uwu.reareye.agent.CapabilitySource
@@ -45,6 +46,9 @@ import hk.uwu.reareye.agent.ReasoningEffort
 import hk.uwu.reareye.agent.ReasoningMapping
 import hk.uwu.reareye.agent.ReasoningPolicy
 import hk.uwu.reareye.agent.ReasoningStatus
+import hk.uwu.reareye.agent.catalog.MaryReasoningCatalog
+import hk.uwu.reareye.agent.catalog.ReasoningCatalogIndex
+import hk.uwu.reareye.agent.withReasoningCatalog
 import hk.uwu.reareye.agent.model.ChatMessage
 import hk.uwu.reareye.agent.model.MessageRole
 import hk.uwu.reareye.agent.provider.ChatEvent
@@ -54,6 +58,7 @@ import hk.uwu.reareye.agent.provider.ProviderRequestDiagnostics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -160,10 +165,12 @@ internal fun ModelConfigurationCard(
     title: Int,
     draft: ModelDraft,
     onChange: (ModelDraft) -> Unit,
-    unreadable: Boolean
+    unreadable: Boolean,
+    reasoningCatalog: StateFlow<ReasoningCatalogIndex> = MaryReasoningCatalog.index,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val catalog by reasoningCatalog.collectAsStateWithLifecycle()
     var testing by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<String?>(null) }
     var resultError by remember { mutableStateOf(false) }
@@ -244,7 +251,7 @@ internal fun ModelConfigurationCard(
                         modifier = Modifier.testTag("mary-model-test-$title"),
                         enabled = !testing && !loadingModels && draft.valid() && draft.provider.model.isNotBlank(),
                         onClick = {
-                            val config = draft.build()
+                            val config = draft.build().withReasoningCatalog(catalog)
                             testing = true
                             result = null
                             resultError = false
@@ -413,7 +420,7 @@ internal fun ModelConfigurationCard(
                 },
             )
             if (advanced) {
-                ReasoningConfiguration(draft, onChange)
+                ReasoningConfiguration(draft, catalog, onChange)
                 MarySettingsField(
                     draft.temperature,
                     { onChange(draft.copy(temperature = it)) },
@@ -435,8 +442,12 @@ internal fun ModelConfigurationCard(
 }
 
 @Composable
-private fun ReasoningConfiguration(draft: ModelDraft, onChange: (ModelDraft) -> Unit) {
-    val config = draft.connectionConfig()
+private fun ReasoningConfiguration(
+    draft: ModelDraft,
+    catalog: ReasoningCatalogIndex,
+    onChange: (ModelDraft) -> Unit,
+) {
+    val config = draft.connectionConfig().withReasoningCatalog(catalog)
     val override =
         config.reasoningOverride?.takeIf { it.validFor(config) && it.source == CapabilitySource.MANUAL }
     val choice = when (override?.status) {
@@ -471,16 +482,17 @@ private fun ReasoningConfiguration(draft: ModelDraft, onChange: (ModelDraft) -> 
             R.string.mary_capability_status_levels,
             support.levels.joinToString { it.name.lowercase() })
     )
-    MarySettingsHint(
-        stringResource(
-            when (support.source) {
-                CapabilitySource.MANUAL -> R.string.mary_capability_source_manual
-                CapabilitySource.SERVICE_METADATA -> R.string.mary_capability_source_service
-                CapabilitySource.OFFLINE -> R.string.mary_capability_source_offline
-                CapabilitySource.UNKNOWN -> R.string.mary_capability_source_unknown
-            }
+    val sourceLabel = when (support.source) {
+        CapabilitySource.MANUAL -> stringResource(R.string.mary_capability_source_manual)
+        CapabilitySource.SERVICE_METADATA -> stringResource(R.string.mary_capability_source_service)
+        CapabilitySource.CATALOG_METADATA -> stringResource(
+            R.string.mary_capability_source_catalog,
+            support.catalogSourceName.orEmpty(),
         )
-    )
+        CapabilitySource.OFFLINE -> stringResource(R.string.mary_capability_source_offline)
+        CapabilitySource.UNKNOWN -> stringResource(R.string.mary_capability_source_unknown)
+    }
+    MarySettingsHint(sourceLabel)
     if (choice == 2 && override != null) {
         val mappings = if (config.protocol == Protocol.ANTHROPIC)
             listOf(
