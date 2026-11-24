@@ -1,5 +1,6 @@
 package hk.uwu.reareye.utils
 
+import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
 import android.system.StructStat
@@ -10,12 +11,13 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
-import java.util.UUID
 import java.util.Base64
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-/** No root shell, guessed UID, permission widening, delete-before-rename, or copy fallback. */
-internal class AndroidSharedRuntimeFileOperations : SharedRuntimeFileStore.FileOperations {
+internal class AndroidSharedRuntimeFileOperations(
+    private val preserveWithRoot: (File, StructStat, SharedRuntimeFileStore.FileState) -> Boolean,
+) : SharedRuntimeFileStore.FileOperations {
     private val stagedInodes = ConcurrentHashMap<String, Pair<Long, Long>>()
 
     override fun read(target: File): SharedRuntimeFileStore.FileState {
@@ -66,24 +68,44 @@ internal class AndroidSharedRuntimeFileOperations : SharedRuntimeFileStore.FileO
         }
     }
 
-    override fun preserveMetadata(temp: File, metadata: SharedRuntimeFileStore.Metadata) {
+    override fun preserveMetadata(temp: File, original: SharedRuntimeFileStore.FileState) {
+        val metadata = original.metadata
         val fd = Os.open(temp.path, OsConstants.O_WRONLY or OsConstants.O_NOFOLLOW or OsConstants.O_CLOEXEC, 0)
         withDescriptor(fd) {
             val output = FileOutputStream(fd)
             val current = Os.fstat(fd)
             requireRegular(current)
             checkStagedIdentity(temp, current)
-            // A non-privileged hook will normally be unable to transfer ownership. That is
-            // an error, NOT permission to replace the system-owned original with our inode.
-            if (current.st_uid != metadata.uid || current.st_gid != metadata.gid) {
-                Os.fchown(fd, metadata.uid, metadata.gid)
+            val localFailure = try {
+                val temporaryLabel = securityLabel(temp)
+                if (temporaryLabel != metadata.securityLabel) {
+                    IOException(
+                        "Temporary runtime SELinux label differs from the original " +
+                            "(${describeLabel(temporaryLabel)} versus ${describeLabel(metadata.securityLabel)})",
+                    )
+                } else {
+                    if (current.st_uid != metadata.uid || current.st_gid != metadata.gid) {
+                        Os.fchown(fd, metadata.uid, metadata.gid)
+                    }
+                    Os.fchmod(fd, metadata.mode)
+                    null
+                }
+            } catch (error: ErrnoException) {
+                if (error.errno != OsConstants.EACCES && error.errno != OsConstants.EPERM) throw error
+                error
             }
-            Os.fchmod(fd, metadata.mode)
-            if (securityLabel(temp) != metadata.securityLabel) {
-                throw IOException("Cannot preserve shared file SELinux label")
+            // Keep this descriptor open while the helper checks the inode, so it cannot be recycled.
+            if (localFailure != null) {
+                try {
+                    if (!preserveWithRoot(temp, current, original)) throw localFailure
+                } catch (error: Exception) {
+                    if (error !== localFailure) error.addSuppressed(localFailure)
+                    throw error
+                }
             }
+            checkStagedIdentity(temp, Os.lstat(temp.path))
             if (metadataOf(Os.fstat(fd), securityLabel(temp)) != metadata) {
-                throw IOException("Cannot preserve shared file ownership or permissions")
+                throw IOException("Temporary runtime file did not retain the original ownership, mode and SELinux label")
             }
             output.fd.sync()
         }
@@ -125,6 +147,9 @@ internal class AndroidSharedRuntimeFileOperations : SharedRuntimeFileStore.FileO
 
     private fun securityLabel(file: File): String =
         Base64.getEncoder().encodeToString(Os.getxattr(file.path, "security.selinux"))
+
+    private fun describeLabel(encoded: String): String =
+        Base64.getDecoder().decode(encoded).toString(Charsets.UTF_8).trimEnd('\u0000')
 
     private fun requireRegular(stat: StructStat) {
         if (!OsConstants.S_ISREG(stat.st_mode)) throw IOException("Shared file is not a regular file")

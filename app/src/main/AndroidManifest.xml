@@ -66,6 +66,12 @@
             android:exported="true"
             tools:ignore="ExportedContentProvider" />
 
+        <provider
+            android:name=".provider.RearRuntimeMetadataProvider"
+            android:authorities="${applicationId}.rear.runtime.metadata"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+
         <service
             android:name=".service.PresetPackDownloadService"
             android:exported="false"
