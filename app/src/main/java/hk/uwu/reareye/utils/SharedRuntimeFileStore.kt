@@ -51,7 +51,7 @@ internal class SharedRuntimeFileStore(
         fun createTemp(target: File): File
         fun writeAndSync(temp: File, text: String)
         /** Preserve all supplied metadata, or throw without modifying the target. */
-        fun preserveMetadata(temp: File, metadata: Metadata)
+        fun preserveMetadata(temp: File, original: FileState)
         /** Atomic replacement only: never delete the target or fall back to copying. */
         fun replaceAtomically(temp: File, target: File)
         fun deleteTemp(temp: File)
@@ -97,7 +97,7 @@ internal class SharedRuntimeFileStore(
         val temp = operations.createTemp(snapshot.target)
         try {
             operations.writeAndSync(temp, text)
-            operations.preserveMetadata(temp, snapshot.state.metadata)
+            operations.preserveMetadata(temp, snapshot.state)
             val staged = operations.read(temp)
             if (staged.metadata != snapshot.state.metadata || staged.text != text) {
                 throw IOException("Runtime replacement did not preserve content and metadata")

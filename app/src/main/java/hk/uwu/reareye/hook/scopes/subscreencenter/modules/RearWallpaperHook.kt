@@ -29,6 +29,7 @@ import androidx.core.net.toUri
 import androidx.core.view.isEmpty
 import com.highcapable.kavaref.KavaRef.Companion.asResolver
 import com.highcapable.kavaref.KavaRef.Companion.resolve
+import hk.uwu.reareye.BuildConfig
 import hk.uwu.reareye.hook.support.ReloadableReceiverRegistration
 import hk.uwu.reareye.hook.support.YLog
 import hk.uwu.reareye.hook.support.hookAppInfo
@@ -40,6 +41,7 @@ import hk.uwu.reareye.hook.utils.resolveDexKitClassValue
 import hk.uwu.reareye.hook.utils.resolveDexKitFieldValue
 import hk.uwu.reareye.hook.utils.resolveDexKitMethodInjectionPoint
 import hk.uwu.reareye.hook.utils.resolveHookPackageVersionCode
+import hk.uwu.reareye.provider.RearRuntimeMetadataProvider
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateConfigRepository
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.widgetapi.IRearWallpaperApiConnection
@@ -225,7 +227,20 @@ class RearWallpaperHook : RoxyHooker() {
     private val pendingViewRunnables = ArrayList<Pair<View, Runnable>>()
     private val runtimeLock = Any()
     private val runtimeStore = SharedRuntimeFileStore(
-        AndroidSharedRuntimeFileOperations(), RuntimeJsonFormat::validate,
+        AndroidSharedRuntimeFileOperations { temp, stat, original ->
+            val context = hostContext ?: return@AndroidSharedRuntimeFileOperations false
+            // The public wallpaper API uses a normal permission. Only our own app can request su.
+            val moduleUid = context.packageManager.getPackageUid(BuildConfig.APPLICATION_ID, 0)
+            if (Binder.getCallingUid() != moduleUid) return@AndroidSharedRuntimeFileOperations false
+            val identity = Binder.clearCallingIdentity()
+            try {
+                RearRuntimeMetadataProvider.preserve(context, temp.name, stat, original.identity)
+            } finally {
+                Binder.restoreCallingIdentity(identity)
+            }
+            true
+        },
+        RuntimeJsonFormat::validate,
     )
 
     private data class RuntimeUpdate(

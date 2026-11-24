@@ -28,6 +28,7 @@ class SharedRuntimeFileStoreTest {
         var deleted = 0
         var skipMetadata = false
         var corruptTemp = false
+        var metadataSource: SharedRuntimeFileStore.FileState? = null
         var onPreserve: (() -> Unit)? = null
         var onRename: (() -> Unit)? = null
         var failCleanup = false
@@ -60,9 +61,10 @@ class SharedRuntimeFileStoreTest {
             check("sync")
         }
 
-        override fun preserveMetadata(temp: File, metadata: SharedRuntimeFileStore.Metadata) {
+        override fun preserveMetadata(temp: File, original: SharedRuntimeFileStore.FileState) {
             check("metadata")
-            if (!skipMetadata) files[temp] = files.getValue(temp).copy(metadata = metadata)
+            metadataSource = original
+            if (!skipMetadata) files[temp] = files.getValue(temp).copy(metadata = original.metadata)
             onPreserve?.invoke()
         }
 
@@ -105,6 +107,21 @@ class SharedRuntimeFileStoreTest {
         assertEquals(1, fs.replaced)
         assertEquals(setOf(target), fs.files.keys)
         assertEquals(0, fs.deleted)
+    }
+
+    @Test fun preflightAndCommitUseTheOriginalSnapshotAsTheMetadataSource() {
+        val fs = FakeFiles()
+        val store = store(fs)
+        val snapshot = store.read(target)
+
+        store.checkWritable(snapshot)
+        assertEquals(original, fs.metadataSource)
+        assertEquals(original, fs.files.getValue(target))
+
+        fs.metadataSource = null
+        store.write(snapshot, "[new]")
+        assertEquals(original, fs.metadataSource)
+        assertEquals(original.metadata, fs.files.getValue(target).metadata)
     }
 
     @Test fun everyPrecommitFailurePreservesOriginal() {
