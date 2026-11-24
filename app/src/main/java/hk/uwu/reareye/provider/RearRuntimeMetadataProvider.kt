@@ -36,10 +36,16 @@ class RearRuntimeMetadataProvider : ContentProvider() {
         }
         val userId = Process.myUid() / 100_000
         val args = stat.joinToString(" ") { java.lang.Long.toUnsignedString(it) }
-        val program = context.assets.open("rear-runtime-metadata.sh").bufferedReader().use { it.readText() }
+        val program = context.assets.open("rear-runtime-metadata.sh").bufferedReader().useLines { lines ->
+            lines.joinToString(separator = "\n", postfix = "\n")
+        }
         val identity = Binder.clearCallingIdentity()
         try {
-            val result = RootHelper.executeRootCommandDetailed("set -- $userId '$name' $args\n$program")
+            // Keep the script out of su's command argument. Its shell reads the script directly.
+            val result = RootHelper.executeRootCommandDetailed(
+                "exec /system/bin/sh -eu -s $userId '$name' $args",
+                stdin = program,
+            )
             val error = when {
                 result.timedOut -> "Root metadata operation timed out"
                 result.exitCode != 0 || result.outputLimitExceeded ->
