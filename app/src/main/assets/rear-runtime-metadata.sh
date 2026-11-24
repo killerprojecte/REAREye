@@ -1,10 +1,9 @@
-set -eu
-
 fail() {
     printf '%s\n' "$1" >&2
     exit 1
 }
 
+[ "$#" -eq 6 ] || fail 'Invalid wallpaper metadata arguments'
 directory="/data/system/theme_magic/users/$1/rearScreen"
 original="$directory/runtime.json"
 staged="$directory/$2"
@@ -15,13 +14,20 @@ identity() {
     /system/bin/toybox stat -c '%d:%i:%h' "$@"
 }
 
+fd_tool() {
+    input_fd=$1
+    shift
+    # mksh closes the saved descriptors on exec. Explicitly inherit the selected inode on stdin.
+    /system/bin/toybox "$@" /proc/self/fd/0 <&"$input_fd"
+}
+
 assert_identity() {
     [ -f "$1" ] && [ ! -L "$1" ] && [ "$(identity "$1")" = "$3" ] &&
-        [ "$(identity -L "$2")" = "$3" ] || fail 'Wallpaper file identity changed'
+        [ "$(fd_tool "$2" stat -L -c '%d:%i:%h')" = "$3" ] || fail 'Wallpaper file identity changed'
 }
 
 label() {
-    line=$(/system/bin/toybox ls -ZdL "$1")
+    line=$(fd_tool "$1" ls -ZdL)
     context=${line%% *}
     case "$context" in
         *:*:*:*) printf '%s\n' "$context" ;;
@@ -33,25 +39,23 @@ label() {
     [ "$(identity "$original")" = "$original_identity" ] &&
     [ "$(identity "$staged")" = "$staged_identity" ] || fail 'Wallpaper file identity changed'
 exec 3<"$original" 4<"$staged"
-source_fd=/proc/self/fd/3
-staged_fd=/proc/self/fd/4
-assert_identity "$original" "$source_fd" "$original_identity"
-assert_identity "$staged" "$staged_fd" "$staged_identity"
+assert_identity "$original" 3 "$original_identity"
+assert_identity "$staged" 4 "$staged_identity"
 
-owner=$(/system/bin/toybox stat -L -c '%u:%g' "$source_fd")
-mode=$(/system/bin/toybox stat -L -c '%a' "$source_fd")
-source_label=$(label "$source_fd")
+owner=$(fd_tool 3 stat -L -c '%u:%g')
+mode=$(fd_tool 3 stat -L -c '%a')
+source_label=$(label 3)
 
 # Operate on the opened inode even if its directory entry is changed during the command.
-if [ "$(/system/bin/toybox stat -L -c '%u:%g' "$staged_fd")" != "$owner" ]; then
-    /system/bin/toybox chown "$owner" "$staged_fd"
+if [ "$(fd_tool 4 stat -L -c '%u:%g')" != "$owner" ]; then
+    fd_tool 4 chown "$owner"
 fi
-/system/bin/toybox chmod "$mode" "$staged_fd"
-if [ "$(label "$staged_fd")" != "$source_label" ]; then
-    /system/bin/toybox chcon "$source_label" "$staged_fd"
+fd_tool 4 chmod "$mode"
+if [ "$(label 4)" != "$source_label" ]; then
+    fd_tool 4 chcon "$source_label"
 fi
 
-assert_identity "$original" "$source_fd" "$original_identity"
-assert_identity "$staged" "$staged_fd" "$staged_identity"
-[ "$(/system/bin/toybox stat -L -c '%u:%g %a' "$staged_fd")" = "$owner $mode" ] &&
-    [ "$(label "$staged_fd")" = "$source_label" ] || fail 'Wallpaper file metadata verification failed'
+assert_identity "$original" 3 "$original_identity"
+assert_identity "$staged" 4 "$staged_identity"
+[ "$(fd_tool 4 stat -L -c '%u:%g %a')" = "$owner $mode" ] &&
+    [ "$(label 4)" = "$source_label" ] || fail 'Wallpaper file metadata verification failed'
