@@ -201,7 +201,7 @@ fun AppNavigationBar(
         anchorTop: Float,
         density: Float
     ) {
-        if (item.quickActions.isNotEmpty()) {
+        if (item.route == CONFIG_ROUTE || item.quickActions.isNotEmpty()) {
             menuAnchor = NavigationAnchor(anchorCenterX, anchorTop, density)
             quickMenuController.begin()
             expandedQuickActionsRoute = item.route
@@ -250,7 +250,7 @@ fun AppNavigationBar(
                     key = item.route,
                     label = item.label,
                     icon = item.icon,
-                    secondaryActionLabel = if (item.quickActions.isNotEmpty()) quickMenuLabel else null,
+                    secondaryActionLabel = if (item.route == CONFIG_ROUTE || item.quickActions.isNotEmpty()) quickMenuLabel else null,
                     editActionLabel = if (item.route == CONFIG_ROUTE) editActionLabel else null,
                 )
             },
@@ -291,6 +291,7 @@ fun AppNavigationBar(
             NavigationQuickActionsPopup(
                 expanded = expandedQuickActionsRoute == item.route,
                 actions = item.quickActions,
+                canEditActions = item.route == CONFIG_ROUTE,
                 backdrop = backdrop,
                 editLabel = editLabel,
                 quickMenuController = quickMenuController,
@@ -368,6 +369,7 @@ private fun NavigationQuickActionsPopup(
     hostPosition: Offset,
     expanded: Boolean,
     actions: List<NavigationQuickAction>,
+    canEditActions: Boolean = false,
     backdrop: NavigationBackdrop,
     editLabel: String,
     quickMenuController: NavigationQuickMenuController,
@@ -386,9 +388,10 @@ private fun NavigationQuickActionsPopup(
     }
     val progress = remember { Animatable(0f) }
     var popupVisible by remember { mutableStateOf(false) }
+    val hasMenuEntries = canEditActions || actions.isNotEmpty()
 
-    LaunchedEffect(expanded, actions) {
-        if (expanded && actions.isNotEmpty()) {
+    LaunchedEffect(expanded, hasMenuEntries) {
+        if (expanded && hasMenuEntries) {
             popupVisible = true
             progress.animateTo(
                 targetValue = 1f,
@@ -403,7 +406,7 @@ private fun NavigationQuickActionsPopup(
         }
     }
 
-    if ((!expanded && !popupVisible) || actions.isEmpty()) return
+    if ((!expanded && !popupVisible) || !hasMenuEntries) return
 
     hk.uwu.mixui.components.NavigationQuickActionPopup(
         positionProvider = positionProvider,
@@ -423,28 +426,17 @@ private fun NavigationQuickActionsPopup(
             contentAlignment = Alignment.TopCenter,
         ) {
             val buttonWidth = QUICK_ACTION_BUTTON_WIDTH_DP.dp
-            val showEditTarget =
-                quickMenuController.showEditTarget || quickMenuController.hoveredKey == EDIT_QUICK_ACTIONS_KEY
-            val editTargetProgress by animateFloatAsState(
-                targetValue = if (showEditTarget) 1f else 0f,
-                animationSpec = tween(
-                    if (showEditTarget) 150 else 180,
-                    easing = FastOutSlowInEasing
-                ),
-                label = "QuickActionEditTargetProgress",
-            )
-
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Box(
-                    modifier = Modifier
-                        .width(buttonWidth)
-                        .height(40.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (editTargetProgress > 0.01f) {
+                if (canEditActions) {
+                    Box(
+                        modifier = Modifier
+                            .width(buttonWidth)
+                            .height(40.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         NavigationQuickActionButton(
                             label = editLabel,
                             icon = Icons.Rounded.Edit,
@@ -454,34 +446,31 @@ private fun NavigationQuickActionsPopup(
                             width = buttonWidth,
                             hovered = quickMenuController.hoveredKey == EDIT_QUICK_ACTIONS_KEY,
                             isEditTarget = true,
-                            modifier = Modifier.graphicsLayer {
-                                alpha = editTargetProgress
-                                val appearScale = 0.94f + 0.06f * editTargetProgress
-                                scaleX = appearScale
-                                scaleY = appearScale
-                            },
+                            delayProgress = progressValue,
                             onClick = onOpenEditor,
                             onPositioned = { quickMenuController.positionTarget(EDIT_QUICK_ACTIONS_KEY, it) },
                         )
                     }
                 }
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    actions.forEachIndexed { index, action ->
-                        NavigationQuickActionButton(
-                            label = action.label,
-                            icon = action.icon,
-                            backdrop = backdrop,
-                            enabled = expanded,
-                            testTag = "navigation-quick-action-${action.id}",
-                            width = buttonWidth,
-                            hovered = quickMenuController.hoveredKey == action.id,
-                            delayProgress = ((progressValue - index * 0.05f).coerceIn(0f, 1f)),
-                            onClick = { onActionSelected(action.target) },
-                            onPositioned = { quickMenuController.positionTarget(action.id, it) },
-                        )
+                if (actions.isNotEmpty()) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        actions.forEachIndexed { index, action ->
+                            NavigationQuickActionButton(
+                                label = action.label,
+                                icon = action.icon,
+                                backdrop = backdrop,
+                                enabled = expanded,
+                                testTag = "navigation-quick-action-${action.id}",
+                                width = buttonWidth,
+                                hovered = quickMenuController.hoveredKey == action.id,
+                                delayProgress = ((progressValue - index * 0.05f).coerceIn(0f, 1f)),
+                                onClick = { onActionSelected(action.target) },
+                                onPositioned = { quickMenuController.positionTarget(action.id, it) },
+                            )
+                        }
                     }
                 }
             }
@@ -637,22 +626,12 @@ private class NavigationQuickMenuController {
             return local.x >= 0f && local.x < coordinates.size.width &&
                 local.y >= 0f && local.y < coordinates.size.height
         }
-        actions.firstOrNull()?.let { first ->
-            target(first.id)?.let { coordinates ->
-                val local = coordinates.screenToLocal(pointerOnScreen)
-                if (local.x >= 0f && local.x < coordinates.size.width && local.y <= coordinates.size.height / 2f) {
-                    showEditTarget = true
-                }
-            }
+        if (contains(EDIT_QUICK_ACTIONS_KEY)) {
+            showEditTarget = true
+            hoveredKey = EDIT_QUICK_ACTIONS_KEY
+            return hoveredKey
         }
         val actionIndex = actions.indexOfFirst { contains(it.id) }
-        if (showEditTarget) {
-            if (contains(EDIT_QUICK_ACTIONS_KEY)) {
-                hoveredKey = EDIT_QUICK_ACTIONS_KEY
-                return hoveredKey
-            }
-            if (actionIndex > 0) showEditTarget = false
-        }
         hoveredKey = actions.getOrNull(actionIndex)?.id
         return hoveredKey
     }
@@ -673,7 +652,6 @@ internal fun NavigationQuickActionEditor(
             .distinctBy { it.id }
             .take(MaxNavigationQuickActions)
             .map { it.id }
-            .ifEmpty { DefaultNavigationQuickActionIds }
             .toMutableStateList()
     }
     val selectedLookup = selectedState.toSet()

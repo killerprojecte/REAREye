@@ -82,6 +82,7 @@ internal fun MaryConversationSidebar(
     onDelete: (String) -> Unit,
     onClosed: () -> Unit = {},
     gestureState: MarySidebarGestureState? = null,
+    confirmDelete: Boolean = false,
 ) {
     val gestures = gestureState ?: remember { MarySidebarGestureState() }
     val dragProgress = gestures.progress.takeUnless { gestures.isOpening }
@@ -229,6 +230,7 @@ internal fun MaryConversationSidebar(
         val pane = stringResource(R.string.mary_sidebar_title)
         val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
         val modalFocus = remember { FocusRequester() }
+        var pendingDeleteSession by remember { mutableStateOf<AgentSessionSummary?>(null) }
         LaunchedEffect(preview) {
             // In touch mode Miuix buttons may not take focus. The modal itself must still own
             // hardware Escape/Tab rather than leaving the Activity without a focused target.
@@ -238,11 +240,15 @@ internal fun MaryConversationSidebar(
             BoxWithConstraints(
                 Modifier.fillMaxSize()
                     .then(if (preview) Modifier.semantics { hideFromAccessibility() }.testTag("mary-sidebar-preview")
-                        .pointerInput(Unit) {
+                        .pointerInput(gestures) {
                             // New hit paths are blocked. The already-down opening pointer retains its
                             // original path through the root draggable; this layer never steals it.
                             awaitPointerEventScope {
-                                while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    if (event.changes.any { it.pressed }) gestures.rejectOpening()
+                                    event.changes.forEach { it.consume() }
+                                }
                             }
                         }
                     else Modifier.testTag("mary-sidebar-modal")
@@ -290,14 +296,52 @@ internal fun MaryConversationSidebar(
                         onSelect = { id -> if (!preview) closeThen { onSelect(id) } },
                         onDelete = { id ->
                             if (!preview && show && gestures.progress == null && pendingAction == null && deleting.isEmpty()) {
-                                deleting = deleting + id
-                                onDelete(id)
+                                if (confirmDelete) {
+                                    pendingDeleteSession = sessions.firstOrNull { it.id == id }
+                                } else {
+                                    deleting = deleting + id
+                                    onDelete(id)
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxSize()
                             .then(if (preview) Modifier.clearAndSetSemantics { testTag = "mary-sidebar-preview-panel" }
                                 else Modifier.semantics { paneTitle = pane }),
                     )
+                }
+            }
+            if (!preview && confirmDelete) {
+                hk.uwu.mixui.components.FormDialog(
+                    show = pendingDeleteSession != null,
+                    modifier = Modifier.testTag("mary-sidebar-delete-dialog"),
+                    title = stringResource(R.string.mary_history_delete_title),
+                    onDismissRequest = { pendingDeleteSession = null },
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        hk.uwu.mixui.components.Card(modifier = Modifier.fillMaxWidth()) {
+                            hk.uwu.mixui.components.ListItem(
+                                animateContentSize = true,
+                                title = stringResource(
+                                    R.string.mary_history_delete_message,
+                                    pendingDeleteSession?.title.orEmpty(),
+                                ),
+                            )
+                        }
+                        hk.uwu.mixui.components.DialogActions(
+                            cancelText = stringResource(R.string.rear_widget_cancel),
+                            confirmText = stringResource(R.string.rear_widget_action_delete),
+                            destructive = true,
+                            onCancel = { pendingDeleteSession = null },
+                            onConfirm = {
+                                val target = pendingDeleteSession
+                                pendingDeleteSession = null
+                                if (target != null && deleting.isEmpty()) {
+                                    deleting = deleting + target.id
+                                    onDelete(target.id)
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }

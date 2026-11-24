@@ -133,6 +133,8 @@ fun BusinessExtraConfigManagerScreen(
         }
     }
 
+    var pendingDeleteEntry by remember { mutableStateOf<RearBusinessExtraConfigEntry?>(null) }
+
     fun openCreateDialog() {
         draftBusiness = ""
         dialogSessionId++
@@ -244,6 +246,41 @@ fun BusinessExtraConfigManagerScreen(
                             }
                         }
                     }
+                    GlassFormDialog(
+                        show = pendingDeleteEntry != null,
+                        modifier = Modifier.testTag("business-extra-delete-dialog"),
+                        title = stringResource(R.string.rear_widget_delete_business_extra_title),
+                        onDismissRequest = { pendingDeleteEntry = null },
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                ListItem(
+                                    animateContentSize = true,
+                                    title = stringResource(
+                                        R.string.rear_widget_delete_business_extra_message,
+                                        pendingDeleteEntry?.business.orEmpty(),
+                                    ),
+                                )
+                            }
+                            hk.uwu.mixui.components.DialogActions(
+                                cancelText = stringResource(R.string.rear_widget_cancel),
+                                confirmText = stringResource(R.string.rear_widget_action_delete),
+                                destructive = true,
+                                onCancel = { pendingDeleteEntry = null },
+                                onConfirm = {
+                                    val target = pendingDeleteEntry
+                                    pendingDeleteEntry = null
+                                    if (target != null) {
+                                        RearBusinessExtraConfigRepository.removeConfigForBusiness(
+                                            prefsManager = prefsManager,
+                                            business = target.business,
+                                        )
+                                        entries.remove(target)
+                                    }
+                                },
+                            )
+                        }
+                    }
                 },
             ) { paddingValues ->
                 LazyColumn(
@@ -345,13 +382,7 @@ fun BusinessExtraConfigManagerScreen(
                                         ModuleStyleDeleteAction(
                                             icon = UiIcons.Delete,
                                             text = stringResource(R.string.rear_widget_action_delete),
-                                            onClick = {
-                                                RearBusinessExtraConfigRepository.removeConfigForBusiness(
-                                                    prefsManager = prefsManager,
-                                                    business = item.business,
-                                                )
-                                                entries.remove(item)
-                                            },
+                                            onClick = { pendingDeleteEntry = item },
                                         )
                                     },
                                 )

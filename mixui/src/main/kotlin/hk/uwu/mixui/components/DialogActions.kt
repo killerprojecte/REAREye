@@ -16,10 +16,15 @@ fun DialogActions(
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
     confirmEnabled: Boolean = true,
+    destructive: Boolean = false,
 ) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Button(onClick = onCancel, modifier = Modifier.weight(1f)) { Text(cancelText) }
-        Button(onClick = onConfirm, enabled = confirmEnabled,
-            colors = ButtonDefaults.buttonColorsPrimary(), modifier = Modifier.weight(1f)) { Text(confirmText) }
+        Button(
+            onClick = onConfirm,
+            enabled = confirmEnabled,
+            colors = if (destructive) ButtonDefaults.buttonColorsDanger() else ButtonDefaults.buttonColorsPrimary(),
+            modifier = Modifier.weight(1f),
+        ) { Text(confirmText) }
     }
 }

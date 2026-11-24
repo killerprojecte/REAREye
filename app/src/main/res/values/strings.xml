@@ -1192,4 +1192,26 @@
     <string name="theme_editor_light">Light</string>
     <string name="theme_editor_dark">Dark</string>
     <string name="theme_editor_navigation_style">Navigation style</string>
+
+    <string name="rear_widget_delete_card_title">Delete Card</string>
+    <string name="rear_widget_delete_card_message">Delete card %1$s?</string>
+    <string name="rear_widget_delete_app_card_title">Delete App Card</string>
+    <string name="rear_widget_delete_app_card_message">Delete app card %1$s?</string>
+    <string name="rear_widget_delete_business_title">Delete Component</string>
+    <string name="rear_widget_delete_business_message">Delete component %1$s?</string>
+    <string name="rear_widget_delete_business_extra_title">Delete Extra Configuration</string>
+    <string name="rear_widget_delete_business_extra_message">Delete extra configuration for %1$s?</string>
+    <string name="rear_widget_delete_scene_route_title">Delete Scene Route</string>
+    <string name="rear_widget_delete_scene_route_message">Delete scene route %1$s?</string>
+    <string name="rear_widget_template_reset_title">Restore Template Defaults</string>
+    <string name="rear_widget_template_reset_message">Discard custom variables and restore template defaults?</string>
+    <string name="script_delete_title">Delete Script</string>
+    <string name="script_delete_message">Delete %1$s? This cannot be undone.</string>
+    <string name="script_debug_no_provider">No provider selected</string>
+    <string name="preset_pack_uninstall_title">Uninstall Preset Pack</string>
+    <string name="preset_pack_uninstall_message">Remove the installed preset resource pack? Resources will stop being injected until reinstalled.</string>
+    <string name="mary_history_delete_title">Delete Conversation</string>
+    <string name="mary_history_delete_message">Delete conversation “%1$s”? This cannot be undone.</string>
+    <string name="home_easter_egg_huawei_ultimate_design_app_title">Rate XT Ultimate Design</string>
+    <string name="home_easter_egg_mifans_disclaimer">This easter egg is for entertainment only\nand does not represent the views of the developers or any organization</string>
 </resources>

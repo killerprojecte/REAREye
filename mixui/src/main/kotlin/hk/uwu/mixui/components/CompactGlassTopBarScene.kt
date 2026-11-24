@@ -1,6 +1,8 @@
 package hk.uwu.mixui.components
 
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -32,7 +34,6 @@ import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.glass.GlassMotion
 import top.yukonga.miuix.kmp.glass.GlassTopAppBarDefaults
 import top.yukonga.miuix.kmp.material.isRuntimeShaderSupported
 import ui.feice.mochi.effect.glass.mochiBackdropSource
@@ -101,7 +102,8 @@ fun CompactGlassTopBar(
             // while retaining the compact bar's fixed height and transcript padding.
             val maskProgress by animateFloatAsState(
                 targetValue = if (scrolled) 1f else 0f,
-                animationSpec = GlassMotion.topBarMask(), label = "compactTopBarMask",
+                animationSpec = tween(durationMillis = 100, easing = LinearEasing),
+                label = "compactTopBarMask",
             )
             val rawBackdrop = backdrop.value
             var backgroundCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }

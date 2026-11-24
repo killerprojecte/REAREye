@@ -87,6 +87,7 @@ internal fun RearAppCardManagementContent(
     var draftTitle by remember { mutableStateOf("") }
     var orderChanged by remember { mutableStateOf(false) }
     var orderSaving by remember { mutableStateOf(false) }
+    var pendingDeleteCard by remember { mutableStateOf<RearAppCardInfo?>(null) }
     val previewRenderingIds = remember { mutableStateListOf<String>() }
 
     fun reload() {
@@ -190,6 +191,52 @@ internal fun RearAppCardManagementContent(
                     if (renameSessionId == submittedSession) editingCard = null
                     delay(350)
                     reload()
+                }
+            }
+        },
+        extraOverlayContent = {
+            GlassFormDialog(
+                show = pendingDeleteCard != null,
+                modifier = Modifier.testTag("app-card-delete-dialog"),
+                title = stringResource(R.string.rear_widget_delete_app_card_title),
+                onDismissRequest = { pendingDeleteCard = null },
+            ) {
+                androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        hk.uwu.mixui.components.ListItem(
+                            animateContentSize = true,
+                            title = stringResource(
+                                R.string.rear_widget_delete_app_card_message,
+                                pendingDeleteCard?.let { it.title.ifBlank { it.appId } }.orEmpty(),
+                            ),
+                        )
+                    }
+                    DialogActions(
+                        cancelText = stringResource(R.string.rear_widget_cancel),
+                        confirmText = stringResource(R.string.rear_widget_action_delete),
+                        destructive = true,
+                        onCancel = { pendingDeleteCard = null },
+                        onConfirm = {
+                            val target = pendingDeleteCard
+                            pendingDeleteCard = null
+                            if (target != null) {
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        RearAppCardRepository.delete(context, target.appId)
+                                    }
+                                    showResult(
+                                        result.success,
+                                        result.error,
+                                        context.getString(R.string.rear_widget_app_deleted),
+                                    )
+                                    if (result.success) {
+                                        delay(350)
+                                        reload()
+                                    }
+                                }
+                            }
+                        },
+                    )
                 }
             }
         },
@@ -376,22 +423,7 @@ internal fun RearAppCardManagementContent(
                                 ModuleStyleDeleteAction(
                                     icon = UiIcons.Delete,
                                     text = stringResource(R.string.rear_widget_action_delete),
-                                    onClick = {
-                                        scope.launch {
-                                            val result = withContext(Dispatchers.IO) {
-                                                RearAppCardRepository.delete(context, card.appId)
-                                            }
-                                            showResult(
-                                                result.success,
-                                                result.error,
-                                                context.getString(R.string.rear_widget_app_deleted),
-                                            )
-                                            if (result.success) {
-                                                delay(350)
-                                                reload()
-                                            }
-                                        }
-                                    },
+                                    onClick = { pendingDeleteCard = card },
                                 )
                             }
                         },
@@ -423,6 +455,7 @@ internal fun RearAppCardRenameScene(
     modifier: Modifier = Modifier,
     focusSessionKey: Any? = Unit,
     submitting: Boolean = false,
+    extraOverlayContent: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     GlassPreferenceScene(
@@ -454,6 +487,7 @@ internal fun RearAppCardRenameScene(
                     )
                 }
             }
+            extraOverlayContent()
         },
         content = content,
     )

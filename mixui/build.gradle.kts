@@ -9,8 +9,12 @@ plugins {
 
 android {
     namespace = "hk.uwu.mixui"
-    buildToolsVersion = "37.0.0"
-    compileSdk { version = release(37) { minorApiLevel = 0 } }
+    buildToolsVersion = gropify.project.android.buildToolsVersion
+    compileSdk {
+        version = release(gropify.project.android.compileSdk) {
+            minorApiLevel = gropify.project.android.compileSdkMinor
+        }
+    }
     defaultConfig { minSdk = 36 }
     buildFeatures { compose = true }
     compileOptions {

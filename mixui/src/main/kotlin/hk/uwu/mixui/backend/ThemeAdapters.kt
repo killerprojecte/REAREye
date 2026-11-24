@@ -1,6 +1,8 @@
 package hk.uwu.mixui.backend
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.font.FontWeight
 
 import hk.uwu.mixui.theme.MixColors
 import hk.uwu.mixui.theme.MixTextStyles
@@ -69,8 +71,8 @@ internal class MochiColors(
 ) : MixColors {
     override val primary get() = source.primary
     override val onPrimary get() = source.onPrimary
-    override val primaryVariant get() = source.primaryContainer
-    override val onPrimaryVariant get() = source.onPrimaryContainer
+    override val primaryVariant get() = lerp(source.primary, if (source.isDark) Color.White else Color.Black, 0.14f)
+    override val onPrimaryVariant get() = source.onPrimary
     override val error get() = source.error
     override val onError get() = source.onError
     override val errorContainer get() = source.errorContainer
@@ -105,7 +107,7 @@ internal class MochiColors(
     override val surfaceVariant get() = source.surfaceVariant
     override val onSurfaceSecondary get() = source.onSurfaceVariant
     override val onSurfaceVariantSummary get() = source.onSurfaceVariant
-    override val onSurfaceVariantActions get() = source.primary
+    override val onSurfaceVariantActions get() = source.onSurfaceVariant
     override val disabledOnSurface get() = source.onSurface.copy(alpha = 0.38f)
     override val surfaceContainer get() = source.surfaceContainer
     override val onSurfaceContainer get() = source.onSurface
@@ -139,7 +141,7 @@ internal class MiuixTextStyles(private val source: top.yukonga.miuix.kmp.theme.T
 }
 
 internal class MochiTextStyles(private val source: ui.feice.mochi.theme.MochiTextStyles) : MixTextStyles {
-    override val main get() = source.body
+    override val main = source.body.copy(fontWeight = FontWeight.Medium)
     override val paragraph get() = source.bodyLarge
     override val body1 get() = source.body
     override val body2 get() = source.subhead
@@ -153,7 +155,7 @@ internal class MochiTextStyles(private val source: ui.feice.mochi.theme.MochiTex
     override val subtitle get() = source.titleSmall
     override val title1 get() = source.largeTitle
     override val title2 get() = source.titleLarge
-    override val title3 get() = source.titleMedium
-    override val title4 get() = source.navTitle
+    override val title3 get() = source.navTitle
+    override val title4 get() = source.titleMedium
 }
 

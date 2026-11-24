@@ -19,13 +19,20 @@ import top.yukonga.miuix.kmp.basic.TopAppBarState
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 
 /** Native physics, with a marker distinguishing a real nested gesture from scrollToItem. */
-private class PageScrollBehavior(private val native: ScrollBehavior) : ScrollBehavior by native {
+private class PageScrollBehavior(
+    private val native: ScrollBehavior,
+    private val listState: LazyListState?,
+) : ScrollBehavior by native {
     var nativeScrollInProgress by mutableStateOf(false)
         private set
+    private var lastUserScrollY = 0f
 
     override val nestedScrollConnection = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-            if (source == NestedScrollSource.UserInput) nativeScrollInProgress = true
+            if (source == NestedScrollSource.UserInput) {
+                nativeScrollInProgress = true
+                if (available.y != 0f) lastUserScrollY = available.y
+            }
             return native.nestedScrollConnection.onPreScroll(available, source)
         }
 
@@ -38,8 +45,16 @@ private class PageScrollBehavior(private val native: ScrollBehavior) : ScrollBeh
             native.nestedScrollConnection.onPreFling(available)
 
         override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = try {
-            native.nestedScrollConnection.onPostFling(consumed, available)
+            native.nestedScrollConnection.onPostFling(consumed, available).also {
+                // A downward return to the first item can reach the native snap with no
+                // remaining velocity after viewport overscroll takes the last delta.
+                if (lastUserScrollY > 0f && listState != null && !listState.canScrollBackward) {
+                    state.heightOffset = 0f
+                    state.contentOffset = 0f
+                }
+            }
         } finally {
+            lastUserScrollY = 0f
             nativeScrollInProgress = false
         }
     }
@@ -52,7 +67,7 @@ internal fun rememberMiuixPageScrollBehavior(
     listState: LazyListState? = null,
 ): ScrollBehavior {
     val native = MiuixScrollBehavior(state = state)
-    val behavior = remember(native) { PageScrollBehavior(native) }
+    val behavior = remember(native, listState) { PageScrollBehavior(native, listState) }
     LaunchedEffect(state, listState) {
         if (listState != null) return@LaunchedEffect
         var previous = state.heightOffset

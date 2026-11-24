@@ -115,8 +115,8 @@ class MaryContextCompositionLayoutTest {
         useComposition()
         host()
         val chip = node("mary-context-usage").getUnclippedBoundsInRoot()
-        assertEquals("Existing Miuix IconButton visual size", 40f, chip.height.value, 1f)
-        assertEquals("Existing Miuix IconButton visual size", 40f, chip.width.value, 1f)
+        assertEquals("Existing compact toolbar touch target", 48f, chip.height.value, 1f)
+        assertEquals("Existing compact toolbar touch target", 48f, chip.width.value, 1f)
         val ring = node("mary-context-ring").getUnclippedBoundsInRoot()
         assertEquals(20f, ring.width.value, 1f)
         assertEquals(20f, ring.height.value, 1f)
@@ -453,6 +453,52 @@ class MaryContextCompositionLayoutTest {
         compose.runOnIdle { assertEquals(0, index.value) }
         compose.runOnIdle { labels.value = emptyList() }
         tabs.assertCountEquals(0)
+    }
+
+    @Test fun miuixModeTabsDragToSwitchOnlyOnRelease() {
+        useComposition(); host(backend = MixUiBackend.Miuix); openPopup()
+        val track = node("compact-glass-tabs-miuix")
+        val popupId = node("mary-context-popup").fetchSemanticsNode().id
+        modeTab(false).assertIsSelected()
+        track.performTouchInput {
+            down(Offset(width * 0.25f, height * 0.5f))
+            moveTo(Offset(width * 0.75f, height * 0.5f))
+        }
+        modeTab(false).assertIsSelected()
+        node("mary-context-legend-TOOL_RESULTS").assertExists()
+        node("mary-context-sequence-0").assertDoesNotExist()
+        screenshot("mode-drag-held", "mary-context-popup")
+        track.performTouchInput { up() }
+        modeTab(true).assertIsSelected()
+        node("mary-context-sequence-0").assertExists()
+        assertEquals(popupId, node("mary-context-popup").fetchSemanticsNode().id)
+        screenshot("mode-drag-released", "mary-context-popup")
+        track.performTouchInput {
+            down(Offset(width * 0.75f, height * 0.5f))
+            moveTo(Offset(width * 0.25f, height * 0.5f))
+            cancel()
+        }
+        modeTab(true).assertIsSelected()
+        track.performTouchInput { swipe(Offset(width * 0.75f, height * 0.5f), Offset(width * 0.25f, height * 0.5f)) }
+        modeTab(false).assertIsSelected()
+        node("mary-context-legend-TOOL_RESULTS").assertExists()
+    }
+
+    @Test fun compactGlassTabsWithoutBackdropStillDrag() {
+        var selection by mutableIntStateOf(0)
+        compose.runOnUiThread {
+            activity = Robolectric.buildActivity(ContextPreviewActivity::class.java).setup().also {
+                it.get().setContent {
+                    MixUiHost(backend = MixUiBackend.Miuix, colorMode = MixColorSchemeMode.Light) {
+                        CompactTabs(listOf("First", "Second"), selection, { selection = it }, glass = true)
+                    }
+                }
+            }
+        }
+        node("compact-glass-tabs-miuix").performTouchInput {
+            swipe(Offset(width * 0.25f, height * 0.5f), Offset(width * 0.75f, height * 0.5f))
+        }
+        compose.onNodeWithText("Second").assertIsSelected()
     }
 
     @Test fun headerTabsStayLeftOfCloseAndAnimateNativeIndicatorContinuously() {

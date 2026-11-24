@@ -146,6 +146,7 @@ fun LargeTitleColumnScaffold(
                     .background(background)) {
                     Column(
                         modifier = Modifier.fillMaxSize()
+                            .windowInsetsPadding(horizontalBarInsets())
                             .scrollEndHaptic()
                             .overScrollVertical()
                             .nestedScroll(scrollBehavior.nestedScrollConnection)

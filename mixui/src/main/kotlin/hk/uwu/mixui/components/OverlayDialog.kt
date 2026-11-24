@@ -15,9 +15,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.semantics.dismiss
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -128,8 +132,12 @@ fun OverlayDialog(
             WindowInsets.displayCutout.asPaddingValues().calculateTopPadding(),
         )
         val imeBottomInset = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+        val safeBottomInset = maxOf(
+            imeBottomInset,
+            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+        )
         val shape =
-            androidx.compose.foundation.shape.RoundedCornerShape(if (isLargeScreen) 28.dp else 32.dp)
+            androidx.compose.foundation.shape.RoundedCornerShape(if (isLargeScreen) MixTheme.shapes.extraLarge else 32.dp)
         var dialogBounds by remember { mutableStateOf(IntRect.Zero) }
 
         LaunchedEffect(show, isLargeScreen) {
@@ -193,7 +201,7 @@ fun OverlayDialog(
                         }
                         .then(
                             if (defaultWindowInsetsPadding) {
-                                Modifier.padding(top = safeTopInset, bottom = imeBottomInset)
+                                Modifier.padding(top = safeTopInset, bottom = safeBottomInset)
                             } else {
                                 Modifier
                             }
@@ -202,6 +210,15 @@ fun OverlayDialog(
                 ) {
                     Column(
                         modifier = modifier
+                            .semantics {
+                                paneTitle = title.orEmpty()
+                                if (currentOnDismissRequest != null) {
+                                    dismiss {
+                                        currentOnDismissRequest?.invoke()
+                                        true
+                                    }
+                                }
+                            }
                             .align(if (isLargeScreen) Alignment.Center else Alignment.BottomCenter)
                             .onGloballyPositioned { coordinates ->
                                 val position = coordinates.positionInWindow()

@@ -107,7 +107,16 @@ fun BottomSheet(
                         }
                     },
                 ) {
-                    Column(Modifier.padding(horizontal = horizontalPadding, vertical = 16.dp)) {
+                    Column(
+                        Modifier
+                            .imePadding()
+                            .windowInsetsPadding(
+                                WindowInsets.safeDrawing.only(
+                                    WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
+                                )
+                            )
+                            .padding(horizontal = horizontalPadding, vertical = 16.dp)
+                    ) {
                         if (title != null || startAction != null || endAction != null) {
                             Box(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                                 Box(Modifier.align(Alignment.CenterStart)) { startAction?.invoke() }
@@ -116,7 +125,9 @@ fun BottomSheet(
                             }
                             Spacer(Modifier.height(20.dp))
                         }
-                        content()
+                        CompositionLocalProvider(LocalFormPresentation provides FormPresentation.Sheet) {
+                            content()
+                        }
                     }
                 }
             }

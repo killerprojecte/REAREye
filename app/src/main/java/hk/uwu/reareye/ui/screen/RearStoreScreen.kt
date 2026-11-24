@@ -324,6 +324,7 @@ private fun formatSize(size: Long): String {
 
 @Composable
 private fun rememberSkeletonPulseAlpha(label: String): Float {
+    if (hk.uwu.mixui.motion.rememberReduceMotionEnabled()) return 0.65f
     val infiniteTransition = rememberInfiniteTransition(label = label)
     val alpha = infiniteTransition.animateFloat(
         initialValue = 0.45f,
@@ -1368,10 +1369,7 @@ internal fun RearStoreDetailContent(
                                 showUninstallDialog = false
                                 scope.launch { performUninstall(widgetId) }
                             },
-                            colors = ButtonDefaults.buttonColors(
-                                color = MixTheme.colorScheme.error,
-                                contentColor = MixTheme.colorScheme.onPrimary,
-                            ),
+                            colors = ButtonDefaults.buttonColorsDanger(),
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(stringResource(R.string.rear_store_uninstall_action))
@@ -1458,6 +1456,7 @@ internal fun RearStoreDetailContent(
                                 installConflict = null
                                 scope.launch { performUninstall(targetWidgetId) }
                             },
+                            colors = ButtonDefaults.buttonColorsDanger(),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(stringResource(R.string.rear_store_uninstall_conflicting_widget))
@@ -1467,6 +1466,7 @@ internal fun RearStoreDetailContent(
                         modifier = Modifier.testTag("store-conflict-actions"),
                         cancelText = stringResource(R.string.rear_widget_cancel),
                         confirmText = stringResource(R.string.rear_store_force_overwrite),
+                        destructive = true,
                         onCancel = { installConflict = null },
                         onConfirm = {
                             installConflict = null
@@ -2667,24 +2667,58 @@ private fun MarkdownCardBody(
         surfaceColor
     }
     val darkMode = backgroundColor.luminance() < 0.5f
+    val errorColor = colorScheme.error
+    val surfaceContainerHighColor = colorScheme.surfaceContainerHigh
     val themeCssVariables = remember(
         backgroundColor,
         surfaceColor,
+        surfaceContainerHighColor,
         onSurfaceColor,
         onSurfaceVariantColor,
         primaryColor,
+        errorColor,
         outlineColor,
         secondaryContainerColor,
         webViewBackgroundColor,
     ) {
+        val borderCss = outlineColor.copy(alpha = 0.42f).toCssColor()
+        val subtleFillCss = onSurfaceColor.copy(alpha = if (darkMode) 0.08f else 0.05f).toCssColor()
+        val altRowCss = onSurfaceColor.copy(alpha = if (darkMode) 0.04f else 0.025f).toCssColor()
         buildString {
             append("--background:${webViewBackgroundColor.toCssColor()};")
             append("--textPrimary:${onSurfaceColor.toCssColor()};")
             append("--textSecondary:${onSurfaceVariantColor.toCssColor()};")
+            append("--textTertiary:${onSurfaceVariantColor.copy(alpha = 0.78f).toCssColor()};")
             append("--link:${primaryColor.toCssColor()};")
-            append("--border:${outlineColor.copy(alpha = 0.42f).toCssColor()};")
+            append("--link-highlight:${primaryColor.copy(alpha = 0.16f).toCssColor()};")
+            append("--link-hover:${primaryColor.copy(alpha = 0.10f).toCssColor()};")
+            append("--border:$borderCss;")
             append("--surface:${secondaryContainerColor.copy(alpha = 0.92f).toCssColor()};")
             append("--quote:${onSurfaceVariantColor.toCssColor()};")
+            append("--blockquote-color:${onSurfaceVariantColor.toCssColor()};")
+            append("--blockquote-border:${outlineColor.copy(alpha = 0.65f).toCssColor()};")
+            append("--hr-background:$borderCss;")
+            append("--code-font:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;")
+            append("--code-background:$subtleFillCss;")
+            append("--pre-background:${surfaceContainerHighColor.copy(alpha = 0.92f).toCssColor()};")
+            append("--thead-border:$borderCss;")
+            append("--tr-border:${outlineColor.copy(alpha = 0.30f).toCssColor()};")
+            append("--tr-alt-background:$altRowCss;")
+            append("--thead-background:$subtleFillCss;")
+            append("--kbd-color:${onSurfaceColor.toCssColor()};")
+            append("--kbd-background:${surfaceContainerHighColor.toCssColor()};")
+            append("--kbd-border:${outlineColor.copy(alpha = 0.55f).toCssColor()};")
+            append("--heading-color:${onSurfaceColor.toCssColor()};")
+            append("--h6-color:${onSurfaceVariantColor.toCssColor()};")
+            append("--keyword-color:${onSurfaceVariantColor.toCssColor()};")
+            append("--mention-color:${primaryColor.toCssColor()};")
+            append("--red-600:${errorColor.toCssColor()};")
+            append("--color-icon-success:${if (darkMode) "#3fb950" else "#1a7f37"};")
+            append("--color-text-danger:${errorColor.toCssColor()};")
+            append("--purple-500:${if (darkMode) "#bc8cff" else "#8250df"};")
+            append("--frame-border:$borderCss;")
+            append("--frame-color:${onSurfaceVariantColor.toCssColor()};")
+            append("--videoBackground:#000000;")
         }
     }
     val normalizedBaseUrl = remember(repoBaseUrl) {
@@ -2700,15 +2734,18 @@ private fun MarkdownCardBody(
             themeCssVariables = themeCssVariables,
         )
     } ?: return
+    val fontScale = density.fontScale
     val webViewKey = remember(
         htmlDocument,
         normalizedBaseUrl,
         webViewHardwareAccelerationEnabled,
+        fontScale,
     ) {
         listOf(
             normalizedBaseUrl.orEmpty(),
             htmlDocument.hashCode().toString(),
             webViewHardwareAccelerationEnabled.toString(),
+            fontScale.toString(),
         )
             .joinToString(separator = "\u0000")
     }
@@ -2821,7 +2858,9 @@ private fun createGithubMarkdownWebView(
             allowFileAccess = false
             setGeolocationEnabled(false)
             cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-            textZoom = 80
+            textZoom = (85f * context.resources.configuration.fontScale)
+                .roundToInt()
+                .coerceIn(70, 180)
         }
         webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String?) {

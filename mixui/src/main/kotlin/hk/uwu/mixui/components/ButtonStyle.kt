@@ -31,4 +31,12 @@ object ButtonDefaults {
         contentColor: Color = MixTheme.colorScheme.onPrimary,
         disabledContentColor: Color = MixTheme.colorScheme.disabledOnPrimaryButton,
     ) = ButtonColors(color, disabledColor, contentColor, disabledContentColor)
+
+    @Composable
+    fun buttonColorsDanger(
+        color: Color = MixTheme.colorScheme.error,
+        disabledColor: Color = MixTheme.colorScheme.error.copy(alpha = 0.36f),
+        contentColor: Color = MixTheme.colorScheme.onError,
+        disabledContentColor: Color = MixTheme.colorScheme.onError.copy(alpha = 0.6f),
+    ) = ButtonColors(color, disabledColor, contentColor, disabledContentColor)
 }

@@ -129,7 +129,6 @@ fun GlassTopBarScaffold(
                                     // own material while retaining the bar's scroll motion.
                                     progressiveBlur = true,
                                     scrollBehavior = scrollBehavior,
-                                    visualContentOffset = visualOffset,
                                     navigationIcon = {
                                         CompositionLocalProvider(LocalInheritMiuixBarMaterial provides inheritMiuixBarMaterial) {
                                             navigationIcon()

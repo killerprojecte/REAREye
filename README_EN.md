@@ -261,8 +261,8 @@ Default scope includes these target processes:
 The project uses Kotlin, Jetpack Compose, Android Gradle Plugin, and Gradle Wrapper.
 
 - JDK 17.
-- Android SDK / Build Tools 37.
-- Compile SDK 37, min SDK 36, target SDK 37.
+- Android Compile SDK 37.2 / Build Tools 37.0.0.
+- Min SDK 36, target SDK 37.
 - For release signing, configure these values in `local.properties`, Gradle properties, or
   environment variables:
     - `androidStoreFile`

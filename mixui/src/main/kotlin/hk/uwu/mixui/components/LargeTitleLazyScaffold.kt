@@ -90,7 +90,6 @@ fun LargeTitleLazyScaffold(
                                 backdrop = backdrop,
                                 progressiveBlur = true,
                                 scrollBehavior = scrollBehavior,
-                                visualContentOffset = visualOffset,
                                 navigationIcon = navigationIcon,
                                 actions = { MiuixTopBarActions(content = actions) },
                             )

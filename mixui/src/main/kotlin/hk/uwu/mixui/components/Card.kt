@@ -36,7 +36,7 @@ object CardDefaults {
 @Composable
 fun Card(
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = CardDefaults.CornerRadius,
+    cornerRadius: Dp = MixTheme.shapes.medium,
     insideMargin: PaddingValues = CardDefaults.InsideMargin,
     colors: CardColors = CardDefaults.defaultColors(),
     pressFeedbackType: PressFeedbackType = PressFeedbackType.None,
@@ -46,9 +46,11 @@ fun Card(
     onLongPress: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val interactive = onClick != null || onLongPress != null
     if (LocalMixUiBackend.current == MixUiBackend.Miuix) {
         top.yukonga.miuix.kmp.basic.Card(
-            modifier = modifier, cornerRadius = cornerRadius, insideMargin = insideMargin,
+            modifier = modifier.mixKeyboardFocusRing(enabled = interactive, cornerRadius = cornerRadius),
+            cornerRadius = cornerRadius, insideMargin = insideMargin,
             colors = top.yukonga.miuix.kmp.basic.CardColors(colors.color, colors.contentColor),
             pressFeedbackType = when (pressFeedbackType) {
                 PressFeedbackType.None -> top.yukonga.miuix.kmp.utils.PressFeedbackType.None
@@ -63,7 +65,7 @@ fun Card(
         val selectedScale by androidx.compose.animation.core.animateFloatAsState(
             if (holdDownState) 0.96f else 1f, label = "card-selection")
         val interaction = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-        val clickable = if (onClick != null || onLongPress != null) Modifier.combinedClickable(
+        val clickable = if (interactive) Modifier.combinedClickable(
             interactionSource = interaction,
             indication = if (showIndication) androidx.compose.foundation.LocalIndication.current else null,
             onClick = { onClick?.invoke() }, onLongClick = onLongPress,
@@ -74,10 +76,14 @@ fun Card(
         ) {
             Column(
                 modifier.graphicsLayer { scaleX = selectedScale; scaleY = selectedScale }
-                    .mixPressFeedback(onClick != null || onLongPress != null,
+                    .mixPressFeedback(interactive,
                         scale = if (pressFeedbackType == PressFeedbackType.Sink) 0.97f else 0.96f,
                         follow = if (pressFeedbackType == PressFeedbackType.Tilt) 3.dp else 0.dp)
-                    .clip(shape).background(colors.color).then(clickable).padding(insideMargin),
+                    .clip(shape)
+                    .background(colors.color)
+                    .mixKeyboardFocusRing(enabled = interactive, cornerRadius = cornerRadius)
+                    .then(clickable)
+                    .padding(insideMargin),
                 content = content,
             )
         }

@@ -95,6 +95,7 @@ fun ListItem(
             modifier = rowModifier.fillMaxWidth().heightIn(min = 56.dp)
                 .mixPressFeedback(enabled = enabled && onClick != null)
                 .background(if (enabled && (pressed || holdDownState)) listColors.highlight else Color.Transparent)
+                .mixKeyboardFocusRing(enabled = enabled && onClick != null, cornerRadius = MixTheme.shapes.medium)
                 .then(if (onClick != null) Modifier.clickable(
                     interactionSource = interactionSource, indication = null,
                     enabled = enabled, onClick = onClick,

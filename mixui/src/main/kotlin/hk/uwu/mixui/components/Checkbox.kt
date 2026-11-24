@@ -5,6 +5,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.state.ToggleableState
 import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.theme.MixTheme
 
 /** Boolean selection with vendor-owned visuals, animation and input semantics. */
 @Composable
@@ -14,15 +15,20 @@ fun Checkbox(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val focusModifier = modifier.mixKeyboardFocusRing(
+        enabled = enabled && onCheckedChange != null,
+        cornerRadius = MixTheme.shapes.extraSmall,
+        matchDescendantFocus = true,
+    )
     when (LocalMixUiBackend.current) {
         MixUiBackend.Miuix -> top.yukonga.miuix.kmp.basic.Checkbox(
             state = if (checked) ToggleableState.On else ToggleableState.Off,
             onClick = onCheckedChange?.let { callback -> { callback(!checked) } },
-            modifier = modifier, enabled = enabled,
+            modifier = focusModifier, enabled = enabled,
         )
         MixUiBackend.Mochi -> ui.feice.mochi.basic.MochiCheckbox(
             checked = checked, onCheckedChange = onCheckedChange,
-            modifier = modifier, enabled = enabled,
+            modifier = focusModifier, enabled = enabled,
         )
     }
 }

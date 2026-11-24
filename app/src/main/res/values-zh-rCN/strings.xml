@@ -1192,4 +1192,26 @@
     <string name="theme_editor_light">浅色</string>
     <string name="theme_editor_dark">深色</string>
     <string name="theme_editor_navigation_style">导航栏风格</string>
+
+    <string name="rear_widget_delete_card_title">删除卡片</string>
+    <string name="rear_widget_delete_card_message">确定删除卡片“%1$s”吗？</string>
+    <string name="rear_widget_delete_app_card_title">删除应用卡</string>
+    <string name="rear_widget_delete_app_card_message">确定删除应用卡“%1$s”吗？</string>
+    <string name="rear_widget_delete_business_title">删除组件</string>
+    <string name="rear_widget_delete_business_message">确定删除组件“%1$s”吗？</string>
+    <string name="rear_widget_delete_business_extra_title">删除额外配置</string>
+    <string name="rear_widget_delete_business_extra_message">确定删除“%1$s”的额外配置吗？</string>
+    <string name="rear_widget_delete_scene_route_title">删除场景路由</string>
+    <string name="rear_widget_delete_scene_route_message">确定删除场景路由“%1$s”吗？</string>
+    <string name="rear_widget_template_reset_title">恢复模板默认值</string>
+    <string name="rear_widget_template_reset_message">确定清空当前自定义变量并恢复模板默认配置吗？</string>
+    <string name="script_delete_title">删除脚本</string>
+    <string name="script_delete_message">确定删除“%1$s”吗？此操作无法撤销。</string>
+    <string name="script_debug_no_provider">未选择 Provider</string>
+    <string name="preset_pack_uninstall_title">卸载预设资源包</string>
+    <string name="preset_pack_uninstall_message">确定移除当前已安装的预设资源包吗？移除后目标侧将不再注入资源。</string>
+    <string name="mary_history_delete_title">删除对话</string>
+    <string name="mary_history_delete_message">确定删除对话“%1$s”吗？此操作无法撤销。</string>
+    <string name="home_easter_egg_huawei_ultimate_design_app_title">Rate XT 非凡大师</string>
+    <string name="home_easter_egg_mifans_disclaimer">本彩蛋仅为娱乐用途\n不代表开发者或任何组织的立场或观点</string>
 </resources>

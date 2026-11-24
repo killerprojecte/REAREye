@@ -17,10 +17,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
@@ -110,12 +112,17 @@ private sealed interface ScriptImportRequest {
 private class ScriptOverwriteRequest(
     val title: String,
     val message: String,
+    val confirmLabel: String? = null,
     val confirm: () -> Unit,
 )
 
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
-fun ScriptManagementScreen(onBack: () -> Unit, bottomInnerPadding: Dp = 0.dp) {
+fun ScriptManagementScreen(
+    onBack: () -> Unit,
+    bottomInnerPadding: Dp = 0.dp,
+    onEditingModeChange: (Boolean) -> Unit = {},
+) {
     val context = LocalContext.current
     val store = remember { ScriptProjectStore(context) }
     var projects by remember { mutableStateOf(emptyList<ScriptProject>()) }
@@ -125,6 +132,13 @@ fun ScriptManagementScreen(onBack: () -> Unit, bottomInnerPadding: Dp = 0.dp) {
     var overwriteRequest by remember { mutableStateOf<ScriptOverwriteRequest?>(null) }
     var pendingExport by remember { mutableStateOf<ScriptProject?>(null) }
     var pendingExportIsProject by remember { mutableStateOf(false) }
+    val isEditingScript = route is ScriptRoute.Editor
+    LaunchedEffect(isEditingScript) {
+        onEditingModeChange(isEditingScript)
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { onEditingModeChange(false) }
+    }
     fun refresh() {
         projects = store.list()
     }
@@ -177,6 +191,7 @@ fun ScriptManagementScreen(onBack: () -> Unit, bottomInnerPadding: Dp = 0.dp) {
                 sessionKey = overwriteRequest,
                 title = overwriteRequest?.title.orEmpty(),
                 message = overwriteRequest?.message.orEmpty(),
+                confirmText = overwriteRequest?.confirmLabel,
                 onDismiss = { overwriteRequest = null },
                 onConfirm = {
                     overwriteRequest?.confirm?.invoke()
@@ -199,7 +214,17 @@ fun ScriptManagementScreen(onBack: () -> Unit, bottomInnerPadding: Dp = 0.dp) {
                 },
                 onOpen = { route = ScriptRoute.Editor(it) },
                 onRename = { renameProject = it },
-                onDelete = { store.delete(it); refresh() },
+                onDelete = { project ->
+                    overwriteRequest = ScriptOverwriteRequest(
+                        title = context.getString(R.string.script_delete_title),
+                        message = context.getString(R.string.script_delete_message, project.name),
+                        confirmLabel = context.getString(R.string.script_delete),
+                        confirm = {
+                            store.delete(project)
+                            refresh()
+                        },
+                    )
+                },
                 onNew = {
                     val project =
                         store.createStandalone("script_${System.currentTimeMillis()}", DEFAULT_SCRIPT)
@@ -488,6 +513,9 @@ internal fun ScriptEditorContent(
         },
     ) { padding ->
         val topPadding = padding.calculateTopPadding()
+        val imeBottom = with(density) {
+            androidx.compose.foundation.layout.WindowInsets.ime.getBottom(density).toDp()
+        }
         val editorTopPadding by remember(editor, progressiveEditor, density, topPadding) {
             derivedStateOf {
                 if (progressiveEditor) with(density) {
@@ -508,7 +536,7 @@ internal fun ScriptEditorContent(
                     top = editorTopPadding,
                     start = padding.calculateStartPadding(androidx.compose.ui.platform.LocalLayoutDirection.current),
                     end = padding.calculateEndPadding(androidx.compose.ui.platform.LocalLayoutDirection.current),
-                    bottom = maxOf(padding.calculateBottomPadding(), bottomInnerPadding)
+                    bottom = maxOf(padding.calculateBottomPadding(), bottomInnerPadding, imeBottom)
                 )
         ) {
             Column(Modifier.fillMaxSize()) {
@@ -627,6 +655,7 @@ internal fun ScriptEditorContent(
             renameFileTarget = null
         },
     )
+    val noProviderMessage = stringResource(R.string.script_debug_no_provider)
     ScriptDebugBottomSheet(
         show = showDebug,
         providerId = providerId,
@@ -639,7 +668,9 @@ internal fun ScriptEditorContent(
             scope.launch {
                 val params = paramsText.split('&').filter { it.contains('=') }
                     .associate { it.substringBefore('=') to it.substringAfter('=') }
-                runResult = if (selectedProvider.isBlank()) "No provider" else {
+                runResult = if (selectedProvider.isBlank()) {
+                    noProviderMessage
+                } else {
                     runProvider(selectedProvider, params)
                 }
             }
@@ -703,6 +734,7 @@ internal fun ScriptOverwriteDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
     sessionKey: Any? = Unit,
+    confirmText: String? = null,
 ) {
     var handled by remember(show, sessionKey) { mutableStateOf(false) }
     val currentSession = remember {
@@ -710,13 +742,16 @@ internal fun ScriptOverwriteDialog(
     }
     currentSession.value = sessionKey
     val currentShow by androidx.compose.runtime.rememberUpdatedState(show)
+    val defaultConfirmText = stringResource(R.string.script_overwrite)
     // The request is cleared immediately on dismissal, but its text must survive exit.
     var lastTitle by remember { mutableStateOf(title) }
     var lastMessage by remember { mutableStateOf(message) }
+    var lastConfirmText by remember { mutableStateOf(confirmText ?: defaultConfirmText) }
     androidx.compose.runtime.SideEffect {
         if (show) {
             lastTitle = title
             lastMessage = message
+            lastConfirmText = confirmText ?: defaultConfirmText
         }
     }
     val dismiss = {
@@ -756,9 +791,9 @@ internal fun ScriptOverwriteDialog(
                         },
                         enabled = show && !handled,
                         modifier = Modifier.weight(1f).testTag("script-overwrite-confirm"),
-                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        colors = ButtonDefaults.buttonColorsDanger(),
                     ) {
-                        Text(stringResource(R.string.script_overwrite))
+                        Text(if (show) (confirmText ?: defaultConfirmText) else lastConfirmText)
                     }
                 }
             }

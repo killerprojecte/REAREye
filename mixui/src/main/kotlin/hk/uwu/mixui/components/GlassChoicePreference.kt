@@ -13,12 +13,13 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.disabled
-import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ui.feice.mochi.basic.MochiAlign
@@ -142,23 +143,32 @@ fun GlassChoicePreference(
                             contentPadding = PaddingValues(vertical = 8.dp),
                             popover = {
                                 options.forEachIndexed { index, option ->
+                                    val optionSemantics = Modifier.semantics {
+                                        if (multiple) {
+                                            role = Role.Checkbox
+                                            toggleableState = if (option.selected) ToggleableState.On else ToggleableState.Off
+                                        } else {
+                                            role = Role.RadioButton
+                                            selected = option.selected
+                                        }
+                                        onClick {
+                                            if (active) {
+                                                select(index)
+                                                true
+                                            } else {
+                                                false
+                                            }
+                                        }
+                                    }
                                     MochiPreferenceContent(
                                         title = option.title,
                                         summary = option.summary,
                                         enabled = active,
                                         onClick = { select(index) },
-                                        modifier = Modifier.semantics {
-                                            if (multiple) {
-                                                role = Role.Checkbox
-                                                toggleableState = if (option.selected) ToggleableState.On else ToggleableState.Off
-                                            } else {
-                                                role = Role.RadioButton
-                                                selected = option.selected
-                                            }
-                                        },
                                     ) {
                                         MochiListRow(
                                             title = option.title,
+                                            modifier = optionSemantics,
                                             checked = option.selected,
                                             enabled = active,
                                         )

@@ -452,6 +452,7 @@ fun RearWallpaperManagementContent(
                         modifier = Modifier.testTag("wallpaper-delete-actions"),
                         cancelText = stringResource(R.string.rear_widget_cancel),
                         confirmText = stringResource(R.string.rear_widget_action_delete),
+                        destructive = true,
                         onCancel = { deleteTarget = null },
                         onConfirm = {
                             deleteTarget?.let(onDelete)

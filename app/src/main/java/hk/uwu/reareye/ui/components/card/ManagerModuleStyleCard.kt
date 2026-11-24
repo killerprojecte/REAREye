@@ -199,8 +199,8 @@ fun ModuleStyleIconAction(
     val actionIconTint =
         (contentColor ?: MixTheme.colorScheme.onSurface).copy(alpha = actionIconAlpha)
     IconButton(
-        minHeight = 35.dp,
-        minWidth = 35.dp,
+        minHeight = 40.dp,
+        minWidth = 40.dp,
         onClick = onClick,
         backgroundColor = backgroundColor,
     ) {
@@ -228,8 +228,9 @@ fun ModuleStyleTextAction(
         contentColor.copy(alpha = actionIconAlpha * if (enabled) 1f else 0.45f)
     IconButton(
         modifier = modifier,
-        minHeight = 35.dp,
-        minWidth = 35.dp,
+        enabled = enabled,
+        minHeight = 40.dp,
+        minWidth = 40.dp,
         onClick = if (enabled) onClick else ({}),
         backgroundColor = backgroundColor.copy(alpha = if (enabled) backgroundColor.alpha else 0.45f),
     ) {
@@ -259,8 +260,8 @@ fun ModuleStyleDeleteAction(
     icon: ImageVector,
     text: String,
     enabled: Boolean = true,
-    backgroundColor: Color = MixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
-    contentColor: Color = MixTheme.colorScheme.onSurface,
+    backgroundColor: Color = MixTheme.colorScheme.errorContainer.copy(alpha = 0.52f),
+    contentColor: Color = MixTheme.colorScheme.error,
     onClick: () -> Unit,
 ) {
     ModuleStyleTextAction(

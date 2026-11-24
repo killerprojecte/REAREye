@@ -81,6 +81,7 @@ import hk.uwu.mixui.components.ButtonDefaults
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.InfiniteProgressIndicator
+import hk.uwu.mixui.components.ListItem
 import hk.uwu.mixui.components.Scaffold
 import hk.uwu.mixui.components.GlassPreferenceScene
 import hk.uwu.mixui.components.GlassTopBarScaffold
@@ -233,6 +234,9 @@ fun BusinessManagerScreen(
         highlightedBusinessId = null
         onFocusBusinessHandled()
     }
+
+    var pendingDeleteBusiness by remember { mutableStateOf<RearBusinessConfig?>(null) }
+    var pendingDeleteRelatedCard by remember { mutableStateOf<RearCardConfig?>(null) }
 
     fun openEditDialog(item: RearBusinessConfig) {
         if (item.downloadedFromStore) {
@@ -626,8 +630,12 @@ fun BusinessManagerScreen(
                                 icon = UiIcons.Delete,
                                 text = stringResource(R.string.rear_widget_action_delete),
                                 onClick = {
-                                    widgets.remove(item)
-                                    persist()
+                                    if (demo != null) {
+                                        widgets.remove(item)
+                                        persist()
+                                    } else {
+                                        pendingDeleteBusiness = item
+                                    }
                                 },
                             )
                         },
@@ -664,16 +672,13 @@ fun BusinessManagerScreen(
                                         ModuleStyleIconAction(
                                             icon = MaterialSymbols.Rounded.Delete,
                                             contentDescription = stringResource(R.string.rear_widget_action_delete),
-                                            contentColor = Color(0xFFD32F2F),
+                                            contentColor = MixTheme.colorScheme.error,
                                             onClick = {
-                                                cards.remove(card)
-                                                if (demo != null) demo.state.cards = cards.toList()
-                                                else scope.launch(Dispatchers.IO) {
-                                                    RearWidgetManagerRepository.saveCards(
-                                                        context,
-                                                        prefsManager,
-                                                        cards.toList(),
-                                                    )
+                                                if (demo != null) {
+                                                    cards.remove(card)
+                                                    demo.state.cards = cards.toList()
+                                                } else {
+                                                    pendingDeleteRelatedCard = card
                                                 }
                                             },
                                         )
@@ -846,6 +851,80 @@ fun BusinessManagerScreen(
     val dialogs: @Composable () -> Unit = {
         businessDialog()
         cardDialog()
+        hk.uwu.mixui.components.GlassFormDialog(
+            show = pendingDeleteBusiness != null,
+            modifier = Modifier.testTag("business-delete-dialog"),
+            title = stringResource(R.string.rear_widget_delete_business_title),
+            onDismissRequest = { pendingDeleteBusiness = null },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    ListItem(
+                        animateContentSize = true,
+                        title = stringResource(
+                            R.string.rear_widget_delete_business_message,
+                            pendingDeleteBusiness?.business.orEmpty(),
+                        ),
+                    )
+                }
+                hk.uwu.mixui.components.DialogActions(
+                    cancelText = stringResource(R.string.rear_widget_cancel),
+                    confirmText = stringResource(R.string.rear_widget_action_delete),
+                    destructive = true,
+                    onCancel = { pendingDeleteBusiness = null },
+                    onConfirm = {
+                        val target = pendingDeleteBusiness
+                        pendingDeleteBusiness = null
+                        if (target != null) {
+                            widgets.remove(target)
+                            persist()
+                        }
+                    },
+                )
+            }
+        }
+        hk.uwu.mixui.components.GlassFormDialog(
+            show = pendingDeleteRelatedCard != null,
+            modifier = Modifier.testTag("business-related-card-delete-dialog"),
+            title = stringResource(R.string.rear_widget_delete_card_title),
+            onDismissRequest = { pendingDeleteRelatedCard = null },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    ListItem(
+                        animateContentSize = true,
+                        title = stringResource(
+                            R.string.rear_widget_delete_card_message,
+                            pendingDeleteRelatedCard?.title.orEmpty(),
+                        ),
+                    )
+                }
+                hk.uwu.mixui.components.DialogActions(
+                    cancelText = stringResource(R.string.rear_widget_cancel),
+                    confirmText = stringResource(R.string.rear_widget_action_delete),
+                    destructive = true,
+                    onCancel = { pendingDeleteRelatedCard = null },
+                    onConfirm = {
+                        val target = pendingDeleteRelatedCard
+                        pendingDeleteRelatedCard = null
+                        if (target != null) {
+                            cards.remove(target)
+                            if (demo != null) {
+                                demo.state.cards = cards.toList()
+                            } else {
+                                scope.launch(Dispatchers.IO) {
+                                    RearWidgetManagerRepository.saveCards(
+                                        context,
+                                        prefsManager,
+                                        cards.toList(),
+                                    )
+                                }
+                            }
+                        }
+                    },
+                )
+            }
+        }
     }
     if (embedded) {
         GlassPreferenceScene(overlayContent = dialogs) {

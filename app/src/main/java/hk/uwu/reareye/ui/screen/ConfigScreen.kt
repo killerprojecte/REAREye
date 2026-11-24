@@ -25,9 +25,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,6 +49,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperInfo
+import hk.uwu.reareye.repository.rearwidget.RearCardConfig
+import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.ui.components.config.AppListSelectorScreen
 import hk.uwu.reareye.ui.components.config.BusinessExtraConfigManagerScreen
 import hk.uwu.reareye.ui.components.config.BusinessExtraConfigScreen
@@ -61,6 +65,7 @@ import hk.uwu.reareye.ui.components.config.SceneRouteManagerScreen
 import hk.uwu.reareye.ui.components.config.buildMoreCategories
 import hk.uwu.reareye.ui.components.config.rememberRearWallpaperManagerState
 import hk.uwu.reareye.ui.components.config.template.RearWallpaperTemplateConfigScreen
+import hk.uwu.reareye.ui.components.config.template.WidgetTemplateConfigScreen
 import hk.uwu.reareye.ui.components.script.ScriptManagementScreen
 import hk.uwu.reareye.ui.config.ConfigCategory
 import hk.uwu.reareye.ui.config.ConfigGroup
@@ -75,8 +80,10 @@ import hk.uwu.reareye.ui.theme.AppMochiThemeStyle
 import hk.uwu.reareye.ui.theme.AppThemePreferences
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import hk.uwu.mixui.components.Card
 import hk.uwu.mixui.components.Icon
 import hk.uwu.mixui.components.GlassAnchoredMenu
@@ -105,6 +112,7 @@ private sealed interface ConfigRoute {
     data object LyricsManager : ConfigRoute
     data object ScriptManagement : ConfigRoute
     data class WallpaperTemplate(val wallpaper: RearWallpaperInfo) : ConfigRoute
+    data class CardTemplate(val card: RearCardConfig, val sourceFilePath: String) : ConfigRoute
 }
 
 private const val NAV_BAR_EXIT_DURATION_MS = 220L
@@ -176,8 +184,36 @@ fun ConfigScreen(
     var moreSearchSessionActive by rememberSaveable { mutableStateOf(false) }
     var moreSearchQuery by rememberSaveable { mutableStateOf("") }
     var pendingMoreSearchCategory by remember { mutableStateOf<ConfigCategory?>(null) }
+    var scriptEditingActive by remember { mutableStateOf(false) }
+    var cardRefreshRevision by remember { mutableIntStateOf(0) }
+    var overlayEnterPending by remember { mutableStateOf(false) }
+    val pendingOverlayQuickTarget = quickManagerTarget in setOf(
+        ConfigType.ManagerType.SCENE_ROUTE,
+        ConfigType.ManagerType.BOUNDS,
+    )
     val currentRoute = routeStack.last()
-    val isOverlayMode = currentRoute.isOverlayRoute()
+    val isOverlayMode = currentRoute.isOverlayRoute() ||
+        (currentRoute == ConfigRoute.ScriptManagement && scriptEditingActive)
+    val effectiveOverlayMode = isOverlayMode || overlayEnterPending || pendingOverlayQuickTarget
+    var hadOverlayActive by remember { mutableStateOf(effectiveOverlayMode) }
+
+    LaunchedEffect(effectiveOverlayMode) {
+        if (effectiveOverlayMode) {
+            hadOverlayActive = true
+            onAppListModeChange(true)
+        } else {
+            if (hadOverlayActive) {
+                delay(OVERLAY_ROUTE_EXIT_DURATION_MS)
+                hadOverlayActive = false
+            }
+            onAppListModeChange(false)
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            onAppListModeChange(false)
+        }
+    }
     val animatedRoute = remember(currentRoute, routeStack.size) {
         ConfigAnimatedRoute(
             route = currentRoute,
@@ -261,18 +297,8 @@ fun ConfigScreen(
 
     fun navigateBack() {
         if (routeStack.size <= 1) return
-        if (isOverlayMode) {
-            routeScope.launch {
-                val newStack = routeStack.dropLast(1)
-                routeStack = newStack
-                delay(OVERLAY_ROUTE_EXIT_DURATION_MS)
-                if (!newStack.last().isOverlayRoute()) {
-                    onAppListModeChange(false)
-                }
-            }
-        } else {
-            routeStack = routeStack.dropLast(1)
-        }
+        overlayEnterPending = false
+        routeStack = routeStack.dropLast(1)
     }
 
     BackHandler(enabled = routeStack.size > 1) {
@@ -281,18 +307,16 @@ fun ConfigScreen(
 
     fun openOverlayRoute(route: ConfigRoute) {
         routeScope.launch {
+            overlayEnterPending = true
             onAppListModeChange(true)
             delay(NAV_BAR_EXIT_DURATION_MS)
             routeStack = routeStack + route
+            overlayEnterPending = false
         }
     }
 
     fun closeOverlayRoute() {
-        routeScope.launch {
-            routeStack = listOf(ConfigRoute.Root)
-            delay(OVERLAY_ROUTE_EXIT_DURATION_MS)
-            onAppListModeChange(false)
-        }
+        navigateBack()
     }
 
     fun openManagerRoute(managerType: ConfigType.ManagerType?) {
@@ -434,6 +458,11 @@ fun ConfigScreen(
                             onFocusCardHandled = onFocusHandled,
                             onOpenComponent = onComponentRequested,
                             onOpenStoreDetail = onOpenRearStoreDetail,
+                            onEditTemplate = { card, sourceFilePath ->
+                                dashboardTabIndex = 0
+                                routeStack = routeStack + ConfigRoute.CardTemplate(card, sourceFilePath)
+                            },
+                            externalRefreshRevision = cardRefreshRevision,
                             actionRequest = actionRequest,
                             onActionHandled = onActionHandled,
                         )
@@ -564,6 +593,36 @@ fun ConfigScreen(
                     onSaved = ::navigateBack,
                 )
 
+                is ConfigRoute.CardTemplate -> WidgetTemplateConfigScreen(
+                    business = route.card.business,
+                    sourceFilePath = route.sourceFilePath,
+                    cardStorageKey = route.card.id,
+                    currentConfigJson = route.card.oneConfigJson,
+                    allowContentPresentation = !routeTransition.isRunning ||
+                            routeTransition.targetState.route !is ConfigRoute.CardTemplate,
+                    contentPadding = PaddingValues(
+                        bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
+                    ),
+                    onBack = ::navigateBack,
+                    onSave = { normalizedJson ->
+                        routeScope.launch {
+                            withContext(Dispatchers.IO) {
+                                val existing = RearWidgetManagerRepository.loadCards(prefsManager)
+                                val updated = existing.map { item ->
+                                    if (item.id == route.card.id) {
+                                        item.copy(oneConfigJson = normalizedJson?.takeIf { it.isNotBlank() })
+                                    } else {
+                                        item
+                                    }
+                                }
+                                RearWidgetManagerRepository.saveCards(context, prefsManager, updated)
+                            }
+                            cardRefreshRevision++
+                            navigateBack()
+                        }
+                    },
+                )
+
                 is ConfigRoute.AppList -> AppListSelectorScreen(
                     configItem = route.item,
                     prefsManager = prefsManager,
@@ -605,7 +664,7 @@ fun ConfigScreen(
                 is ConfigRoute.BusinessExtraDetail -> BusinessExtraConfigScreen(
                     prefsManager = prefsManager,
                     business = route.business,
-                    onBack = { routeStack = routeStack.dropLast(1) },
+                    onBack = ::navigateBack,
                 )
 
                 ConfigRoute.CustomBoundsCompatManager -> CustomBoundsCompatManagerScreen(
@@ -615,7 +674,8 @@ fun ConfigScreen(
 
                 ConfigRoute.ScriptManagement -> ScriptManagementScreen(
                     onBack = ::navigateBack,
-                    bottomInnerPadding = bottomInnerPadding,
+                    bottomInnerPadding = if (scriptEditingActive) 0.dp else bottomInnerPadding,
+                    onEditingModeChange = { scriptEditingActive = it },
                 )
             }
         }

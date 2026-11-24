@@ -13,6 +13,7 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.theme.MixTheme
 
 /** A labelled switch row whose public contract is independent of either UI library. */
 @Composable
@@ -25,18 +26,23 @@ fun SwitchPreference(
     enabled: Boolean = true,
     insideMargin: PaddingValues = PaddingValues(16.dp),
 ) {
+    val focusModifier = modifier.mixKeyboardFocusRing(
+        enabled = enabled,
+        cornerRadius = MixTheme.shapes.medium,
+        matchDescendantFocus = true,
+    )
     if (LocalMixUiBackend.current == MixUiBackend.Miuix) {
         top.yukonga.miuix.kmp.preference.SwitchPreference(
             checked = checked,
             onCheckedChange = onCheckedChange,
             title = title,
-            modifier = modifier.semantics { if (!enabled) disabled() }.miuixSheetPreferenceSurface(enabled),
+            modifier = focusModifier.semantics { if (!enabled) disabled() }.miuixSheetPreferenceSurface(enabled),
             summary = summary,
             enabled = enabled,
             insideMargin = insideMargin,
         )
     } else {
-        MochiPreferenceContent(title = title, summary = summary, modifier = modifier.semantics {
+        MochiPreferenceContent(title = title, summary = summary, modifier = focusModifier.semantics {
             role = Role.Switch
             toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
         }, enabled = enabled,

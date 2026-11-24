@@ -134,6 +134,8 @@ import hk.uwu.mixui.components.ArrowPreference
 import hk.uwu.mixui.components.PreferenceRow
 import hk.uwu.mixui.components.GlassChoicePreference
 import hk.uwu.mixui.components.ChoiceOption
+import hk.uwu.mixui.components.DialogActions
+import hk.uwu.mixui.components.GlassFormDialog
 import hk.uwu.mixui.components.SwitchPreference
 import hk.uwu.mixui.theme.MixTheme
 import java.util.Locale
@@ -201,6 +203,7 @@ fun WidgetTemplateConfigScreenContent(
 
     val resolvedSchema = schema
     val resolvedConfig = workingConfig
+    var showResetConfirm by remember(cardStorageKey) { mutableStateOf(false) }
     TemplateVarConfigScreenScaffold(
         modifier = modifier,
         title = titleText ?: stringResource(R.string.rear_widget_card_template_title),
@@ -228,7 +231,7 @@ fun WidgetTemplateConfigScreenContent(
                 onSave(normalized?.takeIf { it.isNotBlank() })
             }
         },
-        onReset = { onSave(null) },
+        onReset = { showResetConfirm = true },
         editorItems = { schemaValue, configValue ->
             widgetTemplateEditorItems(
                 business = business,
@@ -239,6 +242,31 @@ fun WidgetTemplateConfigScreenContent(
             )
         },
     )
+    GlassFormDialog(
+        show = showResetConfirm,
+        modifier = Modifier.testTag("template-reset-dialog"),
+        title = stringResource(R.string.rear_widget_template_reset_title),
+        onDismissRequest = { showResetConfirm = false },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                ListItem(
+                    animateContentSize = true,
+                    title = stringResource(R.string.rear_widget_template_reset_message),
+                )
+            }
+            DialogActions(
+                cancelText = stringResource(R.string.rear_widget_cancel),
+                confirmText = stringResource(R.string.rear_widget_card_template_use_defaults),
+                destructive = true,
+                onCancel = { showResetConfirm = false },
+                onConfirm = {
+                    showResetConfirm = false
+                    onSave(null)
+                },
+            )
+        }
+    }
 }
 
 private fun LazyListScope.widgetTemplateEditorItems(

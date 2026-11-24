@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.motion.mixPressFeedback
+import hk.uwu.mixui.theme.MixTheme
 
 object IconButtonDefaults {
     val CornerRadius = 40.dp
@@ -32,17 +33,23 @@ fun IconButton(
     enabled: Boolean = true,
     holdDownState: Boolean = false,
     backgroundColor: Color = Color.Unspecified,
-    cornerRadius: Dp = IconButtonDefaults.CornerRadius,
+    cornerRadius: Dp = MixTheme.shapes.capsule,
     minHeight: Dp = IconButtonDefaults.MinHeight,
     minWidth: Dp = IconButtonDefaults.MinWidth,
     content: @Composable () -> Unit,
 ) {
     // Native disabled buttons may drop their clickable semantics node. Keep the
     // public action label/role/disabled state together on the stable outer node.
-    val buttonModifier = modifier.semantics(mergeDescendants = true) {
-        role = Role.Button
-        if (!enabled) disabled()
-    }
+    val buttonModifier = modifier
+        .semantics(mergeDescendants = true) {
+            role = Role.Button
+            if (!enabled) disabled()
+        }
+        .mixKeyboardFocusRing(
+            enabled = enabled,
+            cornerRadius = cornerRadius,
+            matchDescendantFocus = true,
+        )
     when (LocalMixUiBackend.current) {
         MixUiBackend.Miuix -> top.yukonga.miuix.kmp.basic.IconButton(
             onClick, buttonModifier.mixPressFeedback(enabled), enabled, holdDownState,

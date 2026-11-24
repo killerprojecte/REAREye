@@ -1,5 +1,6 @@
 package hk.uwu.mixui.motion
 
+import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -32,9 +33,24 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+
+@Composable
+fun rememberReduceMotionEnabled(): Boolean {
+    val context = LocalContext.current
+    return remember(context) {
+        runCatching {
+            Settings.Global.getFloat(
+                context.contentResolver,
+                Settings.Global.ANIMATOR_DURATION_SCALE,
+                1f,
+            ) == 0f
+        }.getOrDefault(false)
+    }
+}
 
 private const val DEFAULT_VISIBILITY_DELAY = 0
 
@@ -104,6 +120,14 @@ fun ArtVisibilityMotion(
     revealKey: Any = Unit,
     content: @Composable () -> Unit,
 ) {
+    if (rememberReduceMotionEnabled()) {
+        Box(
+            modifier = modifier.graphicsLayer { alpha = if (visible) 1f else 0f },
+        ) {
+            content()
+        }
+        return
+    }
     var revealPhase by remember(revealKey) {
         mutableStateOf(if (visible) ArtRevealPhase.Primed else ArtRevealPhase.Hidden)
     }
@@ -184,47 +208,52 @@ fun <T> ArtSwapContent(
     contentKey: (T) -> Any = { it as Any },
     content: @Composable (T) -> Unit,
 ) {
+    val reduceMotion = rememberReduceMotionEnabled()
     AnimatedContent(
         modifier = modifier.graphicsLayer { clip = true },
         targetState = targetState,
         contentKey = contentKey,
         transitionSpec = {
-            (fadeIn(
-                animationSpec = tween(
-                    durationMillis = 200,
-                    delayMillis = 40,
-                    easing = LinearOutSlowInEasing,
-                )
-            ) + scaleIn(
-                initialScale = 0.992f,
-                animationSpec = tween(
-                    durationMillis = 260,
-                    easing = FastOutSlowInEasing,
-                ),
-            ) + slideInVertically(
-                animationSpec = tween(
-                    durationMillis = 260,
-                    easing = FastOutSlowInEasing,
-                )
-            ) { it / 20 }) togetherWith (
-                    fadeOut(
-                        animationSpec = tween(
-                            durationMillis = 100,
-                            easing = FastOutLinearInEasing,
-                        )
-                    ) + scaleOut(
-                        targetScale = 0.996f,
-                        animationSpec = tween(
-                            durationMillis = 120,
-                            easing = FastOutLinearInEasing,
-                        ),
-                    ) + slideOutVertically(
-                        animationSpec = tween(
-                            durationMillis = 120,
-                            easing = FastOutLinearInEasing,
-                        )
-                    ) { it / 24 }
+            if (reduceMotion) {
+                fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+            } else {
+                (fadeIn(
+                    animationSpec = tween(
+                        durationMillis = 200,
+                        delayMillis = 40,
+                        easing = LinearOutSlowInEasing,
                     )
+                ) + scaleIn(
+                    initialScale = 0.992f,
+                    animationSpec = tween(
+                        durationMillis = 260,
+                        easing = FastOutSlowInEasing,
+                    ),
+                ) + slideInVertically(
+                    animationSpec = tween(
+                        durationMillis = 260,
+                        easing = FastOutSlowInEasing,
+                    )
+                ) { it / 20 }) togetherWith (
+                        fadeOut(
+                            animationSpec = tween(
+                                durationMillis = 100,
+                                easing = FastOutLinearInEasing,
+                            )
+                        ) + scaleOut(
+                            targetScale = 0.996f,
+                            animationSpec = tween(
+                                durationMillis = 120,
+                                easing = FastOutLinearInEasing,
+                            ),
+                        ) + slideOutVertically(
+                            animationSpec = tween(
+                                durationMillis = 120,
+                                easing = FastOutLinearInEasing,
+                            )
+                        ) { it / 24 }
+                        )
+            }
         },
         label = "ArtSwapContent",
         content = { state -> content(state) },
@@ -246,6 +275,12 @@ fun ArtShimmerSweep(
     highlight: Color = Color.White.copy(alpha = 0.55f),
     content: @Composable () -> Unit,
 ) {
+    if (rememberReduceMotionEnabled()) {
+        Box(modifier = modifier) {
+            content()
+        }
+        return
+    }
     val transition = rememberInfiniteTransition(label = "ArtShimmerSweep")
     val sweep by transition.animateFloat(
         initialValue = 0f,

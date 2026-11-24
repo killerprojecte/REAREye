@@ -241,6 +241,7 @@ private fun aboutLogoBlendColors(isDarkTheme: Boolean): List<TextureBlendLayer> 
 
 @Composable
 private fun rememberSkeletonPulseAlpha(label: String): Float {
+    if (hk.uwu.mixui.motion.rememberReduceMotionEnabled()) return 0.65f
     val infiniteTransition = rememberInfiniteTransition(label = label)
     val alpha = infiniteTransition.animateFloat(
         initialValue = 0.45f,

@@ -139,6 +139,8 @@ fun SceneRouteManagerScreen(
         }
     }
 
+    var pendingDeleteRoute by remember { mutableStateOf<RearWidgetSceneRouteConfig?>(null) }
+
     fun openCreateDialog() {
         editingId = null
         draftPackageName = ""
@@ -263,6 +265,39 @@ fun SceneRouteManagerScreen(
                     )
                 }
             }
+            hk.uwu.mixui.components.GlassFormDialog(
+                show = pendingDeleteRoute != null,
+                modifier = Modifier.testTag("scene-route-delete-dialog"),
+                title = stringResource(R.string.rear_widget_delete_scene_route_title),
+                onDismissRequest = { pendingDeleteRoute = null },
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        ListItem(
+                            animateContentSize = true,
+                            title = stringResource(
+                                R.string.rear_widget_delete_scene_route_message,
+                                pendingDeleteRoute?.let { "${it.packageName} / ${it.scene}" }.orEmpty(),
+                            ),
+                        )
+                    }
+                    hk.uwu.mixui.components.DialogActions(
+                        cancelText = stringResource(R.string.rear_widget_cancel),
+                        confirmText = stringResource(R.string.rear_widget_action_delete),
+                        destructive = true,
+                        onCancel = { pendingDeleteRoute = null },
+                        onConfirm = {
+                            val target = pendingDeleteRoute
+                            pendingDeleteRoute = null
+                            if (target != null) {
+                                routes.remove(target)
+                                replaceRoutes(routes.toList())
+                                persist()
+                            }
+                        },
+                    )
+                }
+            }
         },
     ) { paddingValues ->
         val direction = LocalLayoutDirection.current
@@ -372,11 +407,7 @@ fun SceneRouteManagerScreen(
                             ModuleStyleDeleteAction(
                                 icon = UiIcons.Delete,
                                 text = stringResource(R.string.rear_widget_action_delete),
-                                onClick = {
-                                    routes.remove(item)
-                                    replaceRoutes(routes.toList())
-                                    persist()
-                                },
+                                onClick = { pendingDeleteRoute = item },
                             )
                         },
                     )

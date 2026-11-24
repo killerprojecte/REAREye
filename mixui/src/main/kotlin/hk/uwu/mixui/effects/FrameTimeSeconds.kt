@@ -10,23 +10,25 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import hk.uwu.mixui.motion.rememberReduceMotionEnabled
 
 @Composable
 internal fun rememberFrameTimeSeconds(
     playing: Boolean = true,
 ): () -> Float {
+    val active = playing && !rememberReduceMotionEnabled()
     var time by remember { mutableFloatStateOf(0f) }
     var startOffset by remember { mutableFloatStateOf(0f) }
 
-    LaunchedEffect(playing) {
-        if (!playing) {
+    LaunchedEffect(active) {
+        if (!active) {
             startOffset = time
             return@LaunchedEffect
         }
 
         val start = withFrameNanos { it }
 
-        while (playing) {
+        while (active) {
             val now = withFrameNanos { it }
 
             time =

@@ -65,12 +65,15 @@ import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateConfigRepository
 import hk.uwu.reareye.ui.FeatureGuideAction
 import hk.uwu.reareye.ui.LocalFeatureGuideDemo
+import hk.uwu.mixui.components.DialogActions
 import hk.uwu.mixui.components.GlassEditorSheet
+import hk.uwu.mixui.components.GlassFormDialog
 import hk.uwu.mixui.components.GlassPreferenceScene
 import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
+import hk.uwu.reareye.ui.components.card.ModuleStyleTextAction
 import hk.uwu.mixui.components.ListItem
 import hk.uwu.reareye.ui.components.config.draggable.library.draggable.DraggableItem
 import hk.uwu.reareye.ui.components.config.draggable.library.draggable.rememberDraggableLazyListState
@@ -125,6 +128,8 @@ fun CardManagerScreen(
     onFocusCardHandled: () -> Unit = {},
     onOpenComponent: (String) -> Unit = {},
     onOpenStoreDetail: (String) -> Unit = {},
+    onEditTemplate: ((RearCardConfig, String) -> Unit)? = null,
+    externalRefreshRevision: Int = 0,
     actionRequest: ConfigDashboardAction? = null,
     onActionHandled: () -> Unit = {},
 ) {
@@ -162,7 +167,7 @@ fun CardManagerScreen(
         }
     }
 
-    LaunchedEffect(prefsManager, remotePrefsStatusRevision) {
+    LaunchedEffect(prefsManager, remotePrefsStatusRevision, externalRefreshRevision) {
         if (demo != null) {
             cards.clear(); cards.addAll(demo.state.cards)
             businesses.clear(); businesses.addAll(demo.state.businesses)
@@ -341,9 +346,19 @@ fun CardManagerScreen(
         }
     }
 
+    var pendingDeleteCard by remember { mutableStateOf<RearCardConfig?>(null) }
+
     fun openTemplateConfig(item: RearCardConfig) {
         if (demo != null) return
-        activeTemplateCardId.value = item.id
+        if (onEditTemplate != null) {
+            val normalizedBusiness = normalizeTemplateBusinessName(item.business)
+            val sourceFilePath = businesses.firstOrNull {
+                it.business == item.business || normalizeTemplateBusinessName(it.business) == normalizedBusiness
+            }?.filePath.orEmpty()
+            onEditTemplate(item, sourceFilePath)
+        } else {
+            activeTemplateCardId.value = item.id
+        }
     }
 
     val activeTemplateCard =
@@ -836,7 +851,7 @@ fun CardManagerScreen(
                                                         )
                                                     }
                                                     if (hasTemplateConfig) {
-                                                        ModuleStyleDeleteAction(
+                                                        ModuleStyleTextAction(
                                                             icon = Icons.Filled.Tune,
                                                             text = stringResource(R.string.rear_widget_action_config),
                                                             onClick = { openTemplateConfig(item) },
@@ -851,25 +866,7 @@ fun CardManagerScreen(
                                                         text = stringResource(R.string.rear_widget_action_delete),
                                                         onClick = {
                                                             if (demo != null || !item.renameable) return@ModuleStyleDeleteAction
-                                                            cards.remove(item)
-                                                            val nextSettings =
-                                                                cardOrderSettings.toMutableMap()
-                                                                    .apply {
-                                                                        remove(item.id)
-                                                                    }
-                                                            cardOrderSettings.clear()
-                                                            cardOrderSettings.putAll(nextSettings)
-                                                            scope.launch(Dispatchers.IO) {
-                                                                RearWidgetManagerRepository.saveCardOrderSettings(
-                                                                    prefsManager,
-                                                                    nextSettings
-                                                                )
-                                                                RearWidgetManagerRepository.saveCards(
-                                                                    context,
-                                                                    prefsManager,
-                                                                    cards.toList()
-                                                                )
-                                                            }
+                                                            pendingDeleteCard = item
                                                         },
                                                     )
                                                 }
@@ -1042,6 +1039,54 @@ fun CardManagerScreen(
                             )
                         }
                     }
+                }
+            }
+
+            GlassFormDialog(
+                show = pendingDeleteCard != null,
+                modifier = Modifier.testTag("rear-card-delete-dialog"),
+                title = stringResource(R.string.rear_widget_delete_card_title),
+                onDismissRequest = { pendingDeleteCard = null },
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        ListItem(
+                            animateContentSize = true,
+                            title = stringResource(
+                                R.string.rear_widget_delete_card_message,
+                                pendingDeleteCard?.title.orEmpty(),
+                            ),
+                        )
+                    }
+                    DialogActions(
+                        cancelText = stringResource(R.string.rear_widget_cancel),
+                        confirmText = stringResource(R.string.rear_widget_action_delete),
+                        destructive = true,
+                        onCancel = { pendingDeleteCard = null },
+                        onConfirm = {
+                            val target = pendingDeleteCard
+                            pendingDeleteCard = null
+                            if (target != null && target.renameable) {
+                                cards.remove(target)
+                                val nextSettings = cardOrderSettings.toMutableMap().apply {
+                                    remove(target.id)
+                                }
+                                cardOrderSettings.clear()
+                                cardOrderSettings.putAll(nextSettings)
+                                scope.launch(Dispatchers.IO) {
+                                    RearWidgetManagerRepository.saveCardOrderSettings(
+                                        prefsManager,
+                                        nextSettings,
+                                    )
+                                    RearWidgetManagerRepository.saveCards(
+                                        context,
+                                        prefsManager,
+                                        cards.toList(),
+                                    )
+                                }
+                            }
+                        },
+                    )
                 }
             }
         }

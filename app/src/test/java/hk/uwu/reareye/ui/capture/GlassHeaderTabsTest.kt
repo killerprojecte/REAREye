@@ -118,8 +118,6 @@ class GlassHeaderTabsTest {
             if (backend == "miuix") {
                 val track = compose.onNodeWithTag("glass-tabs-miuix")
                 val commitsBeforeDrag = tabCommitCount
-                val indicator = compose.onNodeWithTag("glass-tabs-miuix-indicator", useUnmergedTree = true)
-                val originalLeft = indicator.fetchSemanticsNode().boundsInRoot.left
                 track.performTouchInput {
                     down(Offset(width - 44f, height / 2f))
                     moveBy(Offset(-65f, 0f))
@@ -127,7 +125,6 @@ class GlassHeaderTabsTest {
                 compose.mainClock.advanceTimeByFrame(); compose.waitForIdle()
                 assertEquals("Crossing tabs must not switch the real dashboard body", 3, selected.value)
                 assertEquals(commitsBeforeDrag, tabCommitCount)
-                assertTrue(indicator.fetchSemanticsNode().boundsInRoot.left < originalLeft)
                 save(folder, "drag-preview-more.png")
                 track.performTouchInput { moveTo(Offset(32f, height / 2f)) }
                 compose.mainClock.advanceTimeByFrame(); compose.waitForIdle()

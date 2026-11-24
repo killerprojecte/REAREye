@@ -321,6 +321,7 @@ internal fun MaryToolCallCard(
                 MaryConfirmationActionButton(
                     stringResource(R.string.mary_confirmation_allow_once),
                     primary = true,
+                    destructive = pendingApproval.request.risk == ToolRisk.DESTRUCTIVE,
                     onClick = {
                         if (onApprove(pendingApproval.id, true)) expansion.accepted(entry.id, token)
                         else draft?.failed = true

@@ -395,6 +395,7 @@ fun MaryScreen(
                 historyRevision++
             }
         },
+        confirmDelete = true,
     )
 }
 
@@ -836,16 +837,21 @@ private fun ReasoningHeaderLabel(streaming: Boolean) {
  */
 @Composable
 private fun ThinkingPulseIcon() {
-    val pulse = rememberInfiniteTransition(label = "thinkingPulse")
-    val glow by pulse.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "thinkingGlow",
-    )
+    val glow = if (hk.uwu.mixui.motion.rememberReduceMotionEnabled()) {
+        0.78f
+    } else {
+        val pulse = rememberInfiniteTransition(label = "thinkingPulse")
+        val animated by pulse.animateFloat(
+            initialValue = 0.45f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "thinkingGlow",
+        )
+        animated
+    }
     Icon(
         imageVector = UiIcons.More,
         contentDescription = null,
@@ -984,12 +990,14 @@ internal fun NoticeCard(text: String, isError: Boolean) {
 
 @Composable
 private fun MaryBrandMark() {
+    val brandTitle = stringResource(R.string.mary_title)
     Box(
         modifier = Modifier
             .size(72.dp)
             .clip(RoundedCornerShape(22.dp))
             .background(Color(0xFFFF5C93))
-            .semantics { contentDescription = "mary_brand_mark" },
+            .testTag("mary_brand_mark")
+            .semantics { contentDescription = brandTitle },
         contentAlignment = Alignment.Center,
     ) {
         Icon(

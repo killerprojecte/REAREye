@@ -88,7 +88,7 @@ fun rememberPresetPackHomeSnapshot(refreshToken: Any? = Unit): PresetPackHomeSna
                 onFailure = { error ->
                     PresetPackLocalSnapshot(
                         status = PresetPackLocalStatus.INVALID,
-                        error = error.message ?: "RPP validation failed",
+                        error = error.message ?: context.getString(R.string.preset_pack_invalid_summary),
                     )
                 },
             )
@@ -134,11 +134,18 @@ fun PresetPackStatusCard(
     onClick: () -> Unit,
 ) {
     val colorScheme = MixTheme.colorScheme
+    val isDark = (colorScheme.surface.red * 0.299f +
+        colorScheme.surface.green * 0.587f +
+        colorScheme.surface.blue * 0.114f) < 0.5f
     val isUpdate = snapshot.status == PresetPackLocalStatus.READY && updateAvailable
+    val darkWarningAccent = Color(0xFFE5AD24)
+    val darkErrorAccent = Color(0xFFE06767)
     val background = when {
         isUpdate && useMonetColors -> lerp(colorScheme.surface, colorScheme.primary, 0.2f)
+        isUpdate && isDark -> lerp(colorScheme.surface, darkWarningAccent, 0.2f)
         isUpdate -> Color(0xFFFFF3CD)
         useMonetColors -> lerp(colorScheme.surface, colorScheme.error, 0.2f)
+        isDark -> lerp(colorScheme.surface, darkErrorAccent, 0.2f)
         else -> Color(0xFFFDE9E9)
     }
     val iconTint = when {
@@ -147,9 +154,10 @@ fun PresetPackStatusCard(
             colorScheme.primary,
             0.86f
         )
-
+        isUpdate && isDark -> lerp(colorScheme.onSurfaceVariantSummary, darkWarningAccent, 0.86f)
         isUpdate -> Color(0xFFE0A100)
         useMonetColors -> lerp(colorScheme.onSurfaceVariantSummary, colorScheme.error, 0.82f)
+        isDark -> lerp(colorScheme.onSurfaceVariantSummary, darkErrorAccent, 0.82f)
         else -> Color(0xFFD94B4B)
     }
     val titleTint = when {
@@ -158,7 +166,11 @@ fun PresetPackStatusCard(
             if (isUpdate) colorScheme.primary else colorScheme.error,
             0.4f,
         )
-
+        isDark -> lerp(
+            colorScheme.onSurface,
+            if (isUpdate) darkWarningAccent else darkErrorAccent,
+            0.38f,
+        )
         isUpdate -> Color(0xFF7A5A00)
         else -> Color(0xFF8D3030)
     }
@@ -168,7 +180,11 @@ fun PresetPackStatusCard(
             if (isUpdate) colorScheme.primary else colorScheme.error,
             0.24f,
         )
-
+        isDark -> lerp(
+            colorScheme.onSurfaceVariantSummary,
+            if (isUpdate) darkWarningAccent else darkErrorAccent,
+            0.24f,
+        )
         isUpdate -> Color(0xFF8A6B00)
         else -> Color(0xFF9D4A4A)
     }
@@ -331,6 +347,8 @@ fun PresetPackDialog(
         }
     }
 
+        var showRemoveConfirm by remember(show) { mutableStateOf(false) }
+
     PresetPackSheet(show, ui.copy(download = downloadState),
         onDismissRequest = { if (!ui.localBusy) onDismissRequest() },
         onAction = action@{ action ->
@@ -371,16 +389,42 @@ fun PresetPackDialog(
                     onApplied()
                 }
                 PresetPackAction.REVALIDATE -> localTask(PresetPackOperation.REVALIDATE) { refreshInstalled(reportSuccess = true) }
-                PresetPackAction.REMOVE -> localTask(PresetPackOperation.REMOVE) {
-                    withContext(Dispatchers.IO) { repository.removeInstalled().getOrThrow() }
-                    PresetPackDownloadService.clearResult()
-                    ui = ui.copy(current = null, staged = null, localStatus = PresetPackLocalStatus.NOT_INSTALLED)
-                    notice(R.string.preset_sheet_removed, PresetPackNoticeSeverity.SUCCESS)
-                    onApplied()
+                PresetPackAction.REMOVE -> {
+                    showRemoveConfirm = true
                 }
             }
         },
     )
+    hk.uwu.mixui.components.GlassFormDialog(
+        show = show && showRemoveConfirm,
+        title = androidx.compose.ui.res.stringResource(R.string.preset_pack_uninstall_title),
+        onDismissRequest = { showRemoveConfirm = false },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                hk.uwu.mixui.components.ListItem(
+                    animateContentSize = true,
+                    title = androidx.compose.ui.res.stringResource(R.string.preset_pack_uninstall_message),
+                )
+            }
+            hk.uwu.mixui.components.DialogActions(
+                cancelText = androidx.compose.ui.res.stringResource(R.string.rear_widget_cancel),
+                confirmText = androidx.compose.ui.res.stringResource(R.string.preset_sheet_uninstall),
+                destructive = true,
+                onCancel = { showRemoveConfirm = false },
+                onConfirm = {
+                    showRemoveConfirm = false
+                    localTask(PresetPackOperation.REMOVE) {
+                        withContext(Dispatchers.IO) { repository.removeInstalled().getOrThrow() }
+                        PresetPackDownloadService.clearResult()
+                        ui = ui.copy(current = null, staged = null, localStatus = PresetPackLocalStatus.NOT_INSTALLED)
+                        notice(R.string.preset_sheet_removed, PresetPackNoticeSeverity.SUCCESS)
+                        onApplied()
+                    }
+                },
+            )
+        }
+    }
 }
 
 private fun PresetPackInstalled.toDetails() = PresetPackDetails(

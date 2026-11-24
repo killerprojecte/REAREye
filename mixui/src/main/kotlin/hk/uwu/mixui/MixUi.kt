@@ -14,7 +14,9 @@ import hk.uwu.mixui.backend.MochiColors
 import hk.uwu.mixui.backend.MiuixTextStyles
 import hk.uwu.mixui.backend.MochiTextStyles
 import hk.uwu.mixui.theme.LocalMixColors
+import hk.uwu.mixui.theme.LocalMixShapes
 import hk.uwu.mixui.theme.LocalMixTextStyles
+import hk.uwu.mixui.theme.MixShapes
 import ui.feice.mochi.theme.MochiTheme
 import hk.uwu.mixui.backend.rememberMochiPalette
 import hk.uwu.mixui.backend.mochiAppearance
@@ -77,6 +79,7 @@ fun MixUiHost(
                         CompositionLocalProvider(
                             LocalMixColors provides remember(colors, windowDimming) { MochiColors(colors, windowDimming) },
                             LocalMixTextStyles provides remember(styles) { MochiTextStyles(styles) },
+                            LocalMixShapes provides MixShapes.Default,
                             content = hostedContent,
                         )
                     }
@@ -87,6 +90,7 @@ fun MixUiHost(
                 CompositionLocalProvider(
                     LocalMixColors provides remember(colors) { MiuixColors(colors) },
                     LocalMixTextStyles provides remember(styles) { MiuixTextStyles(styles) },
+                    LocalMixShapes provides MixShapes.Default,
                     content = hostedContent,
                 )
             }

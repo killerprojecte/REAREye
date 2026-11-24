@@ -383,13 +383,13 @@ fun HomeScreen(
         EasterEggType.APRIL_FOOLS -> "FOOLEye"
         EasterEggType.EASTER -> "BUNNYEgg"
         EasterEggType.MI_FANS -> "JINFan"
-        EasterEggType.HUAWEI_ULTIMATE_DESIGN -> "Rate XT 非凡大师"
+        EasterEggType.HUAWEI_ULTIMATE_DESIGN -> androidx.compose.ui.res.stringResource(R.string.home_easter_egg_huawei_ultimate_design_app_title)
         else -> "REAREye"
     }
     val moduleVersion = when (easterEggType) {
         EasterEggType.APRIL_FOOLS -> "4.1.0-41f001u-r${AppProperties.BUILD_NUMBER}-fool"
         EasterEggType.EASTER -> "7.7.7-holyegg-r${AppProperties.BUILD_NUMBER}-rebirth"
-        EasterEggType.MI_FANS -> "本彩蛋仅为娱乐用途\n不代表开发者或任何组织的立场或观点"
+        EasterEggType.MI_FANS -> androidx.compose.ui.res.stringResource(R.string.home_easter_egg_mifans_disclaimer)
         EasterEggType.HUAWEI_ULTIMATE_DESIGN -> "38.0-harmony-r${AppProperties.BUILD_NUMBER}-ultimate"
         else -> "${AppProperties.PROJECT_APP_VERSION_NAME}-${AppProperties.GIT_HASH}-r${AppProperties.BUILD_NUMBER}-${AppProperties.BUILD_CHANNEL}"
     }
@@ -635,10 +635,18 @@ private fun WorkingStatusCard(
     useMonetColors: Boolean,
     onLongPress: () -> Unit,
 ) {
+    val isDark = (MixTheme.colorScheme.surface.red * 0.299f +
+        MixTheme.colorScheme.surface.green * 0.587f +
+        MixTheme.colorScheme.surface.blue * 0.114f) < 0.5f
     val palette = when {
         useMonetColors && !activated -> rememberStatusCardPalette(
             accent = MixTheme.colorScheme.error,
             containerStrength = 0.24f,
+        )
+
+        !activated && isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFE06767),
+            containerStrength = 0.22f,
         )
 
         !activated -> customStatusCardPalette(
@@ -648,11 +656,21 @@ private fun WorkingStatusCard(
             summary = Color(0xFF9A4D4D),
         )
 
+        easterEggType == EasterEggType.NEW_YEAR && isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFE64B4B),
+            containerStrength = 0.22f,
+        )
+
         easterEggType == EasterEggType.NEW_YEAR -> customStatusCardPalette(
             container = Color(0xFFFFECEC),
             icon = Color(0xFFE64B4B),
             title = Color(0xFF7F1E1E),
             summary = Color(0xFF9A3939),
+        )
+
+        easterEggType == EasterEggType.APRIL_FOOLS && isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFEBB027),
+            containerStrength = 0.20f,
         )
 
         easterEggType == EasterEggType.APRIL_FOOLS -> customStatusCardPalette(
@@ -662,11 +680,23 @@ private fun WorkingStatusCard(
             summary = Color(0xFF8E6900),
         )
 
+        easterEggType == EasterEggType.EASTER && isDark -> customStatusCardPalette(
+            container = Color(0xFF2B2234),
+            icon = Color(0xFFED9A9A),
+            title = Color(0xFFE4D3F8),
+            summary = Color(0xFF8BD8A6),
+        )
+
         easterEggType == EasterEggType.EASTER -> customStatusCardPalette(
             container = Color(0xFFFFF4E6),
             icon = Color(0xFFED9A9A),
             title = Color(0xFF6A4C93),
             summary = Color(0xFF4CA66B),
+        )
+
+        easterEggType == EasterEggType.MI_FANS && isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFFF6900),
+            containerStrength = 0.20f,
         )
 
         easterEggType == EasterEggType.MI_FANS -> customStatusCardPalette(
@@ -686,6 +716,11 @@ private fun WorkingStatusCard(
         useMonetColors -> rememberStatusCardPalette(
             accent = MixTheme.colorScheme.primary,
             containerStrength = 0.22f,
+        )
+
+        isDark -> rememberStatusCardPalette(
+            accent = Color(0xFF36D167),
+            containerStrength = 0.20f,
         )
 
         else -> customStatusCardPalette(
@@ -763,18 +798,31 @@ private fun EasterEggType.toTitleRes(): Int {
 
 @Composable
 private fun RootWarningCard(useMonetColors: Boolean) {
-    val palette = if (useMonetColors) rememberStatusCardPalette(
-        accent = MixTheme.colorScheme.error,
-        containerStrength = 0.2f,
-        iconStrength = 0.82f,
-        titleStrength = 0.42f,
-        summaryStrength = 0.26f,
-    ) else customStatusCardPalette(
-        container = Color(0xFFFDE9E9),
-        icon = Color(0xFFD94B4B),
-        title = Color(0xFF8C1F1F),
-        summary = Color(0xFFA63737),
-    )
+    val isDark = (MixTheme.colorScheme.surface.red * 0.299f +
+        MixTheme.colorScheme.surface.green * 0.587f +
+        MixTheme.colorScheme.surface.blue * 0.114f) < 0.5f
+    val palette = when {
+        useMonetColors -> rememberStatusCardPalette(
+            accent = MixTheme.colorScheme.error,
+            containerStrength = 0.2f,
+            iconStrength = 0.82f,
+            titleStrength = 0.42f,
+            summaryStrength = 0.26f,
+        )
+        isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFD94B4B),
+            containerStrength = 0.22f,
+            iconStrength = 0.82f,
+            titleStrength = 0.42f,
+            summaryStrength = 0.26f,
+        )
+        else -> customStatusCardPalette(
+            container = Color(0xFFFDE9E9),
+            icon = Color(0xFFD94B4B),
+            title = Color(0xFF8C1F1F),
+            summary = Color(0xFFA63737),
+        )
+    }
 
     Card(
         modifier = Modifier
@@ -817,18 +865,31 @@ private fun RootWarningCard(useMonetColors: Boolean) {
 @Composable
 private fun FrameNoticeCard(title: String, summary: String, useMonetColors: Boolean) {
     val colorScheme = MixTheme.colorScheme
-    val palette = if (useMonetColors) rememberStatusCardPalette(
-        accent = lerp(colorScheme.primary, colorScheme.secondary, 0.35f),
-        containerStrength = 0.2f,
-        iconStrength = 0.8f,
-        titleStrength = 0.4f,
-        summaryStrength = 0.24f,
-    ) else customStatusCardPalette(
-        container = Color(0xFFFFF3CD),
-        icon = Color(0xFFE0A100),
-        title = Color(0xFF7A5A00),
-        summary = Color(0xFF8A6B00),
-    )
+    val isDark = (colorScheme.surface.red * 0.299f +
+        colorScheme.surface.green * 0.587f +
+        colorScheme.surface.blue * 0.114f) < 0.5f
+    val palette = when {
+        useMonetColors -> rememberStatusCardPalette(
+            accent = lerp(colorScheme.primary, colorScheme.secondary, 0.35f),
+            containerStrength = 0.2f,
+            iconStrength = 0.8f,
+            titleStrength = 0.4f,
+            summaryStrength = 0.24f,
+        )
+        isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFE0A100),
+            containerStrength = 0.2f,
+            iconStrength = 0.8f,
+            titleStrength = 0.4f,
+            summaryStrength = 0.24f,
+        )
+        else -> customStatusCardPalette(
+            container = Color(0xFFFFF3CD),
+            icon = Color(0xFFE0A100),
+            title = Color(0xFF7A5A00),
+            summary = Color(0xFF8A6B00),
+        )
+    }
 
     Card(
         modifier = Modifier
@@ -873,18 +934,31 @@ private fun FrameNoticeCard(title: String, summary: String, useMonetColors: Bool
 private fun UpdateWarningCard(currentHash: String, latestHash: String, useMonetColors: Boolean, onOpenRelease: (() -> Unit)? = null) {
     val context = LocalContext.current
     val colorScheme = MixTheme.colorScheme
-    val palette = if (useMonetColors) rememberStatusCardPalette(
-        accent = lerp(colorScheme.primary, colorScheme.secondary, 0.35f),
-        containerStrength = 0.2f,
-        iconStrength = 0.8f,
-        titleStrength = 0.4f,
-        summaryStrength = 0.24f,
-    ) else customStatusCardPalette(
-        container = Color(0xFFFFF3CD),
-        icon = Color(0xFFE0A100),
-        title = Color(0xFF7A5A00),
-        summary = Color(0xFF8A6B00),
-    )
+    val isDark = (colorScheme.surface.red * 0.299f +
+        colorScheme.surface.green * 0.587f +
+        colorScheme.surface.blue * 0.114f) < 0.5f
+    val palette = when {
+        useMonetColors -> rememberStatusCardPalette(
+            accent = lerp(colorScheme.primary, colorScheme.secondary, 0.35f),
+            containerStrength = 0.2f,
+            iconStrength = 0.8f,
+            titleStrength = 0.4f,
+            summaryStrength = 0.24f,
+        )
+        isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFE0A100),
+            containerStrength = 0.2f,
+            iconStrength = 0.8f,
+            titleStrength = 0.4f,
+            summaryStrength = 0.24f,
+        )
+        else -> customStatusCardPalette(
+            container = Color(0xFFFFF3CD),
+            icon = Color(0xFFE0A100),
+            title = Color(0xFF7A5A00),
+            summary = Color(0xFF8A6B00),
+        )
+    }
 
     Card(
         modifier = Modifier

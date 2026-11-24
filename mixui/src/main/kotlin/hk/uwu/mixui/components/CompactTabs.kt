@@ -17,6 +17,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.TabRowDefaults
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import hk.uwu.mixui.theme.MixTheme
 
 /** Shared compact layout with each renderer's selection, semantics and animated indicator.
@@ -71,15 +72,16 @@ fun CompactTabs(
                 behavior = ui.feice.mochi.basic.MochiSegmentedDefaults.behavior(height = trackHeight),
             )
         } else {
-            // Explicit opt-in: ordinary dialog controls retain their existing surfaces.
-            // A menu samples its external page recording, never its own track or popup.
-            val backdrop = if (glass) (LocalGlassPreferenceBackdrop.current as? GlassFormBackdrop.Miuix)?.value else null
-            if (backdrop != null) top.yukonga.miuix.kmp.glass.GlassSegmentedTabRow(
-                tabs = tabs, selectedIndex = selectedTabIndex.coerceIn(tabs.indices),
-                onSelect = onTabSelected, backdrop = backdrop, height = trackHeight,
-                surfaceAlpha = glassSurfaceAlpha,
-                modifier = Modifier.fillMaxWidth().testTag("compact-glass-tabs-miuix"),
-            ) else TabRowWithContour(
+            if (nativeGlass) {
+                // Keep native drag and the resting track even without a recording source.
+                val backdrop = (LocalGlassPreferenceBackdrop.current as? GlassFormBackdrop.Miuix)?.value
+                MiuixGlassTabs(
+                    tabs = tabs, selectedIndex = selectedTabIndex.coerceIn(tabs.indices),
+                    onSelect = onTabSelected, backdrop = backdrop ?: rememberLayerBackdrop(), height = trackHeight,
+                    surfaceAlpha = if (backdrop != null) glassSurfaceAlpha else 0f,
+                    modifier = Modifier.fillMaxWidth().testTag("compact-glass-tabs-miuix"),
+                )
+            } else TabRowWithContour(
                 tabs = tabs,
                 selectedTabIndex = selectedTabIndex.coerceIn(tabs.indices),
                 onTabSelected = onTabSelected,

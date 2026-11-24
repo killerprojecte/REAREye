@@ -5,13 +5,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.icons.Icons
+import hk.uwu.mixui.theme.MixTheme
 import ui.feice.mochi.list.MochiListDefaults
 import ui.feice.mochi.list.MochiListRow
 
@@ -35,9 +38,16 @@ fun ArrowPreference(
 ) {
     // MIUIX removes its clickable modifier when disabled, but does not expose disabled
     // semantics itself. Keep one labelled row and the same disabled contract on both paths.
-    val rowModifier = modifier.semantics(mergeDescendants = true) {
-        if (!enabled) disabled()
-    }
+    val rowModifier = modifier
+        .semantics(mergeDescendants = true) {
+            if (onClick != null) role = Role.Button
+            if (!enabled) disabled()
+        }
+        .mixKeyboardFocusRing(
+            enabled = enabled && onClick != null,
+            cornerRadius = MixTheme.shapes.medium,
+            matchDescendantFocus = true,
+        )
     if (LocalMixUiBackend.current == MixUiBackend.Miuix) {
         top.yukonga.miuix.kmp.preference.ArrowPreference(
             title = title,
