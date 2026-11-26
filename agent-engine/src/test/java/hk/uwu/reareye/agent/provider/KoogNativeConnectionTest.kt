@@ -69,6 +69,52 @@ class KoogNativeConnectionTest {
     }
 
     @Test
+    fun `responses output text without annotations streams through native decoding once`() = runBlocking {
+        val message = """{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"answer"}]}"""
+        val events = arrayOf(
+            """{"type":"response.created","sequence_number":0,"response":{"id":"resp_1","created_at":1,"model":"test","output":[],"status":"in_progress"}}""",
+            """{"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"type":"message","id":"msg_1","role":"assistant","status":"in_progress","content":[]}}""",
+            """{"type":"response.content_part.added","sequence_number":2,"item_id":"msg_1","output_index":0,"content_index":0,"part":{"type":"output_text","text":""}}""",
+            """{"type":"response.output_text.delta","sequence_number":3,"item_id":"msg_1","output_index":0,"content_index":0,"delta":"an"}""",
+            """{"type":"response.output_text.delta","sequence_number":4,"item_id":"msg_1","output_index":0,"content_index":0,"delta":"swer"}""",
+            """{"type":"response.content_part.done","sequence_number":5,"item_id":"msg_1","output_index":0,"content_index":0,"part":{"type":"output_text","text":"answer"}}""",
+            """{"type":"response.output_item.done","sequence_number":6,"output_index":0,"item":$message}""",
+            """{"type":"response.completed","sequence_number":7,"response":{"id":"resp_1","created_at":1,"model":"test","output":[$message],"status":"completed"}}""",
+        )
+        MockWebServer().use { server ->
+            server.start()
+            server.enqueue(response(*events))
+            val config = ProviderConfig(server.url("/v1").toString(), model = "test", protocol = Protocol.RESPONSES)
+            ProviderFactory.connect(OpenAiCompatibleProvider.defaultClient(), config).use { connection ->
+                val prompt = Prompt(listOf(Message.User("hi", ai.koog.prompt.message.RequestMetaInfo.Empty)),
+                    "test-output-text", connection.params)
+                val frames = connection.executor.executeStreaming(prompt, connection.model).toList()
+                assertEquals(listOf("an", "swer"), frames.filterIsInstance<StreamFrame.TextDelta>().map { it.text })
+                assertEquals("answer", frames.toMessageResponse().parts.filterIsInstance<MessagePart.Text>().single().text)
+                assertEquals("completed", frames.filterIsInstance<StreamFrame.End>().single().finishReason)
+            }
+        }
+    }
+
+    @Test
+    fun `responses output text normalization leaves supplied fields and other content untouched`() {
+        for (part in listOf(
+            """{"type":"output_text","text":"answer","annotations":[{"type":"url_citation","start_index":0,"end_index":6,"title":"Source","url":"https://example.invalid"}]}""",
+            """{"type":"output_text","text":"answer","annotations":null}""",
+            """{"type":"output_text","text":"answer","annotations":"invalid"}""",
+            """{"type":"refusal","refusal":"refused"}""",
+        )) {
+            val raw = """{"type":"response.content_part.done","item_id":"msg_1","output_index":0,"content_index":0,"sequence_number":1,"part":$part}"""
+            val event = Json.parseToJsonElement(raw).jsonObject
+            assertSame(event, responsesOutputTextDefaults(event))
+        }
+        val raw = """{"type":"response.content_part.done","item_id":"msg_1","output_index":0,"content_index":0,"sequence_number":1,"part":{"type":"output_text"}}"""
+        val part = responsesOutputTextDefaults(Json.parseToJsonElement(raw).jsonObject).getValue("part").jsonObject
+        assertEquals("[]", part.getValue("annotations").toString())
+        assertFalse("text" in part)
+    }
+
+    @Test
     fun `responses omitted metadata works across lifecycle for streaming and execute model test`() =
         runBlocking {
             MockWebServer().use { server ->

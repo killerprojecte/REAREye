@@ -327,6 +327,11 @@ tasks.withType<Test>().configureEach {
         rootProject.layout.buildDirectory.dir("reports/mary-ui").get().asFile.absolutePath
     )
     filter {
+        if (uiCapture || maryUiResources) {
+            includeTestsMatching("hk.uwu.reareye.ui.capture.MaryPhaseOne*CaptureTest")
+        } else {
+            excludeTestsMatching("hk.uwu.reareye.ui.capture.MaryPhaseOne*CaptureTest")
+        }
         if (uiCapture) {
             includeTestsMatching("hk.uwu.reareye.ui.components.navigation.NativeNavigationInteractionTest")
             includeTestsMatching("hk.uwu.reareye.ui.capture.ConfigNodeNativeTitleTest")
@@ -536,6 +541,7 @@ dependencies {
     implementation(libs.capsule)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+    implementation(libs.jsoup)
     implementation(libs.gson)
     implementation(libs.sora.editor)
     implementation(libs.sora.language.monarch)

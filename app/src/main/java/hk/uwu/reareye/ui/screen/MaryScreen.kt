@@ -6,6 +6,9 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -74,7 +77,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -86,12 +91,19 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.ChatEntry
+import hk.uwu.reareye.agent.MaryUiAttachment
 import hk.uwu.reareye.agent.MaryViewModel
+import hk.uwu.reareye.agent.voice.MaryVoicePhase
 import hk.uwu.reareye.agent.pendingInteractionToolRowId
 import hk.uwu.reareye.agent.withReasoningCatalog
 import hk.uwu.reareye.agent.voice.rememberMaryVoiceInput
 import hk.uwu.reareye.ui.components.ContextUsageButton
+import hk.uwu.reareye.ui.components.MaryAttachmentCard
 import hk.uwu.reareye.ui.components.MaryComposer
+import hk.uwu.reareye.ui.components.MaryComposerAttachmentStrip
+import hk.uwu.reareye.ui.components.MaryComposerAttachments
+import hk.uwu.reareye.ui.components.MaryComposerModels
+import hk.uwu.reareye.ui.components.maryModelDisplayName
 import hk.uwu.reareye.ui.components.MaryFollowConversationTail
 import hk.uwu.reareye.ui.components.MaryQuestionCard
 import hk.uwu.reareye.ui.components.MaryScrollToLatest
@@ -141,6 +153,25 @@ fun MaryScreen(
     val reasoningProvider = remember(uiState.provider, reasoningCatalog) {
         uiState.provider.withReasoningCatalog(reasoningCatalog)
     }
+    val pickDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) controller.importAttachment(uri)
+    }
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) controller.importAttachment(uri)
+    }
+    val attachments = MaryComposerAttachments(
+        drafts = uiState.draftAttachments,
+        importing = uiState.importingAttachment,
+        onChooseFile = { pickDocument.launch(arrayOf("*/*")) },
+        onChooseImage = { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onRemoveDraft = controller::removeDraftAttachment,
+        menuBottomInset = bottomInnerPadding,
+    )
+    val activeModel = uiState.availableModels.firstOrNull { it.id == uiState.activeModelId }
+    val modelName = activeModel?.name ?: reasoningProvider.model
+        .takeIf { uiState.availableModels.isEmpty() && it.isNotBlank() }
+        ?.let(::maryModelDisplayName) ?: stringResource(R.string.mary_chat_model_not_selected)
+    val models = MaryComposerModels(uiState.activeModelId, modelName, uiState.availableModels, controller::selectModel)
 
     // Deliberately no MiuixScrollBehavior here. A collapsing large title changes the bar's measured
     // height, which the Scaffold reports as the top padding this screen feeds into the list's
@@ -154,6 +185,12 @@ fun MaryScreen(
     // the unmounted conversation list (which cannot report landing scrolls).
     val landingScrollState = if (uiState.entries.isEmpty()) rememberScrollState() else null
     var input by remember { mutableStateOf("") }
+    LaunchedEffect(uiState.unsentText) {
+        uiState.unsentText?.let { previous ->
+            input = if (input.isBlank()) previous else "$previous\n$input"
+            controller.acknowledgeUnsentText(previous)
+        }
+    }
     val voice = rememberMaryVoiceInput()
     LaunchedEffect(voice.error) {
         val message = voice.error ?: return@LaunchedEffect
@@ -191,8 +228,9 @@ fun MaryScreen(
         knownEntryIds.remember(uiState.entries.asSequence().map { it.id })
     }
     val askToolRowId = pendingInteractionToolRowId(uiState.entries, uiState.pendingAsk?.toolCallId)
-    val approvalToolRowId =
-        pendingInteractionToolRowId(uiState.entries, uiState.pendingApproval?.request?.id)
+    val approvalToolRowId = pendingInteractionToolRowId(
+        uiState.entries, uiState.pendingApproval?.takeIf { it.subagentId == null }?.request?.id,
+    )
 
     val tailFollow = rememberMaryTailFollowState(listState, controller.sessionId)
     MaryFollowConversationTail(
@@ -238,7 +276,14 @@ fun MaryScreen(
                         contentPaddingBottom = contentPaddingBottom,
                         appBarInset = paddingValues.calculateTopPadding(),
                         scrollState = checkNotNull(landingScrollState),
-                        onPick = { controller.send(it) },
+                        suggestionsEnabled = !uiState.importingAttachment,
+                        onPick = pick@ { suggestion ->
+                            val latest = controller.state.value
+                            if (latest.importingAttachment) return@pick
+                            // A suggestion must not upload a prepared attachment without an explicit send.
+                            if (latest.draftAttachments.isNotEmpty()) input = suggestion
+                            else controller.send(suggestion)
+                        },
                     )
                 } else {
                     MaryConversationList(
@@ -262,7 +307,7 @@ fun MaryScreen(
                                 Spacer(modifier = Modifier.height(if (startsTurn && index > 0) MaryTurnSpacing else 0.dp))
                                 EntryAppearance(new = knownEntryIds.isNew(entry.id)) {
                                     when (entry) {
-                                        is ChatEntry.UserMessage -> UserBubble(entry.text)
+                                        is ChatEntry.UserMessage -> UserBubble(entry.text, entry.attachments)
                                         is ChatEntry.AssistantMessage -> AssistantBubble(
                                             text = entry.text,
                                             streaming = entry.streaming,
@@ -337,25 +382,61 @@ fun MaryScreen(
             },
         ) {
             Box(modifier = Modifier.fillMaxWidth()) {
-                MaryComposer(
-                    value = input,
-                    onValueChange = { input = it },
-                    running = uiState.running,
-                    locked = uiState.locked,
-                    configuring = uiState.configuring,
-                    provider = reasoningProvider,
-                    onReasoningSelected = { controller.setReasoningEffort(it) },
-                    approvalMode = uiState.approvalMode,
-                    onApprovalModeSelected = { controller.setApprovalMode(it) },
-                    onSend = {
-                        controller.send(input)
-                        input = ""
-                    },
-                    onStop = { controller.cancel() },
-                    voicePhase = voice.phase,
-                    onStartVoice = { voice.start(input) { input = it } },
-                    onInterruptVoice = { voice.interrupt() },
-                )
+                Column(Modifier.fillMaxWidth()) {
+                    val backgroundApproval = uiState.pendingApproval?.takeIf { approvalToolRowId == null }
+                    if (backgroundApproval != null) {
+                        val request = backgroundApproval.request
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                            backgroundApproval.subagentId?.let { id ->
+                                Text(stringResource(R.string.mary_subagent_approval, id.take(8)))
+                            }
+                            MaryToolCallCard(
+                                entry = ChatEntry.ToolCall(backgroundApproval.id, request.name, request.argumentsJson, running = true),
+                                expansion = toolExpansion,
+                                pendingApproval = backgroundApproval,
+                                onAnswer = { id, selected, custom -> controller.answerAsk(id, selected, custom) },
+                                onApprove = { id, allowed -> controller.answerApproval(allowed, interactionId = id) },
+                            )
+                        }
+                    }
+                    if (!uiState.running && uiState.runningSubagents > 0) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(pluralStringResource(R.plurals.mary_subagents_running, uiState.runningSubagents, uiState.runningSubagents))
+                            Text(stringResource(R.string.mary_stop_subagents),
+                                modifier = Modifier.clickable(role = Role.Button, onClick = controller::cancel).padding(8.dp),
+                                color = MixTheme.colorScheme.primary)
+                        }
+                    }
+                    MaryComposerAttachmentStrip(
+                        attachments, enabled = !uiState.locked && !uiState.running,
+                    )
+                    MaryComposer(
+                        value = input,
+                        onValueChange = { input = it },
+                        running = uiState.running,
+                        locked = uiState.locked,
+                        configuring = uiState.configuring,
+                        provider = reasoningProvider,
+                        onReasoningSelected = { controller.setReasoningEffort(it) },
+                        approvalMode = uiState.approvalMode,
+                        onApprovalModeSelected = { controller.setApprovalMode(it) },
+                        agentMode = uiState.agentMode,
+                        onSend = send@ {
+                            val latest = controller.state.value
+                            if (latest.importingAttachment || latest.running || latest.locked || latest.configuring ||
+                                voice.phase != MaryVoicePhase.IDLE || (input.isBlank() && latest.draftAttachments.isEmpty())
+                            ) return@send
+                            if (controller.send(input)) input = ""
+                        },
+                        onStop = { controller.cancel() },
+                        voicePhase = voice.phase,
+                        onStartVoice = { voice.start(input) { input = it } },
+                        onInterruptVoice = { voice.interrupt() },
+                        models = models,
+                        attachments = attachments,
+                    )
+                }
 
                 MaryScrollToLatest(
                     awayFromBottom = !tailFollow.following && uiState.entries.isNotEmpty(),
@@ -441,13 +522,14 @@ internal fun MaryLandingTranscript(
     appBarInset: Dp,
     gestureModifier: Modifier = Modifier,
     scrollState: ScrollState = rememberScrollState(),
+    suggestionsEnabled: Boolean = true,
     onPick: (String) -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().then(gestureModifier)
             .padding(horizontal = 16.dp).padding(bottom = contentPaddingBottom),
     ) {
-        LandingState(appBarInset = appBarInset, scrollState = scrollState, onPick = onPick)
+        LandingState(appBarInset, scrollState, onPick.takeIf { suggestionsEnabled })
     }
 }
 
@@ -537,7 +619,7 @@ internal fun MaryFloatingChatLayout(
 private fun ColumnScope.LandingState(
     appBarInset: Dp,
     scrollState: ScrollState,
-    onPick: (String) -> Unit,
+    onPick: ((String) -> Unit)?,
 ) {
     val suggestionPages = rememberMarySuggestionPages()
     var suggestionPage by remember { mutableIntStateOf(0) }
@@ -586,7 +668,7 @@ private fun ColumnScope.LandingState(
             Spacer(modifier = Modifier.height(if (tight) 18.dp else 26.dp))
 
             suggestions.forEach { suggestion ->
-                SuggestionCard(text = suggestion, onClick = { onPick(suggestion) })
+                SuggestionCard(text = suggestion, onClick = onPick?.let { pick -> { pick(suggestion) } })
                 Spacer(modifier = Modifier.height(gapMedium))
             }
 
@@ -667,8 +749,19 @@ internal fun EntryAppearance(new: Boolean, content: @Composable () -> Unit) {
  * squared off so the bubble reads as coming from that side.
  */
 @Composable
-internal fun UserBubble(text: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+internal fun UserBubble(text: String, attachments: List<MaryUiAttachment> = emptyList()) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        attachments.forEach { attachment ->
+            MaryAttachmentCard(
+                attachment,
+                modifier = Modifier.widthIn(max = 260.dp).testTag("mary-sent-file-${attachment.id}"),
+            )
+        }
+        if (text.isBlank()) return@Column
         Card(
             // Capped rather than a fixed 85%: a short "好的" should not become a wide slab.
             modifier = Modifier.widthIn(max = 300.dp),
@@ -1015,7 +1108,7 @@ private fun MaryBrandMark() {
 }
 
 @Composable
-private fun SuggestionCard(text: String, onClick: () -> Unit) {
+private fun SuggestionCard(text: String, onClick: (() -> Unit)?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.defaultColors(

@@ -1,0 +1,14 @@
+<resources>
+    <string name="mary_chat_choose_model">切换模型</string>
+    <string name="mary_chat_no_configured_model">请先在 Mary 设置中添加模型。</string>
+    <string name="mary_chat_model_not_selected">选择模型</string>
+    <string name="mary_chat_model_no_effort">此模型不支持调整思考强度。</string>
+    <string name="mary_attachment_choose_file">选择文件</string>
+    <string name="mary_attachment_choose_image">选择图像</string>
+    <string name="mary_attachment_remove">移除 %1$s</string>
+    <string name="mary_attachment_importing">正在导入附件…</string>
+    <string name="mary_attachment_import_failed">无法导入此附件，请检查文件类型与大小后重试。</string>
+    <string name="mary_attachment_image_limit">每条消息最多发送 8 张图像，图像总大小不能超过 8 MB。</string>
+    <string name="mary_attachment_image_unsupported">当前模型不支持图像输入。请切换到支持图像的模型，或移除此图像。</string>
+    <string name="mary_attachment_chat_unsupported">纯聊天仅接受较小的 UTF-8 文本文件和受支持的图像。其他文件请切到代理模式后再发送。</string>
+</resources>

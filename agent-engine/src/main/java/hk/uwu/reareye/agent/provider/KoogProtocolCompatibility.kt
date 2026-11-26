@@ -61,6 +61,39 @@ internal fun responsesMetadataDefaults(response: JsonObject): JsonObject {
     return JsonObject(fields)
 }
 
+/** Koog requires annotations on output_text, even when a compatible server has no citations. */
+internal fun responsesOutputTextDefaults(event: JsonObject): JsonObject {
+    fun patch(value: JsonElement, key: String, transform: (JsonElement) -> JsonElement): JsonElement {
+        val obj = value as? JsonObject ?: return value
+        val original = obj[key] ?: return obj
+        val updated = transform(original)
+        return if (original === updated) obj else JsonObject(obj + (key to updated))
+    }
+    fun elements(value: JsonElement, transform: (JsonElement) -> JsonElement): JsonElement {
+        val array = value as? JsonArray ?: return value
+        val updated = array.map(transform)
+        return if (array.indices.all { array[it] === updated[it] }) array else JsonArray(updated)
+    }
+    fun part(value: JsonElement): JsonElement {
+        val obj = value as? JsonObject ?: return value
+        if (obj["type"] != JsonPrimitive("output_text") || "annotations" in obj) return obj
+        // Present null/malformed annotations and missing text are still validated by Koog.
+        return JsonObject(obj + ("annotations" to JsonArray(emptyList())))
+    }
+    fun message(value: JsonElement): JsonElement =
+        if ((value as? JsonObject)?.get("type") == JsonPrimitive("message")) {
+            patch(value, "content") { elements(it, ::part) }
+        } else value
+
+    return when ((event["type"] as? JsonPrimitive)?.contentOrNull) {
+        "response.content_part.added", "response.content_part.done" -> patch(event, "part", ::part)
+        "response.output_item.added", "response.output_item.done" -> patch(event, "item", ::message)
+        "response.created", "response.in_progress", "response.completed", "response.incomplete", "response.failed" ->
+            patch(event, "response") { response -> patch(response, "output") { elements(it, ::message) } }
+        else -> event
+    } as JsonObject
+}
+
 /** A connection owns one dispatcher and serializes its native operations, never the caller's Call pool.
  * Failed/cancelled connections are poisoned before releasing their lease, so no waiting request can
  * be accidentally included in cancelAll, and late interceptor attachment is cancelled immediately. */
@@ -326,7 +359,7 @@ private class ProtocolState : AbstractCoroutineContextElement(Key) {
                 "message_stop" -> stopped = true
             }
         } else if (protocol == Protocol.RESPONSES) {
-            item = responseReasoning.observe(item, ready)
+            item = responseReasoning.observe(responsesOutputTextDefaults(item), ready)
             normalized = if (item === parsed) raw else item.toString()
             val response = item["response"] as? JsonObject
             rememberUsage(response?.get("usage"))

@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import android.graphics.Bitmap
@@ -22,6 +23,10 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
@@ -33,6 +38,9 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.graphics.Color
@@ -49,6 +57,14 @@ import hk.uwu.mixui.MixUiBackend
 import hk.uwu.mixui.MixUiHost
 import hk.uwu.mixui.components.Card
 import hk.uwu.reareye.R
+import hk.uwu.reareye.agent.AgentConfig
+import hk.uwu.reareye.agent.ProviderConfig
+import hk.uwu.reareye.agent.data.LEGACY_DIALOGUE_MODEL_ID
+import hk.uwu.reareye.agent.data.LEGACY_DIALOGUE_PROVIDER_ID
+import hk.uwu.reareye.agent.data.MaryWebSearchEngine
+import hk.uwu.reareye.agent.data.SettingsSnapshot
+import hk.uwu.reareye.ui.screen.MarySettingsScreen
+import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -140,17 +156,13 @@ class MarySettingsFieldInteractionTest {
         override fun hide() { calls += "hide" }
     }
 
-    /** Exercises the real public scaffold, native inline input and real pointer scroll.
-     * This observes app-issued IME commands, not an Android/device IME window.
-     * The actual Mary model card variant uses its production inline field, not its dialog.
-     */
-    private fun inlineKeyboardScrollPolicy(actualMaryCard: Boolean) {
+    /** Real pointer and relocation gestures against the public scaffold; no Android/device IME window. */
+    @Test fun inlineModelAutomaticScrollKeepsKeyboardButPointerDragDismisses() {
         val keyboard = RecordingKeyboard()
         val scroll = ScrollState(0)
         val bringIntoView = BringIntoViewRequester()
         var relocationTargetBounds = Rect.Zero
         lateinit var scope: CoroutineScope
-        var draft by mutableStateOf(ModelDraft())
         var input by mutableStateOf("model-name")
         compose.runOnUiThread {
             activity?.close()
@@ -160,15 +172,11 @@ class MarySettingsFieldInteractionTest {
                     CompositionLocalProvider(LocalSoftwareKeyboardController provides keyboard) {
                         scope = rememberCoroutineScope()
                         LargeTitleColumnScaffold(title = "Mary settings", scrollState = scroll) {
-                            if (actualMaryCard) {
-                                ModelConfigurationCard(R.string.mary_settings_provider, draft,
-                                    onChange = { draft = it }, unreadable = false)
-                            } else {
-                                hk.uwu.mixui.components.TextField(
-                                    value = input, onValueChange = { input = it },
-                                    label = "Model", singleLine = true,
-                                    modifier = Modifier.fillMaxWidth().testTag("inline-model"))
-                            }
+                            hk.uwu.mixui.components.TextField(
+                                value = input, onValueChange = { input = it },
+                                label = "Model", singleLine = true,
+                                modifier = Modifier.fillMaxWidth().testTag("inline-model"),
+                            )
                             Spacer(Modifier.height(1000.dp))
                             // A widthless Spacer has an empty relocation rectangle and
                             // bringIntoView correctly ignores it. Give the target real area.
@@ -187,9 +195,7 @@ class MarySettingsFieldInteractionTest {
             }
         }
         frames()
-        val tag = if (actualMaryCard) "mary-model-input-${R.string.mary_settings_provider}" else "inline-model"
-        val field = compose.onNode(hasSetTextAction() and
-            (hasTestTag(tag) or hasAnyAncestor(hasTestTag(tag))), useUnmergedTree = true)
+        val field = inlineField("inline-model")
         compose.mainClock.autoAdvance = true
         field.performScrollTo()
         compose.mainClock.autoAdvance = false
@@ -214,8 +220,7 @@ class MarySettingsFieldInteractionTest {
         val beforeBringIntoView = compose.runOnIdle { scroll.value }
         val viewportBounds = compose.onNode(hasScrollAction()).fetchSemanticsNode().boundsInRoot
         compose.runOnIdle {
-            println("INLINE_IME_RELOCATION actualMaryCard=$actualMaryCard " +
-                "scroll=$beforeBringIntoView max=${scroll.maxValue} " +
+            println("INLINE_IME_RELOCATION scroll=$beforeBringIntoView max=${scroll.maxValue} " +
                 "viewport=$viewportBounds target=$relocationTargetBounds")
             assertTrue("Relocation target must have nonempty area",
                 relocationTargetBounds.width > 0f && relocationTargetBounds.height > 0f)
@@ -236,16 +241,107 @@ class MarySettingsFieldInteractionTest {
         }
         frames()
         assertTrue("A user page drag must dismiss the keyboard", "hide" in keyboard.calls)
-        screenshot("Mochi-inline-${if (actualMaryCard) "actual-mary-card" else "public-scaffold"}-after-drag")
-        println("INLINE_IME_POLICY actualMaryCard=$actualMaryCard calls=${keyboard.calls}")
+        screenshot("Mochi-inline-public-scaffold-after-drag")
+        println("INLINE_IME_POLICY calls=${keyboard.calls}")
     }
 
-    @Test fun inlineModelAutomaticScrollKeepsKeyboardButPointerDragDismisses() {
-        inlineKeyboardScrollPolicy(actualMaryCard = false)
+    @Test fun actualAgentEditorAutomaticScrollKeepsKeyboardButPointerDragDismisses() {
+        val keyboard = RecordingKeyboard()
+        hostSettings(MixUiBackend.Mochi, dark = false, keyboard = keyboard)
+        // Model and provider fields now live in the native sheet. The Agent budget
+        // is still an inline editor in the real settings page's scroll viewport.
+        val field = inlineField("mary-settings-turn-budget")
+        reveal(field)
+        field.performTouchInput { click() }; frames()
+        field.assertIsFocused()
+        val id = field.fetchSemanticsNode().id
+        compose.runOnUiThread { keyboard.calls.clear(); keyboard.show() }
+
+        val page = compose.onNodeWithTag("mary-settings-agent")
+        val scrollAxis = androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange
+        val before = page.fetchSemanticsNode().config[scrollAxis].value()
+        val delta = if (before > 0f) -48f else 48f
+        page.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, delta) }
+        frames()
+        assertTrue("Programmatic scroll must actually move the Agent page", page.fetchSemanticsNode().config[scrollAxis].value() != before)
+        compose.runOnIdle { assertEquals(listOf("show"), keyboard.calls) }
+        field.assertIsFocused()
+        assertEquals("Automatic scroll must not remount the budget editor", id, field.fetchSemanticsNode().id)
+        field.performTextInput("1"); frames()
+        compose.runOnIdle { assertEquals(listOf("show"), keyboard.calls) }
+
+        val canReturnToTop = page.fetchSemanticsNode().config[scrollAxis].value() > 0f
+        page.performTouchInput {
+            val upper = Offset(width * 0.8f, height * 0.5f)
+            val lower = Offset(width * 0.8f, height * 0.85f)
+            swipe(if (canReturnToTop) upper else lower, if (canReturnToTop) lower else upper, 420)
+        }
+        frames()
+        compose.runOnIdle {
+            assertTrue("A pointer drag on the Agent page must dismiss the keyboard", "hide" in keyboard.calls)
+        }
+        screenshot("Mochi-inline-actual-mary-agent-after-drag")
     }
 
-    @Test fun actualMaryModelAutomaticScrollKeepsKeyboardButPointerDragDismisses() {
-        inlineKeyboardScrollPolicy(actualMaryCard = true)
+    @Test fun actualAgentInlineFieldsRemainVisibleWhileKeyboardOpensAndResizes() {
+        for (backend in MixUiBackend.entries) {
+            val keyboard = RecordingKeyboard()
+            hostSettings(backend, dark = false, keyboard = keyboard)
+            val page = compose.onNodeWithTag("mary-settings-agent")
+            val budget = inlineField("mary-settings-turn-budget")
+            val resultChars = inlineField("mary-settings-result-chars")
+            // Align the last field with the original bottom of the scroll viewport.
+            reveal(resultChars)
+            budget.performTouchInput { click() }; frames()
+            budget.assertIsFocused()
+            val budgetId = budget.fetchSemanticsNode().id
+            val pageBottom = page.getUnclippedBoundsInRoot().bottom.value
+            val originalFieldBottom = budget.getUnclippedBoundsInRoot().bottom.value
+            // The keyboard must cover the old field position if the page does not scroll.
+            val keyboardHeight = maxOf(280, (pageBottom - originalFieldBottom).roundToInt() + 88)
+            compose.runOnUiThread { keyboard.calls.clear() }
+            dispatchSettingsIme(keyboardHeight)
+
+            fun assertAboveKeyboard(field: SemanticsNodeInteraction, ime: Int) {
+                field.assertIsDisplayed().assertIsFocused()
+                val bounds = field.getUnclippedBoundsInRoot()
+                assertTrue("$backend field $bounds is behind IME top ${pageBottom - ime}",
+                    bounds.bottom.value <= pageBottom - ime + 1f)
+                assertTrue("$backend field is clipped after relocation",
+                    field.fetchSemanticsNode().boundsInRoot.height >= bounds.height.value - 1f)
+            }
+
+            assertAboveKeyboard(budget, keyboardHeight)
+            assertEquals(budgetId, budget.fetchSemanticsNode().id)
+            budget.performTextReplacement("24"); frames()
+            budget.performTextInput("1"); frames()
+            assertCaretAndText(budget, "mary-settings-turn-budget", "241", 3)
+            // Tap the other field without closing the IME, then enlarge the keyboard.
+            reveal(resultChars)
+            resultChars.performTouchInput { click() }; frames()
+            dispatchSettingsIme(keyboardHeight + 56)
+            assertAboveKeyboard(resultChars, keyboardHeight + 56)
+            resultChars.performTextReplacement("4096"); frames()
+            resultChars.assertTextContains("4096")
+            assertAboveKeyboard(resultChars, keyboardHeight + 56)
+            captureSettings("${backend.name}-inline-keyboard")
+            dispatchSettingsIme(0)
+            resultChars.assertIsFocused().assertIsDisplayed()
+            assertEquals(pageBottom, page.getUnclippedBoundsInRoot().bottom.value, 1f)
+            compose.runOnIdle { assertTrue("$backend automatic placement must not hide the IME", "hide" !in keyboard.calls) }
+        }
+    }
+
+    private fun dispatchSettingsIme(bottomPx: Int) {
+        compose.runOnUiThread {
+            val window = checkNotNull(activity).get().window
+            val insets = WindowInsetsCompat.Builder()
+                .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, bottomPx))
+                .setVisible(WindowInsetsCompat.Type.ime(), bottomPx > 0)
+                .build()
+            ViewCompat.dispatchApplyWindowInsets(window.decorView, insets)
+        }
+        frames()
     }
 
     @Test fun nativeFieldKeepsFocusAndNodeDuringHorizontalSelectionAndTyping() {
@@ -493,67 +589,278 @@ class MarySettingsFieldInteractionTest {
 
     @Test fun actualSettingsPageEditsEndpointAndBudgetWithoutPersistingBeforeSave() {
         for (backend in MixUiBackend.entries) for (dark in listOf(false, true)) {
-            val snapshot = kotlinx.serialization.json.Json.encodeToString(
-                hk.uwu.reareye.agent.data.SettingsSnapshot.serializer(),
-                hk.uwu.reareye.agent.data.SettingsSnapshot(hk.uwu.reareye.agent.AgentConfig()))
-            compose.runOnUiThread {
-                activity?.close()
-                activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
-                activity!!.get().getSharedPreferences(
-                    "reareye_agent_secrets", 0)
-                    .edit().clear().putString(
-                        "settings_snapshot_v1", snapshot).commit()
-                activity!!.get().setContent {
-                    MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
-                        hk.uwu.reareye.ui.screen.MarySettingsScreen(onBack = {})
+            val snapshot = hostSettings(backend, dark)
+            val address = inlineField("mary-settings-provider-address")
+            val budget = inlineField("mary-settings-turn-budget")
+            val endpointDraft = "https://offline.example.invalid/v1"
+            val budgetDraft = "240"
+
+            selectSettingsTab(R.string.mary_phase_tab_providers, "mary-settings-providers")
+            openProviderEditor()
+            reveal(address)
+            address.performTextReplacement(endpointDraft)
+            frames()
+            address.assertTextContains(endpointDraft)
+            captureSettings("${backend.name}-$dark-address")
+            dismissProviderEditor(R.string.mary_phase_apply_provider)
+
+            selectSettingsTab(R.string.mary_phase_tab_agent, "mary-settings-agent")
+            reveal(budget)
+            budget.performTextReplacement(budgetDraft)
+            frames()
+            budget.assertTextContains(budgetDraft)
+            captureSettings("${backend.name}-$dark-budget")
+
+            selectSettingsTab(R.string.mary_phase_tab_providers, "mary-settings-providers")
+            budget.assertDoesNotExist()
+            openProviderEditor()
+            reveal(address)
+            address.assertTextContains(endpointDraft)
+            address.performTextReplacement("https://discard.example.invalid/v1")
+            frames()
+            dismissProviderEditor(R.string.rear_widget_cancel)
+            openProviderEditor()
+            address.assertTextContains(endpointDraft)
+            dismissProviderEditor(R.string.rear_widget_cancel)
+            selectSettingsTab(R.string.mary_phase_tab_agent, "mary-settings-agent")
+            address.assertDoesNotExist()
+            reveal(budget)
+            budget.assertTextContains(budgetDraft)
+            assertEquals("Switching tabs must not commit either draft", snapshot, activity!!.get().getSharedPreferences(
+                "reareye_agent_secrets", 0).getString("settings_snapshot_v1", null))
+        }
+    }
+
+    @Test fun miuixActualSettingsPreservesCaretBetweenKeystrokes() = actualSettingsPreservesCaret(MixUiBackend.Miuix)
+
+    @Test fun mochiActualSettingsPreservesCaretBetweenKeystrokes() = actualSettingsPreservesCaret(MixUiBackend.Mochi)
+
+    private fun actualSettingsPreservesCaret(backend: MixUiBackend) {
+        hostSettings(backend, dark = false)
+        selectSettingsTab(R.string.mary_phase_tab_providers, "mary-settings-providers")
+        openProviderEditor()
+        assertSequentialEditing("mary-settings-provider-address", "https://example.invalid/", "a", "b", "Q")
+        assertSequentialEditing("mary-settings-provider-key", "", "a", "b", "Q", secure = true)
+        dismissProviderEditor(R.string.rear_widget_cancel)
+
+        selectSettingsTab(R.string.mary_phase_tab_models, "mary-settings-models")
+        compose.onNodeWithTag("mary-settings-model-$LEGACY_DIALOGUE_MODEL_ID").performTouchInput { click() }
+        frames()
+        assertSequentialEditing("mary-settings-model-id", "offline-model", "a", "b", "Q")
+        compose.onNodeWithContentDescription(activity!!.get().getString(R.string.rear_widget_cancel)).performClick()
+        compose.waitUntil(5_000) {
+            compose.mainClock.advanceTimeBy(100)
+            compose.onAllNodesWithTag("mary-settings-model-editor").fetchSemanticsNodes().isEmpty()
+        }
+
+        selectSettingsTab(R.string.mary_phase_tab_agent, "mary-settings-agent")
+        assertSequentialEditing("mary-settings-turn-budget", "24", "1", "2", "3")
+    }
+
+    private fun assertSequentialEditing(tag: String, initial: String, first: String, second: String, middle: String, secure: Boolean = false) {
+        val field = inlineField(tag)
+        reveal(field)
+        field.performTextReplacement(initial)
+        frames()
+        field.performTextInputSelection(TextRange(initial.length), relativeToOriginalText = true)
+        frames()
+        field.performTextInput(first)
+        frames()
+        assertCaretAndText(field, tag, initial + first, initial.length + first.length)
+        field.performTextInput(second)
+        frames()
+        val appended = initial + first + second
+        assertCaretAndText(field, tag, appended, appended.length)
+        field.performTextInputSelection(TextRange(1), relativeToOriginalText = true)
+        frames()
+        field.performTextInput(middle)
+        frames()
+        assertCaretAndText(field, tag, appended.substring(0, 1) + middle + appended.substring(1), 1 + middle.length)
+        if (secure) assertTrue(field.fetchSemanticsNode().config.contains(SemanticsProperties.Password))
+    }
+
+    private fun assertCaretAndText(field: SemanticsNodeInteraction, tag: String, expected: String, caret: Int) {
+        val semantics = field.fetchSemanticsNode().config
+        assertEquals("$tag text", AnnotatedString(expected), semantics[SemanticsProperties.InputText])
+        assertEquals("$tag caret", TextRange(caret), semantics[SemanticsProperties.TextSelectionRange])
+    }
+
+    @Test fun actualSettingsPersistsUnassignedProviderAndRunModeOnlyOnPageSave() {
+        val snapshot = hostSettings(MixUiBackend.Miuix, dark = false)
+        selectSettingsTab(R.string.mary_phase_tab_providers, "mary-settings-providers")
+        compose.onNodeWithTag("mary-settings-provider-add").performClick()
+        frames()
+        val name = inlineField("mary-settings-provider-name")
+        val address = inlineField("mary-settings-provider-address")
+        reveal(name)
+        name.performTextReplacement("Local test connection")
+        frames()
+        reveal(address)
+        address.performTextReplacement("https://local-registry.example.invalid/v1")
+        frames()
+        dismissProviderEditor(R.string.mary_phase_apply_provider)
+        selectSettingsTab(R.string.mary_phase_tab_agent, "mary-settings-agent")
+        val chat = activity!!.get().getString(R.string.mary_phase_chat_mode)
+        compose.onNode(hasText(chat) and hasClickAction() and hasAnyAncestor(hasTestTag("mary-settings-mode-tabs")))
+            .performTouchInput { click() }
+        frames()
+        val prefs = activity!!.get().getSharedPreferences("reareye_agent_secrets", 0)
+        assertEquals(snapshot, prefs.getString("settings_snapshot_v1", null))
+        compose.onNodeWithTag("mary-settings-save").performClick()
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeBy(100)
+            prefs.getString("settings_snapshot_v1", null) != snapshot
+        }
+        val saved = Json.decodeFromString(SettingsSnapshot.serializer(), requireNotNull(prefs.getString("settings_snapshot_v1", null)))
+        val registry = requireNotNull(saved.registry)
+        assertEquals(false, registry.agentMode)
+        val provider = registry.providers.single { it.displayName == "Local test connection" }
+        assertEquals("https://local-registry.example.invalid/v1", provider.baseUrl)
+        assertTrue(registry.models.none { it.providerId == provider.id })
+    }
+
+    @Test fun modelAndProviderDeletionNeedConfirmationAndPageSave() {
+        val snapshot = hostSettings(MixUiBackend.Miuix, dark = false)
+        val context = activity!!.get()
+        val prefs = context.getSharedPreferences("reareye_agent_secrets", 0)
+        val modelTag = "mary-settings-model-$LEGACY_DIALOGUE_MODEL_ID"
+        val providerTag = "mary-settings-provider-$LEGACY_DIALOGUE_PROVIDER_ID"
+        selectSettingsTab(R.string.mary_phase_tab_models, "mary-settings-models")
+        compose.onNodeWithTag(modelTag).performClick()
+        frames()
+        compose.onNodeWithTag("mary-settings-delete-model").performClick()
+        frames()
+        compose.onNodeWithText(context.getString(R.string.mary_settings_model_delete_confirmation)).assertIsDisplayed()
+        compose.onNode(hasText(context.getString(R.string.rear_widget_cancel)) and hasClickAction()).performClick()
+        frames()
+        compose.onNodeWithTag("mary-settings-model-editor").assertIsDisplayed()
+        assertEquals(snapshot, prefs.getString("settings_snapshot_v1", null))
+        compose.onNodeWithTag("mary-settings-delete-model").performClick()
+        frames()
+        compose.onNode(hasText(context.getString(R.string.rear_widget_action_delete)) and hasClickAction()).performClick()
+        frames()
+        compose.onNodeWithTag(modelTag).assertDoesNotExist()
+        selectSettingsTab(R.string.mary_phase_tab_providers, "mary-settings-providers")
+        compose.onNodeWithTag(providerTag).performClick()
+        frames()
+        compose.onNodeWithTag("mary-settings-delete-provider").performClick()
+        frames()
+        compose.onNodeWithText(context.getString(R.string.mary_settings_provider_delete_confirmation)).assertIsDisplayed()
+        compose.onNode(hasText(context.getString(R.string.rear_widget_action_delete)) and hasClickAction()).performClick()
+        frames()
+        compose.onNodeWithTag(providerTag).assertDoesNotExist()
+        assertEquals(snapshot, prefs.getString("settings_snapshot_v1", null))
+        compose.onNodeWithTag("mary-settings-save").assertIsEnabled().performClick()
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeBy(100)
+            prefs.getString("settings_snapshot_v1", null) != snapshot
+        }
+        val saved = Json.decodeFromString<SettingsSnapshot>(requireNotNull(prefs.getString("settings_snapshot_v1", null)))
+        val registry = requireNotNull(saved.registry)
+        assertEquals(null, registry.mainModelId)
+        assertTrue(registry.models.isEmpty())
+        assertTrue(registry.providers.isEmpty())
+    }
+
+    @Test fun webPolicyCanBeSavedWithoutShowingAnEngineSelector() {
+        val original = SettingsSnapshot(
+            AgentConfig(provider = ProviderConfig(model = "legacy", contextWindowTokens = 2_048), maxIterations = 90),
+            webSearchEngine = "GOOGLE",
+        )
+        val snapshot = hostSettings(MixUiBackend.Miuix, dark = false, initial = original)
+        val prefs = activity!!.get().getSharedPreferences("reareye_agent_secrets", 0)
+        val web = compose.onNodeWithTag("mary-settings-web-enabled")
+        reveal(web)
+        compose.onNodeWithTag("mary-settings-web-engine").assertDoesNotExist()
+        web.assertIsOn().performClick()
+        frames()
+        web.assertIsOff()
+        assertEquals(snapshot, prefs.getString("settings_snapshot_v1", null))
+        compose.onNodeWithTag("mary-settings-save").assertIsEnabled().performClick()
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeBy(100)
+            prefs.getString("settings_snapshot_v1", null) != snapshot
+        }
+        val saved = Json.decodeFromString<SettingsSnapshot>(requireNotNull(prefs.getString("settings_snapshot_v1", null)))
+        assertEquals(false, saved.webEnabled)
+        assertEquals(MaryWebSearchEngine.BING.name, saved.webSearchEngine)
+        assertEquals(original.configuration, saved.configuration)
+    }
+
+    private fun hostSettings(
+        backend: MixUiBackend,
+        dark: Boolean,
+        keyboard: RecordingKeyboard? = null,
+        initial: SettingsSnapshot = SettingsSnapshot(AgentConfig(provider = ProviderConfig(model = "offline-model"))),
+    ): String {
+        val snapshot = Json.encodeToString(SettingsSnapshot.serializer(), initial)
+        compose.runOnUiThread {
+            activity?.close()
+            activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+            val current = activity!!.get()
+            current.enableEdgeToEdge()
+            current.getSharedPreferences("reareye_agent_secrets", 0)
+                .edit().clear().putString("settings_snapshot_v1", snapshot).commit()
+            current.setContent {
+                MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
+                    if (keyboard == null) MarySettingsScreen(onBack = {})
+                    else CompositionLocalProvider(LocalSoftwareKeyboardController provides keyboard) {
+                        MarySettingsScreen(onBack = {})
                     }
                 }
             }
-            compose.waitUntil(10_000) {
-                compose.mainClock.advanceTimeBy(100)
-                compose.onAllNodesWithTag("mary-model-card-${R.string.mary_settings_provider}")
-                    .fetchSemanticsNodes().isNotEmpty()
-            }
-            frames()
-            for ((field, replacement) in listOf(
-                R.string.mary_provider_endpoint to "https://offline.example.invalid/v1",
-                R.string.mary_behaviour_turn_budget to "240",
-            )) {
-                val title = activity!!.get().getString(field)
-                // Native animated scroll needs clock progress; leaving the test
-                // clock paused deadlocks performScrollTo before the editor opens.
-                compose.mainClock.autoAdvance = true
-                compose.onNodeWithText(title).performScrollTo()
-                compose.mainClock.autoAdvance = false
-                compose.onNodeWithText(title).performClick()
-                frames()
-                val dialog = "mary-field-dialog-$field"
-                compose.onNodeWithTag(dialog, useUnmergedTree = true).assertIsDisplayed()
-                val actualPage = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }
-                val output = File(System.getProperty("ui.capture.output"), "mary-settings-field").apply { mkdirs() }
-                File(output, "actual-settings-${backend.name}-$dark-field-$field.png").outputStream().use {
-                    check(actualPage.compress(Bitmap.CompressFormat.PNG, 100, it))
-                }
-                compose.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(dialog)), useUnmergedTree = true)
-                    .performTextReplacement(replacement)
-                compose.onNodeWithText(activity!!.get().getString(R.string.rear_widget_confirm)).performClick()
-                frames()
-                compose.onNodeWithTag(dialog, useUnmergedTree = true).assertDoesNotExist()
-                // Native animated scroll needs clock progress; leaving the test
-                // clock paused deadlocks performScrollTo before the editor opens.
-                compose.mainClock.autoAdvance = true
-                compose.onNodeWithText(title).performScrollTo()
-                compose.mainClock.autoAdvance = false
-                compose.onNodeWithText(title).performClick()
-                frames()
-                compose.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(dialog)), useUnmergedTree = true)
-                    .assertTextContains(replacement)
-                compose.onNodeWithText(activity!!.get().getString(R.string.rear_widget_cancel)).performClick()
-                frames()
-            }
-            assertEquals(snapshot, activity!!.get().getSharedPreferences(
-                "reareye_agent_secrets", 0)
-                .getString("settings_snapshot_v1", null))
+        }
+        compose.waitUntil(10_000) {
+            compose.mainClock.advanceTimeBy(100)
+            compose.onAllNodesWithTag("mary-settings-mode-tabs").fetchSemanticsNodes().isNotEmpty()
+        }
+        frames()
+        return snapshot
+    }
+
+    private fun selectSettingsTab(label: Int, pageTag: String) {
+        val tab = compose.onNode(hasText(activity!!.get().getString(label)) and hasClickAction() and
+            hasAnyAncestor(hasTestTag("mary-settings-tabs")))
+        tab.assertIsDisplayed().performTouchInput { click() }
+        frames()
+        tab.assertIsSelected()
+        compose.onNodeWithTag(pageTag).assertIsDisplayed()
+    }
+
+    private fun openProviderEditor() {
+        compose.onNodeWithTag("mary-settings-provider-$LEGACY_DIALOGUE_PROVIDER_ID").assertIsDisplayed().performTouchInput { click() }
+        frames()
+        compose.onNodeWithTag("mary-settings-provider-editor").assertIsDisplayed()
+    }
+
+    private fun dismissProviderEditor(label: Int) {
+        compose.onNodeWithContentDescription(activity!!.get().getString(label)).performClick()
+        // While the edited field loses focus, the native sheet can finish its exit on a later frame.
+        compose.waitUntil(5_000) {
+            compose.mainClock.advanceTimeBy(100)
+            compose.onAllNodesWithTag("mary-settings-provider-editor").fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    private fun inlineField(tag: String) = compose.onNode(hasSetTextAction() and
+        (hasTestTag(tag) or hasAnyAncestor(hasTestTag(tag))), useUnmergedTree = true)
+
+    private fun reveal(field: SemanticsNodeInteraction) {
+        // Both native backends need clock progress for animated relocation.
+        compose.mainClock.autoAdvance = true
+        try {
+            field.performScrollTo().assertIsDisplayed()
+        } finally {
+            compose.mainClock.autoAdvance = false
+        }
+        frames()
+    }
+
+    private fun captureSettings(name: String) {
+        val bitmap = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }
+        val output = File(System.getProperty("ui.capture.output"), "mary-settings-field").apply { mkdirs() }
+        File(output, "actual-settings-$name.png").outputStream().use {
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
         }
     }
 

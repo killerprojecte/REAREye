@@ -8,6 +8,7 @@ import hk.uwu.reareye.agent.model.ChatMessage
 import hk.uwu.reareye.agent.model.MessageRole
 import hk.uwu.reareye.agent.model.NativeMessageEncoding
 import hk.uwu.reareye.agent.model.ToolCall
+import hk.uwu.reareye.agent.model.WorkspaceAttachment
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -26,7 +27,33 @@ import kotlinx.serialization.json.put
 object KoogTranscriptCodec {
     private const val VERSION = 1
     private const val LEGACY = "reareye.legacy.v1"
+    private const val WORKSPACE_REFS = "reareye.workspace-attachments.v1"
+    private const val MATERIALIZED = "reareye.workspace-request-only"
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = false }
+
+    fun workspaceAttachments(message: Message): List<WorkspaceAttachment> =
+        message.metaInfo.metadata?.get(WORKSPACE_REFS)?.let {
+            json.decodeFromJsonElement<List<WorkspaceAttachment>>(it)
+        }.orEmpty().also { refs ->
+            require(refs.isEmpty() || message is Message.User && message.parts.none { it is MessagePart.Tool.Result }) {
+                "Workspace attachments require a user message"
+            }
+            require(refs.distinctBy { it.id }.size == refs.size) { "Duplicate attachment ID" }
+        }
+
+    /** Tag ephemeral parts so accidental attempts at transcript persistence fail before serialization. */
+    fun materializeWorkspaceParts(message: Message.User, parts: List<MessagePart.RequestPart>): Message.User {
+        require(workspaceAttachments(message).isNotEmpty()) { "No workspace references to materialize" }
+        checkPersistable(message)
+        val metadata = JsonObject(message.metaInfo.metadata.orEmpty() + (MATERIALIZED to JsonPrimitive(true)))
+        return message.copy(parts = parts, metaInfo = message.metaInfo.copy(metadata = metadata))
+    }
+
+    private fun checkPersistable(message: Message) {
+        require(message.metaInfo.metadata?.containsKey(MATERIALIZED) != true) {
+            "Materialized workspace parts are request-only"
+        }
+    }
 
     fun toNative(messages: List<ChatMessage>): List<Message> = messages.map { message ->
         val encoding = message.nativeEncoding
@@ -37,6 +64,7 @@ object KoogTranscriptCodec {
             } catch (error: Exception) {
                 throw IllegalArgumentException("Invalid native Koog message payload", error)
             }
+            checkPersistable(native)
             require(project(native) == message.copy(nativeEncoding = null)) {
                 "ChatMessage projection differs from its authoritative native payload; rebuild the native message explicitly"
             }
@@ -45,6 +73,7 @@ object KoogTranscriptCodec {
     }
 
     fun fromNative(messages: List<Message>): List<ChatMessage> = messages.map { native ->
+        checkPersistable(native)
         project(native).copy(
             nativeEncoding = NativeMessageEncoding(
                 version = VERSION,
@@ -53,9 +82,9 @@ object KoogTranscriptCodec {
         )
     }
 
-    /** Validate only persisted native messages; legacy messages remain readable without execution. */
+    /** Validate persisted native payloads and attachment references without touching the filesystem. */
     fun validate(messages: List<ChatMessage>) {
-        toNative(messages.filter { it.nativeEncoding != null })
+        toNative(messages.filter { it.nativeEncoding != null || it.attachments.isNotEmpty() })
     }
 
     private fun project(message: Message): ChatMessage {
@@ -64,6 +93,7 @@ object KoogTranscriptCodec {
             json.decodeFromJsonElement<List<JsonObject>>(it)
         }.orEmpty()
         val name = legacy?.get("name")?.jsonPrimitive?.contentOrNull
+        val attachments = workspaceAttachments(message)
         val text = message.parts.filterIsInstance<MessagePart.Text>()
         val nullContent = legacy?.get("nullContent")?.jsonPrimitive?.booleanOrNull == true
         val content =
@@ -90,7 +120,8 @@ object KoogTranscriptCodec {
                     MessageRole.USER,
                     content,
                     name = name,
-                    protocolItems = protocols
+                    protocolItems = protocols,
+                    attachments = attachments,
                 )
                 else ChatMessage(
                     MessageRole.TOOL,
@@ -110,7 +141,12 @@ object KoogTranscriptCodec {
         require(message.role == MessageRole.TOOL || message.toolCallId == null) {
             "A tool result ID requires a tool message"
         }
+        require(message.attachments.isEmpty() || message.role == MessageRole.USER) {
+            "Workspace attachments require a user message"
+        }
+        require(message.attachments.distinctBy { it.id }.size == message.attachments.size) { "Duplicate attachment ID" }
         val metadata = buildJsonObject {
+            if (message.attachments.isNotEmpty()) put(WORKSPACE_REFS, json.encodeToJsonElement(message.attachments))
             put(LEGACY, buildJsonObject {
                 put("name", message.name?.let(::JsonPrimitive) ?: JsonNull)
                 put("nullContent", message.content == null)

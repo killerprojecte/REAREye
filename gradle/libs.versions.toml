@@ -12,6 +12,7 @@ koog = "1.3.0"
 ktor = "3.3.3"
 okhttp = "5.5.0"
 okhttp-logging = "5.5.0"
+jsoup = "1.23.2"
 junit = "4.13.2"
 robolectric = "4.17"
 androidx-test-junit = "1.3.0"
@@ -106,6 +107,7 @@ capsule = { module = "io.github.kyant0:capsule", version.ref = "capsule" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver3", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp-logging" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 lyricon-provider = { group = "io.github.proify.lyricon", name = "provider", version.ref = "lyricon" }
 lyricon-central = { group = "io.github.proify.lyricon", name = "central", version.ref = "lyriconCentral" }
 lyricon-subscriber = { group = "io.github.proify.lyricon", name = "subscriber", version.ref = "lyricon" }

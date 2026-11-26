@@ -1,0 +1,38 @@
+{
+  "openai": {
+    "id": "openai",
+    "models": {
+      "gpt-4o-mini": {
+        "id": "gpt-4o-mini",
+        "name": "GPT-4o mini",
+        "modalities": { "input": ["text", "image", "pdf"] },
+        "tool_call": true,
+        "limit": { "context": 128000, "output": 16384 }
+      }
+    }
+  },
+  "anthropic": {
+    "id": "anthropic",
+    "models": {
+      "claude-sonnet-4-6": {
+        "id": "claude-sonnet-4-6",
+        "name": "Claude Sonnet 4.6",
+        "modalities": { "input": ["text", "image", "pdf"] },
+        "tool_call": true,
+        "limit": { "context": 1000000, "output": 128000 }
+      }
+    }
+  },
+  "deepseek": {
+    "id": "deepseek",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "name": "DeepSeek V4 Flash",
+        "modalities": { "input": ["text", "image"] },
+        "tool_call": true,
+        "limit": { "context": 1048576, "output": 393216 }
+      }
+    }
+  }
+}

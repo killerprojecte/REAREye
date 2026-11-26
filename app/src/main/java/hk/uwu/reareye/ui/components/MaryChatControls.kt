@@ -40,7 +40,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -213,27 +212,28 @@ internal fun ReasoningStrengthButton(
     enabled: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onSelected: (ReasoningEffort) -> Unit,
+    models: MaryComposerModels? = null,
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
     val support = ReasoningPolicy.support(provider)
     val effective = support.effectiveEffort(provider.reasoningEffort)
     val available = support.levels.size > 1
     val label = effective?.let { reasoningEffortLabel(it) } ?: "—"
-    val description = if (available) stringResource(R.string.mary_chat_reasoning_action, label)
-    else stringResource(R.string.mary_chat_reasoning_unavailable)
-    // A save can temporarily disable actions; it must not close/recreate the user's sheet.
-    var expanded by remember(
-        provider.model,
-        provider.protocol,
-        provider.baseUrl,
-        support.levels
-    ) { mutableStateOf(false) }
-    val shown = expanded && available
+    val description = when {
+        available -> stringResource(R.string.mary_chat_reasoning_action, label)
+        models != null -> stringResource(R.string.mary_chat_model_not_selected)
+        else -> stringResource(R.string.mary_chat_reasoning_unavailable)
+    }
+    // Keep the sheet mounted when its own model picker changes the active model.
+    val canOpen = models != null || available
+    val legacyKey = if (models == null) listOf(provider.model, provider.protocol, provider.baseUrl, support.levels) else null
+    var expanded by remember(legacyKey) { mutableStateOf(false) }
+    val shown = expanded && canOpen
     val currentOnExpandedChange by rememberUpdatedState(onExpandedChange)
     fun setExpanded(value: Boolean) {
         expanded = value
         // Notify before focus/IME changes can collapse an otherwise empty composer.
-        currentOnExpandedChange(value && available)
+        currentOnExpandedChange(value && canOpen)
     }
     SideEffect { currentOnExpandedChange(shown) }
     DisposableEffect(Unit) { onDispose { currentOnExpandedChange(false) } }
@@ -241,10 +241,11 @@ internal fun ReasoningStrengthButton(
         if (enabled && available) MixTheme.colorScheme.primary else MixTheme.colorScheme.onSurfaceVariantSummary.copy(
             alpha = 0.5f
         )
+    val toggle = { setExpanded(!shown); if (!shown) keyboard?.hide(); Unit }
     Box {
         IconButton(
-            onClick = { setExpanded(!shown); if (!shown) keyboard?.hide() },
-            enabled = enabled && available,
+            onClick = toggle,
+            enabled = enabled && canOpen,
             cornerRadius = ButtonDefaults.CornerRadius,
             modifier = Modifier
                 .size(44.dp)
@@ -252,7 +253,7 @@ internal fun ReasoningStrengthButton(
                 .semantics(mergeDescendants = true) {
                     contentDescription = description
                     stateDescription = label
-                    if (!enabled || !available) disabled()
+                    if (!enabled || !canOpen) disabled()
                 },
         ) {
             ReasoningGauge(effective, tint)
@@ -266,6 +267,8 @@ internal fun ReasoningStrengthButton(
             onSelected = { effort ->
                 if (shown && enabled && effort in support.levels) onSelected(effort)
             },
+            models = models,
+            activeModelId = models?.selectedKey ?: provider.model,
         )
     }
 }
@@ -279,13 +282,15 @@ private fun ReasoningStrengthPicker(
     enabled: Boolean,
     onDismiss: () -> Unit,
     onSelected: (ReasoningEffort) -> Unit,
+    models: MaryComposerModels?,
+    activeModelId: String,
 ) {
-    if (levels.size < 2) return
-    var preview by remember(show, levels) {
+    if (levels.size < 2 && models == null) return
+    var preview by remember(show, activeModelId, levels) {
         mutableIntStateOf(levels.indexOf(effective).coerceAtLeast(0))
     }
-    var dragging by remember(show, levels) { mutableStateOf(false) }
-    var dragProgress by remember(show, levels) { mutableFloatStateOf(preview.toFloat()) }
+    var dragging by remember(show, activeModelId, levels) { mutableStateOf(false) }
+    var dragProgress by remember(show, activeModelId, levels) { mutableFloatStateOf(preview.toFloat()) }
     // The animation tracks drag samples with a zero-duration spec; the canvas uses the
     // raw sample while pressed, then animates only the final fractional-to-node snap.
     val animatedProgress by animateFloatAsState(
@@ -293,14 +298,15 @@ private fun ReasoningStrengthPicker(
         animationSpec = tween(if (dragging) 0 else 200), label = "reasoningSliderProgress",
     )
     val displayProgress = if (dragging) dragProgress else animatedProgress
-    LaunchedEffect(effective, show, levels) {
+    LaunchedEffect(effective, show, activeModelId, levels) {
         if (!dragging) preview = levels.indexOf(effective).coerceAtLeast(0)
     }
     val currentOnSelected by rememberUpdatedState(onSelected)
     val currentShow by rememberUpdatedState(show)
     val currentEnabled by rememberUpdatedState(enabled)
     val lastIndex = levels.lastIndex
-    val previewLabel = reasoningEffortLabel(levels[preview.coerceIn(0, lastIndex)])
+    val previewLabel = levels.getOrNull(preview)?.let { reasoningEffortLabel(it) }
+        ?: stringResource(R.string.mary_chat_model_no_effort)
     val title = stringResource(R.string.mary_chat_reasoning_title)
     val primary = MixTheme.colorScheme.primary
     val track = MixTheme.colorScheme.secondaryContainer
@@ -325,26 +331,42 @@ private fun ReasoningStrengthPicker(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Independent centered lines stay readable on narrow screens and large fonts.
-            Text(
-                title, modifier = Modifier
-                    .testTag("mary-reasoning-title")
-                    .semantics { heading() },
-                fontSize = 21.sp, lineHeight = 27.sp, fontWeight = FontWeight.Bold
-            )
-            AnimatedContent(
-                targetState = previewLabel,
-                transitionSpec = {
-                    (fadeIn(tween(180)) + slideInVertically(tween(180)) { it / 4 }) togetherWith
-                            (fadeOut(tween(140)) + slideOutVertically(tween(180)) { -it / 4 })
-                },
-                modifier = Modifier.testTag("mary-reasoning-level"),
-                label = "reasoningLevel",
-            ) { label ->
-                Text(
-                    label, color = primary, fontSize = 20.sp, lineHeight = 26.sp,
-                    fontWeight = FontWeight.Bold
+            if (models != null) {
+                MaryReasoningModelDropdown(
+                    models = models,
+                    effort = previewLabel.takeIf { levels.isNotEmpty() },
+                    enabled = enabled && show,
                 )
+                if (levels.size < 2) {
+                    Text(
+                        stringResource(R.string.mary_chat_model_no_effort),
+                        color = MixTheme.colorScheme.onSurfaceContainerVariant,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                    return@Column
+                }
+            } else {
+                // Keep the legacy control usable in existing hosts without a model selector.
+                Text(
+                    title, modifier = Modifier
+                        .testTag("mary-reasoning-title")
+                        .semantics { heading() },
+                    fontSize = 21.sp, lineHeight = 27.sp, fontWeight = FontWeight.Bold
+                )
+                AnimatedContent(
+                    targetState = previewLabel,
+                    transitionSpec = {
+                        (fadeIn(tween(180)) + slideInVertically(tween(180)) { it / 4 }) togetherWith
+                                (fadeOut(tween(140)) + slideOutVertically(tween(180)) { -it / 4 })
+                    },
+                    modifier = Modifier.testTag("mary-reasoning-level"),
+                    label = "reasoningLevel",
+                ) { label ->
+                    Text(
+                        label, color = primary, fontSize = 20.sp, lineHeight = 26.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
             Canvas(
                 Modifier
@@ -369,7 +391,7 @@ private fun ReasoningStrengthPicker(
                             }
                         }
                     }
-                    .pointerInput(levels, show, rtl, enabled) {
+                    .pointerInput(activeModelId, levels, show, rtl, enabled) {
                         if (!show || !enabled) return@pointerInput
                         fun progressAt(x: Float): Float = reasoningSliderProgressAt(
                             x, size.width.toFloat(), 20.dp.toPx(), lastIndex, rtl,
@@ -454,18 +476,19 @@ internal enum class MaryComposerAction { STOP, INTERRUPT, FINALIZING, VOICE, SEN
  * A live run outranks everything (only "stop" makes sense). A live dictation session outranks the
  * draft text, because its only manual escape is to finish it — and while the final transcript is
  * still in flight the action is inert so a half-finalised draft cannot be sent. Otherwise the draft
- * decides: empty shows dictation, and any text — typed or dictated — shows send.
+ * decides: any text or attachment shows send, otherwise it shows dictation.
  */
 internal fun maryComposerAction(
     running: Boolean,
     voice: MaryVoicePhase,
-    value: String
+    value: String,
+    hasAttachments: Boolean = false,
 ): MaryComposerAction = when {
     running -> MaryComposerAction.STOP
     voice == MaryVoicePhase.FINALIZING -> MaryComposerAction.FINALIZING
     voice == MaryVoicePhase.RECORDING -> MaryComposerAction.INTERRUPT
-    value.isBlank() -> MaryComposerAction.VOICE
-    else -> MaryComposerAction.SEND
+    value.isNotBlank() || hasAttachments -> MaryComposerAction.SEND
+    else -> MaryComposerAction.VOICE
 }
 
 /**
@@ -514,11 +537,14 @@ internal fun MaryComposer(
     voicePhase: MaryVoicePhase = MaryVoicePhase.IDLE,
     onStartVoice: () -> Unit = {},
     onInterruptVoice: () -> Unit = {},
+    models: MaryComposerModels? = null,
+    attachments: MaryComposerAttachments? = null,
+    agentMode: Boolean = true,
 ) {
     var focused by remember { mutableStateOf(false) }
     var reasoningPickerOpen by remember { mutableStateOf(false) }
     var approvalPickerOpen by remember { mutableStateOf(false) }
-    val pickerOpen = reasoningPickerOpen || approvalPickerOpen
+    val pickerOpen = reasoningPickerOpen || (agentMode && approvalPickerOpen)
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val density = LocalDensity.current
@@ -561,11 +587,12 @@ internal fun MaryComposer(
             if (focused) focusManager.clearFocus()
         }
     }
-    val canSend = value.isNotBlank() && !running && !locked && !configuring
+    val importing = attachments?.importing == true
+    val hasAttachments = attachments?.drafts?.isNotEmpty() == true
+    val canSend = (value.isNotBlank() || hasAttachments) && !running && !locked && !configuring && !importing
     val send: () -> Unit = { onSend(); focusManager.clearFocus(); keyboard?.hide() }
-    // With nothing typed, the primary action is dictation; a draft (typed or dictated) makes it
-    // send. While a dictation session is live the action is the interrupt that freezes its text.
-    val action = maryComposerAction(running, voicePhase, value)
+    // A pending import shows the send affordance, but it remains disabled until import finishes.
+    val action = maryComposerAction(running, voicePhase, value, hasAttachments || importing)
     val actionEnabled = when (action) {
         MaryComposerAction.STOP -> true
         MaryComposerAction.INTERRUPT -> !locked
@@ -658,12 +685,14 @@ internal fun MaryComposer(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Spacer(Modifier.width(44.dp))
-                ApprovalModeButton(
-                    approvalMode,
-                    enabled = expanded && !running && !locked && !configuring,
-                    onExpandedChange = { pickerChanged(it, reasoning = false) },
-                    onSelected = onApprovalModeSelected
-                )
+                if (agentMode) {
+                    ApprovalModeButton(
+                        approvalMode,
+                        enabled = expanded && !running && !locked && !configuring,
+                        onExpandedChange = { pickerChanged(it, reasoning = false) },
+                        onSelected = onApprovalModeSelected,
+                    )
+                }
                 Spacer(Modifier.weight(1f))
                 // Saves are queued by the controller, so a second selection stays available
                 // while the preceding setting is persisted. Execution/lock still disables it.
@@ -671,12 +700,13 @@ internal fun MaryComposer(
                     provider,
                     enabled = expanded && !running && !locked,
                     onExpandedChange = { pickerChanged(it, reasoning = true) },
-                    onSelected = onReasoningSelected
+                    onSelected = onReasoningSelected,
+                    models = models,
                 )
                 Spacer(Modifier.width(4.dp))
                 Spacer(Modifier.width(44.dp))
             }
-            ComposerAttachButton(locked)
+            MaryComposerAttachButton(locked || running, attachments)
             ComposerActionButton(
                 action = action,
                 enabled = actionEnabled,
@@ -727,22 +757,6 @@ internal fun maryComposerGeometry(
         inputInset = inset,
         actionY = (compactY + (inputHeight - compactY) * fraction).roundToInt(),
     )
-}
-
-@Composable
-private fun ComposerAttachButton(locked: Boolean) {
-    IconButton(
-        onClick = {},
-        enabled = !locked,
-        modifier = Modifier
-            .size(44.dp)
-            .testTag("mary-composer-attach")
-    ) {
-        Icon(
-            Icons.Outlined.Add, contentDescription = stringResource(R.string.mary_action_attach),
-            tint = MixTheme.colorScheme.onSurfaceContainer, modifier = Modifier.size(28.dp)
-        )
-    }
 }
 
 @Composable

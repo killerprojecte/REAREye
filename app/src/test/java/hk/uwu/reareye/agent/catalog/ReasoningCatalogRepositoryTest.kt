@@ -4,6 +4,8 @@ import hk.uwu.reareye.agent.Protocol
 import hk.uwu.reareye.agent.ProviderConfig
 import hk.uwu.reareye.agent.ReasoningEffort.HIGH
 import hk.uwu.reareye.agent.ReasoningEffort.LOW
+import hk.uwu.reareye.agent.data.MaryModelCapability
+import hk.uwu.reareye.agent.data.MaryModelValueSource
 import java.io.IOException
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
@@ -43,6 +45,14 @@ class ReasoningCatalogRepositoryTest {
         })
         known.start { cache }.join()
         assertEquals(listOf(LOW), known.index.value.capabilityFor(config("old"))?.levels)
+        val model = known.models.value.models(config("old").baseUrl, Protocol.RESPONSES).single()
+        assertEquals("Public old", model.displayName)
+        assertEquals(100_000, model.context)
+        assertEquals(5000, model.output)
+        assertEquals(setOf(MaryModelCapability.TEXT, MaryModelCapability.IMAGE, MaryModelCapability.TOOLS), model.capabilities)
+        assertEquals(MaryModelValueSource.CATALOG, model.contextSource)
+        assertEquals(MaryModelValueSource.CATALOG, model.outputSource)
+        assertNull(model.details.reasoning)
         val bytes = cache.read(source.id)!!
         assertFalse(bytes.decodeToString().contains("not kept in snapshot"))
         assertEquals(listOf("${source.id}.json"), directory.list()?.toList())
@@ -54,6 +64,7 @@ class ReasoningCatalogRepositoryTest {
             assertEquals(source.feedUri, uri)
             assertEquals("\"v1\"", validator)
             assertEquals(listOf(LOW), restarted.index.value.capabilityFor(config("old"))?.levels)
+            assertEquals(model, restarted.models.value.models(config("old").baseUrl, Protocol.RESPONSES).single())
             CatalogHttpResult.Unchanged
         })
         val first = restarted.start { cache }
@@ -131,6 +142,46 @@ class ReasoningCatalogRepositoryTest {
         assertEquals(listOf(HIGH), repository.index.value.capabilityFor(config("safe"))?.levels)
     }
 
+    @Test
+    fun `legacy reasoning cache works offline and forces public metadata to download once`() = runBlocking {
+        val cache = MemoryCache()
+        cache.write(source.id, """{"version":1,"sourceId":"models-dev-v1","etag":"\"legacy\"","records":[
+            {"provider":"openai","modelId":"old","efforts":["LOW"]}
+        ]}""".encodeToByteArray())
+        val presets = ModelsDevModelCatalog.parse(
+            """{"openai":{"id":"openai","models":{"built-in":{"id":"built-in","name":"Preset"}}}}""".byteInputStream(),
+        )
+        lateinit var repository: ReasoningCatalogRepository
+        repository = repository(ReasoningCatalogHttp { uri, validator ->
+            assertEquals(source.feedUri, uri)
+            assertNull(validator)
+            assertEquals(listOf(LOW), repository.index.value.capabilityFor(config("old"))?.levels)
+            assertEquals("built-in", repository.models.value.models(config("old").baseUrl, Protocol.RESPONSES).single().details.id)
+            json("fresh", "high", "\"v2\"")
+        })
+        repository.start(builtIn = { presets }) { cache }.join()
+        assertEquals("fresh", repository.models.value.models(config("old").baseUrl, Protocol.RESPONSES).single().details.id)
+        assertEquals(listOf(HIGH), repository.index.value.capabilityFor(config("fresh"))?.levels)
+        assertTrue(repository.models.value.models("https://proxy.test/v1", Protocol.RESPONSES).isEmpty())
+    }
+
+    @Test
+    fun `metadata-only updates do not discard the last validated reasoning controls`() = runBlocking {
+        val cache = MemoryCache()
+        repository(ReasoningCatalogHttp { _, _ -> json("old", "low", "\"v1\"") }).start { cache }.join()
+        val repository = repository(ReasoningCatalogHttp { _, validator ->
+            assertEquals("\"v1\"", validator)
+            CatalogHttpResult.Updated(
+                """{"openai":{"id":"openai","models":{"new":{"id":"new","name":"New Model","reasoning":true}}}}"""
+                    .encodeToByteArray(), "\"v2\"",
+            )
+        })
+        repository.start { cache }.join()
+        assertEquals(listOf(LOW), repository.index.value.capabilityFor(config("old"))?.levels)
+        assertNull(repository.index.value.capabilityFor(config("new")))
+        assertEquals("New Model", repository.models.value.models(config("new").baseUrl, Protocol.RESPONSES).single().displayName)
+    }
+
     private fun CoroutineScope.repository(
         http: ReasoningCatalogHttp,
         sources: List<ReasoningCatalogSource> = listOf(source),
@@ -140,7 +191,9 @@ class ReasoningCatalogRepositoryTest {
     private fun config(id: String) = ProviderConfig("https://api.openai.com/v1", model = id, protocol = Protocol.RESPONSES)
 
     private fun json(id: String, effort: String, etag: String?) = CatalogHttpResult.Updated(
-        """{"openai":{"models":{"$id":{"id":"$id","description":"not kept in snapshot","reasoning_options":[
+        """{"openai":{"id":"openai","models":{"$id":{"id":"$id","name":"Public $id",
+            "description":"not kept in snapshot","limit":{"context":100000,"output":5000},
+            "modalities":{"input":["text","image"]},"tool_call":true,"reasoning_options":[
             {"type":"effort","values":["$effort"]}
         ]}}}}""".encodeToByteArray(), etag,
     )

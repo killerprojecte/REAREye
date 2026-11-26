@@ -1,0 +1,14 @@
+<resources>
+    <string name="mary_chat_choose_model">Choose model</string>
+    <string name="mary_chat_no_configured_model">Add a model in Mary settings.</string>
+    <string name="mary_chat_model_not_selected">Choose a model</string>
+    <string name="mary_chat_model_no_effort">This model has no adjustable reasoning level.</string>
+    <string name="mary_attachment_choose_file">Choose file</string>
+    <string name="mary_attachment_choose_image">Choose image</string>
+    <string name="mary_attachment_remove">Remove %1$s</string>
+    <string name="mary_attachment_importing">Importing attachment…</string>
+    <string name="mary_attachment_import_failed">Could not import this attachment. Check the file type and size and try again.</string>
+    <string name="mary_attachment_image_limit">Send up to 8 images and 8 MB of images per message.</string>
+    <string name="mary_attachment_image_unsupported">This model cannot read images. Switch to an image-capable model or remove the image.</string>
+    <string name="mary_attachment_chat_unsupported">Chat mode accepts small UTF-8 text files and supported images. Switch to Agent mode to keep other files in the conversation.</string>
+</resources>

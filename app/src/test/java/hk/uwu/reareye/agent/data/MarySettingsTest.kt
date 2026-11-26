@@ -5,7 +5,12 @@ import hk.uwu.reareye.agent.AgentConfig
 import hk.uwu.reareye.agent.Protocol
 import hk.uwu.reareye.agent.ProviderConfig
 import hk.uwu.reareye.agent.interaction.ApprovalMode
+import hk.uwu.reareye.hook.support.RemotePreferencesSnapshot
+import hk.uwu.reareye.hook.support.XposedRemoteHookPrefs
 import hk.uwu.reareye.ui.components.ModelDraft
+import hk.uwu.reareye.ui.config.ConfigKeys
+import hk.uwu.reareye.ui.config.PrefsManager
+import hk.uwu.reareye.ui.screen.MarySettingsDraft
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -177,7 +182,7 @@ class MarySettingsStoreAtomicTest {
         prefs.edit().clear()
             .putString(
                 "settings_snapshot_v1",
-                """{"configuration":{"systemPrompt":"old custom prompt"}}"""
+                """{"configuration":{"systemPrompt":"old custom prompt"},"inheritApprovalModel":false}"""
             )
             .putString("api_key_ciphertext", "unreadable-dialogue-cipher")
             .putString("approval_api_key_ciphertext", "unreadable-approval-cipher").commit()
@@ -250,12 +255,298 @@ class MarySettingsStoreAtomicTest {
         assertFalse(first.isAlive)
         assertFalse(second?.isAlive == true)
         error.get()?.let { throw AssertionError(it) }
-        assertEquals(
-            original.copy(
-                approvalMode = ApprovalMode.AUTO,
-                configuration = original.configuration.copy(systemPrompt = "new prompt")
-            ),
-            AgentSettingsStore(context).loadMarySettings()
-        )
+        val actual = AgentSettingsStore(context).loadMarySettings()
+        assertEquals(ApprovalMode.AUTO, actual.approvalMode)
+        assertEquals(original.configuration.copy(systemPrompt = "new prompt"), actual.configuration)
+        assertEquals(original.approvalProvider, actual.approvalProvider)
+        assertEquals(LEGACY_DIALOGUE_MODEL_ID, actual.mainModelId)
+        assertEquals(LEGACY_APPROVAL_MODEL_ID, actual.approvalModelId)
     }
+
+    @Test
+    fun migratesBothLegacyRolesWithStableIdsAndTheirOwnParametersAndKeys() {
+        val main = ProviderConfig(baseUrl = "https://primary.invalid/v1", model = "main-remote-id", protocol = Protocol.RESPONSES,
+            contextWindowTokens = 64_000, maxOutputTokens = 4_096, temperature = 0.4)
+        val approval = ProviderConfig(baseUrl = "https://approval.invalid/v1", model = "approval-remote-id", protocol = Protocol.ANTHROPIC,
+            contextWindowTokens = 32_000, maxOutputTokens = 1_024, temperature = 0.1)
+        prefs.edit().clear()
+            .putString("settings_snapshot_v1", Json.encodeToString(SettingsSnapshot(AgentConfig(provider = main),
+                inheritApprovalModel = false, approvalProvider = approval)))
+            .putString("api_key_ciphertext", seal("main-test-key"))
+            .putString("approval_api_key_ciphertext", seal("approval-test-key")).commit()
+        val store = fakeCryptoStore()
+        val legacy = store.loadMarySettings()
+        assertTrue(legacy.agentMode)
+        assertEquals(LEGACY_DIALOGUE_MODEL_ID, legacy.mainModelId)
+        assertEquals(LEGACY_APPROVAL_MODEL_ID, legacy.approvalModelId)
+        assertEquals(main.copy(apiKey = "main-test-key"), legacy.resolveModel(legacy.mainModelId))
+        assertEquals(approval.copy(apiKey = "approval-test-key"), legacy.resolveModel(legacy.approvalModelId))
+        assertEquals(legacy.resolveModel(legacy.mainModelId), store.load().provider)
+        assertEquals(legacy.resolveModel(legacy.approvalModelId), store.loadMarySettings().approvalProvider)
+        assertTrue(store.saveRegistrySettings(legacy))
+        assertEquals(legacy, fakeCryptoStore().loadMarySettings())
+        val encoded = requireNotNull(prefs.getString("settings_snapshot_v1", null))
+        assertFalse(encoded.contains("main-test-key")); assertFalse(encoded.contains("approval-test-key"))
+    }
+
+    @Test
+    fun followingLegacySnapshotDoesNotRegisterDormantApprovalOrRestoreItLater() {
+        val snapshot = SettingsSnapshot(AgentConfig(provider = ProviderConfig(model = "dialogue")),
+            approvalProvider = ProviderConfig(model = "old-approval", baseUrl = "https://approval.invalid/v1"))
+        prefs.edit().clear().putString("settings_snapshot_v1", Json.encodeToString(snapshot))
+            .putString("approval_api_key_ciphertext", seal("dormant-key")).commit()
+        val store = fakeCryptoStore()
+        val preview = store.loadMarySettings()
+        assertEquals(listOf(LEGACY_DIALOGUE_PROVIDER_ID), preview.providers.map { it.id })
+        assertEquals(listOf(LEGACY_DIALOGUE_MODEL_ID), preview.models.map { it.id })
+        assertNull(preview.approvalModelId)
+        assertTrue(store.saveRegistrySettings(preview.copy(inheritApprovalModel = false)))
+        assertNull(fakeCryptoStore().loadMarySettings().approvalModelId)
+        assertFalse(prefs.contains("approval_api_key_ciphertext"))
+    }
+
+    @Test
+    fun remoteLegacyMigrationUsesApprovalModeAndNeverWritesBackToRemotePrefs() {
+        val remote = context.getSharedPreferences("legacy_remote_test_fixture", Context.MODE_PRIVATE)
+        val base = "https://legacy-approval.invalid/v1"
+        remote.edit().clear().putBoolean(ConfigKeys.AGENT_APPROVAL_INHERIT, true)
+            .putString(ConfigKeys.AGENT_APPROVAL_BASE_URL, base)
+            .putString(ConfigKeys.AGENT_APPROVAL_MODEL, "legacy-approval")
+            .putString(ConfigKeys.AGENT_APPROVAL_PROTOCOL, Protocol.ANTHROPIC.name)
+            .putInt(ConfigKeys.AGENT_APPROVAL_CONTEXT_WINDOW, 64_000)
+            .putString(ConfigKeys.AGENT_MODEL, "legacy-dialogue").commit()
+        val adapter = PrefsManager(XposedRemoteHookPrefs.fromProvider("fixture") { RemotePreferencesSnapshot(remote, 1) })
+        for (inherit in listOf(true, false)) {
+            remote.edit().putBoolean(ConfigKeys.AGENT_APPROVAL_INHERIT, inherit).commit()
+            val originalRemote = remote.all.toMap()
+            prefs.edit().clear().putString("api_key_ciphertext", seal("dialogue-key"))
+                .putString("approval_api_key_ciphertext", seal("approval-key")).commit()
+            val store = AgentSettingsStore(context, ::seal, ::unseal) { adapter }
+            assertTrue(store.isReady())
+            val loaded = store.loadMarySettings()
+            assertEquals("legacy-dialogue", loaded.resolveModel(loaded.mainModelId)?.model)
+            assertEquals("dialogue-key", loaded.resolveModel(loaded.mainModelId)?.apiKey)
+            if (inherit) {
+                assertEquals(listOf(LEGACY_DIALOGUE_PROVIDER_ID), loaded.providers.map { it.id })
+                assertEquals(listOf(LEGACY_DIALOGUE_MODEL_ID), loaded.models.map { it.id })
+                assertNull(loaded.approvalModelId)
+            } else {
+                assertEquals(LEGACY_APPROVAL_MODEL_ID, loaded.approvalModelId)
+                assertEquals(ProviderConfig(baseUrl = base, model = "legacy-approval", protocol = Protocol.ANTHROPIC,
+                    contextWindowTokens = 64_000, apiKey = "approval-key"), loaded.resolveModel(loaded.approvalModelId))
+            }
+            assertTrue(store.saveRegistrySettings(loaded))
+            assertEquals(loaded, fakeCryptoStore().loadMarySettings())
+            assertEquals(originalRemote, remote.all)
+        }
+    }
+
+    @Test
+    fun onlyAnUnusedUnmodifiedMigratedApprovalPlaceholderIsRemoved() {
+        val original = legacyRegistry(ProviderConfig(model = "main"), ProviderConfig())
+        val approvalModel = original.models.last()
+        val approvalProvider = original.providers.last()
+        fun read(registry: MaryRegistrySnapshot, inherit: Boolean = true, cipher: String? = null): MarySettings {
+            val snapshot = SettingsSnapshot(AgentConfig(), registry = registry, inheritApprovalModel = inherit)
+            prefs.edit().clear().putString("settings_snapshot_v1", Json.encodeToString(snapshot)).apply {
+                if (cipher != null) putString("approval_api_key_ciphertext", cipher)
+            }.commit()
+            return fakeCryptoStore().loadMarySettings()
+        }
+        val hidden = read(original)
+        assertNull(hidden.approvalModelId)
+        assertEquals(listOf(LEGACY_DIALOGUE_PROVIDER_ID), hidden.providers.map { it.id })
+        assertEquals(listOf(LEGACY_DIALOGUE_MODEL_ID), hidden.models.map { it.id })
+        assertTrue(fakeCryptoStore().saveRegistrySettings(hidden.copy(webEnabled = false)))
+        val saved = Json.decodeFromString<SettingsSnapshot>(requireNotNull(prefs.getString("settings_snapshot_v1", null)))
+        assertEquals(hidden.models, saved.registry?.models)
+        assertTrue(read(original, inherit = false).providers.contains(approvalProvider))
+        assertTrue(read(original, cipher = "unreadable").isProviderKeyUnreadable(approvalProvider.id))
+        for (registry in listOf(
+            original.copy(mainModelId = approvalModel.id),
+            original.copy(subagentModelId = approvalModel.id),
+            original.copy(models = listOf(original.models.first(), approvalModel.copy(contextWindowTokens = 8_192))),
+            original.copy(models = original.models + MaryModelConfig("shared", approvalProvider.id, "")),
+            original.copy(providers = listOf(original.providers.first(), approvalProvider.copy(displayName = "Kept"))),
+        )) {
+            val kept = read(registry)
+            assertTrue(kept.providers.any { it.id == approvalProvider.id })
+            assertTrue(kept.models.any { it.id == approvalModel.id })
+        }
+    }
+
+    @Test
+    fun webPolicyReadsLocalSnapshotWithoutConsultingRemoteOrDecrypting() {
+        prefs.edit().clear().commit()
+        val reader = AgentSettingsStore(context, { error("must not encrypt") }, { error("must not decrypt") }) {
+            error("must not consult remote")
+        }
+        assertTrue(reader.webToolsEnabled())
+        prefs.edit().putString("settings_snapshot_v1", """{"configuration":{},"webSearchEngine":"GOOGLE"}""")
+            .putString("api_key_ciphertext", seal("key")).commit()
+        assertTrue(reader.webToolsEnabled())
+        val writer = fakeCryptoStore()
+        val defaults = writer.loadMarySettings()
+        assertTrue(defaults.webEnabled)
+        assertEquals(MaryWebSearchEngine.BING, defaults.webSearchEngine)
+        assertTrue(writer.saveRegistrySettings(defaults.copy(webEnabled = false)))
+        assertFalse(reader.webToolsEnabled())
+        val reloaded = fakeCryptoStore().loadMarySettings()
+        assertFalse(reloaded.webEnabled)
+        assertEquals(MaryWebSearchEngine.BING, reloaded.webSearchEngine)
+        assertTrue(writer.saveRegistrySettings(reloaded.copy(webEnabled = true)))
+        assertTrue(reader.webToolsEnabled())
+        prefs.edit().putString("settings_snapshot_v1", """{"configuration":{},"registry":{"mainModelId":"missing"}}""").commit()
+        assertFalse(reader.webToolsEnabled())
+        prefs.edit().putString("settings_snapshot_v1", "broken snapshot").commit()
+        assertFalse(reader.webToolsEnabled())
+    }
+
+    @Test
+    fun persistsIndependentEntriesAndRoleChoicesWithScopedKeyRotationAndDeletion() {
+        val store = seedRegistry()
+        var settings = store.loadMarySettings()
+        assertFalse(settings.agentMode)
+        assertEquals("beta-model", settings.mainModelId)
+        assertEquals("alpha-model", settings.approvalModelId)
+        assertEquals("helper-model", settings.subagentModelId)
+        assertEquals("Alpha custom name", settings.models.first().name)
+        assertEquals(setOf(MaryModelCapability.IMAGE, MaryModelCapability.TOOLS), settings.models.first().capabilities)
+        assertEquals(MaryModelValueSource.CATALOG, settings.models.first().contextSource)
+        assertEquals(17, settings.providers.first().modelCount)
+        assertEquals("https://beta.invalid/v1", store.load().provider.baseUrl)
+        assertEquals("beta-key", store.loadApiKey())
+        assertEquals("alpha-key", store.loadApprovalApiKey())
+        assertEquals("alpha-key", settings.resolveModel(settings.subagentModelId)?.apiKey)
+        assertTrue(store.saveApiKey("rotated-key"))
+        settings = store.loadMarySettings()
+        assertEquals("rotated-key", settings.resolveModel("beta-model")?.apiKey)
+        assertEquals("alpha-key", settings.resolveModel("helper-model")?.apiKey)
+
+        val snapshot = prefs.all.toMap()
+        assertFalse(store.saveRegistrySettings(settings.copy(providers = settings.providers.drop(1))))
+        for (referenced in listOf("alpha-model", "beta-model", "helper-model")) {
+            assertFalse(store.saveRegistrySettings(settings.copy(models = settings.models.filterNot { it.id == referenced })))
+        }
+        assertEquals(snapshot, prefs.all)
+        val detached = settings.copy(mainModelId = "alpha-model", models = settings.models.filterNot { it.id == "beta-model" },
+            providers = settings.providers.filterNot { it.id == "beta" })
+        assertTrue(store.saveRegistrySettings(detached, mapOf("alpha" to "")))
+        assertFalse(prefs.contains("provider_api_key_ciphertext.beta"))
+        assertFalse(prefs.contains("provider_api_key_ciphertext.alpha"))
+        assertNull(fakeCryptoStore().loadMarySettings().resolveModel("beta-model"))
+    }
+
+    @Test
+    fun unrelatedSaveKeepsInvalidUntouchedLegacyValuesAndRejectsInvalidEdits() {
+        val legacyConfig = AgentConfig(
+            provider = ProviderConfig(baseUrl = "file:///legacy", model = "legacy-model ",
+                contextWindowTokens = 2_048, maxOutputTokens = 9_192, temperature = 2.5),
+            maxIterations = 100, maxConsecutiveToolFailures = 99, maxToolResultChars = 250_000, turnBudgetMs = 25_123,
+        )
+        prefs.edit().clear().putString("settings_snapshot_v1", Json.encodeToString(SettingsSnapshot(legacyConfig))).commit()
+        val store = fakeCryptoStore()
+        val before = store.loadMarySettings()
+        val draft = MarySettingsDraft.from(before)
+        assertTrue(draft.valid())
+        assertFalse(draft.copy(iterations = "101").valid())
+        val provider = draft.providers.single()
+        assertFalse(draft.updateProvider(provider.copy(displayName = "edited")).valid())
+        val model = draft.models.single()
+        assertFalse(draft.updateModel(model.copy(displayName = "edited")).valid())
+        val edited = draft.copy(webEnabled = false, approvalMode = ApprovalMode.AUTO)
+        assertTrue(store.saveRegistrySettings(edited.build(), expected = before))
+        val saved = fakeCryptoStore().loadMarySettings()
+        assertEquals(legacyConfig, saved.configuration)
+        assertEquals(before.models, saved.models)
+        assertEquals(before.providers, saved.providers)
+        assertEquals(ApprovalMode.AUTO, saved.approvalMode)
+        assertFalse(saved.webEnabled)
+    }
+
+    @Test
+    fun modelAndProviderDeletionClearRolesKeysAndRejectStaleSave() {
+        val store = seedRegistry()
+        val initial = store.loadMarySettings()
+        val draft = MarySettingsDraft.from(initial)
+        val removedModel = draft.removeModel("beta-model")
+        assertTrue(removedModel.valid())
+        assertTrue(store.saveRegistrySettings(removedModel.build(), expected = initial))
+        val afterModel = fakeCryptoStore().loadMarySettings()
+        assertNull(afterModel.mainModelId)
+        assertEquals("alpha-model", afterModel.approvalModelId)
+        assertEquals("helper-model", afterModel.subagentModelId)
+        assertEquals("beta-key", afterModel.resolveProvider("beta")?.apiKey)
+        assertNull(afterModel.resolveModel("beta-model"))
+        val removedProvider = MarySettingsDraft.from(afterModel).removeProvider("alpha")
+        assertTrue(removedProvider.valid())
+        assertTrue(store.saveRegistrySettings(removedProvider.build(), expected = afterModel))
+        assertFalse(prefs.contains("provider_api_key_ciphertext.alpha"))
+        assertEquals("beta-key", fakeCryptoStore().loadMarySettings().resolveProvider("beta")?.apiKey)
+        assertFalse(store.saveRegistrySettings(draft.copy(webEnabled = false).build(), expected = initial))
+        val afterProvider = fakeCryptoStore().loadMarySettings()
+        assertNull(afterProvider.approvalModelId)
+        assertNull(afterProvider.subagentModelId)
+        assertTrue(afterProvider.models.isEmpty())
+        assertTrue(store.saveRegistrySettings(MarySettingsDraft.from(afterProvider).removeProvider("beta").build()))
+        store.save(store.load().copy(systemPrompt = "still empty"))
+        val reloaded = fakeCryptoStore().loadMarySettings()
+        assertTrue(reloaded.providers.isEmpty())
+        assertTrue(reloaded.models.isEmpty())
+        assertFalse(prefs.contains("provider_api_key_ciphertext.beta"))
+    }
+
+    @Test
+    fun failedEncryptionCannotCommitAnyRegistryOrKeyChange() {
+        val store = seedRegistry()
+        val before = prefs.all.toMap()
+        var encryptionCalls = 0
+        val failing = AgentSettingsStore(context, { value -> if (++encryptionCalls == 2) null else seal(value) }, ::unseal)
+        assertFalse(failing.saveRegistrySettings(store.loadMarySettings().copy(agentMode = true),
+            linkedMapOf("alpha" to "new-alpha-key", "beta" to "new-beta-key")))
+        assertEquals(2, encryptionCalls)
+        assertEquals(before, prefs.all)
+    }
+
+    @Test
+    fun legacyConfigUpdateDetachesOnlyItsModelWhenProviderWasShared() {
+        val store = seedRegistry()
+        val settings = store.loadMarySettings()
+        assertTrue(store.saveRegistrySettings(settings.copy(mainModelId = "alpha-model")))
+        val before = store.load()
+        store.save(before.copy(provider = before.provider.copy(baseUrl = "https://moved.invalid/v1", temperature = 0.6)))
+        val reloaded = fakeCryptoStore().loadMarySettings()
+        assertEquals("alpha-model", reloaded.mainModelId)
+        assertEquals("https://moved.invalid/v1", reloaded.configuration.provider.baseUrl)
+        assertEquals(0.6, reloaded.configuration.provider.temperature)
+        assertEquals("alpha-key", reloaded.configuration.provider.apiKey)
+        assertEquals("https://alpha.invalid/v1", reloaded.resolveModel("helper-model")?.baseUrl)
+        assertEquals("alpha-key", reloaded.resolveModel("helper-model")?.apiKey)
+        assertEquals("https://beta.invalid/v1", reloaded.resolveModel("beta-model")?.baseUrl)
+        assertTrue(reloaded.models.first { it.id == "alpha-model" }.providerId != "alpha")
+    }
+
+    private fun seedRegistry(): AgentSettingsStore {
+        check(prefs.edit().clear().putString("settings_snapshot_v1", """{"configuration":{}}""").commit())
+        val store = fakeCryptoStore()
+        val settings = MarySettings(agentMode = false, inheritApprovalModel = false,
+            providers = listOf(
+                MaryProviderConfig("alpha", "Alpha", "https://alpha.invalid/v1", Protocol.RESPONSES, modelCount = 17),
+                MaryProviderConfig("beta", "Beta", "https://beta.invalid/v1", Protocol.ANTHROPIC),
+            ),
+            models = listOf(
+                MaryModelConfig("alpha-model", "alpha", "remote-alpha", "Alpha custom name", contextWindowTokens = 60_000,
+                    contextSource = MaryModelValueSource.CATALOG, maxOutputTokens = 8_000,
+                    capabilities = setOf(MaryModelCapability.IMAGE, MaryModelCapability.TOOLS)),
+                MaryModelConfig("beta-model", "beta", "remote-beta"),
+                MaryModelConfig("helper-model", "alpha", "remote-helper"),
+            ), mainModelId = "beta-model", approvalModelId = "alpha-model", subagentModelId = "helper-model",
+        )
+        check(store.saveRegistrySettings(settings, mapOf("alpha" to "alpha-key", "beta" to "beta-key")))
+        return store
+    }
+
+    private fun fakeCryptoStore() = AgentSettingsStore(context, ::seal, ::unseal)
+    private fun seal(value: String) = "fixture:" + value.reversed()
+    private fun unseal(value: String) = value.takeIf { it.startsWith("fixture:") }?.removePrefix("fixture:")?.reversed()
 }

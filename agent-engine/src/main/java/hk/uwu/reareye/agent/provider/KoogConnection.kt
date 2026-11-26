@@ -76,6 +76,7 @@ internal fun nativeConnection(client: OkHttpClient, config: ProviderConfig): Nat
         LLMCapability.Tools,
         LLMCapability.Thinking
     )
+    if (config.supportsImageInput) capabilities += LLMCapability.Vision.Image
     if (config.protocol != Protocol.ANTHROPIC) capabilities += if (config.protocol == Protocol.RESPONSES)
         LLMCapability.OpenAIEndpoint.Responses else LLMCapability.OpenAIEndpoint.Completions
     val model = LLModel(

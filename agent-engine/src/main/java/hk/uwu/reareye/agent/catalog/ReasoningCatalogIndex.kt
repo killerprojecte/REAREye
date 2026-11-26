@@ -39,7 +39,7 @@ data class ReasoningCatalogRoute(
     val levels: List<ReasoningEffort>,
 )
 
-private fun endpoint(raw: String): String? {
+internal fun catalogEndpoint(raw: String): String? {
     val uri = runCatching { URI(raw) }.getOrNull() ?: return null
     val host = uri.host?.lowercase() ?: return null
     if (!uri.scheme.equals("https", ignoreCase = true) ||
@@ -78,7 +78,7 @@ class ReasoningCatalogSnapshot private constructor(
                 val routes = source.routes(normalizedRecord)
                 require(routes.isNotEmpty())
                 for (route in routes) {
-                    val baseUrl = requireNotNull(endpoint(route.baseUrl))
+                    val baseUrl = requireNotNull(catalogEndpoint(route.baseUrl))
                     val levels = immutableList(route.levels.sortedBy { it.ordinal })
                     val config = ProviderConfig(baseUrl = baseUrl, protocol = route.protocol, model = record.modelId)
                     require(supportedCapability(config, route.mapping, levels, source.displayName).validFor(config))
@@ -96,7 +96,7 @@ class ReasoningCatalogSnapshot private constructor(
 class ReasoningCatalogIndex private constructor(private val entries: Map<CatalogKey, CatalogCapability>) {
     fun capabilityFor(config: ProviderConfig): ReasoningCapability? {
         if (entries.isEmpty()) return null
-        val baseUrl = endpoint(config.baseUrl.trim()) ?: return null
+        val baseUrl = catalogEndpoint(config.baseUrl.trim()) ?: return null
         val entry = entries[CatalogKey(baseUrl, config.protocol, config.model.trim())] ?: return null
         return supportedCapability(config, entry.mapping, entry.levels, entry.sourceName)
     }

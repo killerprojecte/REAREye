@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mary_subagent_event">子代理 %1$s：%2$s</string>
+    <string name="mary_subagent_approval">子代理 %1$s 需要审批</string>
+    <plurals name="mary_subagents_running">
+        <item quantity="other">%1$d 个子代理正在运行</item>
+    </plurals>
+    <string name="mary_stop_subagents">停止子代理</string>
+</resources>

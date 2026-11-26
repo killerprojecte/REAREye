@@ -36,6 +36,7 @@ data class ProviderConfig(
     val credentialScopeTag: String? = null,
     /** Resolved from the current local catalog snapshot, never part of saved model settings. */
     @Transient val reasoningCatalogCapability: ReasoningCapability? = null,
+    val supportsImageInput: Boolean = false,
 ) {
     val isUsable: Boolean
         get() = baseUrl.isNotBlank() && model.isNotBlank()

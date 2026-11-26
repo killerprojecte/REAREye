@@ -37,7 +37,13 @@ data class ChatMessage(
     val protocolItems: List<JsonObject> = emptyList(),
     /** Authoritative Koog message. Projection edits must explicitly discard/rebuild this encoding. */
     val nativeEncoding: NativeMessageEncoding? = null,
+    /** References to user-selected files in this conversation; never a URI or file content. */
+    val attachments: List<WorkspaceAttachment> = emptyList(),
 )
+
+/** Stable metadata for a file owned by one local conversation. */
+@Serializable
+data class WorkspaceAttachment(val id: String, val name: String, val mime: String, val size: Long)
 
 /** Versioned, lossless native payload; absent for legacy text/tool messages. */
 @Serializable

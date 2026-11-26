@@ -442,7 +442,7 @@ internal fun ModelConfigurationCard(
 }
 
 @Composable
-private fun ReasoningConfiguration(
+internal fun ReasoningConfiguration(
     draft: ModelDraft,
     catalog: ReasoningCatalogIndex,
     onChange: (ModelDraft) -> Unit,
