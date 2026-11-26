@@ -219,12 +219,14 @@ class LyriconHook : RoxyHooker() {
             lyricServicesLifecycle = runtime.manage(
                 this.withAppContext {
                     val context = this
-                    when (LyricProvider.fromValue(
+                    val provider = LyricProvider.fromValue(
                         hookPrefs.getInt(
                             ConfigKeys.LYRIC_PROVIDER,
                             ConfigKeys.LYRIC_PROVIDER_DEFAULT
                         )
-                    )) {
+                    )
+                    YLog.info("Starting rear-screen lyric provider: $provider")
+                    when (provider) {
                         LyricProvider.LYRICON -> {
                             val listener = createLyricListener()
                             val lyriconMonitor =
@@ -409,15 +411,11 @@ class LyriconHook : RoxyHooker() {
                 returnType = Void.TYPE
                 parameters(MediaMetadata::class.java)
             }.hook {
-                replaceUnit {
-                    val metadata = args(0).cast<MediaMetadata>()
+                before {
+                    val metadata = args(0).cast<MediaMetadata?>()
                     val i = instance!!.asResolver().firstField {
                         name = "this$0"
-                    }.get()
-                    if (i == null) {
-                        callOriginal(metadata)
-                        return@replaceUnit
-                    }
+                    }.get() ?: return@before
                     elements.addIfAbsent(i)
                     val state = stateOf(i)
                     if (state.singleLineSession != null) {
@@ -440,10 +438,7 @@ class LyriconHook : RoxyHooker() {
                             ConfigKeys.HOOK_SKIP_UNCHANGED_MEDIA_TITLE_UPDATE,
                             false
                         )
-                    if (!removeNativeLyric && !skipTitleOnlyUpdate) {
-                        callOriginal(metadata)
-                        return@replaceUnit
-                    }
+                    if (!removeNativeLyric && !skipTitleOnlyUpdate) return@before
                     val metadataForUpdate = if (
                         removeNativeLyric && metadata != null
                     ) {
@@ -479,20 +474,16 @@ class LyriconHook : RoxyHooker() {
                             if (moreDebug) {
                                 YLog.debug("Skip metadata update: mediaId unchanged and only title changed")
                             }
-                            return@replaceUnit
+                            resultNull()
+                            return@before
                         }
                     }
-                    callOriginal(metadataForUpdate)
+                    // Let RoxyHook continue the call chain; callOriginal bypasses other hooks.
+                    args(0).set(metadataForUpdate)
                 }
-            }
-
-            musicControlListenerClz.firstMethod {
-                name = "onClientMetadataUpdate"
-                returnType = Void.TYPE
-                parameters(MediaMetadata::class.java)
-            }.hook {
                 after {
-                    val metadata = args(0).cast<MediaMetadata>()
+                    if (hasThrowable) return@after
+                    val metadata = args(0).cast<MediaMetadata?>()
                     val i = instance!!.asResolver().firstField {
                         name = "this$0"
                     }.get() ?: return@after
@@ -523,6 +514,9 @@ class LyriconHook : RoxyHooker() {
                     // register() can call back synchronously; queued callbacks must not survive cleanup.
                     if (superLyricConnection !== connection || !connection.isActive) return@launch
                     latestSuperLyric = snapshot
+                    if (hookPrefs.getBoolean(ConfigKeys.MORE_DEBUG, false)) {
+                        YLog.debug("SuperLyric callback: elements=${elements.size}, hasText=${!snapshot.text.isNullOrBlank()}")
+                    }
                     elements.forEach { element -> applySuperLyric(element, snapshot) }
                 }
             },
