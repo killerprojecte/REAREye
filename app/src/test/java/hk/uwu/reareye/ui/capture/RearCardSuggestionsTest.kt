@@ -14,6 +14,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import kotlin.math.abs
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -21,7 +22,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import hk.uwu.mixui.components.GlassPreferenceScene
+import hk.uwu.mixui.components.SuggestionMenu
 import hk.uwu.mixui.components.Text
 import hk.uwu.mixui.components.Card
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -111,13 +114,13 @@ class RearCardSuggestionsTest {
         }
         frames()
     }
-    private fun capture(backend: MixUiBackend, dark: Boolean, step: String) {
+    private fun capture(backend: MixUiBackend, dark: Boolean, step: String, includePopup: Boolean = step == "filter") {
         val folder = File(System.getProperty("ui.capture.output"), "glass-interaction-refinement/SUGGESTIONS").apply { mkdirs() }
         val name = "${backend.name.lowercase()}-${if (dark) "dark" else "light"}-$step"
         val frame = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }
         File(folder, "$name-window.png").outputStream().use { check(frame.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-        // Same-window glass overlay crop; the full production component fixture is above.
-        if (step == "filter") {
+        // Keep the raw card crop beside the full window when the popup is under test.
+        if (includePopup) {
             val popup = compose.onNode(isPopup()).captureToImage().asAndroidBitmap()
             File(folder, "$name-popup.png").outputStream().use { check(popup.compress(Bitmap.CompressFormat.PNG, 100, it)) }
         }
@@ -391,6 +394,86 @@ class RearCardSuggestionsTest {
             assertEquals("widget.00042", business.value)
             assertEquals("42", priority.value)
             compose.onNode(isPopup()).assertDoesNotExist()
+        }
+    }
+
+    @Test fun selectedHighlightIsInsetAndRoundedAtBothListEndsWithoutShrinkingTouchTargets() {
+        val longLabel = " candidate with a long model name that wraps and truncates in the suggestion list"
+        val titles = listOf("First$longLabel", "Second", "Third", "Fourth", "Fifth", "Final$longLabel")
+        val summary = "provider/model-with-a-long-identifier-and-a-suffix-that-must-truncate"
+        val summaries = titles.indices.map { if (it == 0 || it == titles.lastIndex) summary else null }
+        for (backend in listOf(MixUiBackend.Miuix, MixUiBackend.Mochi)) for (dark in listOf(false, true)) {
+            val selected = mutableStateOf(-1)
+            val taps = mutableListOf<Int>()
+            compose.mainClock.autoAdvance = false
+            compose.runOnUiThread {
+                activity?.close()
+                activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+                activity!!.get().enableEdgeToEdge()
+                activity!!.get().setContent {
+                    MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light) {
+                        GlassPreferenceScene(backgroundColor = Color(0xFF7B818E), overlayContent = {
+                            Box(Modifier.fillMaxSize().padding(start = 40.dp, top = 100.dp)) {
+                                SuggestionMenu(expanded = true, options = titles, selectedIndex = selected.value,
+                                    optionSummaries = summaries, onSelectedIndexChange = { taps.add(it) },
+                                    onDismissRequest = {}, maxHeight = 168.dp) {
+                                    Box(Modifier.width(260.dp).height(56.dp))
+                                }
+                            }
+                        }) {}
+                    }
+                }
+            }
+            frames()
+            val list = compose.onNodeWithTag("glass-suggestion-options")
+            val glassTag = if (backend == MixUiBackend.Miuix) "glass-suggestion-miuix" else "glass-suggestion-mochi"
+            compose.onNodeWithTag(glassTag).assertIsDisplayed()
+            assertEquals("$backend dark=$dark compact row retains the 56 dp minimum (mdpi)",
+                56, option(titles[1]).assertIsDisplayed().fetchSemanticsNode().size.height)
+            option(titles.last()).assertIsNotDisplayed()
+            for (index in listOf(0, titles.lastIndex)) {
+                if (index != 0) {
+                    // Capture the final row at the same scroll position before and after selection.
+                    compose.mainClock.autoAdvance = true
+                    try { list.performScrollToIndex(index) } finally { compose.mainClock.autoAdvance = false }
+                    frames()
+                    option(titles.first()).assertIsNotDisplayed()
+                }
+                val phase = if (index == 0) "first" else "last"
+                val description = "$backend dark=$dark $phase row"
+                val row = option(titles[index]).assertIsDisplayed().assertIsNotSelected().assertTextContains(summary)
+                val before = row.captureToImage().asAndroidBitmap()
+                compose.runOnUiThread { selected.value = index }; frames()
+                row.assertIsDisplayed().assertIsSelected().assertTextContains(summary)
+                val after = row.captureToImage().asAndroidBitmap()
+                assertInsetHighlight(description, before, after)
+                capture(backend, dark, "highlight-$phase", includePopup = true)
+                row.performTouchInput { click(Offset(if (index == 0) 3f else width - 4f, centerY)) }
+                compose.runOnIdle { assertEquals(if (index == 0) listOf(0) else listOf(0, index), taps) }
+            }
+        }
+    }
+
+    private fun assertInsetHighlight(description: String, before: Bitmap, after: Bitmap) {
+        val w = after.width
+        val h = after.height
+        assertEquals("$description width", before.width, w)
+        assertEquals("$description height", before.height, h)
+        assertTrue("$description keeps its 56 dp hit target (mdpi)", h >= 56)
+        fun delta(x: Int, y: Int): Int {
+            val a = before.getPixel(x, y)
+            val b = after.getPixel(x, y)
+            return abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) +
+                abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) +
+                abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))
+        }
+        // Sample outside text/check bounds; compare the same pixels with no selection.
+        for ((x, y) in listOf(3 to h / 2, w - 4 to h / 2, w / 2 to 1, w / 2 to h - 2,
+            9 to 6, w - 10 to 6, 9 to h - 7, w - 10 to h - 7)) {
+            assertTrue("$description should leave the glass bare at ($x, $y)", delta(x, y) <= 3)
+        }
+        for ((x, y) in listOf(9 to h / 2, w - 10 to h / 2, w / 2 to 6, w / 2 to h - 7)) {
+            assertTrue("$description should tint the glass at ($x, $y)", delta(x, y) > 3)
         }
     }
 

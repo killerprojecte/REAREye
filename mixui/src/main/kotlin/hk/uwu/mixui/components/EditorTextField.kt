@@ -57,6 +57,7 @@ fun EditorTextField(
     autoFocus: Boolean = false,
     focusSessionKey: Any? = Unit,
     selectAllOnFocus: Boolean = false,
+    backgroundColor: Color? = null,
 ) {
     val inlineLabel = LocalMixUiBackend.current == MixUiBackend.Miuix &&
         LocalFormPresentation.current != FormPresentation.Page
@@ -117,7 +118,7 @@ fun EditorTextField(
             minLines = minLines,
             visualTransformation = visualTransformation,
             selectAllOnFocus = selectAllOnFocus,
-            backgroundColor = if (nativeMochi ||
+            backgroundColor = backgroundColor ?: if (nativeMochi ||
                 (inlineLabel && LocalFormPresentation.current == FormPresentation.Sheet)) null else Color.Transparent,
         )
     }

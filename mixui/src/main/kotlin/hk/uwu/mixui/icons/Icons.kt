@@ -19,6 +19,7 @@ import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.icon.extended.Tune
+import top.yukonga.miuix.kmp.icon.glass.Delete
 
 /** Shared vector assets; application layouts never depend on a vendor icon namespace. */
 object Icons {
@@ -38,6 +39,9 @@ object Icons {
         val Check: ImageVector get() = MiuixIcons.Basic.Check
         val Search: ImageVector get() = MiuixIcons.Basic.Search
         val SearchCleanup: ImageVector get() = MiuixIcons.Basic.SearchCleanup
+    }
+    object Glass {
+        val Delete: ImageVector get() = MiuixIcons.Glass.Delete
     }
     object Regular {
         val Link: ImageVector get() = MiuixIcons.Regular.Link

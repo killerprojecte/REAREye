@@ -12,9 +12,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -40,11 +44,15 @@ import top.yukonga.miuix.kmp.material.GlassDefaults
 import top.yukonga.miuix.kmp.material.GlassEdgeStrokes
 import top.yukonga.miuix.kmp.material.GlassShadows
 import top.yukonga.miuix.kmp.material.GlassShape
-import androidx.compose.ui.graphics.luminance
 import ui.feice.mochi.effect.glass.LocalMochiBackdrop
 import ui.feice.mochi.effect.glass.MochiGlassSurface
 import ui.feice.mochi.theme.MochiTheme
 import kotlin.math.roundToInt
+
+private val SuggestionCardRadius = 20.dp
+private val SuggestionHighlightHorizontalInset = 6.dp
+private val SuggestionHighlightVerticalInset = 4.dp
+private val SuggestionHighlightRadius = SuggestionCardRadius - SuggestionHighlightHorizontalInset
 
 /**
  * Editable, non-focusable suggestions: prefer a shorter panel BELOW the field,
@@ -134,18 +142,33 @@ fun SuggestionMenu(
                 contentPadding = PaddingValues(vertical = 4.dp)) {
                 itemsIndexed(options, key = { index, _ -> rowKeys[index] }) { index, title ->
                     val selected = selectedIndex == index
+                    val primary = MixTheme.colorScheme.primary
+                    val highlight = if (selected) Modifier.drawBehind {
+                        // Inset only the paint: keep the full row tappable and the text aligned.
+                        val horizontal = SuggestionHighlightHorizontalInset.toPx()
+                        val vertical = SuggestionHighlightVerticalInset.toPx()
+                        val width = size.width - 2 * horizontal
+                        val height = size.height - 2 * vertical
+                        if (width > 0f && height > 0f) {
+                            drawRoundRect(
+                                color = primary.copy(alpha = 0.08f),
+                                topLeft = Offset(horizontal, vertical),
+                                size = Size(width, height),
+                                cornerRadius = CornerRadius(SuggestionHighlightRadius.toPx()),
+                            )
+                        }
+                    } else Modifier
                     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp)
                         .focusProperties { canFocus = false }
                         .selectable(selected = selected, role = Role.RadioButton) {
                             if (expandedNow) selectNow(index)
                         }
-                        .background(if (selected) MixTheme.colorScheme.primary.copy(alpha = 0.08f)
-                            else androidx.compose.ui.graphics.Color.Transparent)
+                        .then(highlight)
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(title, color = if (selected) MixTheme.colorScheme.primary else MixTheme.colorScheme.onSurface,
+                            Text(title, color = if (selected) primary else MixTheme.colorScheme.onSurface,
                                 maxLines = 2, overflow = TextOverflow.Ellipsis)
                             optionSummaries.getOrNull(index)?.takeIf { it.isNotBlank() }?.let {
                                 Text(it, style = MixTheme.textStyles.footnote1,
@@ -154,7 +177,7 @@ fun SuggestionMenu(
                             }
                         }
                         if (selected) Icon(Icons.Basic.Check, contentDescription = null,
-                            tint = MixTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            tint = primary, modifier = Modifier.size(20.dp))
                     }
                 }
             }
@@ -233,11 +256,11 @@ private fun SuggestionCard(modifier: Modifier, allowGlass: Boolean, content: @Co
     Box(modifier) {
         when (LocalMixUiBackend.current) {
             MixUiBackend.Miuix -> {
-                val backdrop = if (allowGlass) LocalGlassSheetActionBackdrop.current
+                val backdrop = if (allowGlass) LocalGlassSheetPopupBackdrop.current
                     ?: (LocalGlassFormBackdrop.current as? GlassFormBackdrop.Miuix)?.value
                     ?: (LocalGlassPreferenceBackdrop.current as? GlassFormBackdrop.Miuix)?.value else null
                 val dark = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.background.luminance() < 0.5f
-                val shape = GlassShape(20.dp)
+                val shape = GlassShape(SuggestionCardRadius)
                 Box(Modifier.testTag(if (backdrop != null) "glass-suggestion-miuix" else "solid-suggestion-card")
                     .glassPanel(backdrop = backdrop, shape = shape, style = GlassDefaults.style(dark),
                         material = modalGlassMaterial(), stroke = GlassEdgeStrokes.forTheme(dark),
@@ -250,9 +273,9 @@ private fun SuggestionCard(modifier: Modifier, allowGlass: Boolean, content: @Co
                 val material = MochiTheme.materials.menuGlass
                 if (backdrop != null && material != null) {
                     MochiGlassSurface(Modifier.testTag("glass-suggestion-mochi"), backdrop = backdrop,
-                        material = material, cornerRadius = 20.dp) { content() }
+                        material = material, cornerRadius = SuggestionCardRadius) { content() }
                 } else Box(Modifier.testTag("solid-suggestion-card")
-                    .background(fallback, RoundedCornerShape(20.dp))) { content() }
+                    .background(fallback, RoundedCornerShape(SuggestionCardRadius))) { content() }
             }
         }
     }

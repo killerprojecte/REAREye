@@ -31,7 +31,8 @@ internal val LocalGlassPreferenceBackdrop = staticCompositionLocalOf<GlassFormBa
 /**
  * Native single-selection preference. No persistence is owned by this control.
  * Both backends request dismissal before delivering selection to the caller.
- * Requires GlassTopBarScaffold or GlassPreferenceScene; the host supplies real page pixels.
+ * A native Miuix glass sheet supplies its own source and popup owner. Otherwise,
+ * requires GlassTopBarScaffold or GlassPreferenceScene for the page source.
  */
 @Composable
 fun GlassSelectPreference(
@@ -43,10 +44,13 @@ fun GlassSelectPreference(
     summary: String? = null,
     enabled: Boolean = true,
     supportingText: PreferenceSupportingText? = null,
+    onExpandedChange: ((Boolean) -> Unit)? = null,
 ) {
-    val backdrop = checkNotNull(LocalGlassPreferenceBackdrop.current) {
-        "GlassSelectPreference requires GlassTopBarScaffold or GlassPreferenceScene"
-    }
+    val inNativeSheet = LocalMiuixSheetTabs.current && LocalFormPresentation.current == FormPresentation.Sheet
+    val backdrop = if (inNativeSheet) GlassFormBackdrop.Miuix(LocalGlassSheetPopupBackdrop.current)
+        else checkNotNull(LocalGlassPreferenceBackdrop.current) {
+            "GlassSelectPreference requires a native Miuix glass sheet, GlassTopBarScaffold or GlassPreferenceScene"
+        }
     val actualEnabled = enabled && items.isNotEmpty()
     val rowModifier = modifier.semantics(mergeDescendants = true) {
         if (!actualEnabled) disabled()
@@ -55,18 +59,29 @@ fun GlassSelectPreference(
         is GlassFormBackdrop.Miuix -> top.yukonga.miuix.kmp.glass.GlassDropdownPreference(
             title = title, items = items, selectedIndex = selectedIndex,
             onSelectedIndexChange = onSelectedIndexChange,
-            modifier = rowModifier.miuixSheetPreferenceSurface(), summary = summary, enabled = actualEnabled,
-            showValue = false, backdrop = backdrop.value, renderInRootScaffold = true,
+            modifier = rowModifier.miuixSheetPreferenceSurface(actualEnabled), summary = summary, enabled = actualEnabled,
+            showValue = inNativeSheet, backdrop = backdrop.value,
+            // The local Scaffold places the menu above the sheet and outside its material recording.
+            renderInRootScaffold = !inNativeSheet,
+            onExpandedChange = onExpandedChange,
         )
         is GlassFormBackdrop.Mochi -> CompositionLocalProvider(LocalMochiBackdrop provides backdrop.value) {
             var expanded by remember { mutableStateOf(false) }
-            LaunchedEffect(actualEnabled) { if (!actualEnabled) expanded = false }
+            fun setExpanded(next: Boolean) {
+                val requested = next && actualEnabled
+                if (expanded != requested) {
+                    expanded = requested
+                    onExpandedChange?.invoke(requested)
+                }
+            }
+            LaunchedEffect(actualEnabled) { if (!actualEnabled) setExpanded(false) }
             val nativeItems = remember(items) { items.map { MochiItem(label = it) }.toImmutableList() }
             val (anchorModifier, changeExpanded) = rememberMochiMenuActivation(
-                Modifier.widthIn(min = 34.dp, max = if (supportingText != null) 200.dp else 120.dp), actualEnabled, expanded,
-            ) { expanded = it && actualEnabled }
+                Modifier.widthIn(min = 34.dp, max = if (supportingText != null) 200.dp else 120.dp),
+                actualEnabled, expanded, ::setExpanded,
+            )
             MochiPreferenceContent(title = title, summary = if (supportingText != null) supportingText.description else summary, modifier = rowModifier, enabled = actualEnabled,
-                onClick = { expanded = true }) {
+                onClick = { setExpanded(true) }) {
                 MochiListRow(
                     title = title,
                     enabled = actualEnabled,
@@ -79,7 +94,7 @@ fun GlassSelectPreference(
                             enabled = actualEnabled,
                             onItemClick = { index ->
                                 if (actualEnabled && index in items.indices) {
-                                    expanded = false
+                                    setExpanded(false)
                                     onSelectedIndexChange(index)
                                 }
                             },

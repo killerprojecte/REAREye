@@ -10,12 +10,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
 import top.yukonga.miuix.kmp.blur.Backdrop
@@ -33,8 +41,14 @@ internal class NativeSheetMaterialSource(val backdrop: LayerBackdrop) {
     private var anchor: LayoutCoordinates? = null
     var origin by mutableStateOf<IntOffset?>(null)
         private set
+    var windowOrigin by mutableStateOf<Offset?>(null)
+        private set
 
-    fun updatePanel(value: LayoutCoordinates?) { panel = value; updateOrigin() }
+    fun updatePanel(value: LayoutCoordinates?) {
+        panel = value
+        windowOrigin = value?.takeIf { it.isAttached }?.positionInWindow()
+        updateOrigin()
+    }
     fun updateAnchor(value: LayoutCoordinates?) { anchor = value; updateOrigin() }
 
     private fun updateOrigin() {
@@ -49,6 +63,43 @@ internal class NativeSheetMaterialSource(val backdrop: LayerBackdrop) {
         if (origin != updated) origin = updated
     }
     var size by mutableStateOf(IntSize.Zero)
+}
+
+/** Full-window source for a popup crossing the sheet edge; sheet controls still use the local layer. */
+internal class NativeSheetPopupBackdrop(
+    private val page: Backdrop,
+    private val sheet: NativeSheetMaterialSource,
+) : Backdrop {
+    override val isCoordinatesDependent = true
+    override val backdropCoordinates: LayoutCoordinates? get() = page.backdropCoordinates
+
+    override fun DrawScope.drawBackdrop(
+        density: Density,
+        coordinates: LayoutCoordinates?,
+        layerBlock: (GraphicsLayerScope.() -> Unit)?,
+        downscaleFactor: Float,
+    ) {
+        with(page) { drawBackdrop(density, coordinates, layerBlock, downscaleFactor) }
+        val consumer = coordinates?.takeIf { it.isAttached } ?: return
+        val frame = backdropCoordinates ?: return
+        val window = consumer.positionInWindow()
+        val scrim = sheet.scope?.scrimColor?.value
+        val scale = 1f / downscaleFactor
+        if (scrim != null && scrim.alpha > 0f) {
+            val origin = (frame.positionInWindow() - window) * scale
+            drawRect(scrim, topLeft = origin, size = Size(frame.size.width * scale, frame.size.height * scale))
+        }
+        val panel = sheet.windowOrigin ?: return
+        val layer = sheet.backdrop.graphicsLayer
+        if (layer.size != sheet.size) return
+        val offset = (panel - window) * scale
+        // Use the actual panel origin, not the offscreen recording's position under
+        // the header action. Popup glass has no separate backdrop layer transform.
+        withTransform({
+            translate(offset.x, offset.y)
+            scale(scale, scale, Offset.Zero)
+        }) { drawLayer(layer) }
+    }
 }
 
 @Composable

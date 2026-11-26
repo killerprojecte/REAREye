@@ -1,26 +1,62 @@
 package hk.uwu.mixui.components
 
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onLayoutRectChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import hk.uwu.mixui.icons.Icons
 import hk.uwu.mixui.theme.MixTheme
 import top.yukonga.miuix.kmp.glass.GlassDropdownPopup
+import top.yukonga.miuix.kmp.glass.GlassPopupDefaults
 import top.yukonga.miuix.kmp.glass.GlassPopupSizing
+import top.yukonga.miuix.kmp.glass.glassSurface
+import ui.feice.mochi.basic.MochiPopoverDefaults
 import ui.feice.mochi.effect.glass.LocalMochiBackdrop
+import ui.feice.mochi.effect.glass.MochiGlassSurface
+import ui.feice.mochi.theme.MochiTheme
+
+sealed interface GlassAnchoredMenuPlacement {
+    data object Default : GlassAnchoredMenuPlacement
+
+    /** Stays in the editor's window and prefers the area above the button. */
+    data class AboveAnchor(val bottomInset: Dp = 0.dp) : GlassAnchoredMenuPlacement
+}
 
 /** A null [selected] denotes an action rather than a selectable option. */
 data class GlassMenuOption(
@@ -40,6 +76,8 @@ data class GlassMenuOption(
  * Popup and outside-touch layers are never part of the recorded page backdrop.
  * [menuContent] preserves specialized row layouts; its caller owns row selection
  * and closes [expanded] before invoking an action, just like the default rows.
+ * [GlassAnchoredMenuPlacement.AboveAnchor] uses the standard option rows so the
+ * whole menu can be sized before committing to either side of the anchor.
  */
 @Composable
 fun GlassAnchoredMenu(
@@ -52,6 +90,7 @@ fun GlassAnchoredMenu(
     width: Dp = 280.dp,
     maxHeight: Dp? = null,
     menuContent: (@Composable ColumnScope.() -> Unit)? = null,
+    placement: GlassAnchoredMenuPlacement = GlassAnchoredMenuPlacement.Default,
     anchor: @Composable () -> Unit,
 ) {
     val backdrop = checkNotNull(LocalGlassPreferenceBackdrop.current) {
@@ -73,6 +112,22 @@ fun GlassAnchoredMenu(
                 }
             }
         }
+    }
+    if (placement is GlassAnchoredMenuPlacement.AboveAnchor) {
+        require(menuContent == null) { "AboveAnchor uses GlassMenuOption rows" }
+        // Keep the window inset listener active before the first opening. Reading it
+        // only inside the overlay defers the initial system-bar/IME geometry.
+        val safeDrawing = WindowInsets.safeDrawing
+        val bounds = remember { mutableStateOf(IntRect.Zero) }
+        val trackAnchor = remember { Modifier.onLayoutRectChanged(debounceMillis = 0) { bounds.value = it.boundsInWindow } }
+        Box(modifier.then(trackAnchor)) { anchor() }
+        if (expanded && active) {
+            GlassPreferenceOverlay {
+                AboveAnchorMenu(backdrop, { bounds.value }, safeDrawing, placement.bottomInset, width, maxHeight,
+                    onDismiss = { onExpandedChange(false) }, rows = rows)
+            }
+        }
+        return
     }
     when (backdrop) {
         is GlassFormBackdrop.Miuix -> {
@@ -135,6 +190,173 @@ fun GlassAnchoredMenu(
                         CompositionLocalProvider(ui.feice.mochi.theme.LocalMochiMaterials provides materials) { anchor() }
                     },
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboveAnchorMenu(
+    backdrop: GlassFormBackdrop,
+    anchorBounds: () -> IntRect,
+    safeDrawing: WindowInsets,
+    bottomInset: Dp,
+    width: Dp,
+    maxHeight: Dp?,
+    onDismiss: () -> Unit,
+    rows: @Composable ColumnScope.() -> Unit,
+) {
+    val dismiss by rememberUpdatedState(onDismiss)
+    BackHandler { dismiss() }
+    val view = LocalView.current
+    DisposableEffect(view) {
+        // Dismiss the menu before the IME handles system Back; don't focus a new window.
+        val dispatcher = view.findOnBackInvokedDispatcher()
+        val callback = OnBackInvokedCallback { dismiss() }
+        dispatcher?.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_OVERLAY, callback)
+        onDispose { dispatcher?.unregisterOnBackInvokedCallback(callback) }
+    }
+
+    val windowInfo = LocalWindowInfo.current
+    var origin by remember { mutableStateOf<IntOffset?>(null) }
+    val trackOrigin = remember { Modifier.onLayoutRectChanged(debounceMillis = 0) { origin = it.boundsInWindow.topLeft } }
+
+    Layout(
+        modifier = Modifier.fillMaxSize().then(trackOrigin),
+        content = {
+            // A sibling of the panel catches taps outside without focusing the page underneath.
+            Box(Modifier.pointerInput(Unit) { detectTapGestures { dismiss() } })
+            val panelModifier = Modifier.testTag("glass-anchored-menu-above")
+                .semantics { this[SemanticsProperties.IsPopup] = Unit }
+                .pointerInput(Unit) {
+                    // Own even the padded areas of the panel; don't consume taps meant for rows.
+                    awaitPointerEventScope { while (true) awaitPointerEvent() }
+                }
+            AboveAnchorMenuSurface(backdrop, panelModifier) {
+                Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp), content = rows)
+            }
+        },
+    ) { measurables, constraints ->
+        val hostWidth = constraints.maxWidth
+        val hostHeight = constraints.maxHeight
+        val hostOrigin = origin ?: return@Layout layout(hostWidth, hostHeight) {}
+        val anchor = anchorBounds()
+        val window = windowInfo.containerSize
+        val left = maxOf(hostOrigin.x, safeDrawing.getLeft(this, layoutDirection))
+        val top = maxOf(hostOrigin.y, safeDrawing.getTop(this))
+        val right = minOf(hostOrigin.x + hostWidth, window.width - safeDrawing.getRight(this, layoutDirection))
+        val bottom = minOf(hostOrigin.y + hostHeight,
+            window.height - maxOf(safeDrawing.getBottom(this), bottomInset.roundToPx()))
+        if (minOf(right, anchor.right) <= maxOf(left, anchor.left) ||
+            minOf(bottom, anchor.bottom) <= maxOf(top, anchor.top)
+        ) return@Layout layout(hostWidth, hostHeight) {}
+
+        val margin = 8.dp.roundToPx()
+        val gap = 6.dp.roundToPx()
+        val panelWidth = minOf(width.roundToPx(), right - left - margin * 2)
+        val above = (anchor.top - gap - top - margin).coerceAtLeast(0)
+        val below = (bottom - margin - anchor.bottom - gap).coerceAtLeast(0)
+        val heightLimit = maxHeight?.roundToPx() ?: Constraints.Infinity
+        if (panelWidth <= 0 || heightLimit <= 0 || maxOf(above, below) == 0) {
+            return@Layout layout(hostWidth, hostHeight) {}
+        }
+
+        val panel = measurables[1]
+        // If below is larger, use it only when the full menu fits there (or there's
+        // no room above at all). Otherwise scroll in the preferred upper space.
+        val useBelow = above == 0 || (below > above &&
+            minOf(heightLimit, panel.maxIntrinsicHeight(panelWidth)).let { it in (above + 1)..below })
+        val card = panel.measure(Constraints.fixedWidth(panelWidth).copy(
+            maxHeight = minOf(heightLimit, if (useBelow) below else above)))
+        val anchorStart = if (layoutDirection == LayoutDirection.Ltr) anchor.left else anchor.right - card.width
+        val x = anchorStart.coerceIn(left + margin, right - margin - card.width)
+        val y = if (useBelow) anchor.bottom + gap else anchor.top - gap - card.height
+        val outside = measurables[0].measure(Constraints.fixed(hostWidth, hostHeight))
+        layout(hostWidth, hostHeight) {
+            outside.place(0, 0)
+            card.place(x - hostOrigin.x, y - hostOrigin.y)
+        }
+    }
+}
+
+@Composable
+private fun AboveAnchorMenuSurface(
+    backdrop: GlassFormBackdrop,
+    modifier: Modifier,
+    content: @Composable () -> Unit,
+) {
+    when (backdrop) {
+        is GlassFormBackdrop.Miuix -> {
+            val radius = 24.dp
+            val surface = glassSurface(backdrop.value, GlassPopupDefaults.visuals(), radius)(RoundedCornerShape(radius))
+            Box(modifier.then(surface)) { content() }
+        }
+        is GlassFormBackdrop.Mochi -> {
+            val material = MochiTheme.materials.menuGlass
+            val radius = MochiPopoverDefaults.CornerRadius
+            if (material != null) {
+                MochiGlassSurface(modifier, material = material, backdrop = backdrop.value, cornerRadius = radius) {
+                    content()
+                }
+            } else {
+                val shape = RoundedCornerShape(radius)
+                Box(modifier.shadow(10.dp, shape).clip(shape).background(MixTheme.colorScheme.surfaceContainer)) {
+                    content()
+                }
+            }
+        }
+    }
+}
+
+/** A sheet anchor needs its own topmost popup on Miuix; the page overlay sits below the scrim. */
+@Composable
+fun GlassSheetAnchoredMenu(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    options: List<GlassMenuOption>,
+    onOptionClick: (Int) -> Unit,
+    enabled: Boolean = true,
+    maxHeight: Dp = 280.dp,
+    anchor: @Composable () -> Unit,
+) {
+    if (LocalGlassPreferenceBackdrop.current is GlassFormBackdrop.Mochi) {
+        GlassAnchoredMenu(expanded, onExpandedChange, options, onOptionClick,
+            enabled = enabled, maxHeight = maxHeight, anchor = anchor)
+        return
+    }
+    Box {
+        anchor()
+        if (expanded && enabled && options.isNotEmpty()) {
+            val gap = with(LocalDensity.current) { 6.dp.roundToPx() }
+            val margin = with(LocalDensity.current) { 10.dp.roundToPx() }
+            val position = remember(gap, margin) {
+                object : PopupPositionProvider {
+                    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
+                        layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+                        val w = popupContentSize.width
+                        val h = popupContentSize.height
+                        val x = anchorBounds.left + (anchorBounds.width - w) / 2
+                        val below = anchorBounds.bottom + gap
+                        val above = anchorBounds.top - gap - h
+                        val y = if (below + h <= windowSize.height - margin) below else above
+                        return IntOffset(x.coerceIn(margin, (windowSize.width - w - margin).coerceAtLeast(margin)),
+                            y.coerceIn(margin, (windowSize.height - h - margin).coerceAtLeast(margin)))
+                    }
+                }
+            }
+            Popup(position, onDismissRequest = { onExpandedChange(false) },
+                properties = PopupProperties(focusable = true)) {
+                val shape = RoundedCornerShape(24.dp)
+                Column(Modifier.width(260.dp).heightIn(max = maxHeight).shadow(10.dp, shape).clip(shape)
+                    .background(MixTheme.colorScheme.surfaceContainer).verticalScroll(rememberScrollState())
+                    .padding(vertical = 6.dp)) {
+                    options.forEachIndexed { index, option ->
+                        GlassMenuRow(option, enabled = option.enabled) {
+                            if (option.dismissOnClick) onExpandedChange(false)
+                            onOptionClick(index)
+                        }
+                    }
+                }
             }
         }
     }

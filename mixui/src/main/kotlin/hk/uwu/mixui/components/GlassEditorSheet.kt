@@ -1,6 +1,8 @@
 package hk.uwu.mixui.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -13,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
@@ -43,6 +46,8 @@ fun GlassEditorSheet(
     sessionKey: Any? = Unit,
     dismissRequestKey: Any? = Unit,
     modifier: Modifier = Modifier,
+    /** Optional secondary action, immediately before the confirmation action. */
+    beforeConfirmAction: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val currentShow by rememberUpdatedState(show)
@@ -56,6 +61,14 @@ fun GlassEditorSheet(
     if (show && retainedSession != sessionKey) retainedSession = sessionKey
     key(retainedSession) {
         val scroll = rememberScrollState()
+        val confirmAction: @Composable () -> Unit = {
+            BottomSheetActionButton(
+                enabled = show && confirmEnabled,
+                onClick = { if (currentShow && currentEnabled) confirm() },
+            ) {
+                Icon(MiuixIcons.Glass.Save, contentDescription = confirmText)
+            }
+        }
         GlassBottomSheet(
             show = show,
             title = title,
@@ -73,12 +86,12 @@ fun GlassEditorSheet(
                     Icon(MiuixIcons.Glass.Close, contentDescription = label)
                 }
             } },
-            endAction = {
-                BottomSheetActionButton(
-                    enabled = show && confirmEnabled,
-                    onClick = { if (currentShow && currentEnabled) confirm() },
-                ) {
-                    Icon(MiuixIcons.Glass.Save, contentDescription = confirmText)
+            endAction = if (beforeConfirmAction == null) confirmAction else {
+                {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        beforeConfirmAction()
+                        confirmAction()
+                    }
                 }
             },
         ) {

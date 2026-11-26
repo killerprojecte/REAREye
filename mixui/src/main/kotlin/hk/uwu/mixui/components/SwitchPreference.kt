@@ -36,7 +36,10 @@ fun SwitchPreference(
             checked = checked,
             onCheckedChange = onCheckedChange,
             title = title,
-            modifier = focusModifier.semantics { if (!enabled) disabled() }.miuixSheetPreferenceSurface(enabled),
+            modifier = focusModifier.semantics {
+                toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+                if (!enabled) disabled()
+            }.miuixSheetPreferenceSurface(enabled),
             summary = summary,
             enabled = enabled,
             insideMargin = insideMargin,

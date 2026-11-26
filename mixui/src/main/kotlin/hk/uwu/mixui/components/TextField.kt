@@ -7,7 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -133,75 +132,56 @@ fun TextField(
         val nativeTextStyle = textStyle ?: top.yukonga.miuix.kmp.theme.MiuixTheme.textStyles.main
         val resolvedTextStyle = if (disabledSheet) nativeTextStyle.copy(color = palette.disabledOnSurface)
             else nativeTextStyle
-        if (selectAllOnFocus) {
-            // Keep IME composition and selection across String callbacks. Parent echoes
-            // of typed text must not create a new TextFieldValue or select it again.
-            var editorValue by remember { mutableStateOf(TextFieldValue(value)) }
-            // Business text remains authoritative even if a filter rejects an edit
-            // without changing value. Echoed text reuses the full IME value unchanged.
-            val presentedValue = if (editorValue.text == value) editorValue else {
-                editorValue.copy(text = value, composition = null)
-            }
-            SideEffect {
-                if (editorValue != presentedValue) editorValue = presentedValue
-            }
-            var isFocused by remember { mutableStateOf(false) }
-            LaunchedEffect(isFocused) {
-                if (isFocused) {
-                    // Apply after the focus-causing tap's cursor update, not on edits.
-                    editorValue = editorValue.copy(
-                        selection = TextRange(0, editorValue.text.length),
-                    )
-                }
-            }
-            top.yukonga.miuix.kmp.basic.TextField(
-                value = presentedValue,
-                onValueChange = { next ->
-                    // Read-only inputs still allow selection/copy; disabled inputs do not.
-                    if (enabled) {
-                        val previousText = editorValue.text
-                        editorValue = next
-                        if (next.text != previousText) guardedOnValueChange(next.text)
-                    }
-                },
-                modifier = fieldModifier.onFocusChanged { isFocused = it.isFocused },
-                label = label,
-                colors = colors,
-                enabled = enabled,
-                readOnly = readOnly,
-                textStyle = resolvedTextStyle,
-                keyboardOptions = keyboardOptions,
-                keyboardActions = keyboardActions,
-                leadingIcon = guardedLeading,
-                trailingIcon = guardedTrailing,
-                singleLine = singleLine,
-                maxLines = maxLines,
-                minLines = minLines,
-                visualTransformation = visualTransformation,
-            )
-        } else {
-            // The default path remains the native String overload and neutral fill.
-            top.yukonga.miuix.kmp.basic.TextField(
-                value = value,
-                onValueChange = guardedOnValueChange,
-                modifier = fieldModifier,
-                label = label,
-                colors = colors,
-                enabled = enabled,
-                readOnly = readOnly,
-                textStyle = resolvedTextStyle,
-                keyboardOptions = keyboardOptions,
-                keyboardActions = keyboardActions,
-                leadingIcon = guardedLeading,
-                trailingIcon = guardedTrailing,
-                singleLine = singleLine,
-                maxLines = maxLines,
-                minLines = minLines,
-                visualTransformation = visualTransformation,
-            )
+        var editorValue by remember { mutableStateOf(TextFieldValue(value)) }
+        // The native sheet can recompose with the previous String before the caller's
+        // edit reaches it. Display the caller's text, but don't commit that temporary
+        // mismatch: clamping against the shorter String would lose the new caret.
+        val presentedValue = editorValue.withText(value)
+        LaunchedEffect(value) {
+            // An actual change of the caller's text accepts the IME value or replaces
+            // it. A replacement cannot keep a composing range from another String.
+            editorValue = editorValue.withText(value)
         }
+        var lastDispatchedText = value
+        var isFocused by remember { mutableStateOf(false) }
+        LaunchedEffect(isFocused) {
+            if (isFocused && selectAllOnFocus) {
+                // Apply after the focus-causing tap's cursor update, not on edits.
+                editorValue = editorValue.copy(selection = TextRange(0, editorValue.text.length))
+            }
+        }
+        top.yukonga.miuix.kmp.basic.TextField(
+            value = presentedValue,
+            onValueChange = { next ->
+                // Read-only inputs still allow selection/copy; disabled inputs do not.
+                if (enabled) {
+                    editorValue = next
+                    if (next.text != lastDispatchedText) {
+                        lastDispatchedText = next.text
+                        guardedOnValueChange(next.text)
+                    }
+                }
+            },
+            modifier = fieldModifier.onFocusChanged { isFocused = it.isFocused },
+            label = label,
+            colors = colors,
+            enabled = enabled,
+            readOnly = readOnly,
+            textStyle = resolvedTextStyle,
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
+            leadingIcon = guardedLeading,
+            trailingIcon = guardedTrailing,
+            singleLine = singleLine,
+            maxLines = maxLines,
+            minLines = minLines,
+            visualTransformation = visualTransformation,
+        )
     }
 }
+
+private fun TextFieldValue.withText(text: String): TextFieldValue =
+    if (this.text == text) this else copy(text = text, composition = null)
 
 /** Disabled input decorations must not retain independent click/accessibility edit actions. */
 @Composable

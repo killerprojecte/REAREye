@@ -1,9 +1,12 @@
 package hk.uwu.mixui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -16,13 +19,19 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import hk.uwu.mixui.LocalMixUiBackend
 import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.theme.MixTheme
 import kotlinx.collections.immutable.toImmutableList
 import top.yukonga.miuix.kmp.blur.Backdrop
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.glass.GlassSegmentedTabRow
 import top.yukonga.miuix.kmp.glass.GlassSegmentedTabRowDefaults
+import top.yukonga.miuix.kmp.material.isRuntimeShaderSupported
 import kotlin.math.abs
 import ui.feice.mochi.effect.glass.LocalMochiBackdrop
 import ui.feice.mochi.effect.glass.MochiGlassSurface
+import ui.feice.mochi.effect.glass.mochiBackdropSource
+import ui.feice.mochi.effect.glass.rememberMochiBackdrop
 import ui.feice.mochi.theme.MochiTheme
 
 /** Body-only backdrop supplied by glass headers and native MIUIX sheets. */
@@ -108,6 +117,38 @@ fun GlassTabs(
         }
     }
 }
+/** Joined glass tabs on a scrolling form surface, without inheriting toolbar material. */
+@Composable
+fun InlineGlassTabs(
+    tabs: List<String>,
+    selectedTabIndex: Int,
+    onTabSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    surfaceColor: Color = MixTheme.colorScheme.surfaceContainer,
+) {
+    if (tabs.isEmpty()) return
+    val backend = LocalMixUiBackend.current
+    val miuix = if (backend == MixUiBackend.Miuix && isRuntimeShaderSupported()) rememberLayerBackdrop() else null
+    val mochi = if (backend == MixUiBackend.Mochi) rememberMochiBackdrop(surfaceColor) else null
+    val record = when {
+        miuix != null -> Modifier.layerBackdrop(miuix)
+        mochi != null -> Modifier.mochiBackdropSource(mochi)
+        else -> Modifier
+    }
+    Box(modifier, propagateMinConstraints = true) {
+        // Record just the underlying surface. The track and labels are siblings, so
+        // a selection or scroll frame cannot be sampled back into its own glass.
+        Box(Modifier.matchParentSize().then(record).background(surfaceColor))
+        CompositionLocalProvider(
+            LocalGlassTabsBackdrop provides miuix,
+            LocalGlassTabsMochiBackdrop provides mochi,
+            LocalGlassTabsSurfaceAlpha provides 1f,
+        ) {
+            GlassTabs(tabs, selectedTabIndex, onTabSelected)
+        }
+    }
+}
+
 // Native handles the indicator and selection. The host only vetoes pointer releases
 // belonging to its vertical scroller or stationary taps in the gaps between labels.
 @Composable

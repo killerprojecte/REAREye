@@ -32,6 +32,7 @@ internal class GlassSheetScene(
 internal val LocalGlassSheetScene = staticCompositionLocalOf<GlassSheetScene?> { null }
 internal val LocalGlassSheetActionAlpha = staticCompositionLocalOf { 0f }
 internal val LocalGlassSheetActionBackdrop = staticCompositionLocalOf<Backdrop?> { null }
+internal val LocalGlassSheetPopupBackdrop = staticCompositionLocalOf<Backdrop?> { null }
 
 /**
  * Put inside the full-window root Scaffold, around its page and bars. Only that
@@ -121,12 +122,16 @@ internal fun NativeGlassSheet(
             }
             val sheetSource = rememberNativeSheetMaterialSource()
             val sheetMaterial = rememberNativeSheetMaterialSurface(scene.backdrop, sheetSource)
+            val popupBackdrop = remember(scene.backdrop, sheetSource) {
+                scene.backdrop?.let { NativeSheetPopupBackdrop(it, sheetSource) }
+            }
             // A local popup owner preserves the caller's theme for MIUIX's native
             // header. Never route this entry back to the applied root theme.
             // Recalculate at full-window coordinates instead of inheriting a
             // scrolled page's consumed insets. Native sheet still owns top/IME.
             CompositionLocalProvider(
                 LocalGlassSheetActionBackdrop provides sheetSource.backdrop,
+                LocalGlassSheetPopupBackdrop provides popupBackdrop,
                 LocalGlassSheetActionAlpha provides actionAlpha,
             ) {
                 Scaffold(
