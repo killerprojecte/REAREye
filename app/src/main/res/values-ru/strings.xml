@@ -128,8 +128,6 @@
 
     <string name="category_module_settings">Настройки модуля</string>
     <string name="category_module_settings_desc">Настройки самого модуля REAREye</string>
-    <string name="module_theme_mode">Тема оформления</string>
-    <string name="module_theme_mode_desc">Переключение между вариантами оформления</string>
     <string name="module_navigation_bar_mode">Стиль панели навигации</string>
     <string name="module_navigation_bar_mode_desc">Выбор стиля панели навигации</string>
     <string name="module_navigation_bar_mode_normal">Обычный</string>
@@ -144,9 +142,6 @@
     <string name="module_store_api_custom_domain">Кастомный домен API</string>
     <string name="module_store_api_custom_domain_help">Укажите только доменное имя, без https:// и пути</string>
     <string name="module_store_api_custom_domain_invalid">Недопустимый домен. Укажите только имя хоста, без протокола, пути, параметров запроса и фрагмента</string>
-    <string name="module_theme_mode_miuix_system">Miuix: как в системе</string>
-    <string name="module_theme_mode_miuix_light">Miuix: светлая</string>
-    <string name="module_theme_mode_miuix_dark">Miuix: тёмная</string>
     <string name="module_theme_mode_monet_system">Monet: как в системе</string>
     <string name="module_theme_mode_monet_light">Monet: светлая</string>
     <string name="module_theme_mode_monet_dark">Monet: тёмная</string>
@@ -867,10 +862,4 @@
     <string name="guide_demo_wallpaper_result">В настоящем списке обоев пример отмечен как текущий. При обычном использовании здесь можно применять обои или добавлять их в список автоматической смены. После выхода из руководства демонстрационные данные не сохранятся.</string>
     <string name="guide_demo_try_action">Выполните действие в подсвеченной области</string>
 
-    <string name="mary_sidebar_title">Меню бесед Mary</string>
-    <string name="mary_sidebar_open">Открыть меню бесед</string>
-    <string name="mary_sidebar_close">Закрыть меню бесед</string>
-    <string name="mary_sidebar_locked">Беседа заблокирована</string>
-    <string name="mary_history_loading">Загрузка бесед…</string>
-    <string name="mary_history_load_failed">Не удалось загрузить беседы. Повторите попытку.</string>
-</resources>
+    </resources>
