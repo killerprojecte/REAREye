@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mary_subagent_event">Subagent %1$s: %2$s</string>
+    <string name="mary_subagent_approval">Subagent %1$s needs approval</string>
+    <plurals name="mary_subagents_running">
+        <item quantity="one">%1$d subagent running</item>
+        <item quantity="other">%1$d subagents running</item>
+    </plurals>
+    <string name="mary_stop_subagents">Stop subagents</string>
+</resources>

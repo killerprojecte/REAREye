@@ -68,7 +68,7 @@
 .pl-mh .pl-en /* markup.heading entity.name */,
 .pl-ms /* meta.separator */ {
   font-weight: bold;
-  color: #0366d6;
+  color: #58a6ff;
 }
 
 .pl-mi /* markup.italic */ {
@@ -92,8 +92,8 @@
 }
 
 .pl-mc /* markup.changed, punctuation.definition.changed */ {
-  color: #b08800;
-  background-color: #fffdef;
+  color: #ffd33d;
+  background-color: #341a00;
 }
 
 .pl-mi2 /* markup.ignored, markup.untracked */ {
@@ -107,7 +107,7 @@
 }
 
 .pl-mo /* meta.output */ {
-  color: #0366d6;
+  color: #58a6ff;
 }
 
 .pl-ba /* brackethighlighter.tag, brackethighlighter.curly, brackethighlighter.round, brackethighlighter.square, brackethighlighter.angle, brackethighlighter.quote */ {

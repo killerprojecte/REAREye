@@ -3,13 +3,14 @@
  * Compatibility with JetBrains Koog 1.3.0 (Apache License 2.0).
  * Source: JetBrains/koog tag 1.3.0, prompt-executor-{anthropic,openai}-client.
  * Native clients retain ownership of request encoding, DTO decoding, and SSE transport.
- * This isolated shim fixes missing signature/redacted/encrypted-only streaming and usage fields.
+ * This isolated shim fixes omitted gateway chunk metadata and native reasoning/usage handling.
  * Remove once the corresponding upstream fixes are available in a pinned release.
  */
 package hk.uwu.reareye.agent.provider
 
 import ai.koog.agents.core.tools.ToolDescriptor
 import ai.koog.http.client.KoogHttpClient
+import ai.koog.http.client.KoogHttpClientException
 import ai.koog.prompt.Prompt
 import ai.koog.prompt.executor.clients.anthropic.AnthropicClientSettings
 import ai.koog.prompt.executor.clients.anthropic.AnthropicLLMClient
@@ -21,6 +22,7 @@ import ai.koog.prompt.message.ResponseMetaInfo
 import ai.koog.prompt.streaming.StreamFrame
 import ai.koog.prompt.streaming.toMessageResponse
 import hk.uwu.reareye.agent.Protocol
+import hk.uwu.reareye.agent.ProviderConfig
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
@@ -43,6 +45,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import java.util.UUID
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.reflect.KClass
@@ -56,6 +59,39 @@ internal fun responsesMetadataDefaults(response: JsonObject): JsonObject {
     fields.putIfAbsent("parallel_tool_calls", JsonPrimitive(true))
     fields.putIfAbsent("text", JsonObject(emptyMap()))
     return JsonObject(fields)
+}
+
+/** Koog requires annotations on output_text, even when a compatible server has no citations. */
+internal fun responsesOutputTextDefaults(event: JsonObject): JsonObject {
+    fun patch(value: JsonElement, key: String, transform: (JsonElement) -> JsonElement): JsonElement {
+        val obj = value as? JsonObject ?: return value
+        val original = obj[key] ?: return obj
+        val updated = transform(original)
+        return if (original === updated) obj else JsonObject(obj + (key to updated))
+    }
+    fun elements(value: JsonElement, transform: (JsonElement) -> JsonElement): JsonElement {
+        val array = value as? JsonArray ?: return value
+        val updated = array.map(transform)
+        return if (array.indices.all { array[it] === updated[it] }) array else JsonArray(updated)
+    }
+    fun part(value: JsonElement): JsonElement {
+        val obj = value as? JsonObject ?: return value
+        if (obj["type"] != JsonPrimitive("output_text") || "annotations" in obj) return obj
+        // Present null/malformed annotations and missing text are still validated by Koog.
+        return JsonObject(obj + ("annotations" to JsonArray(emptyList())))
+    }
+    fun message(value: JsonElement): JsonElement =
+        if ((value as? JsonObject)?.get("type") == JsonPrimitive("message")) {
+            patch(value, "content") { elements(it, ::part) }
+        } else value
+
+    return when ((event["type"] as? JsonPrimitive)?.contentOrNull) {
+        "response.content_part.added", "response.content_part.done" -> patch(event, "part", ::part)
+        "response.output_item.added", "response.output_item.done" -> patch(event, "item", ::message)
+        "response.created", "response.in_progress", "response.completed", "response.incomplete", "response.failed" ->
+            patch(event, "response") { response -> patch(response, "output") { elements(it, ::message) } }
+        else -> event
+    } as JsonObject
 }
 
 /** A connection owns one dispatcher and serializes its native operations, never the caller's Call pool.
@@ -91,6 +127,81 @@ internal class TrackedCalls : AutoCloseable {
             synchronized(attached) { closed.set(true); attached.toList().also { attached.clear() } }
         calls.forEach { it.cancel() }
         dispatcher.cancelAll()
+    }
+}
+
+/** Koog 1.3 requires identity metadata it does not use when producing Chat stream frames. */
+private class GatewayChatChunks(
+    private val requestedModel: String,
+    private val config: ProviderConfig
+) {
+    private val chunkType = JsonPrimitive("chat.completion.chunk")
+    private val errorType = JsonPrimitive("error")
+    private val fallbackId by lazy { JsonPrimitive("chatcmpl-reareye-${UUID.randomUUID()}") }
+    private var id: JsonPrimitive? = null
+    private var model: JsonPrimitive? = null
+    private var created: JsonPrimitive? = null
+
+    fun normalize(chunk: JsonObject, raw: String): JsonObject {
+        // Never pass an in-band error to the success DTO: some gateways also send choices.
+        // Format here as the native agent graph bypasses KoogProviderAdapter. Keep the
+        // structured body and leave the HTTP status unset: this is an in-band error.
+        val type = chunk["type"]
+        val hasError = chunk["error"]?.let { it != JsonNull } == true
+        if (hasError || type == errorType || chunk["object"] == errorType) {
+            throw KoogHttpClientException(
+                errorBody = raw,
+                message = "Chat Completions SSE returned an error frame"
+            ).asAgentError(config, "POST /chat/completions")
+        }
+        if (type != null && type != chunkType) return chunk
+
+        val usage = chunk["usage"] as? JsonObject
+        val choices = chunk["choices"]
+        val isChatChunk = when (choices) {
+            is JsonArray -> if (choices.isEmpty()) usage != null else choices.all { element ->
+                val choice = element as? JsonObject ?: return@all false
+                val index = choice["index"] as? JsonPrimitive
+                index != null && !index.isString && index.intOrNull != null && choice["delta"] is JsonObject
+            }
+            JsonNull -> usage != null // Existing compatibility for null choices in usage-only frames.
+            else -> false
+        }
+        if (!isChatChunk) return chunk
+
+        fun readString(key: String): JsonPrimitive? {
+            val value = chunk[key] ?: return null
+            require(value is JsonPrimitive && value.isString) { "Chat Completions SSE $key must be a string" }
+            return value
+        }
+
+        val chunkObject = readString("object")
+        if (chunkObject != null && chunkObject != chunkType) return chunk
+        val chunkCreated = chunk["created"]?.let { value ->
+            require(value is JsonPrimitive && !value.isString && value.longOrNull != null) {
+                "Chat Completions SSE created must be an integer"
+            }
+            value
+        }
+        val chunkId = readString("id")
+        val chunkModel = readString("model")
+        if (choices is JsonArray) choices.forEach { element ->
+            val reason = element.jsonObject["finish_reason"]
+            require(reason == null || reason is JsonNull || (reason is JsonPrimitive && reason.isString)) {
+                "Chat Completions SSE finish_reason must be a string or null"
+            }
+        }
+        chunkId?.let { id = it }
+        chunkModel?.let { model = it }
+        chunkCreated?.let { created = it }
+        if (chunkId != null && chunkModel != null && chunkCreated != null && chunkObject != null) return chunk
+
+        val fields = chunk.toMutableMap()
+        if (chunkId == null) fields["id"] = id ?: fallbackId
+        if (chunkModel == null) fields["model"] = model ?: JsonPrimitive(requestedModel)
+        if (chunkCreated == null) fields["created"] = created ?: JsonPrimitive(0) // Unknown server timestamp.
+        if (chunkObject == null) fields["object"] = chunkType
+        return JsonObject(fields)
     }
 }
 
@@ -141,8 +252,9 @@ private class ProtocolState : AbstractCoroutineContextElement(Key) {
         )
     }
 
-    fun observe(raw: String, protocol: Protocol): String? {
+    fun observe(raw: String, protocol: Protocol, gatewayChat: GatewayChatChunks?): String? {
         val parsed = Json.parseToJsonElement(raw).jsonObject
+        val compatibleChat = gatewayChat?.normalize(parsed, raw) ?: parsed
         // Koog 1.3 requires these non-null response metadata fields even on lifecycle events.
         // Its native JSON uses SnakeCase. Only absent keys are defaulted: explicit null/wrong
         // types and missing core response fields must still fail in the native DTO decoder.
@@ -155,7 +267,7 @@ private class ProtocolState : AbstractCoroutineContextElement(Key) {
             else response?.let(::responsesMetadataDefaults)
         var item = if (compatibleResponse !== response) JsonObject(
             parsed + ("response" to requireNotNull(compatibleResponse))
-        ) else parsed
+        ) else compatibleChat
         var normalized = if (item === parsed) raw else item.toString()
         val type = item["type"]?.jsonPrimitive?.contentOrNull
         fun rememberUsage(value: JsonElement?) {
@@ -247,7 +359,7 @@ private class ProtocolState : AbstractCoroutineContextElement(Key) {
                 "message_stop" -> stopped = true
             }
         } else if (protocol == Protocol.RESPONSES) {
-            item = responseReasoning.observe(item, ready)
+            item = responseReasoning.observe(responsesOutputTextDefaults(item), ready)
             normalized = if (item === parsed) raw else item.toString()
             val response = item["response"] as? JsonObject
             rememberUsage(response?.get("usage"))
@@ -388,7 +500,7 @@ internal class ProtocolCompatibilityTransport(
     private val protocol: Protocol,
     private val calls: TrackedCalls,
     private val nativeOpenAI: Boolean,
-    private val providerConfig: hk.uwu.reareye.agent.ProviderConfig? = null,
+    private val providerConfig: ProviderConfig? = null,
 ) : KoogHttpClient by delegate {
     private fun request(value: Any): Any {
         val compatible = compatibilityRequest(value)
@@ -451,6 +563,12 @@ internal class ProtocolCompatibilityTransport(
 
         @Suppress("UNCHECKED_CAST")
         val body = request(requestBody) as T
+        val gatewayChat = if (protocol == Protocol.CHAT_COMPLETIONS && !nativeOpenAI && providerConfig != null) {
+            val model = (body as? String)?.let {
+                Json.parseToJsonElement(it).jsonObject["model"]?.jsonPrimitive?.contentOrNull
+            } ?: providerConfig.model
+            GatewayChatChunks(model, providerConfig)
+        } else null
         calls.request {
             // Decode outside Ktor's SSE session: otherwise its error mapper can mask a DTO failure
             // with a secondary Content-Length mismatch after the SSE body was already consumed.
@@ -461,7 +579,7 @@ internal class ProtocolCompatibilityTransport(
                 .buffer(kotlinx.coroutines.channels.Channel.BUFFERED)
                 .collect { data ->
                     val normalized =
-                        if (state != null) state.observe(data, protocol) ?: return@collect else data
+                        if (state != null) state.observe(data, protocol, gatewayChat) ?: return@collect else data
                     state?.emitReady?.let { emitFrame ->
                         while (state.ready.isNotEmpty()) emitFrame(
                             state.ready.removeFirst()

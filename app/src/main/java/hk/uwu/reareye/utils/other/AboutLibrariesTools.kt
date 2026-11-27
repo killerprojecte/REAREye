@@ -1,5 +1,7 @@
 package hk.uwu.reareye.utils.other
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.core.animateFloatAsState
@@ -35,21 +37,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import hk.uwu.reareye.R
-import hk.uwu.reareye.ui.components.RearBadgeGroup
-import hk.uwu.reareye.ui.components.RearBadgeItem
-import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.mixui.components.BadgeGroup
+import hk.uwu.mixui.components.BadgeItem
+import hk.uwu.mixui.components.ListItem
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonColors
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Link
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonColors
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.HorizontalDivider
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.GlassBottomSheet
+import androidx.compose.ui.platform.testTag
+import hk.uwu.mixui.theme.MixTheme
 
 @Serializable
 data class AboutLibraries(
@@ -106,14 +107,18 @@ fun loadLibraries(context: Context): AboutLibraries {
 }
 
 @Composable
-fun LibraryItem(lib: Library, licenses: Map<String, License>) {
+fun LibraryItem(
+    lib: Library,
+    licenses: Map<String, License>,
+    onLicenseClick: (License) -> Unit,
+) {
     val context = LocalContext.current
     val hasLink = lib.website != null
-    var showLicenses by remember { mutableStateOf<List<License>>(emptyList()) }
     var expandLicensesInline by remember { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        SuperCard(
+        ListItem(
+            animateContentSize = true,
             title = lib.name,
             summary = buildLibrarySummary(lib),
             endActions = {
@@ -137,8 +142,8 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
                         }
                     ) {
                         Icon(
-                            imageVector = MiuixIcons.Link,
-                            tint = MiuixTheme.colorScheme.onSurface,
+                            imageVector = UiIcons.Link,
+                            tint = MixTheme.colorScheme.onSurface,
                             contentDescription = null,
                         )
                     }
@@ -150,7 +155,7 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
                         modifier = Modifier
                             .height(16.dp),
                         thickness = 1.dp,
-                        color = MiuixTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        color = MixTheme.colorScheme.outline.copy(alpha = 0.5f)
                     )
                 }
                 val licenseEntries = lib.licenses.map { licenseId ->
@@ -159,11 +164,11 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
                 LibraryCreditsRow(
                     developers = lib.developers,
                     licenseBadges = licenseEntries.map { (licenseId, license) ->
-                        RearBadgeItem(
+                        BadgeItem(
                             text = licenseBadgeText(licenseId, license),
                             emphasized = false,
                             onClick = license?.let { targetLicense ->
-                                { showLicenses = listOf(targetLicense) }
+                                { onLicenseClick(targetLicense) }
                             },
                         )
                     },
@@ -171,61 +176,77 @@ fun LibraryItem(lib: Library, licenses: Map<String, License>) {
                     onExpand = { expandLicensesInline = true },
                     onCollapse = { expandLicensesInline = false },
                 )
-                if (showLicenses.isNotEmpty()) {
-                    val primaryColor = MiuixTheme.colorScheme.primary
-                    val dialogTitle = remember(showLicenses) {
-                        showLicenses.joinToString(" / ") { it.name }
-                    }
-                    OverlayBottomSheet(
-                        show = true,
-                        title = dialogTitle,
-                        onDismissRequest = { showLicenses = emptyList() }
-                    ) {
-                        val rawText = remember(showLicenses) {
-                            showLicenses.joinToString("\n\n") { license ->
-                                buildString {
-                                    append(license.name)
-                                    append("\n\n")
-                                    append(license.content ?: license.url)
-                                }
-                            }
-                        }
-
-                        val annotatedText = remember(rawText) {
-                            buildAnnotatedString {
-                                append(rawText)
-                                val urlPattern = Regex("(https?://[\\w-]+(\\.[\\w-]+)+(/\\S*)?)")
-                                urlPattern.findAll(rawText).forEach { match ->
-                                    addLink(
-                                        LinkAnnotation.Url(
-                                            url = match.value,
-                                            styles = TextLinkStyles(
-                                                SpanStyle(
-                                                    color = primaryColor,
-                                                    fontWeight = FontWeight.Bold,
-                                                )
-                                            )
-                                        ),
-                                        start = match.range.first,
-                                        end = match.range.last + 1
-                                    )
-                                }
-                            }
-                        }
-
-                        Text(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 560.dp)
-                                .padding(top = 8.dp)
-                                .verticalScroll(rememberScrollState()),
-                            text = annotatedText,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                    }
-                }
-
             },
+        )
+    }
+}
+
+/** Owned by the license page, never by a recyclable LazyColumn row. */
+internal class LibraryLicenseSheetState {
+    var selected by mutableStateOf<License?>(null)
+        private set
+    var visible by mutableStateOf(false)
+        private set
+    var session by mutableStateOf(0L)
+        private set
+
+    fun open(license: License) {
+        session++
+        selected = license
+        visible = true
+    }
+
+    fun dismiss(expectedSession: Long) {
+        if (session == expectedSession) visible = false
+    }
+
+    fun finishDismiss(expectedSession: Long) {
+        if (session == expectedSession && !visible) selected = null
+    }
+}
+
+@Composable
+internal fun LibraryLicenseSheet(state: LibraryLicenseSheetState) {
+    val license = state.selected ?: return
+    val session = state.session
+    GlassBottomSheet(
+        show = state.visible,
+        title = license.name,
+        sessionKey = session,
+        onDismissRequest = { state.dismiss(session) },
+        onDismissFinished = { state.finishDismiss(session) },
+    ) {
+        val primaryColor = MixTheme.colorScheme.primary
+        val rawText = remember(license) {
+            "${license.name}\n\n${license.content ?: license.url}"
+        }
+        val annotatedText = remember(rawText, primaryColor) {
+            buildAnnotatedString {
+                append(rawText)
+                val urlPattern = Regex("(https?://[\\w-]+(\\.[\\w-]+)+(/\\S*)?)")
+                urlPattern.findAll(rawText).forEach { match ->
+                    addLink(
+                        LinkAnnotation.Url(
+                            url = match.value,
+                            styles = TextLinkStyles(
+                                SpanStyle(color = primaryColor, fontWeight = FontWeight.Bold)
+                            ),
+                        ),
+                        start = match.range.first,
+                        end = match.range.last + 1,
+                    )
+                }
+            }
+        }
+        Text(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 560.dp)
+                .padding(top = 8.dp)
+                .testTag("about-license-body")
+                .verticalScroll(rememberScrollState()),
+            text = annotatedText,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
         )
     }
 }
@@ -246,7 +267,7 @@ private fun licenseBadgeText(licenseId: String, license: License?): String {
 @Composable
 private fun LibraryCreditsRow(
     developers: List<Developer>,
-    licenseBadges: List<RearBadgeItem>,
+    licenseBadges: List<BadgeItem>,
     expanded: Boolean,
     onExpand: () -> Unit,
     onCollapse: () -> Unit,
@@ -262,7 +283,7 @@ private fun LibraryCreditsRow(
             emptyList()
         } else {
             listOf(
-                RearBadgeItem(
+                BadgeItem(
                     text = LicenseBadgeOverflowText,
                     emphasized = false,
                     onClick = onExpand,
@@ -312,7 +333,7 @@ private fun LibraryCreditsRow(
             }
             Box(contentAlignment = Alignment.CenterEnd) {
                 if (licenseBadges.isNotEmpty()) {
-                    RearBadgeGroup(
+                    BadgeGroup(
                         badges = licenseBadges,
                         modifier = Modifier.graphicsLayer { alpha = fullBadgeAlpha },
                         horizontalAlignment = Alignment.End,
@@ -321,7 +342,7 @@ private fun LibraryCreditsRow(
             }
             Box(contentAlignment = Alignment.CenterEnd) {
                 if (overflowBadges.isNotEmpty()) {
-                    RearBadgeGroup(
+                    BadgeGroup(
                         badges = overflowBadges,
                         modifier = Modifier.graphicsLayer { alpha = overflowBadgeAlpha },
                         horizontalAlignment = Alignment.End,
@@ -499,7 +520,7 @@ private fun buildLibraryDevelopersText(developers: List<Developer>): AnnotatedSt
                         url = url,
                         styles = TextLinkStyles(
                             SpanStyle(
-                                color = MiuixTheme.colorScheme.primary,
+                                color = MixTheme.colorScheme.primary,
                             )
                         )
                     ),

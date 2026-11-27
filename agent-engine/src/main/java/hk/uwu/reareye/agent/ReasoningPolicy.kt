@@ -18,6 +18,7 @@ class ReasoningSupport internal constructor(
     val status: ReasoningStatus = if (levels.isEmpty()) ReasoningStatus.UNKNOWN else ReasoningStatus.SUPPORTED,
     val source: CapabilitySource = if (levels.isEmpty()) CapabilitySource.UNKNOWN else CapabilitySource.OFFLINE,
     private val exactLevels: Boolean = false,
+    val catalogSourceName: String? = null,
 ) {
     fun effectiveEffort(requested: ReasoningEffort): ReasoningEffort? {
         if (levels.isEmpty()) return null
@@ -41,15 +42,15 @@ object ReasoningPolicy {
     private val unknown = ReasoningSupport(emptyList())
 
     fun support(config: ProviderConfig): ReasoningSupport {
-        val capability = config.reasoningOverride?.takeIf {
-            it.source == CapabilitySource.MANUAL && it.validFor(config)
-        }
-            ?: config.reasoningMetadata?.takeIf {
-                it.source == CapabilitySource.SERVICE_METADATA && it.validFor(
-                    config
-                )
+        fun ReasoningCapability.knownFrom(source: CapabilitySource): Boolean =
+            this.source == source && status != ReasoningStatus.UNKNOWN && validFor(config)
+
+        val capability = config.reasoningOverride?.takeIf { it.knownFrom(CapabilitySource.MANUAL) }
+            ?: config.reasoningMetadata?.takeIf { it.knownFrom(CapabilitySource.SERVICE_METADATA) }
+            ?: config.reasoningCatalogCapability?.takeIf {
+                it.status == ReasoningStatus.SUPPORTED && it.knownFrom(CapabilitySource.CATALOG_METADATA)
             }
-        if (capability != null && capability.status != ReasoningStatus.UNKNOWN) {
+        if (capability != null) {
             val mode = when (capability.mapping) {
                 ReasoningMapping.OPENAI_EFFORT -> ReasoningMode.OPENAI
                 ReasoningMapping.OPENROUTER_REASONING -> ReasoningMode.GATEWAY_REASONING
@@ -63,7 +64,8 @@ object ReasoningPolicy {
                 mode,
                 capability.status,
                 capability.source,
-                exactLevels = true
+                exactLevels = true,
+                catalogSourceName = capability.catalogSourceName
             )
         }
         val raw = config.model.trim().lowercase()

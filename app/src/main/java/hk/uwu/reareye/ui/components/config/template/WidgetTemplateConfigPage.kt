@@ -43,6 +43,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -52,7 +53,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.toColorInt
@@ -113,34 +113,31 @@ import hk.uwu.reareye.repository.rearwidget.textValue
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateConfigRepository
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateField
 import hk.uwu.reareye.repository.widgettemplate.WidgetTemplateSchema
-import hk.uwu.reareye.ui.components.OverlayDialog
 import hk.uwu.reareye.ui.components.rememberRearWidgetTemplatePreviewBitmap
 import hk.uwu.reareye.widgetapi.RearWidgetTemplateConfigState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Checkbox
-import top.yukonga.miuix.kmp.basic.ColorPalette
-import top.yukonga.miuix.kmp.basic.ColorPicker
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.Slider
-import top.yukonga.miuix.kmp.basic.TabRowWithContour
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.ListItem
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.Checkbox
+import hk.uwu.mixui.components.ColorPalette
+import hk.uwu.mixui.components.ColorPicker
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.Slider
+import hk.uwu.mixui.components.Tabs
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.TextField
+import hk.uwu.mixui.components.ArrowPreference
+import hk.uwu.mixui.components.PreferenceRow
+import hk.uwu.mixui.components.GlassChoicePreference
+import hk.uwu.mixui.components.ChoiceOption
+import hk.uwu.mixui.components.DialogActions
+import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.SwitchPreference
+import hk.uwu.mixui.theme.MixTheme
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -206,6 +203,7 @@ fun WidgetTemplateConfigScreenContent(
 
     val resolvedSchema = schema
     val resolvedConfig = workingConfig
+    var showResetConfirm by remember(cardStorageKey) { mutableStateOf(false) }
     TemplateVarConfigScreenScaffold(
         modifier = modifier,
         title = titleText ?: stringResource(R.string.rear_widget_card_template_title),
@@ -233,7 +231,7 @@ fun WidgetTemplateConfigScreenContent(
                 onSave(normalized?.takeIf { it.isNotBlank() })
             }
         },
-        onReset = { onSave(null) },
+        onReset = { showResetConfirm = true },
         editorItems = { schemaValue, configValue ->
             widgetTemplateEditorItems(
                 business = business,
@@ -244,6 +242,31 @@ fun WidgetTemplateConfigScreenContent(
             )
         },
     )
+    GlassFormDialog(
+        show = showResetConfirm,
+        modifier = Modifier.testTag("template-reset-dialog"),
+        title = stringResource(R.string.rear_widget_template_reset_title),
+        onDismissRequest = { showResetConfirm = false },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                ListItem(
+                    animateContentSize = true,
+                    title = stringResource(R.string.rear_widget_template_reset_message),
+                )
+            }
+            DialogActions(
+                cancelText = stringResource(R.string.rear_widget_cancel),
+                confirmText = stringResource(R.string.rear_widget_card_template_use_defaults),
+                destructive = true,
+                onCancel = { showResetConfirm = false },
+                onConfirm = {
+                    showResetConfirm = false
+                    onSave(null)
+                },
+            )
+        }
+    }
 }
 
 private fun LazyListScope.widgetTemplateEditorItems(
@@ -555,8 +578,8 @@ private fun RangeFieldEditor(
             ) {
                 Text(
                     text = field.from.toString(),
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    style = MixTheme.textStyles.body2,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 )
                 Slider(
                     modifier = Modifier
@@ -577,8 +600,8 @@ private fun RangeFieldEditor(
                 )
                 Text(
                     text = rangeEnd.toString(),
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    style = MixTheme.textStyles.body2,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
             if (field.tagName == "FontSize" || (field.tagName == "SeekBar" && field.uiType == 1)) {
@@ -591,8 +614,8 @@ private fun RangeFieldEditor(
                     ) {
                         Text(
                             text = stringResource(R.string.rear_widget_card_template_font_preview_title),
-                            style = MiuixTheme.textStyles.body2,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            style = MixTheme.textStyles.body2,
+                            color = MixTheme.colorScheme.onSurfaceVariantSummary,
                         )
                         Text(
                             text = stringResource(R.string.rear_widget_card_template_font_preview_text),
@@ -660,9 +683,9 @@ private fun AlignFieldEditor(
                             .border(
                                 width = if (selected) 2.dp else 1.dp,
                                 color = if (selected) {
-                                    MiuixTheme.colorScheme.primary
+                                    MixTheme.colorScheme.primary
                                 } else {
-                                    MiuixTheme.colorScheme.outline.copy(alpha = 0.35f)
+                                    MixTheme.colorScheme.outline.copy(alpha = 0.35f)
                                 },
                                 shape = TemplateOptionCardShape,
                             )
@@ -682,18 +705,18 @@ private fun AlignFieldEditor(
                                 imageVector = option.icon,
                                 contentDescription = null,
                                 tint = if (selectedValue == option.value) {
-                                    MiuixTheme.colorScheme.primary
+                                    MixTheme.colorScheme.primary
                                 } else {
-                                    MiuixTheme.colorScheme.onBackground
+                                    MixTheme.colorScheme.onBackground
                                 },
                             )
                             Text(
                                 text = option.title,
-                                style = MiuixTheme.textStyles.body2,
+                                style = MixTheme.textStyles.body2,
                                 color = if (selected) {
-                                    MiuixTheme.colorScheme.primary
+                                    MixTheme.colorScheme.primary
                                 } else {
-                                    MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    MixTheme.colorScheme.onSurfaceVariantSummary
                                 },
                             )
                         }
@@ -804,8 +827,8 @@ private fun ImagePickFieldEditor(
         } else {
             Text(
                 text = stringResource(R.string.rear_widget_card_template_image_pick_summary),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
             Button(
@@ -856,7 +879,7 @@ private fun MultiImageFieldEditor(
     ) {
         TemplateSectionHeader(title = field.resolvedTitle())
         if (hasDarkVariant) {
-            TabRowWithContour(
+            Tabs(
                 tabs = listOf(
                     stringResource(R.string.rear_widget_card_template_preview_light),
                     stringResource(R.string.rear_widget_card_template_preview_dark),
@@ -1051,11 +1074,11 @@ private fun DateFieldEditor(
             } else {
                 stringResource(R.string.rear_widget_card_template_date_invalid)
             },
-            style = MiuixTheme.textStyles.body2,
+            style = MixTheme.textStyles.body2,
             color = if (valid) {
-                MiuixTheme.colorScheme.onSurfaceVariantSummary
+                MixTheme.colorScheme.onSurfaceVariantSummary
             } else {
-                MiuixTheme.colorScheme.error
+                MixTheme.colorScheme.error
             },
         )
     }
@@ -1382,7 +1405,7 @@ private fun AnimationFieldEditor(
 @Composable
 private fun CustomEditLinkFieldEditor(field: RearWidgetCustomEditLinkField) {
     val context = LocalContext.current
-    ArrowPreference(
+    PreferenceRow(
         title = stringResource(R.string.rear_widget_card_template_external_editor),
         summary = field.deeplink,
         onClick = {
@@ -1404,7 +1427,7 @@ private fun CustomEditLinkFieldEditor(field: RearWidgetCustomEditLinkField) {
 }
 
 @Composable
-private fun ColorValueEditor(
+internal fun ColorValueEditor(
     title: String,
     palette: List<String>,
     currentValue: String,
@@ -1439,8 +1462,8 @@ private fun ColorValueEditor(
         if (palette.isNotEmpty()) {
             Text(
                 text = stringResource(R.string.rear_widget_card_template_color_palette),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
             ColorPalette(
                 color = composeColor,
@@ -1462,9 +1485,9 @@ private fun ColorValueEditor(
                             .border(
                                 width = if (option.equals(currentValue, true)) 2.dp else 1.dp,
                                 color = if (option.equals(currentValue, true)) {
-                                    MiuixTheme.colorScheme.primary
+                                    MixTheme.colorScheme.primary
                                 } else {
-                                    MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                    MixTheme.colorScheme.onSurfaceVariantSummary
                                 },
                                 shape = RoundedCornerShape(999.dp),
                             )
@@ -1477,8 +1500,8 @@ private fun ColorValueEditor(
 
         Text(
             text = stringResource(R.string.rear_widget_card_template_color_manual),
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            style = MixTheme.textStyles.body2,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
         )
         TextField(
             value = rawValue,
@@ -1507,7 +1530,7 @@ private fun ColorValueEditor(
                         .clip(RoundedCornerShape(999.dp))
                         .border(
                             1.dp,
-                            MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            MixTheme.colorScheme.onSurfaceVariantSummary,
                             RoundedCornerShape(999.dp)
                         )
                         .background(parsedColor?.let(::Color) ?: Color.Transparent),
@@ -1518,12 +1541,12 @@ private fun ColorValueEditor(
                 ) {
                     Text(
                         text = stringResource(R.string.rear_widget_card_template_color_advanced),
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        style = MixTheme.textStyles.body2,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                     )
                     Text(
                         text = rawValue.ifBlank { stringResource(R.string.rear_widget_card_template_color_invalid) },
-                        color = if (parsedColor == null) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.onBackground,
+                        color = if (parsedColor == null) MixTheme.colorScheme.error else MixTheme.colorScheme.onBackground,
                     )
                 }
                 Button(onClick = { showAdvancedPicker = true }) {
@@ -1533,10 +1556,15 @@ private fun ColorValueEditor(
         }
     }
 
-    OverlayDialog(
+    hk.uwu.mixui.components.GlassEditorSheet(
+        modifier = Modifier.testTag("template-advanced-color"),
         show = showAdvancedPicker,
         title = stringResource(R.string.rear_widget_card_template_color_advanced),
         onDismissRequest = { showAdvancedPicker = false },
+        onConfirm = { showAdvancedPicker = false },
+        confirmText = stringResource(R.string.rear_widget_confirm),
+        cancelText = null,
+        sessionKey = title,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -1547,13 +1575,6 @@ private fun ColorValueEditor(
                 onColorChanged = { commitColor(it) },
                 modifier = Modifier.fillMaxWidth(),
             )
-            Button(
-                onClick = { showAdvancedPicker = false },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary(),
-            ) {
-                Text(text = stringResource(R.string.rear_widget_confirm))
-            }
         }
     }
 }
@@ -1608,7 +1629,7 @@ private fun TemplateSectionHeader(
     summary: String? = null,
     insideMargin: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
 ) {
-    BasicComponent(
+    ListItem(
         modifier = modifier.fillMaxWidth(),
         title = title,
         summary = summary?.takeIf { it.isNotBlank() },
@@ -1653,9 +1674,9 @@ private fun TemplateImageOptionCard(
         imageValue
     }
     val selectedBorderColor = if (selected) {
-        MiuixTheme.colorScheme.primary
+        MixTheme.colorScheme.primary
     } else {
-        MiuixTheme.colorScheme.outline.copy(alpha = 0.35f)
+        MixTheme.colorScheme.outline.copy(alpha = 0.35f)
     }
     val interactionSource =
         remember(imageValue, darkImageValue, label) { MutableInteractionSource() }
@@ -1703,8 +1724,8 @@ private fun TemplateImageOptionCard(
                 secondaryLabel?.takeIf { it.isNotBlank() }?.let {
                     Text(
                         text = it,
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        style = MixTheme.textStyles.body2,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                     )
                 }
             }
@@ -1712,8 +1733,8 @@ private fun TemplateImageOptionCard(
                 ImageOptionSelectionMode.None -> Unit
                 ImageOptionSelectionMode.Single -> Unit
                 ImageOptionSelectionMode.Multi -> Checkbox(
-                    state = if (selected) ToggleableState.On else ToggleableState.Off,
-                    onClick = onClick,
+                    checked = selected,
+                    onCheckedChange = { onClick() },
                 )
             }
         }
@@ -1752,8 +1773,8 @@ private fun TemplatePreviewThumbnail(
         } else {
             Text(
                 text = stringResource(R.string.rear_widget_card_template_preview_unavailable),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 modifier = Modifier.padding(horizontal = 8.dp),
             )
         }
@@ -1852,52 +1873,22 @@ private fun SingleChoicePreference(
 ) {
     val popupScope = rememberCoroutineScope()
     var showPopup by remember(title, selectedValue, options) { mutableStateOf(false) }
-    val entries = remember(options, optionSummaries) {
-        options.mapIndexed { index, option ->
-            DropdownItem(
-                title = option,
-                summary = optionSummaries.getOrNull(index)?.takeIf { it.isBlank().not() },
-            )
-        }
-    }
-
-    Box(modifier = Modifier.fillMaxWidth()) {
-        ArrowPreference(
-            title = title,
-            summary = summary,
-            holdDownState = showPopup,
-            onClick = { if (options.isNotEmpty()) showPopup = true },
-        )
-
-        OverlayListPopup(
-            show = showPopup,
-            popupModifier = Modifier.widthIn(min = 220.dp),
-            popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-            alignment = PopupPositionProvider.Align.End,
-            enableWindowDim = true,
-            onDismissRequest = { showPopup = false },
-            maxHeight = null,
-            minWidth = 220.dp,
-            renderInRootScaffold = true,
-        ) {
-            ListPopupColumn {
-                options.forEachIndexed { index, option ->
-                    DropdownImpl(
-                        item = entries[index],
-                        optionSize = options.size,
-                        isSelected = option == selectedValue,
-                        index = index,
-                        dropdownColors = DropdownDefaults.dropdownColors(),
-                        onSelectedIndexChange = {
-                            showPopup = false
-                            popupScope.launch {
-                                withFrameNanos { }
-                                onSelected(option)
-                            }
-                        },
-                    )
-                }
+    GlassChoicePreference(
+        title = title,
+        summary = summary,
+        expanded = showPopup,
+        onExpandedChange = { showPopup = it },
+        options = options.mapIndexed { index, option ->
+            ChoiceOption(title = option,
+                summary = optionSummaries.getOrNull(index)?.takeIf { it.isNotBlank() },
+                selected = option == selectedValue)
+        },
+        onOptionClick = { index ->
+            val option = options[index]
+            popupScope.launch {
+                withFrameNanos { }
+                onSelected(option)
             }
-        }
-    }
+        },
+    )
 }

@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.screen
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.view.KeyEvent as AndroidKeyEvent
 import android.view.View
 
@@ -55,15 +57,10 @@ import hk.uwu.reareye.agent.data.AgentSessionSummary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Add
-import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.Settings
-import top.yukonga.miuix.kmp.icon.extended.Refresh
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.theme.MixTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -85,6 +82,7 @@ internal fun MaryConversationSidebar(
     onDelete: (String) -> Unit,
     onClosed: () -> Unit = {},
     gestureState: MarySidebarGestureState? = null,
+    confirmDelete: Boolean = false,
 ) {
     val gestures = gestureState ?: remember { MarySidebarGestureState() }
     val dragProgress = gestures.progress.takeUnless { gestures.isOpening }
@@ -232,6 +230,7 @@ internal fun MaryConversationSidebar(
         val pane = stringResource(R.string.mary_sidebar_title)
         val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
         val modalFocus = remember { FocusRequester() }
+        var pendingDeleteSession by remember { mutableStateOf<AgentSessionSummary?>(null) }
         LaunchedEffect(preview) {
             // In touch mode Miuix buttons may not take focus. The modal itself must still own
             // hardware Escape/Tab rather than leaving the Activity without a focused target.
@@ -241,11 +240,15 @@ internal fun MaryConversationSidebar(
             BoxWithConstraints(
                 Modifier.fillMaxSize()
                     .then(if (preview) Modifier.semantics { hideFromAccessibility() }.testTag("mary-sidebar-preview")
-                        .pointerInput(Unit) {
+                        .pointerInput(gestures) {
                             // New hit paths are blocked. The already-down opening pointer retains its
                             // original path through the root draggable; this layer never steals it.
                             awaitPointerEventScope {
-                                while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    if (event.changes.any { it.pressed }) gestures.rejectOpening()
+                                    event.changes.forEach { it.consume() }
+                                }
                             }
                         }
                     else Modifier.testTag("mary-sidebar-modal")
@@ -293,14 +296,52 @@ internal fun MaryConversationSidebar(
                         onSelect = { id -> if (!preview) closeThen { onSelect(id) } },
                         onDelete = { id ->
                             if (!preview && show && gestures.progress == null && pendingAction == null && deleting.isEmpty()) {
-                                deleting = deleting + id
-                                onDelete(id)
+                                if (confirmDelete) {
+                                    pendingDeleteSession = sessions.firstOrNull { it.id == id }
+                                } else {
+                                    deleting = deleting + id
+                                    onDelete(id)
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxSize()
                             .then(if (preview) Modifier.clearAndSetSemantics { testTag = "mary-sidebar-preview-panel" }
                                 else Modifier.semantics { paneTitle = pane }),
                     )
+                }
+            }
+            if (!preview && confirmDelete) {
+                hk.uwu.mixui.components.FormDialog(
+                    show = pendingDeleteSession != null,
+                    modifier = Modifier.testTag("mary-sidebar-delete-dialog"),
+                    title = stringResource(R.string.mary_history_delete_title),
+                    onDismissRequest = { pendingDeleteSession = null },
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        hk.uwu.mixui.components.Card(modifier = Modifier.fillMaxWidth()) {
+                            hk.uwu.mixui.components.ListItem(
+                                animateContentSize = true,
+                                title = stringResource(
+                                    R.string.mary_history_delete_message,
+                                    pendingDeleteSession?.title.orEmpty(),
+                                ),
+                            )
+                        }
+                        hk.uwu.mixui.components.DialogActions(
+                            cancelText = stringResource(R.string.rear_widget_cancel),
+                            confirmText = stringResource(R.string.rear_widget_action_delete),
+                            destructive = true,
+                            onCancel = { pendingDeleteSession = null },
+                            onConfirm = {
+                                val target = pendingDeleteSession
+                                pendingDeleteSession = null
+                                if (target != null && deleting.isEmpty()) {
+                                    deleting = deleting + target.id
+                                    onDelete(target.id)
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -337,7 +378,7 @@ internal fun MarySidebarContent(
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = MiuixTheme.colorScheme
+    val colors = MixTheme.colorScheme
     val closeFocus = remember { FocusRequester() }
     LaunchedEffect(visualOnly) { if (!visualOnly) closeFocus.requestFocus() }
     val formatter = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
@@ -352,7 +393,7 @@ internal fun MarySidebarContent(
             Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(stringResource(R.string.mary_title), style = MiuixTheme.textStyles.title3,
+            Text(stringResource(R.string.mary_title), style = MixTheme.textStyles.title3,
                 fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp).focusRequester(closeFocus).testTag("mary-sidebar-close")) {
                 Icon(Icons.Outlined.Close, stringResource(R.string.mary_sidebar_close))
@@ -370,11 +411,11 @@ internal fun MarySidebarContent(
                     label = stringResource(if (locked) R.string.mary_sidebar_locked else R.string.mary_session_lock),
                     enabled = hasSession && !locked, onClick = onLock, tag = "mary-sidebar-lock",
                 )
-                SidebarAction(MiuixIcons.Settings, stringResource(R.string.mary_settings_title),
+                SidebarAction(UiIcons.Settings, stringResource(R.string.mary_settings_title),
                     onClick = onOpenSettings, tag = "mary-sidebar-settings")
                 Box(Modifier.padding(horizontal = 12.dp, vertical = 16.dp).fillMaxWidth().height(1.dp)
                     .background(colors.outline.copy(alpha = 0.35f)))
-                Text(stringResource(R.string.mary_history_title), style = MiuixTheme.textStyles.footnote1,
+                Text(stringResource(R.string.mary_history_title), style = MixTheme.textStyles.footnote1,
                     color = colors.onSurfaceVariantSummary,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
@@ -386,11 +427,11 @@ internal fun MarySidebarContent(
                             loadFailed -> R.string.mary_history_load_failed
                             else -> R.string.mary_history_empty
                         }),
-                        style = MiuixTheme.textStyles.footnote1,
+                        style = MixTheme.textStyles.footnote1,
                         color = colors.onSurfaceVariantSummary,
                         modifier = Modifier.padding(12.dp),
                     )
-                    if (loadFailed) SidebarAction(MiuixIcons.Refresh,
+                    if (loadFailed) SidebarAction(UiIcons.Refresh,
                         stringResource(R.string.credits_contributors_retry), onClick = onRetry,
                         tag = "mary-sidebar-retry")
                 }
@@ -407,12 +448,12 @@ internal fun MarySidebarContent(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(session.title, style = MiuixTheme.textStyles.body1,
+                            Text(session.title, style = MixTheme.textStyles.body1,
                                 color = colors.onSurface,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(stringResource(R.string.mary_history_meta,
                                 formatter.format(Date(session.updatedAt)), session.messageCount),
-                                style = MiuixTheme.textStyles.footnote2,
+                                style = MixTheme.textStyles.footnote2,
                                 color = colors.onSurfaceVariantSummary,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
@@ -421,7 +462,7 @@ internal fun MarySidebarContent(
                             tint = colors.onSurfaceVariantSummary)
                         IconButton(onClick = { onDelete(session.id) }, enabled = !deleting,
                             modifier = Modifier.size(48.dp).testTag("mary-sidebar-delete-${session.id}")) {
-                            Icon(MiuixIcons.Delete, stringResource(R.string.mary_history_delete),
+                            Icon(UiIcons.Delete, stringResource(R.string.mary_history_delete),
                                 modifier = Modifier.size(20.dp), tint = colors.onSurfaceVariantSummary)
                         }
                     }
@@ -438,10 +479,10 @@ internal fun MarySidebarContent(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(MiuixIcons.Add, null, tint = colors.onPrimary, modifier = Modifier.size(22.dp))
+            Icon(UiIcons.Add, null, tint = colors.onPrimary, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(10.dp))
             Text(stringResource(R.string.mary_action_new_chat), color = colors.onPrimary,
-                style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.Medium)
+                style = MixTheme.textStyles.body1, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -454,7 +495,7 @@ private fun SidebarAction(
     onClick: () -> Unit,
     tag: String,
 ) {
-    val color = if (enabled) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurfaceVariantSummary
+    val color = if (enabled) MixTheme.colorScheme.onSurface else MixTheme.colorScheme.onSurfaceVariantSummary
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
@@ -463,6 +504,6 @@ private fun SidebarAction(
     ) {
         Icon(icon, null, modifier = Modifier.size(22.dp), tint = color)
         Spacer(Modifier.width(14.dp))
-        Text(label, style = MiuixTheme.textStyles.body1, color = color)
+        Text(label, style = MixTheme.textStyles.body1, color = color)
     }
 }

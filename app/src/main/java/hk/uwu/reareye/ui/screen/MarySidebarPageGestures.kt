@@ -15,7 +15,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 
-/** One root host covers the page and its sibling app navigation, only while Mary registers it. */
+/** The content owns opening gestures; its sidebar preview is hosted above sibling navigation. */
 @Stable
 internal class MarySidebarPageGestureHost {
     // Independent of drawer-open registration.enabled: a pending release must die on leaving Mary.

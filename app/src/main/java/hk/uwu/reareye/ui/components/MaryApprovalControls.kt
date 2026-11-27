@@ -42,14 +42,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.interaction.ApprovalMode
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.PreferenceRow
+import hk.uwu.mixui.components.GlassAnchoredMenu
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 internal fun approvalModeTitle(mode: ApprovalMode): String = stringResource(
@@ -111,7 +109,7 @@ private val FullAccessWarning = Color(0xFFE97833)
 
 @Composable
 private fun approvalModeAccent(mode: ApprovalMode): Color =
-    if (mode == ApprovalMode.ALLOW_ALL) FullAccessWarning else MiuixTheme.colorScheme.primary
+    if (mode == ApprovalMode.ALLOW_ALL) FullAccessWarning else MixTheme.colorScheme.primary
 
 /** Compact composer entry; the settings page uses the exact same options below. */
 @Composable
@@ -130,7 +128,7 @@ internal fun ApprovalModeButton(
     val title = approvalModeTitle(mode)
     val accent = approvalModeAccent(mode)
     val action = stringResource(R.string.mary_chat_approval_action, title)
-    Box {
+    ApprovalModeMenu(expanded, mode, { expanded = it }, enabled, onSelected) {
         IconButton(
             enabled = enabled,
             onClick = {
@@ -155,10 +153,7 @@ internal fun ApprovalModeButton(
                     .testTag("mary-approval-current-${mode.name}")
             )
         }
-        ApprovalModePopup(shown, mode, { expanded = false }) {
-            expanded = false
-            onSelected(it)
-        }
+
     }
 }
 
@@ -169,8 +164,8 @@ internal fun MaryApprovalModePreference(
     enabled: Boolean = true,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Box {
-        ArrowPreference(
+    ApprovalModeMenu(expanded, mode, { expanded = it }, enabled, onSelected) {
+        PreferenceRow(
             title = stringResource(R.string.mary_settings_ui_approval_mode),
             summary = approvalModeTitle(mode),
             enabled = enabled,
@@ -178,52 +173,55 @@ internal fun MaryApprovalModePreference(
             onClick = { expanded = true },
             modifier = Modifier.testTag("mary-settings-approval-mode"),
         )
-        ApprovalModePopup(expanded && enabled, mode, { expanded = false }) {
-            expanded = false
-            onSelected(it)
-        }
+
     }
 }
 
 @Composable
-private fun ApprovalModePopup(
+private fun ApprovalModeMenu(
     show: Boolean,
     mode: ApprovalMode,
-    onDismiss: () -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    enabled: Boolean,
     onSelected: (ApprovalMode) -> Unit,
+    anchor: @Composable () -> Unit,
 ) {
-    OverlayListPopup(
-        show = show,
-        popupModifier = Modifier,
-        popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-        alignment = PopupPositionProvider.Align.Start,
-        enableWindowDim = true,
-        onDismissRequest = onDismiss,
-        maxHeight = null,
-        minWidth = 300.dp,
-        renderInRootScaffold = true,
-    ) {
+    GlassAnchoredMenu(
+        expanded = show,
+        onExpandedChange = onExpandedChange,
+        options = emptyList(),
+        onOptionClick = {},
+        enabled = enabled,
+        width = 340.dp,
+        anchor = anchor,
+        menuContent = {
         Column(Modifier
             .widthIn(max = 420.dp)
             .testTag("mary-approval-options")) {
             Text(
                 stringResource(R.string.mary_chat_approval_title),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                style = MiuixTheme.textStyles.footnote1,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                style = MixTheme.textStyles.footnote1,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary
             )
             ApprovalMode.entries.forEach { option ->
                 val selected = mode == option
                 val accent = approvalModeAccent(option)
-                val titleColor = if (selected) accent else MiuixTheme.colorScheme.onSurfaceContainer
+                val titleColor = if (selected) accent else MixTheme.colorScheme.onSurfaceContainer
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("mary-approval-option-${option.name}")
                         .selectable(
                             selected = selected,
+                            enabled = enabled && show,
                             role = Role.RadioButton,
-                            onClick = { onSelected(option) })
+                            onClick = {
+                                if (enabled && show) {
+                                    onExpandedChange(false)
+                                    onSelected(option)
+                                }
+                            })
                         .semantics(mergeDescendants = true) {}
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -238,14 +236,14 @@ private fun ApprovalModePopup(
                     )
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(
-                            approvalModeTitle(option), style = MiuixTheme.textStyles.body2,
+                            approvalModeTitle(option), style = MixTheme.textStyles.body2,
                             fontWeight = FontWeight.Medium, color = titleColor,
                             modifier = Modifier.testTag("mary-approval-option-title-${option.name}")
                         )
                         Text(
-                            approvalModeSummary(option), style = MiuixTheme.textStyles.footnote1,
+                            approvalModeSummary(option), style = MixTheme.textStyles.footnote1,
                             color = if (selected && option == ApprovalMode.ALLOW_ALL) accent
-                            else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            else MixTheme.colorScheme.onSurfaceVariantSummary,
                             modifier = Modifier.testTag("mary-approval-option-summary-${option.name}")
                         )
                     }
@@ -260,5 +258,6 @@ private fun ApprovalModePopup(
                 }
             }
         }
-    }
+        },
+    )
 }

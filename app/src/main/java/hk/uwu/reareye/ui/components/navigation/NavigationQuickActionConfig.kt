@@ -1,6 +1,7 @@
 package hk.uwu.reareye.ui.components.navigation
 
 const val MaxNavigationQuickActions = 5
+const val EmptyNavigationQuickActionSentinel = "none"
 
 const val NavigationQuickActionComponentManagerId = "config_manager_business"
 const val NavigationQuickActionCardManagerId = "config_manager_card"
@@ -24,6 +25,9 @@ val AvailableNavigationQuickActionIds = listOf(
 )
 
 fun parseNavigationQuickActionIds(value: String): List<String> {
+    if (value.trim() == EmptyNavigationQuickActionSentinel) {
+        return emptyList()
+    }
     val availableLookup = AvailableNavigationQuickActionIds.toSet()
     val parsed = value
         .split('|')
@@ -37,9 +41,13 @@ fun parseNavigationQuickActionIds(value: String): List<String> {
 
 fun encodeNavigationQuickActionIds(ids: List<String>): String {
     val availableLookup = AvailableNavigationQuickActionIds.toSet()
-    return ids
+    val normalized = ids
         .filter { it in availableLookup }
         .distinct()
         .take(MaxNavigationQuickActions)
-        .joinToString("|")
+    return if (normalized.isEmpty()) {
+        EmptyNavigationQuickActionSentinel
+    } else {
+        normalized.joinToString("|")
+    }
 }

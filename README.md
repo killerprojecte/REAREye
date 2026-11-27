@@ -239,8 +239,8 @@
 项目使用 Kotlin、Jetpack Compose、Android Gradle Plugin 和 Gradle Wrapper。
 
 - JDK 17。
-- Android SDK / Build Tools 37。
-- 编译 SDK 37，最低 SDK 36，目标 SDK 37。
+- Android 编译 SDK 37.2 / Build Tools 37.0.0。
+- 最低 SDK 36，目标 SDK 37。
 - 如需签名 Release 包，请在 `local.properties`、Gradle 属性或环境变量中配置：
   - `androidStoreFile`
   - `KEYSTORE_PASSWORD`

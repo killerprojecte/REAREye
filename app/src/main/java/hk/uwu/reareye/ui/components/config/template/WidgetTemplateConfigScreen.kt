@@ -18,18 +18,24 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun WidgetTemplateConfigScreen(
+    modifier: Modifier = Modifier,
     business: String,
     sourceFilePath: String,
     cardStorageKey: String,
     currentConfigJson: String?,
+    allowContentPresentation: Boolean = true,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     onBack: () -> Unit,
     onSave: (String?) -> Unit,
 ) {
     WidgetTemplateConfigScreenContent(
+        modifier = modifier,
         business = business,
         sourceFilePath = sourceFilePath,
         cardStorageKey = cardStorageKey,
         currentConfigJson = currentConfigJson,
+        allowContentPresentation = allowContentPresentation,
+        contentPadding = contentPadding,
         onBack = onBack,
         onSave = onSave,
     )

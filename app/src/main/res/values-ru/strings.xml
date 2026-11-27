@@ -135,10 +135,6 @@
     <string name="module_navigation_bar_mode_normal">Обычный</string>
     <string name="module_navigation_bar_mode_floating">Плавающий</string>
     <string name="module_navigation_bar_mode_floating_glass">Плавающее жидкое стекло</string>
-    <string name="module_search_bar_style">Стиль строки поиска</string>
-    <string name="module_search_bar_style_desc">Выбор оформления строки поиска</string>
-    <string name="module_search_bar_style_default">По умолчанию</string>
-    <string name="module_search_bar_style_miuix">Miuix</string>
     <string name="module_store_api">API магазина</string>
     <string name="module_store_api_desc">Выбор поставщика API для магазина компонентов</string>
     <string name="module_store_webview_hardware_acceleration">Аппаратное ускорение WebView</string>

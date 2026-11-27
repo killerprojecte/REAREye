@@ -70,5 +70,12 @@
 # --- Tool ---
 -keep class hk.uwu.reareye.hook.** { *; }
 -keep class hk.uwu.reareye.utils.other.AboutLibrariesToolsKt
--keep class com.hchen.superlyricapi.* {*;}
+-keepattributes RuntimeVisibleAnnotations,AnnotationDefault
+
+# WireCodec 通过 getDeclaredConstructor() 创建帧和嵌套结构。
+-keepclasseswithmembers,allowobfuscation class com.hchen.superlyricapi.** {
+    @com.hchen.superlyricapi.wire.Wire <fields>;
+    <init>();
+}
+
 -dontwarn android.os.ServiceManager

@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components
 
+import hk.uwu.mixui.components.CompactTabs
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,11 +11,19 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material3.DropdownMenu
+import hk.uwu.mixui.components.GlassAnchoredMenu
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,17 +41,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.PopupProperties
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.context.ContextCategory
 import hk.uwu.reareye.agent.context.ContextSegment
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.CompactTopBarIconButton
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.theme.MixTheme
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -94,12 +103,23 @@ private fun percent(value: Double?): String = value?.takeIf { it.isFinite() }?.l
     String.format(Locale.getDefault(), "%.1f%%", it * 100)
 } ?: "—"
 
+/** Stable cross-backend progress identity; theme accents do not change capacity meaning. */
+internal val MaryContextProgressBlue = Color(0xFF1677FF)
+
 /** Independent native implementation. Composition estimates and provider usage are separate facts. */
 @Composable
-internal fun ContextUsageButton(summary: MaryUsageSummary) {
-    val colors = MiuixTheme.colorScheme
+internal fun ContextUsageButton(summary: MaryUsageSummary, topBar: Boolean = false) {
+    val colors = MixTheme.colorScheme
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     var expanded by remember { mutableStateOf(false) }
+    val anchorFocus = remember { FocusRequester() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    var wasExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(expanded) {
+        if (!expanded && wasExpanded) anchorFocus.requestFocus()
+        wasExpanded = expanded
+    }
     var sequence by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf<ContextCategory?>(null) }
     var selectedIndex by remember { mutableIntStateOf(0) }
@@ -146,40 +166,34 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
     val screen = LocalConfiguration.current
     val popupWidth = (screen.screenWidthDp - 24).coerceIn(160, 320).dp
     val popupHeight = (screen.screenHeightDp - 88).coerceIn(144, 360).dp
-    Box {
-        // Preserve the existing compact topbar ring; detailed composition lives only in the popup.
-        IconButton(
-            onClick = { expanded = !expanded },
-            modifier = Modifier.testTag("mary-context-usage").semantics(mergeDescendants = true) {
-                contentDescription = description
-                ratio?.let { progressBarRangeInfo = ProgressBarRangeInfo(it.toFloat().coerceIn(0f, 1f), 0f..1f) }
-            },
-        ) {
-            Canvas(Modifier.size(20.dp).testTag("mary-context-ring")) {
-                val stroke = 2.dp.toPx()
-                drawCircle(colors.outline, radius = (size.minDimension - stroke) / 2, style = Stroke(stroke))
-                val sweep = contextProgressSweep(ratio)
-                if (sweep != 0f) drawArc(
-                    colors.primary, startAngle = -90f, sweepAngle = sweep, useCenter = false,
-                    topLeft = Offset(stroke / 2, stroke / 2),
-                    size = Size(size.width - stroke, size.height - stroke),
-                    style = Stroke(stroke, cap = StrokeCap.Butt),
-                )
-            }
-        }
-        DropdownMenu(
-            expanded = expanded, onDismissRequest = { expanded = false },
-            modifier = Modifier.width(popupWidth).heightIn(max = popupHeight).testTag("mary-context-popup"),
-            offset = DpOffset(0.dp, 2.dp), properties = PopupProperties(focusable = true),
-            shape = RoundedCornerShape(18.dp), containerColor = colors.surface,
-            tonalElevation = 0.dp, shadowElevation = 6.dp,
-        ) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+    GlassAnchoredMenu(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        options = emptyList(),
+        onOptionClick = {},
+        width = popupWidth,
+        maxHeight = popupHeight,
+        menuContent = {
+            // Native in-tree glass popups have no separate Android Window to
+            // request keyboard focus or turn Escape into dismissal for us.
+            val popupFocus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { popupFocus.requestFocus() }
+            Column(Modifier.fillMaxWidth().testTag("mary-context-popup")
+                .onPreviewKeyEvent {
+                    if (it.key == Key.Escape) {
+                        if (it.type == KeyEventType.KeyUp) expanded = false
+                        true
+                    } else false
+                }
+                .focusRequester(popupFocus).focusable()
+                .padding(horizontal = 12.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.mary_context_short_title), style = MiuixTheme.textStyles.body2,
+                    Text(stringResource(R.string.mary_context_short_title), style = MixTheme.textStyles.body2,
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).testTag("mary-context-title"),
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    RearCompactTabs(
+                    CompactTabs(
+                        glass = true,
+                        glassSurfaceAlpha = 0f,
                         tabs = listOf(stringResource(R.string.mary_context_category_mode), stringResource(R.string.mary_context_sequence_mode)),
                         selectedTabIndex = if (sequence) 1 else 0,
                         onTabSelected = { index ->
@@ -199,11 +213,11 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
                     Column(Modifier.weight(1f)) {
                         Text(if (summary.loading) stringResource(R.string.mary_context_loading) else
                             "${if (used != null) approximation else ""}${compactTokens(used)} / ${compactTokens(summary.windowTokens.takeIf { it > 0 })}",
-                            style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.Medium)
-                        Text(stringResource(R.string.mary_context_capacity_label), style = MiuixTheme.textStyles.footnote2,
+                            style = MixTheme.textStyles.body1, fontWeight = FontWeight.Medium)
+                        Text(stringResource(R.string.mary_context_capacity_label), style = MixTheme.textStyles.footnote2,
                             color = colors.onSurfaceVariantSummary)
                     }
-                    Text(if (ratio == null) "—" else approximation + percent(ratio), style = MiuixTheme.textStyles.body1)
+                    Text(if (ratio == null) "—" else approximation + percent(ratio), style = MixTheme.textStyles.body1)
                 }
                 // The strip is an optional direct pointer shortcut. Named legend targets below
                 // remain 48dp; numeric detail text is deliberately not part of the strip hit area.
@@ -240,7 +254,7 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
                                     Spacer(Modifier.width(4.dp))
                                     Text(if (sequence) "${index + 1} · " + stringResource(contextCategoryLabel(segment.category))
                                         else stringResource(contextCategoryLabel(segment.category)),
-                                        style = MiuixTheme.textStyles.footnote1,
+                                        style = MixTheme.textStyles.footnote1,
                                         color = colors.onSurface)
                                 }
                             }
@@ -262,39 +276,68 @@ internal fun ContextUsageButton(summary: MaryUsageSummary) {
                         })
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(name, style = MiuixTheme.textStyles.footnote1, fontWeight = FontWeight.Medium,
+                        Text(name, style = MixTheme.textStyles.footnote1, fontWeight = FontWeight.Medium,
                             modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         val amount = if (remaining) free else selected?.tokens?.toLong()
-                        if (amount != null) Text("≈" + NumberFormat.getIntegerInstance().format(amount), style = MiuixTheme.textStyles.footnote1)
+                        if (amount != null) Text("≈" + NumberFormat.getIntegerInstance().format(amount), style = MixTheme.textStyles.footnote1)
                     }
                     if (selected != null && used != null && used > 0) {
                         Text(stringResource(R.string.mary_context_shares,
                             percent(selected.tokens.toDouble() / used),
                             percent(summary.windowTokens.takeIf { it > 0 }?.let { selected.tokens.toDouble() / it })),
-                            style = MiuixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
+                            style = MixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
                     } else if (remaining && free != null) {
                         Text(stringResource(R.string.mary_context_free_share, percent(free.toDouble() / summary.windowTokens)),
-                            style = MiuixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
+                            style = MixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
                     }
                 }
                 Column(Modifier.fillMaxWidth().testTag("mary-context-provider")) {
                     Text(stringResource(R.string.mary_context_provider_input, compactTokens(summary.usage?.inputTokens.takeUnless { summary.loading }), percent(summary.cacheRatio.takeUnless { summary.loading })),
-                        style = MiuixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
+                        style = MixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
                     if (summary.budgetCorrectionTokens > 0) Text(
                         stringResource(R.string.mary_context_correction, compactTokens(summary.budgetCorrectionTokens)),
-                        style = MiuixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
+                        style = MixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary)
                     Text(stringResource(if (sequence) R.string.mary_context_sequence_note else R.string.mary_context_estimate_note),
-                        style = MiuixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary,
+                        style = MixTheme.textStyles.footnote2, color = colors.onSurfaceVariantSummary,
                         modifier = Modifier.padding(top = 4.dp, bottom = 4.dp))
                 }
             }
-        }
-    }
+        },
+        anchor = {
+            // The popup close button remains ordinary; only Mary's toolbar anchor opts in.
+            val anchorModifier = Modifier.focusRequester(anchorFocus).testTag("mary-context-usage")
+                .semantics(mergeDescendants = true) {
+                    contentDescription = description
+                    ratio?.let { progressBarRangeInfo = ProgressBarRangeInfo(it.toFloat().coerceIn(0f, 1f), 0f..1f) }
+                }
+            val toggle = {
+                focusManager.clearFocus(force = true)
+                keyboard?.hide()
+                anchorFocus.requestFocus()
+                expanded = !expanded
+            }
+            val ring: @Composable () -> Unit = {
+                Canvas(Modifier.size(20.dp).testTag("mary-context-ring")) {
+                    val stroke = 2.dp.toPx()
+                    drawCircle(colors.outline, radius = (size.minDimension - stroke) / 2, style = Stroke(stroke))
+                    val sweep = contextProgressSweep(ratio)
+                    if (sweep != 0f) drawArc(
+                        MaryContextProgressBlue, startAngle = -90f, sweepAngle = sweep, useCenter = false,
+                        topLeft = Offset(stroke / 2, stroke / 2),
+                        size = Size(size.width - stroke, size.height - stroke),
+                        style = Stroke(stroke, cap = StrokeCap.Butt),
+                    )
+                }
+            }
+            if (topBar) CompactTopBarIconButton(toggle, anchorModifier, ring)
+            else IconButton(onClick = toggle, modifier = anchorModifier, content = ring)
+        },
+    )
 }
 
 @Composable
 private fun ContextStrip(segments: List<ContextSegment>, occupied: Float, modifier: Modifier) {
-    val track = MiuixTheme.colorScheme.outline.copy(alpha = 0.35f)
+    val track = MixTheme.colorScheme.outline.copy(alpha = 0.35f)
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     Canvas(modifier.clip(RoundedCornerShape(4.dp))) {
         drawRect(track)

@@ -22,6 +22,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,14 +40,15 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import hk.uwu.mixui.components.navigationBackdrop
+import hk.uwu.mixui.components.rememberNavigationBackdrop
+import hk.uwu.reareye.application.DefaultApplication
 import hk.uwu.reareye.ui.components.PresetPackDialog
 import hk.uwu.reareye.ui.components.SubscreenNotificationAccessPrompt
 import hk.uwu.reareye.ui.components.TargetAppVersionDialog
-import hk.uwu.reareye.ui.components.motion.ArtVisibilityMotion
+import hk.uwu.mixui.motion.ArtVisibilityMotion
 import hk.uwu.reareye.ui.components.navigation.NavigationQuickTarget
-import hk.uwu.reareye.ui.components.navigation.RearNavigationBar
+import hk.uwu.reareye.ui.components.navigation.AppNavigationBar
 import hk.uwu.reareye.ui.components.navigation.encodeNavigationQuickActionIds
 import hk.uwu.reareye.ui.components.navigation.parseNavigationQuickActionIds
 import hk.uwu.reareye.ui.config.ConfigKeys
@@ -68,23 +70,28 @@ import hk.uwu.reareye.ui.screen.MarySettingsScreen
 import hk.uwu.reareye.ui.screen.RearStoreScreen
 import hk.uwu.reareye.ui.screen.preloadHomeFrameNotice
 import hk.uwu.reareye.ui.theme.AppTheme
+import hk.uwu.reareye.ui.theme.AppNavigationBarStyle
 import hk.uwu.reareye.ui.theme.AppThemeMode
+import hk.uwu.reareye.ui.theme.AppMochiThemeStyle
+import hk.uwu.reareye.ui.theme.AppThemePreferences
 import hk.uwu.reareye.version.AppVersionGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.theme.MixTheme
 
 /**
  * Screen order drives the horizontal transition direction. The Rear Store is reachable from the
  * configuration header rather than the bottom bar, so it keeps a slot here for its transition
- * while [RearNavigationBar] renders only the four bottom-bar destinations.
+ * while [AppNavigationBar] renders only the four bottom-bar destinations.
  */
 private val MainScreenOrder = listOf("home", "store", "mary", "config", "about")
 
 private data class RemoteUiSettings(
+    val mochiThemeStyleValue: Int,
     val themeModeValue: Int,
-    val navigationBarModeValue: Int,
+    val themeMigrationPending: Boolean,
+    val navigationBarStyleValue: Int,
     val navigationQuickActionIds: List<String>,
     val launcherHidden: Boolean,
 )
@@ -139,6 +146,9 @@ class MainActivity : ComponentActivity() {
         // container silently rejects the hooks and template fields this module writes, so it is
         // safer to explain the requirement and leave than to half work.
         val versionViolations = AppVersionGate.evaluate(applicationContext)
+        if (versionViolations.isEmpty()) {
+            (application as? DefaultApplication)?.onUiOpened()
+        }
 
         setContent {
             if (versionViolations.isNotEmpty()) {
@@ -180,9 +190,11 @@ class MainActivity : ComponentActivity() {
 
             val remotePrefsManager = remember { applicationContext.getPrefsManager() }
             val remoteRevision = rememberRemotePrefsStatusRevision()
+            val themeRevision by AppThemePreferences.changes.collectAsState()
             var remoteUiSettings by remember { mutableStateOf<RemoteUiSettings?>(null) }
+            var themeMigrationWarningShown by rememberSaveable { mutableStateOf(false) }
 
-            LaunchedEffect(remoteRevision) {
+            LaunchedEffect(remoteRevision, themeRevision) {
                 val loadedRemoteUiSettings = withContext(Dispatchers.IO) {
                     if (!remotePrefsManager.isRemoteReady()) {
                         null
@@ -206,15 +218,14 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
+                        val theme = AppThemePreferences.loadAndMigrate(remotePrefsManager.prefs)
                         RemoteUiSettings(
-                            themeModeValue = remotePrefsManager.getInt(
-                                ConfigKeys.MODULE_THEME_MODE,
-                                AppThemeMode.default.value,
+                            mochiThemeStyleValue = remotePrefsManager.getInt(
+                                ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value,
                             ),
-                            navigationBarModeValue = remotePrefsManager.getInt(
-                                ConfigKeys.MODULE_NAVIGATION_BAR_MODE,
-                                ModuleNavigationBarMode.default.value,
-                            ),
+                            themeModeValue = theme.mode.value,
+                            themeMigrationPending = theme.migrationPending,
+                            navigationBarStyleValue = AppThemePreferences.readNavigationStyle(remotePrefsManager.prefs).value,
                             navigationQuickActionIds = normalizedQuickActionIds,
                             launcherHidden = remotePrefsManager.getBoolean(
                                 ConfigKeys.MODULE_HIDE_LAUNCHER_ENTRY,
@@ -226,6 +237,14 @@ class MainActivity : ComponentActivity() {
 
                 remoteUiSettings = loadedRemoteUiSettings
                 loadedRemoteUiSettings?.let { settings ->
+                    if (settings.themeMigrationPending && !themeMigrationWarningShown) {
+                        themeMigrationWarningShown = true
+                        android.widget.Toast.makeText(
+                            applicationContext,
+                            hk.uwu.reareye.R.string.module_theme_migration_pending,
+                            android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                    }
                     ModuleSettingsController.syncLauncherEntryVisibility(
                         context = applicationContext,
                         hidden = settings.launcherHidden,
@@ -239,11 +258,14 @@ class MainActivity : ComponentActivity() {
                 return@setContent
             }
 
-            var themeModeValue by remember {
+            var mochiThemeStyleValue by remember(settings.mochiThemeStyleValue) {
+                mutableIntStateOf(settings.mochiThemeStyleValue)
+            }
+            var themeModeValue by remember(settings.themeModeValue) {
                 mutableIntStateOf(settings.themeModeValue)
             }
-            var navigationBarModeValue by remember {
-                mutableIntStateOf(settings.navigationBarModeValue)
+            var navigationBarStyleValue by remember(settings.navigationBarStyleValue) {
+                mutableIntStateOf(settings.navigationBarStyleValue)
             }
             var currentScreen by remember { mutableStateOf("home") }
             // The Rear Store is a configuration-level destination, so the system back gesture
@@ -289,18 +311,19 @@ class MainActivity : ComponentActivity() {
                 navBarVisible = true
             }
 
-            AppTheme(themeMode = AppThemeMode.fromValue(themeModeValue)) {
-                val navigationBarMode = ModuleNavigationBarMode.fromValue(navigationBarModeValue)
-                val enableFloatingGlass =
-                    navigationBarMode == ModuleNavigationBarMode.FLOATING_GLASS
+            AppTheme(
+                themeMode = AppThemeMode.fromValue(themeModeValue),
+                mochiStyle = AppMochiThemeStyle.fromValue(mochiThemeStyleValue).style,
+            ) {
+                val navigationBarMode = AppNavigationBarStyle.fromValue(navigationBarStyleValue)
+                    .mode(AppThemeMode.fromValue(themeModeValue).backend)
+                val enableNavigationGlass =
+                    navigationBarMode == ModuleNavigationBarMode.FLOATING_GLASS ||
+                        navigationBarMode == ModuleNavigationBarMode.SEMI_TRANSPARENT
                 val showNavigation =
                     navBarVisible && !(currentScreen == "config" && configInAppListMode)
                 val density = LocalDensity.current
-                val surfaceColor = MiuixTheme.colorScheme.surface
-                val backdrop = rememberLayerBackdrop {
-                    drawRect(surfaceColor)
-                    drawContent()
-                }
+                val backdrop = rememberNavigationBackdrop()
                 var stableBottomInset by remember { mutableStateOf(0.dp) }
                 val marySidebarGestureHost = remember { MarySidebarPageGestureHost() }
 
@@ -310,11 +333,10 @@ class MainActivity : ComponentActivity() {
                 ) {
                     // Keep the popup host full-window: MIUIX dialogs own their IME avoidance.
                     Scaffold { _ ->
+                        hk.uwu.mixui.components.GlassBottomSheetScene {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .marySidebarPageGesture(marySidebarGestureHost,
-                                    enabled = currentScreen == "mary" && !showPresetPackDialog && !featureGuideVisible)
                                 // Navigation stays at the physical window bottom. Screens own
                                 // IME avoidance; never shrink this shared root or its popup host.
                                 .graphicsLayer { clip = true }
@@ -322,10 +344,15 @@ class MainActivity : ComponentActivity() {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
+                                    // Only page content opens Mary's sidebar. The sibling bottom
+                                    // bar keeps its own pointer stream in either drag direction.
+                                    .marySidebarPageGesture(marySidebarGestureHost,
+                                        enabled = currentScreen == "mary" && !showPresetPackDialog && !featureGuideVisible)
                                     .marySidebarBackground(marySidebarGestureHost)
                                     .then(
-                                        if (enableFloatingGlass) {
-                                            Modifier.layerBackdrop(backdrop)
+                                        if (enableNavigationGlass || backdrop.isQuickActionRecordingRequested) {
+                                            // Only page content: never record the sibling bar, Popup or scrim.
+                                            Modifier.navigationBackdrop(backdrop, recordNavigation = enableNavigationGlass)
                                         } else {
                                             Modifier
                                         }
@@ -449,9 +476,8 @@ class MainActivity : ComponentActivity() {
                                                     configInAppListMode = it
                                                 },
                                                 onThemeModeChange = { themeModeValue = it },
-                                                onNavigationBarModeChange = {
-                                                    navigationBarModeValue = it
-                                                },
+                                                onMochiThemeStyleChange = { mochiThemeStyleValue = it },
+                                                onNavigationBarStyleChange = { navigationBarStyleValue = it },
                                                 onOpenRearStore = {
                                                     configInAppListMode = false
                                                     currentScreen = "store"
@@ -516,11 +542,12 @@ class MainActivity : ComponentActivity() {
                                         slideDivisor = 3,
                                         hiddenOffsetFallback = 28.dp,
                                     ) {
-                                        RearNavigationBar(
+                                        AppNavigationBar(
                                             // The Rear Store is a configuration-level destination,
                                             // so the Configuration tab stays highlighted while it is open.
                                             currentScreen = if (currentScreen == "store") "config" else currentScreen,
                                             navigationBarMode = navigationBarMode,
+                                            navigationBarStyle = AppNavigationBarStyle.fromValue(navigationBarStyleValue),
                                             backdrop = backdrop,
                                             shadowVisibilityProgress = navShadowProgress,
                                             quickActionIds = navigationQuickActionIds,
@@ -598,6 +625,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                 )
                             }
+                        }
                         }
                     }
                 }

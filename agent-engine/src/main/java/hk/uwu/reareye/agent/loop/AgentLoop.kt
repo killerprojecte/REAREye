@@ -104,6 +104,12 @@ class AgentLoop(
     private val ask: AskCallback? = null,
     private val checkBudget: ContextBudgetCallback? = null,
     private val approvalDiagnostic: (String) -> Unit = {},
+    /** Resolve local attachment references only in an outgoing request, never in a checkpoint. */
+    private val materializeForProvider: suspend (List<Message>) -> List<Message> = { it },
+    /** Drain host-typed mailbox messages only at a checkpoint with all tool results paired. */
+    private val receiveMessages: () -> List<ChatMessage> = { emptyList() },
+    /** Current-turn inputs that must still reach the answering model after whole-history compression. */
+    private val retainAfterCompression: List<ChatMessage> = emptyList(),
 ) {
     fun run(
         history: List<ChatMessage>,
@@ -174,9 +180,9 @@ class AgentLoop(
                 ),
             )
 
-        fun nativeContext() = prefix + KoogTranscriptCodec.toNative(working)
+        suspend fun nativeContext() = prefix + materializeForProvider(KoogTranscriptCodec.toNative(working))
         val initialPrompt = prompt("mary-native", params = connection.params) {
-            nativeContext().forEach { message(it) }
+            (prefix + KoogTranscriptCodec.toNative(working)).forEach { message(it) }
         }
         val execution = strategy<Unit, Unit>("mary_native_graph") {
             val prepare by node<Unit, Unit>("budget_and_context") {
@@ -185,6 +191,11 @@ class AgentLoop(
                 } else if (iterations >= this@AgentLoop.config.maxIterations) {
                     fail("已达单轮工具调用上限（${this@AgentLoop.config.maxIterations} 次），已停止以免继续消耗额度。")
                 } else {
+                    val incoming = receiveMessages()
+                    if (incoming.isNotEmpty()) {
+                        working.addAll(incoming)
+                        transcript.addAll(incoming)
+                    }
                     specs = environment.availableTools()
                     val request = budget(working.toList())
                     when (val decision = checkBudget?.invoke(request)
@@ -214,7 +225,9 @@ class AgentLoop(
                                 val candidate = llm.writeSession {
                                     val saved = prompt
                                     try {
-                                        prompt = initialPrompt.withMessages { nativeContext() }
+                                        val durable = KoogTranscriptCodec.toNative(working)
+                                        val requestMessages = materializeForProvider(durable)
+                                        prompt = initialPrompt.withMessages { prefix + requestMessages }
                                             .withParams(
                                                 connection.params.copy(
                                                     maxTokens = summaryReserve,
@@ -235,20 +248,29 @@ class AgentLoop(
                                         ) {
                                             throw AgentError.Protocol("压缩摘要不完整或包含工具调用，原上下文未更改。")
                                         }
-                                        val compressed =
-                                            prompt.messages.filterNot { item -> prefix.any { it === item } }
+                                        // Whole-history compression retains the first user message.
+                                        // Restore its durable reference form rather than saving the request's media bytes.
+                                        val compressed = prompt.messages.filterNot { item -> prefix.any { it === item } }
+                                            .map { item ->
+                                                val index = requestMessages.indexOfFirst { it === item || it == item }
+                                                if (index >= 0) durable[index] else item
+                                            }
                                         KoogTranscriptCodec.fromNative(compressed)
                                     } finally {
                                         // Compression is a transaction: error/cancel never mutates the active prompt.
                                         prompt = saved
                                     }
                                 }
-                                val estimate = budget(candidate)
+                                val answeringContext = candidate + retainAfterCompression.filterNot { retained ->
+                                    candidate.any { it == retained ||
+                                        (retained.attachments.isNotEmpty() && it.attachments == retained.attachments) }
+                                }
+                                val estimate = budget(answeringContext)
                                 if (estimate.needsCompaction) {
                                     fail("整段历史压缩后的上下文仍超过预算，原上下文未更改。")
                                 } else {
                                     working.clear()
-                                    working.addAll(candidate)
+                                    working.addAll(answeringContext)
                                     checkpoint()
                                     emit(AgentEvent.ContextCompressed(estimate.estimatedInputTokens))
                                 }
@@ -256,8 +278,9 @@ class AgentLoop(
                         }
                     }
                     if (!stopped) {
+                        val outgoing = nativeContext()
                         llm.writeSession {
-                            prompt = initialPrompt.withMessages { nativeContext() }
+                            prompt = initialPrompt.withMessages { outgoing }
                             tools = specs.map { it.toKoogDescriptor() }
                         }
                     }

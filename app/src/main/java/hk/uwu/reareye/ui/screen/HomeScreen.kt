@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.screen
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -14,15 +16,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -42,9 +41,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -60,10 +59,11 @@ import hk.uwu.reareye.R
 import hk.uwu.reareye.generated.AppProperties
 import hk.uwu.reareye.hook.support.ModuleActivationState
 import hk.uwu.reareye.hook.support.XposedModuleStatus
+import hk.uwu.reareye.ui.components.PresetPackHomeSnapshot
 import hk.uwu.reareye.ui.components.PresetPackLocalStatus
 import hk.uwu.reareye.ui.components.PresetPackStatusCard
 import hk.uwu.reareye.ui.components.isNewerThan
-import hk.uwu.reareye.ui.components.motion.ArtVisibilityMotion
+import hk.uwu.mixui.motion.ArtVisibilityMotion
 import hk.uwu.reareye.ui.components.rememberPresetPackHomeSnapshot
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
@@ -71,10 +71,6 @@ import hk.uwu.reareye.ui.easteregg.EasterEggManager
 import hk.uwu.reareye.ui.easteregg.EasterEggType
 import hk.uwu.reareye.ui.featureGuideAnchor
 import hk.uwu.reareye.ui.theme.AppThemeMode
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import hk.uwu.reareye.utils.RootHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -84,27 +80,17 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.MoreCircle
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.GlassAnchoredMenu
+import hk.uwu.mixui.components.GlassMenuOption
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.TopBarIconButton
+import hk.uwu.mixui.components.LargeTitleColumnScaffold
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.theme.MixTheme
+import hk.uwu.mixui.components.PressFeedbackType
 
 private val updateInfoHttpClient = OkHttpClient()
 
@@ -163,7 +149,7 @@ private fun rememberStatusCardPalette(
     titleStrength: Float = 0.46f,
     summaryStrength: Float = 0.28f,
 ): StatusCardPalette {
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
 
     return remember(
         accent,
@@ -264,40 +250,51 @@ private suspend fun fetchLatestCommitHashFromNetwork(): String? {
     }
 }
 
+/** A read-only home state supplied by an offline owner. Null keeps the live device sources.
+ * All values are rendered by the same production page; no alternate sample layout is used.
+ */
+data class HomeScreenSnapshot(
+    val activationState: ModuleActivationState,
+    val hasRootAccess: Boolean,
+    val latestCommitHash: String?,
+    val presetPack: PresetPackHomeSnapshot,
+    val themeMode: AppThemeMode = AppThemeMode.default,
+)
+
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
 fun HomeScreen(
     bottomInnerPadding: Dp = 0.dp,
     onOpenPresetPackDialog: () -> Unit = {},
     presetPackRefreshToken: Any? = Unit,
+    snapshot: HomeScreenSnapshot? = null,
+    // Offline hosts inject callbacks explicitly; snapshot alone still cannot run root actions.
+    quickActionOverride: ((Int) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var activationState by remember { mutableStateOf(XposedModuleStatus.current()) }
+    var activationState by remember(snapshot) { mutableStateOf(snapshot?.activationState ?: XposedModuleStatus.current()) }
     val isActivated = activationState == ModuleActivationState.ACTIVE
-    val showTopMenu = remember { mutableStateOf(false) }
-    val scrollBehavior = MiuixScrollBehavior()
-    val prefsManager = remember { context.getPrefsManager() }
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
+    val showTopMenu = remember(snapshot) { mutableStateOf(false) }
+    val prefsManager = remember(snapshot) { if (snapshot == null) context.getPrefsManager() else null }
     val coroutineScope = rememberCoroutineScope()
     val easterEggToastHolder = remember { ToastHolder() }
-    val presetPackHomeSnapshot = rememberPresetPackHomeSnapshot(presetPackRefreshToken)
+    val presetPackHomeSnapshot = snapshot?.presetPack ?: rememberPresetPackHomeSnapshot(presetPackRefreshToken)
     val presetPackSnapshot = presetPackHomeSnapshot.local
     val presetPackUpdateAvailable = presetPackHomeSnapshot.latest?.isNewerThan(
         presetPackSnapshot.installed?.manifest?.packVersion,
     ) == true
 
-    var latestCommitHash by remember { mutableStateOf<String?>(null) }
-    var isCheckingUpdate by remember { mutableStateOf(false) }
-    var hasRootAccess by remember { mutableStateOf<Boolean?>(null) }
-    val frameNotice = FrameNoticeCache.value
-    var easterEggType by remember {
-        mutableStateOf(EasterEggManager.getCurrentEasterEggType(context))
+    var latestCommitHash by remember(snapshot) { mutableStateOf(snapshot?.latestCommitHash) }
+    var isCheckingUpdate by remember(snapshot) { mutableStateOf(false) }
+    var hasRootAccess by remember(snapshot) { mutableStateOf<Boolean?>(snapshot?.hasRootAccess) }
+    val frameNotice = if (snapshot == null) FrameNoticeCache.value else null
+    var easterEggType by remember(snapshot) {
+        mutableStateOf(if (snapshot == null) EasterEggManager.getCurrentEasterEggType(context) else EasterEggType.NONE)
     }
-    val themeMode = remember(prefsManager) {
-        AppThemeMode.fromValue(
-            prefsManager.getInt(
+    val themeMode = remember(prefsManager, snapshot) {
+        snapshot?.themeMode ?: AppThemeMode.fromValue(
+            requireNotNull(prefsManager).getInt(
                 ConfigKeys.MODULE_THEME_MODE,
                 AppThemeMode.default.value,
             )
@@ -309,7 +306,8 @@ fun HomeScreen(
                 themeMode == AppThemeMode.MONET_DARK
     }
 
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, snapshot) {
+        if (snapshot != null) return@DisposableEffect onDispose {}
         val statusObserver: (ModuleActivationState) -> Unit = { activationState = it }
         val lifecycleObserver = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) XposedModuleStatus.refresh()
@@ -323,7 +321,8 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(snapshot) {
+        if (snapshot != null) return@LaunchedEffect
         if (!UpdateInfoCache.latestCommitHash.isNullOrBlank()) {
             latestCommitHash = UpdateInfoCache.latestCommitHash
             return@LaunchedEffect
@@ -342,7 +341,8 @@ fun HomeScreen(
         isCheckingUpdate = false
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(snapshot) {
+        if (snapshot != null) return@LaunchedEffect
         hasRootAccess = withContext(Dispatchers.IO) {
             RootHelper.hasRootAccess()
         }
@@ -383,13 +383,13 @@ fun HomeScreen(
         EasterEggType.APRIL_FOOLS -> "FOOLEye"
         EasterEggType.EASTER -> "BUNNYEgg"
         EasterEggType.MI_FANS -> "JINFan"
-        EasterEggType.HUAWEI_ULTIMATE_DESIGN -> "Rate XT 非凡大师"
+        EasterEggType.HUAWEI_ULTIMATE_DESIGN -> androidx.compose.ui.res.stringResource(R.string.home_easter_egg_huawei_ultimate_design_app_title)
         else -> "REAREye"
     }
     val moduleVersion = when (easterEggType) {
         EasterEggType.APRIL_FOOLS -> "4.1.0-41f001u-r${AppProperties.BUILD_NUMBER}-fool"
         EasterEggType.EASTER -> "7.7.7-holyegg-r${AppProperties.BUILD_NUMBER}-rebirth"
-        EasterEggType.MI_FANS -> "本彩蛋仅为娱乐用途\n不代表开发者或任何组织的立场或观点"
+        EasterEggType.MI_FANS -> androidx.compose.ui.res.stringResource(R.string.home_easter_egg_mifans_disclaimer)
         EasterEggType.HUAWEI_ULTIMATE_DESIGN -> "38.0-harmony-r${AppProperties.BUILD_NUMBER}-ultimate"
         else -> "${AppProperties.PROJECT_APP_VERSION_NAME}-${AppProperties.GIT_HASH}-r${AppProperties.BUILD_NUMBER}-${AppProperties.BUILD_CHANNEL}"
     }
@@ -402,260 +402,158 @@ fun HomeScreen(
     }
     val versionCodename = AppProperties.PROJECT_APP_VERSION_CODENAME
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                color = Color.Transparent,
-                title = appTitle,
-                actions = {
-                    Box {
-                        IconButton(
-                            onClick = { showTopMenu.value = true },
-                            holdDownState = showTopMenu.value,
-                        ) {
-                            Icon(
-                                imageVector = MiuixIcons.Regular.MoreCircle,
-                                contentDescription = null,
-                                tint = MiuixTheme.colorScheme.onBackground,
-                            )
-                        }
-
-                        OverlayListPopup(
-                            show = showTopMenu.value,
-                            popupModifier = Modifier,
-                            popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                            alignment = PopupPositionProvider.Align.End,
-                            enableWindowDim = true,
-                            onDismissRequest = { showTopMenu.value = false },
-                            maxHeight = null,
-                            minWidth = 220.dp,
-                            renderInRootScaffold = true,
-                        ) {
-                            @SuppressLint("LocalContextGetResourceValueCall")
-                            ListPopupColumn {
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                DropdownImpl(
-                                    item = DropdownItem(
-                                        title = androidx.compose.ui.res.stringResource(
-                                            R.string.quick_stop_subscreencenter,
-                                        ),
-                                    ),
-                                    optionSize = 4,
-                                    isSelected = false,
-                                    index = 0,
-                                    dropdownColors = DropdownDefaults.dropdownColors(),
-                                    onSelectedIndexChange = {
-                                        showTopMenu.value = false
-
-                                        coroutineScope.launch {
-                                            forceStopPackageByRoot(
-                                                context = context,
-                                                packageName = "com.xiaomi.subscreencenter",
-                                                appName = context.getString(R.string.category_subscreencenter),
-                                            )
-                                        }
-                                    },
-                                )
-
-                                DropdownImpl(
-                                    item = DropdownItem(
-                                        title = androidx.compose.ui.res.stringResource(
-                                            R.string.quick_stop_thememanager,
-                                        ),
-                                    ),
-                                    optionSize = 4,
-                                    isSelected = false,
-                                    index = 1,
-                                    dropdownColors = DropdownDefaults.dropdownColors(),
-                                    onSelectedIndexChange = {
-                                        showTopMenu.value = false
-                                        coroutineScope.launch {
-                                            forceStopPackageByRoot(
-                                                context = context,
-                                                packageName = "com.android.thememanager",
-                                                appName = context.getString(R.string.category_thememanager),
-                                            )
-                                        }
-                                    },
-                                )
-
-                                DropdownImpl(
-                                    item = DropdownItem(
-                                        title = androidx.compose.ui.res.stringResource(
-                                            R.string.quick_stop_personalassistant,
-                                        ),
-                                    ),
-                                    optionSize = 4,
-                                    isSelected = false,
-                                    index = 2,
-                                    dropdownColors = DropdownDefaults.dropdownColors(),
-                                    onSelectedIndexChange = {
-                                        showTopMenu.value = false
-                                        coroutineScope.launch {
-                                            forceStopPackageByRoot(
-                                                context = context,
-                                                packageName = "com.miui.personalassistant",
-                                                appName = context.getString(R.string.category_personalassistant),
-                                            )
-                                        }
-                                    },
-                                )
-
-                                DropdownImpl(
-                                    item = DropdownItem(
-                                        title = androidx.compose.ui.res.stringResource(
-                                            R.string.quick_stop_systemui,
-                                        ),
-                                    ),
-                                    optionSize = 4,
-                                    isSelected = false,
-                                    index = 3,
-                                    dropdownColors = DropdownDefaults.dropdownColors(),
-                                    onSelectedIndexChange = {
-                                        showTopMenu.value = false
-                                        coroutineScope.launch {
-                                            forceKillSystemUI(context)
-                                        }
-                                    },
-                                )
-
-                                Spacer(modifier = Modifier.height(2.dp))
-
-                            }
+    // The backend owns the title transition, scroll effects and safe-area spacing.
+    // Home already rendered all cards together in one lazy item, so one native
+    // scrolling column preserves the content and its remembered state.
+    LargeTitleColumnScaffold(
+        title = appTitle,
+        bottomObstruction = bottomInnerPadding,
+        contentSpacing = 12.dp,
+        actions = {
+            GlassAnchoredMenu(
+                expanded = showTopMenu.value,
+                onExpandedChange = { showTopMenu.value = it },
+                options = listOf(
+                    GlassMenuOption(androidx.compose.ui.res.stringResource(R.string.quick_stop_subscreencenter)),
+                    GlassMenuOption(androidx.compose.ui.res.stringResource(R.string.quick_stop_thememanager)),
+                    GlassMenuOption(androidx.compose.ui.res.stringResource(R.string.quick_stop_personalassistant)),
+                    GlassMenuOption(androidx.compose.ui.res.stringResource(R.string.quick_stop_systemui)),
+                ),
+                onOptionClick = { index ->
+                    if (quickActionOverride != null) quickActionOverride(index)
+                    else if (snapshot == null) coroutineScope.launch {
+                        when (index) {
+                            0 -> forceStopPackageByRoot(context, "com.xiaomi.subscreencenter",
+                                context.getString(R.string.category_subscreencenter))
+                            1 -> forceStopPackageByRoot(context, "com.android.thememanager",
+                                context.getString(R.string.category_thememanager))
+                            2 -> forceStopPackageByRoot(context, "com.miui.personalassistant",
+                                context.getString(R.string.category_personalassistant))
+                            3 -> forceKillSystemUI(context)
                         }
                     }
                 },
-                scrollBehavior = scrollBehavior,
-            )
+                enabled = snapshot == null || quickActionOverride != null,
+            ) {
+                TopBarIconButton(
+                    modifier = Modifier.testTag("home-quick-actions"),
+                    onClick = { if (snapshot == null || quickActionOverride != null) showTopMenu.value = true },
+                ) {
+                    Icon(
+                        imageVector = UiIcons.Regular.MoreCircle,
+                        contentDescription = null,
+                        tint = MixTheme.colorScheme.onBackground,
+                    )
+                }
+            }
         },
-        contentWindowInsets = WindowInsets.systemBars,
-    ) { paddingValues ->
+    ) {
         var visible by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) { visible = true }
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .rearAcrylicSource(hazeState)
-                .padding(horizontal = 12.dp),
-            contentPadding = PaddingValues(
-                top = paddingValues.calculateTopPadding() + 12.dp,
-                bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding + 12.dp,
-            ),
-            overscrollEffect = null,
-        ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    RevealItem(visible = visible, delayMillis = 0) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            WorkingStatusCard(
-                                statusTitle = statusTitle,
-                                statusVersion = AppProperties.BUILD_NUMBER.toString(),
-                                activated = isActivated,
-                                easterEggType = easterEggType,
-                                useMonetColors = useMonetStatusColors,
-                                onLongPress = {
-                                    val result =
-                                        EasterEggManager.toggleTodayEasterEggEnabled(context)
-                                    if (!result.matchedToday) {
-                                        showSingleToast(
-                                            context = context,
-                                            holder = easterEggToastHolder,
-                                            message = context.getString(R.string.home_easter_egg_no_today),
-                                        )
-                                        return@WorkingStatusCard
-                                    }
-
-                                    easterEggType =
-                                        EasterEggManager.getCurrentEasterEggType(context)
-                                    val eggName = context.getString(result.type.toTitleRes())
-                                    val messageRes = when {
-                                        result.isEnabled -> R.string.home_easter_egg_enabled
-                                        else -> R.string.home_easter_egg_disabled
-                                    }
-                                    showSingleToast(
-                                        context = context,
-                                        holder = easterEggToastHolder,
-                                        message = context.getString(messageRes, eggName),
-                                    )
-                                },
+        RevealItem(visible = visible, delayMillis = 0) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                WorkingStatusCard(
+                    statusTitle = statusTitle,
+                    statusVersion = AppProperties.BUILD_NUMBER.toString(),
+                    activated = isActivated,
+                    easterEggType = easterEggType,
+                    useMonetColors = useMonetStatusColors,
+                    onLongPress = {
+                        if (snapshot != null) return@WorkingStatusCard
+                        val result =
+                            EasterEggManager.toggleTodayEasterEggEnabled(context)
+                        if (!result.matchedToday) {
+                            showSingleToast(
+                                context = context,
+                                holder = easterEggToastHolder,
+                                message = context.getString(R.string.home_easter_egg_no_today),
                             )
-
-                            frameNotice?.let { notice ->
-                                FrameNoticeCard(
-                                    title = notice.title,
-                                    summary = notice.summary,
-                                    useMonetColors = useMonetStatusColors,
-                                )
-                            }
-
-                            if (showRootWarning) {
-                                RevealItem(visible = visible, delayMillis = rootWarningDelay) {
-                                    RootWarningCard(useMonetColors = useMonetStatusColors)
-                                }
-                            }
-
-                            if (showUpdateWarning) {
-                                UpdateWarningCard(
-                                    currentHash = AppProperties.GIT_HASH.take(7),
-                                    latestHash = latestCommitHash?.take(7).orEmpty(),
-                                    useMonetColors = useMonetStatusColors,
-                                )
-                            }
-
-                            if (presetPackSnapshot.status == PresetPackLocalStatus.NOT_INSTALLED ||
-                                presetPackSnapshot.status == PresetPackLocalStatus.INVALID ||
-                                presetPackUpdateAvailable
-                            ) {
-                                PresetPackStatusCard(
-                                    snapshot = presetPackSnapshot,
-                                    updateAvailable = presetPackUpdateAvailable,
-                                    latestVersion = presetPackHomeSnapshot.latest?.version,
-                                    useMonetColors = useMonetStatusColors,
-                                    onClick = onOpenPresetPackDialog,
-                                )
-                            }
+                            return@WorkingStatusCard
                         }
-                    }
 
-                    RevealItem(visible = visible, delayMillis = 50) {
-                        ModuleInfoCard(
-                            activationState = activationState,
-                            moduleVersion = moduleVersion,
-                            versionCodename = versionCodename,
-                            releaseChannel = releaseChannel,
-                            easterEggType = easterEggType
+                        easterEggType =
+                            EasterEggManager.getCurrentEasterEggType(context)
+                        val eggName = context.getString(result.type.toTitleRes())
+                        val messageRes = when {
+                            result.isEnabled -> R.string.home_easter_egg_enabled
+                            else -> R.string.home_easter_egg_disabled
+                        }
+                        showSingleToast(
+                            context = context,
+                            holder = easterEggToastHolder,
+                            message = context.getString(messageRes, eggName),
                         )
-                    }
+                    },
+                )
 
-                    RevealItem(visible = visible, delayMillis = updateInfoDelay) {
-                        UpdateInfoCard(
-                            currentHash = when (easterEggType) {
-                                EasterEggType.APRIL_FOOLS -> "41f001u"
-                                EasterEggType.EASTER -> "holyegg"
-                                EasterEggType.MI_FANS -> "leijun"
-                                EasterEggType.HUAWEI_ULTIMATE_DESIGN -> "ultimate"
-                                else -> AppProperties.GIT_HASH
-                            },
-                            latestHash = when (easterEggType) {
-                                EasterEggType.APRIL_FOOLS if AppProperties.GIT_HASH == latestCommitHash -> "41f001u"
-                                EasterEggType.EASTER if AppProperties.GIT_HASH == latestCommitHash -> "candies"
-                                EasterEggType.MI_FANS if AppProperties.GIT_HASH == latestCommitHash -> "jinfan"
-                                EasterEggType.HUAWEI_ULTIMATE_DESIGN if AppProperties.GIT_HASH == latestCommitHash -> "design"
-                                else -> latestCommitHash
-                            },
-                            checking = isCheckingUpdate,
-                        )
+                frameNotice?.let { notice ->
+                    FrameNoticeCard(
+                        title = notice.title,
+                        summary = notice.summary,
+                        useMonetColors = useMonetStatusColors,
+                    )
+                }
+
+                if (showRootWarning) {
+                    RevealItem(visible = visible, delayMillis = rootWarningDelay) {
+                        RootWarningCard(useMonetColors = useMonetStatusColors)
                     }
+                }
+
+                if (showUpdateWarning) {
+                    UpdateWarningCard(
+                        currentHash = AppProperties.GIT_HASH.take(7),
+                        latestHash = latestCommitHash?.take(7).orEmpty(),
+                        useMonetColors = useMonetStatusColors,
+                        onOpenRelease = if (snapshot == null) null else ({ }),
+                    )
+                }
+
+                if (presetPackSnapshot.status == PresetPackLocalStatus.NOT_INSTALLED ||
+                    presetPackSnapshot.status == PresetPackLocalStatus.INVALID ||
+                    presetPackUpdateAvailable
+                ) {
+                    PresetPackStatusCard(
+                        snapshot = presetPackSnapshot,
+                        updateAvailable = presetPackUpdateAvailable,
+                        latestVersion = presetPackHomeSnapshot.latest?.version,
+                        useMonetColors = useMonetStatusColors,
+                        onClick = onOpenPresetPackDialog,
+                    )
                 }
             }
         }
 
+        RevealItem(visible = visible, delayMillis = 50) {
+            ModuleInfoCard(
+                activationState = activationState,
+                moduleVersion = moduleVersion,
+                versionCodename = versionCodename,
+                releaseChannel = releaseChannel,
+                easterEggType = easterEggType
+            )
+        }
+
+        RevealItem(visible = visible, delayMillis = updateInfoDelay) {
+            UpdateInfoCard(
+                currentHash = when (easterEggType) {
+                    EasterEggType.APRIL_FOOLS -> "41f001u"
+                    EasterEggType.EASTER -> "holyegg"
+                    EasterEggType.MI_FANS -> "leijun"
+                    EasterEggType.HUAWEI_ULTIMATE_DESIGN -> "ultimate"
+                    else -> AppProperties.GIT_HASH
+                },
+                latestHash = when (easterEggType) {
+                    EasterEggType.APRIL_FOOLS if AppProperties.GIT_HASH == latestCommitHash -> "41f001u"
+                    EasterEggType.EASTER if AppProperties.GIT_HASH == latestCommitHash -> "candies"
+                    EasterEggType.MI_FANS if AppProperties.GIT_HASH == latestCommitHash -> "jinfan"
+                    EasterEggType.HUAWEI_ULTIMATE_DESIGN if AppProperties.GIT_HASH == latestCommitHash -> "design"
+                    else -> latestCommitHash
+                },
+                checking = isCheckingUpdate,
+            )
+        }
     }
 }
 
@@ -737,10 +635,18 @@ private fun WorkingStatusCard(
     useMonetColors: Boolean,
     onLongPress: () -> Unit,
 ) {
+    val isDark = (MixTheme.colorScheme.surface.red * 0.299f +
+        MixTheme.colorScheme.surface.green * 0.587f +
+        MixTheme.colorScheme.surface.blue * 0.114f) < 0.5f
     val palette = when {
         useMonetColors && !activated -> rememberStatusCardPalette(
-            accent = MiuixTheme.colorScheme.error,
+            accent = MixTheme.colorScheme.error,
             containerStrength = 0.24f,
+        )
+
+        !activated && isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFE06767),
+            containerStrength = 0.22f,
         )
 
         !activated -> customStatusCardPalette(
@@ -750,11 +656,21 @@ private fun WorkingStatusCard(
             summary = Color(0xFF9A4D4D),
         )
 
+        easterEggType == EasterEggType.NEW_YEAR && isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFE64B4B),
+            containerStrength = 0.22f,
+        )
+
         easterEggType == EasterEggType.NEW_YEAR -> customStatusCardPalette(
             container = Color(0xFFFFECEC),
             icon = Color(0xFFE64B4B),
             title = Color(0xFF7F1E1E),
             summary = Color(0xFF9A3939),
+        )
+
+        easterEggType == EasterEggType.APRIL_FOOLS && isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFEBB027),
+            containerStrength = 0.20f,
         )
 
         easterEggType == EasterEggType.APRIL_FOOLS -> customStatusCardPalette(
@@ -764,11 +680,23 @@ private fun WorkingStatusCard(
             summary = Color(0xFF8E6900),
         )
 
+        easterEggType == EasterEggType.EASTER && isDark -> customStatusCardPalette(
+            container = Color(0xFF2B2234),
+            icon = Color(0xFFED9A9A),
+            title = Color(0xFFE4D3F8),
+            summary = Color(0xFF8BD8A6),
+        )
+
         easterEggType == EasterEggType.EASTER -> customStatusCardPalette(
             container = Color(0xFFFFF4E6),
             icon = Color(0xFFED9A9A),
             title = Color(0xFF6A4C93),
             summary = Color(0xFF4CA66B),
+        )
+
+        easterEggType == EasterEggType.MI_FANS && isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFFF6900),
+            containerStrength = 0.20f,
         )
 
         easterEggType == EasterEggType.MI_FANS -> customStatusCardPalette(
@@ -786,8 +714,13 @@ private fun WorkingStatusCard(
         )
 
         useMonetColors -> rememberStatusCardPalette(
-            accent = MiuixTheme.colorScheme.primary,
+            accent = MixTheme.colorScheme.primary,
             containerStrength = 0.22f,
+        )
+
+        isDark -> rememberStatusCardPalette(
+            accent = Color(0xFF36D167),
+            containerStrength = 0.20f,
         )
 
         else -> customStatusCardPalette(
@@ -844,7 +777,7 @@ private fun WorkingStatusCard(
                         R.string.home_working_version,
                         statusVersion
                     ),
-                    style = MiuixTheme.textStyles.body2,
+                    style = MixTheme.textStyles.body2,
                     color = palette.summary,
                 )
             }
@@ -865,18 +798,31 @@ private fun EasterEggType.toTitleRes(): Int {
 
 @Composable
 private fun RootWarningCard(useMonetColors: Boolean) {
-    val palette = if (useMonetColors) rememberStatusCardPalette(
-        accent = MiuixTheme.colorScheme.error,
-        containerStrength = 0.2f,
-        iconStrength = 0.82f,
-        titleStrength = 0.42f,
-        summaryStrength = 0.26f,
-    ) else customStatusCardPalette(
-        container = Color(0xFFFDE9E9),
-        icon = Color(0xFFD94B4B),
-        title = Color(0xFF8C1F1F),
-        summary = Color(0xFFA63737),
-    )
+    val isDark = (MixTheme.colorScheme.surface.red * 0.299f +
+        MixTheme.colorScheme.surface.green * 0.587f +
+        MixTheme.colorScheme.surface.blue * 0.114f) < 0.5f
+    val palette = when {
+        useMonetColors -> rememberStatusCardPalette(
+            accent = MixTheme.colorScheme.error,
+            containerStrength = 0.2f,
+            iconStrength = 0.82f,
+            titleStrength = 0.42f,
+            summaryStrength = 0.26f,
+        )
+        isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFD94B4B),
+            containerStrength = 0.22f,
+            iconStrength = 0.82f,
+            titleStrength = 0.42f,
+            summaryStrength = 0.26f,
+        )
+        else -> customStatusCardPalette(
+            container = Color(0xFFFDE9E9),
+            icon = Color(0xFFD94B4B),
+            title = Color(0xFF8C1F1F),
+            summary = Color(0xFFA63737),
+        )
+    }
 
     Card(
         modifier = Modifier
@@ -908,7 +854,7 @@ private fun RootWarningCard(useMonetColors: Boolean) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = androidx.compose.ui.res.stringResource(R.string.home_root_warning_desc),
-                    style = MiuixTheme.textStyles.body2,
+                    style = MixTheme.textStyles.body2,
                     color = palette.summary,
                 )
             }
@@ -918,19 +864,32 @@ private fun RootWarningCard(useMonetColors: Boolean) {
 
 @Composable
 private fun FrameNoticeCard(title: String, summary: String, useMonetColors: Boolean) {
-    val colorScheme = MiuixTheme.colorScheme
-    val palette = if (useMonetColors) rememberStatusCardPalette(
-        accent = lerp(colorScheme.primary, colorScheme.secondary, 0.35f),
-        containerStrength = 0.2f,
-        iconStrength = 0.8f,
-        titleStrength = 0.4f,
-        summaryStrength = 0.24f,
-    ) else customStatusCardPalette(
-        container = Color(0xFFFFF3CD),
-        icon = Color(0xFFE0A100),
-        title = Color(0xFF7A5A00),
-        summary = Color(0xFF8A6B00),
-    )
+    val colorScheme = MixTheme.colorScheme
+    val isDark = (colorScheme.surface.red * 0.299f +
+        colorScheme.surface.green * 0.587f +
+        colorScheme.surface.blue * 0.114f) < 0.5f
+    val palette = when {
+        useMonetColors -> rememberStatusCardPalette(
+            accent = lerp(colorScheme.primary, colorScheme.secondary, 0.35f),
+            containerStrength = 0.2f,
+            iconStrength = 0.8f,
+            titleStrength = 0.4f,
+            summaryStrength = 0.24f,
+        )
+        isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFE0A100),
+            containerStrength = 0.2f,
+            iconStrength = 0.8f,
+            titleStrength = 0.4f,
+            summaryStrength = 0.24f,
+        )
+        else -> customStatusCardPalette(
+            container = Color(0xFFFFF3CD),
+            icon = Color(0xFFE0A100),
+            title = Color(0xFF7A5A00),
+            summary = Color(0xFF8A6B00),
+        )
+    }
 
     Card(
         modifier = Modifier
@@ -963,7 +922,7 @@ private fun FrameNoticeCard(title: String, summary: String, useMonetColors: Bool
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = summary,
-                    style = MiuixTheme.textStyles.body2,
+                    style = MixTheme.textStyles.body2,
                     color = palette.summary,
                 )
             }
@@ -972,21 +931,34 @@ private fun FrameNoticeCard(title: String, summary: String, useMonetColors: Bool
 }
 
 @Composable
-private fun UpdateWarningCard(currentHash: String, latestHash: String, useMonetColors: Boolean) {
+private fun UpdateWarningCard(currentHash: String, latestHash: String, useMonetColors: Boolean, onOpenRelease: (() -> Unit)? = null) {
     val context = LocalContext.current
-    val colorScheme = MiuixTheme.colorScheme
-    val palette = if (useMonetColors) rememberStatusCardPalette(
-        accent = lerp(colorScheme.primary, colorScheme.secondary, 0.35f),
-        containerStrength = 0.2f,
-        iconStrength = 0.8f,
-        titleStrength = 0.4f,
-        summaryStrength = 0.24f,
-    ) else customStatusCardPalette(
-        container = Color(0xFFFFF3CD),
-        icon = Color(0xFFE0A100),
-        title = Color(0xFF7A5A00),
-        summary = Color(0xFF8A6B00),
-    )
+    val colorScheme = MixTheme.colorScheme
+    val isDark = (colorScheme.surface.red * 0.299f +
+        colorScheme.surface.green * 0.587f +
+        colorScheme.surface.blue * 0.114f) < 0.5f
+    val palette = when {
+        useMonetColors -> rememberStatusCardPalette(
+            accent = lerp(colorScheme.primary, colorScheme.secondary, 0.35f),
+            containerStrength = 0.2f,
+            iconStrength = 0.8f,
+            titleStrength = 0.4f,
+            summaryStrength = 0.24f,
+        )
+        isDark -> rememberStatusCardPalette(
+            accent = Color(0xFFE0A100),
+            containerStrength = 0.2f,
+            iconStrength = 0.8f,
+            titleStrength = 0.4f,
+            summaryStrength = 0.24f,
+        )
+        else -> customStatusCardPalette(
+            container = Color(0xFFFFF3CD),
+            icon = Color(0xFFE0A100),
+            title = Color(0xFF7A5A00),
+            summary = Color(0xFF8A6B00),
+        )
+    }
 
     Card(
         modifier = Modifier
@@ -995,6 +967,10 @@ private fun UpdateWarningCard(currentHash: String, latestHash: String, useMonetC
         colors = CardDefaults.defaultColors(color = palette.container),
         insideMargin = PaddingValues(14.dp),
         onClick = {
+            if (onOpenRelease != null) {
+                onOpenRelease()
+                return@Card
+            }
             @Suppress("KotlinConstantConditions", "SimplifyBooleanWithConstants")
             context.startActivity(
                 Intent(
@@ -1032,7 +1008,7 @@ private fun UpdateWarningCard(currentHash: String, latestHash: String, useMonetC
                         currentHash,
                         latestHash,
                     ),
-                    style = MiuixTheme.textStyles.body2,
+                    style = MixTheme.textStyles.body2,
                     color = palette.summary,
                 )
             }
@@ -1110,7 +1086,7 @@ private fun UpdateInfoCard(currentHash: String, latestHash: String?, checking: B
     ) {
         Text(
             text = androidx.compose.ui.res.stringResource(R.string.home_update_title),
-            style = MiuixTheme.textStyles.title3,
+            style = MixTheme.textStyles.title3,
         )
         Spacer(modifier = Modifier.height(8.dp))
         InfoLine(
@@ -1132,12 +1108,12 @@ private fun UpdateInfoCard(currentHash: String, latestHash: String?, checking: B
 @Composable
 fun InfoLine(title: String, value: String, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
-        Text(text = title, style = MiuixTheme.textStyles.headline1)
+        Text(text = title, style = MixTheme.textStyles.headline1)
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = value,
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            style = MixTheme.textStyles.body2,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
         )
     }
 }

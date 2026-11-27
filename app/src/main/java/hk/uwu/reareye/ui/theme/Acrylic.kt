@@ -15,7 +15,7 @@ import dev.chrisbanes.haze.blur.HazeColorEffect
 import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 fun rememberAcrylicHazeState(): HazeState {
@@ -24,7 +24,7 @@ fun rememberAcrylicHazeState(): HazeState {
 
 @Composable
 fun rememberAcrylicHazeStyle(): HazeBlurStyle {
-    val surface = MiuixTheme.colorScheme.surface
+    val surface = MixTheme.colorScheme.surface
     val tintAlpha = if (surface.luminance() < 0.5f) 0.72f else 0.82f
 
     return remember(surface, tintAlpha) {

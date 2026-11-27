@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components.config
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -20,19 +23,15 @@ import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfig
@@ -40,43 +39,35 @@ import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigEntry
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigFields
 import hk.uwu.reareye.repository.rearwidget.RearBusinessExtraConfigRepository
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.reareye.ui.components.OverlayDialog
+import hk.uwu.mixui.components.GlassFormDialog
+import androidx.compose.ui.platform.testTag
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
-import hk.uwu.reareye.ui.components.card.SuperCard
-import hk.uwu.reareye.ui.components.motion.ArtRevealItem
-import hk.uwu.reareye.ui.components.motion.ArtStaggeredReveal
-import hk.uwu.reareye.ui.components.motion.ArtSwapContent
+import hk.uwu.mixui.components.ListItem
+import hk.uwu.mixui.motion.ArtRevealItem
+import hk.uwu.mixui.motion.ArtStaggeredReveal
+import hk.uwu.mixui.motion.ArtSwapContent
 import hk.uwu.reareye.ui.config.ConfigGroup
 import hk.uwu.reareye.ui.config.ConfigItem
 import hk.uwu.reareye.ui.config.ConfigNode
 import hk.uwu.reareye.ui.config.ConfigType
 import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.rememberRemotePrefsStatusRevision
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.InfiniteProgressIndicator
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.TopBarIconButton
+import hk.uwu.mixui.components.pageScrollFeedback
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.EditorTextField
+import hk.uwu.mixui.components.SwitchPreference
 
 private val BusinessExtraConfigNodes = listOf<ConfigNode>(
     ConfigGroup(
@@ -98,15 +89,13 @@ fun BusinessExtraConfigManagerScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val layoutDirection = LocalLayoutDirection.current
-    val scrollBehavior = MiuixScrollBehavior()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
+    val listState = rememberLazyListState()
     val entries = remember { mutableStateListOf<RearBusinessExtraConfigEntry>() }
     var loaded by remember { mutableStateOf(false) }
     var dataCardsVisible by remember { mutableStateOf(false) }
     val remotePrefsStatusRevision = rememberRemotePrefsStatusRevision()
     var showDialog by remember { mutableStateOf(false) }
+    var dialogSessionId by remember { mutableIntStateOf(0) }
     var draftBusiness by remember { mutableStateOf("") }
     var editingBusiness by remember { mutableStateOf<String?>(null) }
 
@@ -144,12 +133,16 @@ fun BusinessExtraConfigManagerScreen(
         }
     }
 
+    var pendingDeleteEntry by remember { mutableStateOf<RearBusinessExtraConfigEntry?>(null) }
+
     fun openCreateDialog() {
         draftBusiness = ""
+        dialogSessionId++
         showDialog = true
     }
 
     fun submitDialog() {
+        if (!showDialog) return
         val business = draftBusiness.trim()
         if (business.isBlank()) {
             Toast.makeText(
@@ -202,45 +195,99 @@ fun BusinessExtraConfigManagerScreen(
                 },
             )
         } else {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                        color = Color.Transparent,
-                        title = stringResource(R.string.rear_widget_business_extra_manager),
-                        navigationIcon = {
-                            IconButton(
-                                modifier = Modifier.padding(start = 16.dp),
-                                onClick = onBack
+            GlassTopBarScaffold(
+                title = stringResource(R.string.rear_widget_business_extra_manager),
+                isContentScrolled = listState.canScrollBackward,
+                contentListState = listState,
+                navigationIcon = {
+                    TopBarIconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.scene_route_navigate_back))
+                    }
+                },
+                actions = {
+                    TopBarIconButton(onClick = ::openCreateDialog, enabled = loaded) {
+                        Icon(Icons.Filled.Add, stringResource(R.string.rear_widget_business_extra_add))
+                    }
+                },
+                overlayContent = {
+                    GlassFormDialog(
+                        show = showDialog,
+                        title = stringResource(R.string.rear_widget_business_extra_add),
+                        onDismissRequest = { showDialog = false },
+                    ) {
+                        DialogFormColumn(modifier = Modifier.testTag("business-extra-form")) {
+                            EditorTextField(
+                                value = draftBusiness,
+                                onValueChange = { draftBusiness = it },
+                                modifier = Modifier.fillMaxWidth().testTag("business-extra-form-name"),
+                                label = stringResource(R.string.rear_widget_business_name),
+                                singleLine = true,
+                                autoFocus = showDialog,
+                                selectAllOnFocus = true,
+                                focusSessionKey = dialogSessionId,
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Icon(
-                                    modifier = Modifier.graphicsLayer {
-                                        if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                                    },
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = null,
+                                Button(
+                                    onClick = { showDialog = false },
+                                    modifier = Modifier.weight(1f).testTag("business-extra-form-cancel"),
+                                ) {
+                                    Text(stringResource(R.string.rear_widget_cancel))
+                                }
+                                Button(
+                                    onClick = { submitDialog() },
+                                    colors = ButtonDefaults.buttonColorsPrimary(),
+                                    modifier = Modifier.weight(1f).testTag("business-extra-form-confirm"),
+                                ) {
+                                    Text(stringResource(R.string.rear_widget_confirm))
+                                }
+                            }
+                        }
+                    }
+                    GlassFormDialog(
+                        show = pendingDeleteEntry != null,
+                        modifier = Modifier.testTag("business-extra-delete-dialog"),
+                        title = stringResource(R.string.rear_widget_delete_business_extra_title),
+                        onDismissRequest = { pendingDeleteEntry = null },
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                ListItem(
+                                    animateContentSize = true,
+                                    title = stringResource(
+                                        R.string.rear_widget_delete_business_extra_message,
+                                        pendingDeleteEntry?.business.orEmpty(),
+                                    ),
                                 )
                             }
-                        },
-                        actions = {
-                            IconButton(
-                                modifier = Modifier.padding(end = 16.dp),
-                                onClick = { if (loaded) openCreateDialog() },
-                            ) {
-                                Icon(imageVector = Icons.Filled.Add, contentDescription = null)
-                            }
-                        },
-                        scrollBehavior = scrollBehavior,
-                    )
-                }
+                            hk.uwu.mixui.components.DialogActions(
+                                cancelText = stringResource(R.string.rear_widget_cancel),
+                                confirmText = stringResource(R.string.rear_widget_action_delete),
+                                destructive = true,
+                                onCancel = { pendingDeleteEntry = null },
+                                onConfirm = {
+                                    val target = pendingDeleteEntry
+                                    pendingDeleteEntry = null
+                                    if (target != null) {
+                                        RearBusinessExtraConfigRepository.removeConfigForBusiness(
+                                            prefsManager = prefsManager,
+                                            business = target.business,
+                                        )
+                                        entries.remove(target)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                },
             ) { paddingValues ->
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
-                        .scrollEndHaptic()
-                        .overScrollVertical()
-                        .rearAcrylicSource(hazeState)
+                        .pageScrollFeedback()
                         .padding(horizontal = 12.dp),
                     contentPadding = PaddingValues(
                         top = paddingValues.calculateTopPadding() + 12.dp,
@@ -256,7 +303,8 @@ fun BusinessExtraConfigManagerScreen(
                                 .fillMaxWidth()
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                SuperCard(
+                                ListItem(
+                                    animateContentSize = true,
                                     title = stringResource(R.string.rear_widget_business_extra_hint_title),
                                     summary = buildString {
                                         if (loaded) {
@@ -332,15 +380,9 @@ fun BusinessExtraConfigManagerScreen(
                                     },
                                     rightAction = {
                                         ModuleStyleDeleteAction(
-                                            icon = MiuixIcons.Delete,
+                                            icon = UiIcons.Delete,
                                             text = stringResource(R.string.rear_widget_action_delete),
-                                            onClick = {
-                                                RearBusinessExtraConfigRepository.removeConfigForBusiness(
-                                                    prefsManager = prefsManager,
-                                                    business = item.business,
-                                                )
-                                                entries.remove(item)
-                                            },
+                                            onClick = { pendingDeleteEntry = item },
                                         )
                                     },
                                 )
@@ -363,39 +405,7 @@ fun BusinessExtraConfigManagerScreen(
                 }
             }
 
-            OverlayDialog(
-                show = showDialog,
-                title = stringResource(R.string.rear_widget_business_extra_add),
-                onDismissRequest = { showDialog = false },
-            ) {
-                DialogFormColumn {
-                    TextField(
-                        value = draftBusiness,
-                        onValueChange = { draftBusiness = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = stringResource(R.string.rear_widget_business_name),
-                        singleLine = true,
-                    )
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Button(
-                            onClick = { submitDialog() },
-                            colors = ButtonDefaults.buttonColorsPrimary(),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(R.string.rear_widget_confirm))
-                        }
-                        Button(
-                            onClick = { showDialog = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(stringResource(R.string.rear_widget_cancel))
-                        }
-                    }
-                }
-            }
+
         }
     }
 }
@@ -406,10 +416,7 @@ fun BusinessExtraConfigScreen(
     business: String,
     onBack: () -> Unit,
 ) {
-    val layoutDirection = LocalLayoutDirection.current
-    val scrollBehavior = MiuixScrollBehavior()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
+    val listState = rememberLazyListState()
     val remotePrefsStatusRevision = rememberRemotePrefsStatusRevision()
     var remoteReady by remember(business, remotePrefsStatusRevision) {
         mutableStateOf(false)
@@ -443,35 +450,21 @@ fun BusinessExtraConfigScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                color = Color.Transparent,
-                title = stringResource(R.string.rear_widget_business_extra_settings),
-                navigationIconPadding = 12.dp,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            modifier = Modifier.graphicsLayer {
-                                if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                            },
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-            )
-        }
+    GlassTopBarScaffold(
+        title = stringResource(R.string.rear_widget_business_extra_settings),
+        isContentScrolled = listState.canScrollBackward,
+        contentListState = listState,
+        navigationIcon = {
+            TopBarIconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.scene_route_navigate_back))
+            }
+        },
     ) { paddingValues ->
         LazyColumn(
+                    state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .rearAcrylicSource(hazeState)
+                .pageScrollFeedback()
                 .padding(horizontal = 12.dp),
             contentPadding = PaddingValues(
                 top = paddingValues.calculateTopPadding() + 12.dp,

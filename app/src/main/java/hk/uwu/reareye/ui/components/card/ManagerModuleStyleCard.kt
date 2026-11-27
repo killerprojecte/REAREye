@@ -22,15 +22,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import hk.uwu.reareye.ui.components.RearBadgeGroup
-import hk.uwu.reareye.ui.components.RearBadgeItem
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.BadgeGroup
+import hk.uwu.mixui.components.BadgeItem
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
+import hk.uwu.mixui.components.HorizontalDivider
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 fun ModuleStyleManagerCard(
@@ -38,7 +38,7 @@ fun ModuleStyleManagerCard(
     bottomPadding: Dp = 12.dp,
     title: String,
     summaryLines: List<String>,
-    badges: List<RearBadgeItem> = emptyList(),
+    badges: List<BadgeItem> = emptyList(),
     detailsBelowHeader: Boolean = false,
     trailing: @Composable (() -> Unit)? = null,
     headerVerticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
@@ -46,9 +46,9 @@ fun ModuleStyleManagerCard(
     scrollActionsHorizontally: Boolean = false,
     backgroundColor: Color? = null,
     contentColor: Color? = null,
-    titleColor: Color = contentColor ?: MiuixTheme.colorScheme.onSurface,
-    summaryColor: Color = contentColor ?: MiuixTheme.colorScheme.onSurfaceVariantSummary,
-    dividerColor: Color = MiuixTheme.colorScheme.outline.copy(alpha = 0.5f),
+    titleColor: Color = contentColor ?: MixTheme.colorScheme.onSurface,
+    summaryColor: Color = contentColor ?: MixTheme.colorScheme.onSurfaceVariantSummary,
+    dividerColor: Color = MixTheme.colorScheme.outline.copy(alpha = 0.5f),
     onCardClick: (() -> Unit)? = null,
     leftAction: @Composable () -> Unit,
     rightAction: @Composable () -> Unit,
@@ -79,7 +79,7 @@ fun ModuleStyleManagerCard(
                     )
                     if (!detailsBelowHeader) {
                         if (badges.isNotEmpty()) {
-                            RearBadgeGroup(
+                            BadgeGroup(
                                 badges = badges,
                                 modifier = Modifier.padding(top = 2.dp),
                             )
@@ -100,7 +100,7 @@ fun ModuleStyleManagerCard(
 
             if (detailsBelowHeader) {
                 if (badges.isNotEmpty()) {
-                    RearBadgeGroup(badges = badges)
+                    BadgeGroup(badges = badges)
                 }
                 summaryLines.forEach { line ->
                     Text(
@@ -142,7 +142,7 @@ fun ModuleStyleManagerCard(
             colors = backgroundColor?.let {
                 CardDefaults.defaultColors(
                     color = it,
-                    contentColor = contentColor ?: MiuixTheme.colorScheme.onSurface,
+                    contentColor = contentColor ?: MixTheme.colorScheme.onSurface,
                 )
             } ?: CardDefaults.defaultColors(),
             onClick = onCardClick,
@@ -166,7 +166,7 @@ fun ModuleStyleManagerCard(
             colors = backgroundColor?.let {
                 CardDefaults.defaultColors(
                     color = it,
-                    contentColor = contentColor ?: MiuixTheme.colorScheme.onSurface,
+                    contentColor = contentColor ?: MixTheme.colorScheme.onSurface,
                 )
             } ?: CardDefaults.defaultColors(),
         ) {
@@ -191,16 +191,16 @@ fun ModuleStyleIconAction(
     modifier: Modifier = Modifier.size(20.dp),
     icon: ImageVector,
     contentDescription: String? = null,
-    backgroundColor: Color = MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
+    backgroundColor: Color = MixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
     contentColor: Color? = null,
     onClick: () -> Unit,
 ) {
     val actionIconAlpha = if (backgroundColor.luminance() < 0.5f) 0.7f else 0.9f
     val actionIconTint =
-        (contentColor ?: MiuixTheme.colorScheme.onSurface).copy(alpha = actionIconAlpha)
+        (contentColor ?: MixTheme.colorScheme.onSurface).copy(alpha = actionIconAlpha)
     IconButton(
-        minHeight = 35.dp,
-        minWidth = 35.dp,
+        minHeight = 40.dp,
+        minWidth = 40.dp,
         onClick = onClick,
         backgroundColor = backgroundColor,
     ) {
@@ -218,8 +218,8 @@ fun ModuleStyleTextAction(
     icon: ImageVector,
     text: String,
     enabled: Boolean = true,
-    backgroundColor: Color = MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
-    contentColor: Color = MiuixTheme.colorScheme.onSurface,
+    backgroundColor: Color = MixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
+    contentColor: Color = MixTheme.colorScheme.onSurface,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -228,8 +228,9 @@ fun ModuleStyleTextAction(
         contentColor.copy(alpha = actionIconAlpha * if (enabled) 1f else 0.45f)
     IconButton(
         modifier = modifier,
-        minHeight = 35.dp,
-        minWidth = 35.dp,
+        enabled = enabled,
+        minHeight = 40.dp,
+        minWidth = 40.dp,
         onClick = if (enabled) onClick else ({}),
         backgroundColor = backgroundColor.copy(alpha = if (enabled) backgroundColor.alpha else 0.45f),
     ) {
@@ -259,8 +260,8 @@ fun ModuleStyleDeleteAction(
     icon: ImageVector,
     text: String,
     enabled: Boolean = true,
-    backgroundColor: Color = MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
-    contentColor: Color = MiuixTheme.colorScheme.onSurface,
+    backgroundColor: Color = MixTheme.colorScheme.errorContainer.copy(alpha = 0.52f),
+    contentColor: Color = MixTheme.colorScheme.error,
     onClick: () -> Unit,
 ) {
     ModuleStyleTextAction(

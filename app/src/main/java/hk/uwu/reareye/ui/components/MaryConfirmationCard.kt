@@ -44,9 +44,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.theme.MixTheme
 
 internal const val MARY_TOOL_MOTION_MILLIS = 220
 
@@ -77,17 +77,19 @@ internal fun MaryConfirmationCard(
     actions: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MixTheme.colorScheme
     val dark = scheme.surfaceContainerHigh.luminance() < 0.5f
     val errorColors = maryErrorColors(dark)
     val container =
-        if (isError) errorColors.container else if (dark) Color(0xff2c2c2c) else scheme.surfaceContainerHigh
+        if (isError) errorColors.container else scheme.surfaceContainerHigh
     val accent = if (isError || isDanger) errorColors.content else scheme.primary
     val secondary = if (isError) errorColors.content else scheme.onSurfaceVariantSummary
-    val border =
-        if (isError) errorColors.border else if (dark) Color.White.copy(alpha = 0.12f) else Color.Black.copy(
-            alpha = 0.10f
-        )
+    val border = when {
+        isError -> errorColors.border
+        isDanger -> errorColors.border.copy(alpha = 0.6f)
+        dark -> scheme.outline.copy(alpha = 0.35f)
+        else -> scheme.outline.copy(alpha = 0.28f)
+    }
     val shape = RoundedCornerShape(20.dp)
     // The summary and body must trade their heights on the same clock. Removing the
     // summary with `if` first caused a one-frame shrink before the body started expanding.
@@ -181,18 +183,21 @@ internal fun MaryConfirmationActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     primary: Boolean = false,
+    destructive: Boolean = false,
     enabled: Boolean = true,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MixTheme.colorScheme
     val dark = scheme.surfaceContainerHigh.luminance() < 0.5f
     val foreground = when {
         !enabled -> scheme.onSurfaceVariantSummary.copy(alpha = 0.55f)
+        destructive -> scheme.onError
         primary && dark -> Color(0xff202020)
         primary -> Color.White
         else -> scheme.onSurfaceContainer
     }
     val fill = when {
         !enabled -> scheme.onSurfaceVariantSummary.copy(alpha = 0.16f)
+        destructive -> scheme.error
         primary && dark -> Color.White
         primary -> Color(0xff262626)
         else -> if (dark) Color.White.copy(alpha = 0.04f) else Color.Black.copy(alpha = 0.025f)

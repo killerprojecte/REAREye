@@ -4,8 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import hk.uwu.reareye.R
-import hk.uwu.reareye.ui.components.RearBadgeItem
-import hk.uwu.reareye.ui.components.rememberRearAccentBadgePalette
+import hk.uwu.mixui.components.BadgeItem
+import hk.uwu.mixui.components.rememberAccentBadgePalette
 
 private enum class RearWidgetManagerBadgeKind {
     SourceLocal,
@@ -29,7 +29,7 @@ private enum class RearWidgetManagerBadgeKind {
 
 @Composable
 private fun rememberRearWidgetBadgePalette(kind: RearWidgetManagerBadgeKind) =
-    rememberRearAccentBadgePalette(
+    rememberAccentBadgePalette(
         when (kind) {
             RearWidgetManagerBadgeKind.SourceLocal -> Color(0xFF64748B)
             RearWidgetManagerBadgeKind.SourceStore -> Color(0xFF3B82F6)
@@ -55,7 +55,7 @@ private fun rememberRearWidgetBadgePalette(kind: RearWidgetManagerBadgeKind) =
 internal fun rearWidgetSourceBadges(
     downloadedFromStore: Boolean,
     storeWidgetId: String?,
-): List<RearBadgeItem> {
+): List<BadgeItem> {
     return buildList {
         add(rearWidgetSourceBadge(downloadedFromStore))
         storeWidgetId?.trim()?.takeIf { it.isNotBlank() }?.let {
@@ -65,8 +65,8 @@ internal fun rearWidgetSourceBadges(
 }
 
 @Composable
-internal fun rearWidgetSourceBadge(downloadedFromStore: Boolean): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetSourceBadge(downloadedFromStore: Boolean): BadgeItem {
+    return BadgeItem(
         text = stringResource(
             if (downloadedFromStore) {
                 R.string.rear_widget_badge_source_store
@@ -85,88 +85,88 @@ internal fun rearWidgetSourceBadge(downloadedFromStore: Boolean): RearBadgeItem 
 }
 
 @Composable
-internal fun rearWidgetRepoIdBadge(storeWidgetId: String): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetRepoIdBadge(storeWidgetId: String): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_repo_id, storeWidgetId),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.RepoId),
     )
 }
 
 @Composable
-internal fun rearWidgetPackageBadge(packageName: String): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetPackageBadge(packageName: String): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_package, packageName),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.PackageName),
     )
 }
 
 @Composable
-internal fun rearWidgetBusinessBadge(business: String): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetBusinessBadge(business: String): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_business, business),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.Business),
     )
 }
 
 @Composable
-internal fun rearWidgetPriorityBadge(priority: Int): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetPriorityBadge(priority: Int): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_priority, priority),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.Priority),
     )
 }
 
 @Composable
-internal fun rearWidgetStickyBadge(): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetStickyBadge(): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_sticky),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.Sticky),
     )
 }
 
 @Composable
-internal fun rearWidgetRuleBadge(rule: String): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetRuleBadge(rule: String): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_rule, rule),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.Rule),
     )
 }
 
 @Composable
-internal fun rearWidgetComponentCountBadge(count: Int): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetComponentCountBadge(count: Int): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_widget_count, count),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.Count),
     )
 }
 
 @Composable
-internal fun rearWidgetCardCountBadge(count: Int): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetCardCountBadge(count: Int): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_card_count, count),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.Count),
     )
 }
 
 @Composable
-internal fun rearWidgetSceneRouteCountBadge(count: Int): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetSceneRouteCountBadge(count: Int): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_scene_route_count, count),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.Count),
     )
 }
 
 @Composable
-internal fun rearWidgetLockedBadge(): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetLockedBadge(): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_locked),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.Locked),
     )
 }
 
 @Composable
-internal fun rearWidgetTemplateStatusBadge(hasCustomConfig: Boolean): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetTemplateStatusBadge(hasCustomConfig: Boolean): BadgeItem {
+    return BadgeItem(
         text = stringResource(
             if (hasCustomConfig) {
                 R.string.rear_widget_badge_template_custom
@@ -185,40 +185,40 @@ internal fun rearWidgetTemplateStatusBadge(hasCustomConfig: Boolean): RearBadgeI
 }
 
 @Composable
-internal fun rearWidgetAppCardBadge(): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetAppCardBadge(): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_app),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.AppCard),
     )
 }
 
 @Composable
-internal fun rearWidgetRearEyeBadge(): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetRearEyeBadge(): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_reareye),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.RearEye),
     )
 }
 
 @Composable
-internal fun rearWidgetExternalBadge(): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetExternalBadge(): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_external),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.External),
     )
 }
 
 @Composable
-internal fun rearWidgetReadOnlyBadge(): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetReadOnlyBadge(): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_read_only),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.ReadOnly),
     )
 }
 
 @Composable
-internal fun rearWidgetComponentBadge(component: String): RearBadgeItem {
-    return RearBadgeItem(
+internal fun rearWidgetComponentBadge(component: String): BadgeItem {
+    return BadgeItem(
         text = stringResource(R.string.rear_widget_badge_component, component),
         palette = rememberRearWidgetBadgePalette(RearWidgetManagerBadgeKind.Component),
     )

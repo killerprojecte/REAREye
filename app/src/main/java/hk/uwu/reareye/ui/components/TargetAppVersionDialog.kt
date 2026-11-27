@@ -1,5 +1,6 @@
 package hk.uwu.reareye.ui.components
 
+import hk.uwu.mixui.components.OverlayDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,10 +22,10 @@ import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.version.AppVersionViolation
 import kotlinx.coroutines.delay
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.theme.MixTheme
 import kotlin.math.ceil
 
 /** How long the gate stays on screen before it closes the app on its own. */
@@ -92,8 +93,8 @@ fun TargetAppVersionDialog(
                     )
                     Text(
                         text = violation.packageName,
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        style = MixTheme.textStyles.body2,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                     )
                 }
             }
@@ -103,8 +104,8 @@ fun TargetAppVersionDialog(
                     R.string.target_app_version_dialog_countdown,
                     remainingSeconds,
                 ),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
 
             Button(
@@ -133,15 +134,15 @@ private fun VersionDetailRow(
         Text(
             text = label,
             modifier = Modifier.width(112.dp),
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            style = MixTheme.textStyles.body2,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
         )
         Text(
             text = value,
             color = if (emphasize) {
-                MiuixTheme.colorScheme.error
+                MixTheme.colorScheme.error
             } else {
-                MiuixTheme.colorScheme.onSurface
+                MixTheme.colorScheme.onSurface
             },
         )
     }

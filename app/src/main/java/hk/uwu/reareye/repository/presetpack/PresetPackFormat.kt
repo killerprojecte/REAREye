@@ -18,6 +18,8 @@ object PresetPackContract {
     const val MANIFEST_NAME = "manifest.json"
     const val GITHUB_LATEST_RELEASE =
         "https://api.github.com/repos/NekoStash/REAREye-Preset-Resources/releases/latest"
+    const val CLOUD_SHARE_URL =
+        "https://pan.quark.cn/s/f2f9af5abb46#/list/share/799faa52857c449a85c30257c30944be"
     const val RELEASE_ASSET_PREFIX = "reareye-presets-"
     const val MAX_PACK_BYTES = 300L * 1024L * 1024L
 

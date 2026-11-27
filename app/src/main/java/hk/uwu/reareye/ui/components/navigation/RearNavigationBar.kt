@@ -1,6 +1,5 @@
 package hk.uwu.reareye.ui.components.navigation
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -10,32 +9,25 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BorderStyle
 import androidx.compose.material.icons.rounded.Cottage
@@ -47,15 +39,16 @@ import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.Widgets
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,12 +56,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -84,37 +76,29 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
-import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.zIndex
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.rounded.Stacks
-import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
-import com.kyant.backdrop.highlight.Highlight
-import com.kyant.backdrop.shadow.InnerShadow
-import com.kyant.backdrop.shadow.Shadow
 import com.kyant.capsule.ContinuousCapsule
 import hk.uwu.reareye.R
 import hk.uwu.reareye.ui.config.ConfigType
+import hk.uwu.reareye.ui.theme.AppNavigationBarStyle
 import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
-import hk.uwu.reareye.utils.BlurredBar
-import hk.uwu.reareye.utils.blend.rememberBlurBackdrop
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.NavigationBar
-import top.yukonga.miuix.kmp.basic.NavigationBarDisplayMode
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.BottomSheetAction
+import hk.uwu.mixui.components.BottomSheetActionButton
+import hk.uwu.mixui.components.BottomSheetActionIcon
+import hk.uwu.mixui.components.GlassBottomSheet
+import hk.uwu.mixui.components.GlassBottomSheetSize
+import androidx.compose.ui.platform.testTag
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.NavigationBar
+import hk.uwu.mixui.components.NavigationBarMode
+import hk.uwu.mixui.components.NavigationBackdrop
+import hk.uwu.mixui.components.NavigationItem
+import hk.uwu.mixui.components.NavigationAnchor
+import hk.uwu.mixui.theme.MixTheme
 
 sealed interface NavigationQuickTarget {
     @Immutable
@@ -122,7 +106,7 @@ sealed interface NavigationQuickTarget {
 }
 
 @Immutable
-private data class NavigationQuickAction(
+internal data class NavigationQuickAction(
     val id: String,
     val label: String,
     val icon: ImageVector,
@@ -137,33 +121,20 @@ private data class NavigationDestination(
     val quickActions: List<NavigationQuickAction> = emptyList(),
 )
 
-@Immutable
-private data class NavigationQuickActionStyle(
-    val containerColor: Color,
-    val contentColor: Color,
-    val borderColor: Color,
-    val hoveredContainerColor: Color,
-    val selectedContainerColor: Color,
-    val selectedBorderColor: Color,
-    val shadowAlpha: Float,
-    val shadowElevation: Dp,
-    val usesGlass: Boolean,
-)
-
 private const val HOME_ROUTE = "home"
 private const val MARY_ROUTE = "mary"
 private const val CONFIG_ROUTE = "config"
 private const val ABOUT_ROUTE = "about"
 private const val EDIT_QUICK_ACTIONS_KEY = "__edit_quick_actions__"
 private const val QUICK_ACTION_BUTTON_WIDTH_DP = 176
-private const val QUICK_ACTION_HALF_LONG_PRESS_MIN_MS = 180L
 
 @Composable
-fun RearNavigationBar(
+fun AppNavigationBar(
     modifier: Modifier = Modifier,
     currentScreen: String,
     navigationBarMode: ModuleNavigationBarMode,
-    backdrop: Backdrop,
+    backdrop: NavigationBackdrop,
+    navigationBarStyle: AppNavigationBarStyle = AppNavigationBarStyle.default,
     shadowVisibilityProgress: Float = 1f,
     quickActionIds: List<String> = DefaultNavigationQuickActionIds,
     onQuickActionIdsChanged: (List<String>) -> Unit = {},
@@ -175,6 +146,8 @@ fun RearNavigationBar(
     val configLabel = stringResource(R.string.configuration_navigation)
     val aboutLabel = stringResource(R.string.about_navigation)
     val editLabel = stringResource(R.string.navigation_quick_edit)
+    val quickMenuLabel = stringResource(R.string.navigation_quick_available_title)
+    val editActionLabel = stringResource(R.string.navigation_quick_edit_title)
     val allQuickActions = rememberNavigationQuickActions()
     val quickActionLookup = remember(allQuickActions) { allQuickActions.associateBy { it.id } }
     val enabledQuickActions = remember(quickActionIds, allQuickActions) {
@@ -219,14 +192,18 @@ fun RearNavigationBar(
     var expandedQuickActionsRoute by remember { mutableStateOf<String?>(null) }
     var showQuickActionEditor by remember { mutableStateOf(false) }
 
+    var menuAnchor by remember { mutableStateOf(NavigationAnchor(0f, 0f, 1f)) }
+    var navigationHostPosition by remember { mutableStateOf(Offset.Zero) }
+
     fun openQuickActions(
         item: NavigationDestination,
         anchorCenterX: Float,
         anchorTop: Float,
         density: Float
     ) {
-        if (item.quickActions.isNotEmpty()) {
-            quickMenuController.begin(anchorCenterX, anchorTop, density)
+        if (item.route == CONFIG_ROUTE || item.quickActions.isNotEmpty()) {
+            menuAnchor = NavigationAnchor(anchorCenterX, anchorTop, density)
+            quickMenuController.begin()
             expandedQuickActionsRoute = item.route
         }
     }
@@ -242,10 +219,15 @@ fun RearNavigationBar(
     }
 
     fun selectQuickAction(target: NavigationQuickTarget) {
+        // Retire ownership before invoking application code; retained closing callbacks
+        // and a release following Back/cancel must never execute the same action again.
+        if (expandedQuickActionsRoute == null) return
+        expandedQuickActionsRoute = null
         quickMenuController.reset()
         onQuickActionSelected(target)
-        expandedQuickActionsRoute = null
     }
+
+    BackHandler(enabled = expandedQuickActionsRoute != null) { closeQuickActions() }
 
     NavigationQuickActionEditor(
         show = showQuickActionEditor,
@@ -258,135 +240,67 @@ fun RearNavigationBar(
         },
     )
 
-    if (navigationBarMode == ModuleNavigationBarMode.NORMAL || navigationBarMode == ModuleNavigationBarMode.SEMI_TRANSPARENT) {
-        val bar: @Composable () -> Unit = {
-            NavigationBar(
-                modifier = modifier,
-                color = if (navigationBarMode == ModuleNavigationBarMode.NORMAL) {
-                    MiuixTheme.colorScheme.surface
-                } else {
-                    Color.Transparent
-                },
-                mode = NavigationBarDisplayMode.IconAndText,
-            ) {
-                items.forEach { item ->
-                    RearNavigationBarItem(
-                        item = item,
-                        selected = currentScreen == item.route,
-                        expanded = expandedQuickActionsRoute == item.route,
-                        navigationBarMode = navigationBarMode,
-                        editLabel = editLabel,
-                        quickMenuController = quickMenuController,
-                        onClick = {
-                            closeQuickActions()
-                            onScreenSelected(item.route)
-                        },
-                        onOpenQuickActions = { anchorCenterX, anchorTop, density ->
-                            openQuickActions(item, anchorCenterX, anchorTop, density)
-                        },
-                        onDismissQuickActions = ::closeQuickActions,
-                        onOpenEditor = ::openEditor,
-                        onQuickActionSelected = ::selectQuickAction,
-                    )
-                }
-            }
-        }
-        if (navigationBarMode == ModuleNavigationBarMode.SEMI_TRANSPARENT) {
-            val enable = rememberBlurBackdrop(true)
-            BlurredBar(backdrop = enable, bar)
-        } else {
-            bar()
-        }
-        return
-    }
-
-    val enableGlass = navigationBarMode == ModuleNavigationBarMode.FLOATING_GLASS
-    val selectedIndex = items.indexOfFirst { it.route == currentScreen }.coerceAtLeast(0)
-    val selectedItem = items.getOrNull(selectedIndex)
-    val selectedOverlayQuickGesture = selectedItem?.let { item ->
-        Modifier.navigationQuickActionDragGesture(
-            enabled = item.quickActions.isNotEmpty(),
-            actions = item.quickActions,
-            quickMenuController = quickMenuController,
-            onOpenQuickActions = { anchorCenterX, anchorTop, density ->
-                openQuickActions(item, anchorCenterX, anchorTop, density)
+    Box(modifier.onGloballyPositioned {
+        navigationHostPosition = it.positionInRoot()
+        quickMenuController.positionHost(it)
+    }) {
+        NavigationBar(
+            items = items.map { item ->
+                NavigationItem(
+                    key = item.route,
+                    label = item.label,
+                    icon = item.icon,
+                    secondaryActionLabel = if (item.route == CONFIG_ROUTE || item.quickActions.isNotEmpty()) quickMenuLabel else null,
+                    editActionLabel = if (item.route == CONFIG_ROUTE) editActionLabel else null,
+                )
             },
-            onDismissQuickActions = ::closeQuickActions,
-            onOpenEditor = ::openEditor,
-            onQuickActionSelected = ::selectQuickAction,
+            style = navigationBarStyle.style,
+            selectedKey = currentScreen,
+            onSelect = { route -> closeQuickActions(); onScreenSelected(route) },
+            backdrop = backdrop,
+            mode = when (navigationBarMode) {
+                ModuleNavigationBarMode.NORMAL -> NavigationBarMode.Normal
+                ModuleNavigationBarMode.FLOATING -> NavigationBarMode.Floating
+                ModuleNavigationBarMode.FLOATING_GLASS -> NavigationBarMode.FloatingGlass
+                ModuleNavigationBarMode.SEMI_TRANSPARENT -> NavigationBarMode.Translucent
+            },
+            shadowVisibilityProgress = shadowVisibilityProgress,
+            onEditAction = { route -> if (route == CONFIG_ROUTE) openEditor() },
+            onSecondaryAction = { route, anchor ->
+                items.firstOrNull { it.route == route }?.let { item ->
+                    openQuickActions(item, anchor.centerX, anchor.top, anchor.density)
+                }
+            },
+            onSecondaryDrag = { pointer ->
+                items.firstOrNull { it.route == expandedQuickActionsRoute }?.let { item ->
+                    quickMenuController.updateHover(pointer, item.quickActions) != null
+                } ?: false
+            },
+            onSecondaryEnd = { cancelled ->
+                val action = items.firstOrNull { it.route == expandedQuickActionsRoute }
+                    ?.quickActions?.firstOrNull { it.id == quickMenuController.hoveredKey }
+                when {
+                    cancelled -> closeQuickActions()
+                    quickMenuController.hoveredKey == EDIT_QUICK_ACTIONS_KEY -> openEditor()
+                    action != null -> selectQuickAction(action.target)
+                    else -> closeQuickActions()
+                }
+            },
         )
-    } ?: Modifier
-
-    FloatingBottomBar(
-        modifier = modifier
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {},
+        items.forEach { item ->
+            NavigationQuickActionsPopup(
+                expanded = expandedQuickActionsRoute == item.route,
+                actions = item.quickActions,
+                canEditActions = item.route == CONFIG_ROUTE,
+                backdrop = backdrop,
+                editLabel = editLabel,
+                quickMenuController = quickMenuController,
+                anchor = menuAnchor,
+                hostPosition = navigationHostPosition,
+                onDismissRequest = ::closeQuickActions,
+                onOpenEditor = ::openEditor,
+                onActionSelected = ::selectQuickAction,
             )
-            .padding(
-                bottom = 12.dp + WindowInsets.navigationBars.asPaddingValues()
-                    .calculateBottomPadding()
-            ),
-        selectedIndex = selectedIndex,
-        onSelected = {
-            closeQuickActions()
-            onScreenSelected(items[it].route)
-        },
-        backdrop = backdrop,
-        tabsCount = items.size,
-        isBlurEnabled = enableGlass,
-        shadowVisibilityProgress = shadowVisibilityProgress,
-        selectedOverlayModifier = Modifier,
-        renderDuplicateContentLayer = true,
-        quickGestureModifier = selectedOverlayQuickGesture,
-    ) {
-        items.forEachIndexed { index, item ->
-            FloatingBottomBarItem(
-                onClick = {
-                    closeQuickActions()
-                    onScreenSelected(items[index].route)
-                },
-                quickGestureModifier = Modifier.navigationQuickActionDragGesture(
-                    enabled = item.quickActions.isNotEmpty(),
-                    actions = item.quickActions,
-                    quickMenuController = quickMenuController,
-                    onOpenQuickActions = { anchorCenterX, anchorTop, density ->
-                        openQuickActions(item, anchorCenterX, anchorTop, density)
-                    },
-                    onDismissQuickActions = ::closeQuickActions,
-                    onOpenEditor = ::openEditor,
-                    onQuickActionSelected = ::selectQuickAction,
-                ),
-                popup = {
-                    NavigationQuickActionsPopup(
-                        expanded = expandedQuickActionsRoute == item.route,
-                        actions = item.quickActions,
-                        navigationBarMode = navigationBarMode,
-                        editLabel = editLabel,
-                        quickMenuController = quickMenuController,
-                        onDismissRequest = ::closeQuickActions,
-                        onOpenEditor = ::openEditor,
-                        onActionSelected = ::selectQuickAction,
-                    )
-                },
-                modifier = Modifier.defaultMinSize(minWidth = 76.dp),
-            ) {
-                Icon(
-                    imageVector = item.icon,
-                    contentDescription = item.label,
-                    tint = MiuixTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = item.label,
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Visible,
-                )
-            }
         }
     }
 }
@@ -450,99 +364,13 @@ private fun rememberNavigationQuickActions(): List<NavigationQuickAction> {
 }
 
 @Composable
-private fun RowScope.RearNavigationBarItem(
-    item: NavigationDestination,
-    selected: Boolean,
-    expanded: Boolean,
-    navigationBarMode: ModuleNavigationBarMode,
-    editLabel: String,
-    quickMenuController: NavigationQuickMenuController,
-    onClick: () -> Unit,
-    onOpenQuickActions: (anchorCenterX: Float, anchorTop: Float, density: Float) -> Unit,
-    onDismissQuickActions: () -> Unit,
-    onOpenEditor: () -> Unit,
-    onQuickActionSelected: (NavigationQuickTarget) -> Unit,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val onSurfaceContainerColor = MiuixTheme.colorScheme.onSurfaceContainer
-    val tint = when {
-        isPressed -> if (selected) {
-            onSurfaceContainerColor.copy(alpha = 0.5f)
-        } else {
-            onSurfaceContainerColor.copy(alpha = 0.6f)
-        }
-
-        selected -> onSurfaceContainerColor
-        else -> onSurfaceContainerColor.copy(alpha = 0.4f)
-    }
-    val fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-
-    Box(
-        modifier = Modifier
-            .height(64.dp)
-            .weight(1f),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationQuickActionDragGesture(
-                    enabled = item.quickActions.isNotEmpty(),
-                    actions = item.quickActions,
-                    quickMenuController = quickMenuController,
-                    onOpenQuickActions = onOpenQuickActions,
-                    onDismissQuickActions = onDismissQuickActions,
-                    onOpenEditor = onOpenEditor,
-                    onQuickActionSelected = onQuickActionSelected,
-                )
-                .combinedClickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = onClick,
-                    onLongClick = null,
-                ),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top,
-        ) {
-            Icon(
-                imageVector = item.icon,
-                contentDescription = item.label,
-                tint = tint,
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .size(26.dp),
-            )
-            Text(
-                modifier = Modifier.padding(bottom = 8.dp),
-                text = item.label,
-                color = tint,
-                fontSize = 12.sp,
-                fontWeight = fontWeight,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        NavigationQuickActionsPopup(
-            expanded = expanded,
-            actions = item.quickActions,
-            navigationBarMode = navigationBarMode,
-            editLabel = editLabel,
-            quickMenuController = quickMenuController,
-            onDismissRequest = onDismissQuickActions,
-            onOpenEditor = onOpenEditor,
-            onActionSelected = onQuickActionSelected,
-        )
-    }
-}
-
-@Composable
 private fun NavigationQuickActionsPopup(
+    anchor: NavigationAnchor,
+    hostPosition: Offset,
     expanded: Boolean,
     actions: List<NavigationQuickAction>,
-    navigationBarMode: ModuleNavigationBarMode,
+    canEditActions: Boolean = false,
+    backdrop: NavigationBackdrop,
     editLabel: String,
     quickMenuController: NavigationQuickMenuController,
     onDismissRequest: () -> Unit,
@@ -550,18 +378,20 @@ private fun NavigationQuickActionsPopup(
     onActionSelected: (NavigationQuickTarget) -> Unit,
 ) {
     val density = LocalDensity.current
-    val menuBackdrop = rememberLayerBackdrop()
-    val positionProvider = remember(density) {
+    val positionProvider = remember(density, anchor, hostPosition) {
         NavigationQuickActionsPopupPositionProvider(
+            anchor = anchor,
+            hostPosition = hostPosition,
             spacingPx = with(density) { 10.dp.roundToPx() },
             windowPaddingPx = with(density) { 12.dp.roundToPx() },
         )
     }
     val progress = remember { Animatable(0f) }
     var popupVisible by remember { mutableStateOf(false) }
+    val hasMenuEntries = canEditActions || actions.isNotEmpty()
 
-    LaunchedEffect(expanded, actions) {
-        if (expanded && actions.isNotEmpty()) {
+    LaunchedEffect(expanded, hasMenuEntries) {
+        if (expanded && hasMenuEntries) {
             popupVisible = true
             progress.animateTo(
                 targetValue = 1f,
@@ -576,16 +406,11 @@ private fun NavigationQuickActionsPopup(
         }
     }
 
-    if ((!expanded && !popupVisible) || actions.isEmpty()) return
+    if ((!expanded && !popupVisible) || !hasMenuEntries) return
 
-    Popup(
-        popupPositionProvider = positionProvider,
+    hk.uwu.mixui.components.NavigationQuickActionPopup(
+        positionProvider = positionProvider,
         onDismissRequest = onDismissRequest,
-        properties = PopupProperties(
-            focusable = false,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-        ),
     ) {
         val progressValue = progress.value
         Box(
@@ -601,70 +426,51 @@ private fun NavigationQuickActionsPopup(
             contentAlignment = Alignment.TopCenter,
         ) {
             val buttonWidth = QUICK_ACTION_BUTTON_WIDTH_DP.dp
-            val showEditTarget =
-                quickMenuController.showEditTarget || quickMenuController.hoveredKey == EDIT_QUICK_ACTIONS_KEY
-            val editTargetProgress by animateFloatAsState(
-                targetValue = if (showEditTarget) 1f else 0f,
-                animationSpec = tween(
-                    if (showEditTarget) 150 else 180,
-                    easing = FastOutSlowInEasing
-                ),
-                label = "QuickActionEditTargetProgress",
-            )
-
-            NavigationQuickActionsBackdropLayer(
-                actionsCount = actions.size,
-                editTargetProgress = editTargetProgress,
-                width = buttonWidth,
-                modifier = Modifier.layerBackdrop(menuBackdrop),
-            )
-
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Box(
-                    modifier = Modifier
-                        .width(buttonWidth)
-                        .height(40.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (editTargetProgress > 0.01f) {
+                if (canEditActions) {
+                    Box(
+                        modifier = Modifier
+                            .width(buttonWidth)
+                            .height(40.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         NavigationQuickActionButton(
                             label = editLabel,
                             icon = Icons.Rounded.Edit,
-                            navigationBarMode = navigationBarMode,
-                            backdrop = menuBackdrop,
+                            backdrop = backdrop,
+                            enabled = expanded,
+                            testTag = "navigation-quick-edit-target",
                             width = buttonWidth,
                             hovered = quickMenuController.hoveredKey == EDIT_QUICK_ACTIONS_KEY,
                             isEditTarget = true,
-                            modifier = Modifier.graphicsLayer {
-                                alpha = editTargetProgress
-                                val appearScale = 0.94f + 0.06f * editTargetProgress
-                                scaleX = appearScale
-                                scaleY = appearScale
-                            },
+                            delayProgress = progressValue,
                             onClick = onOpenEditor,
-                            onPositioned = { _ -> },
+                            onPositioned = { quickMenuController.positionTarget(EDIT_QUICK_ACTIONS_KEY, it) },
                         )
                     }
                 }
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    actions.forEachIndexed { index, action ->
-                        NavigationQuickActionButton(
-                            label = action.label,
-                            icon = action.icon,
-                            navigationBarMode = navigationBarMode,
-                            backdrop = menuBackdrop,
-                            width = buttonWidth,
-                            hovered = quickMenuController.hoveredKey == action.id,
-                            delayProgress = ((progressValue - index * 0.05f).coerceIn(0f, 1f)),
-                            onClick = { onActionSelected(action.target) },
-                            onPositioned = { _ -> },
-                        )
+                if (actions.isNotEmpty()) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        actions.forEachIndexed { index, action ->
+                            NavigationQuickActionButton(
+                                label = action.label,
+                                icon = action.icon,
+                                backdrop = backdrop,
+                                enabled = expanded,
+                                testTag = "navigation-quick-action-${action.id}",
+                                width = buttonWidth,
+                                hovered = quickMenuController.hoveredKey == action.id,
+                                delayProgress = ((progressValue - index * 0.05f).coerceIn(0f, 1f)),
+                                onClick = { onActionSelected(action.target) },
+                                onPositioned = { quickMenuController.positionTarget(action.id, it) },
+                            )
+                        }
                     }
                 }
             }
@@ -673,47 +479,12 @@ private fun NavigationQuickActionsPopup(
 }
 
 @Composable
-private fun NavigationQuickActionsBackdropLayer(
-    actionsCount: Int,
-    editTargetProgress: Float,
-    width: Dp,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            modifier = Modifier
-                .width(width)
-                .height(40.dp)
-                .graphicsLayer { alpha = editTargetProgress }
-                .background(
-                    MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f),
-                    ContinuousCapsule
-                ),
-        )
-        repeat(actionsCount) {
-            Box(
-                modifier = Modifier
-                    .width(width)
-                    .height(40.dp)
-                    .background(
-                        MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.66f),
-                        ContinuousCapsule
-                    ),
-            )
-        }
-    }
-}
-
-@Composable
 private fun NavigationQuickActionButton(
     label: String,
     icon: ImageVector,
-    navigationBarMode: ModuleNavigationBarMode,
-    backdrop: Backdrop,
+    backdrop: NavigationBackdrop,
+    enabled: Boolean,
+    testTag: String,
     width: Dp,
     hovered: Boolean,
     onClick: () -> Unit,
@@ -722,24 +493,7 @@ private fun NavigationQuickActionButton(
     isEditTarget: Boolean = false,
     onPositioned: (LayoutCoordinates) -> Unit = {},
 ) {
-    val density = LocalDensity.current
-    val style = rememberNavigationQuickActionStyle(navigationBarMode)
-    val shouldUseGlass = style.usesGlass
-    val targetContainerColor = when {
-        hovered && shouldUseGlass -> style.selectedContainerColor
-        hovered -> style.hoveredContainerColor
-        else -> style.containerColor
-    }
-    val containerColor by animateColorAsState(
-        targetValue = targetContainerColor,
-        animationSpec = tween(160, easing = FastOutSlowInEasing),
-        label = "QuickActionContainerColor",
-    )
-    val borderColor by animateColorAsState(
-        targetValue = if (hovered && shouldUseGlass) style.selectedBorderColor else style.borderColor,
-        animationSpec = tween(160, easing = FastOutSlowInEasing),
-        label = "QuickActionBorderColor",
-    )
+    val contentColor = MixTheme.colorScheme.onSurface
     val targetScale = when {
         hovered && isEditTarget -> 1.12f
         hovered -> 1.08f
@@ -762,59 +516,19 @@ private fun NavigationQuickActionButton(
             clip = true
             scaleX = animatedScale * progressScale
             scaleY = animatedScale * progressScale
-            shadowElevation =
-                with(density) { (style.shadowElevation + if (hovered) 8.dp else 0.dp).toPx() }
-            ambientShadowColor = Color.Black.copy(alpha = style.shadowAlpha)
-            spotShadowColor = Color.Black.copy(alpha = style.shadowAlpha)
         }
-        .then(
-            if (shouldUseGlass) {
-                Modifier.drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { ContinuousCapsule },
-                    effects = {
-                        vibrancy()
-                        blur(if (hovered) 10f.dp.toPx() else 8f.dp.toPx())
-                        lens(
-                            if (hovered) 34f.dp.toPx() else 24f.dp.toPx(),
-                            if (hovered) 38f.dp.toPx() else 26f.dp.toPx(),
-                        )
-                    },
-                    highlight = {
-                        Highlight.Default.copy(alpha = if (hovered) 1f else 0.86f)
-                    },
-                    shadow = {
-                        Shadow.Default.copy(
-                            color = Color.Black.copy(alpha = 0.18f),
-                            alpha = if (hovered) 0.58f else 0.32f,
-                        )
-                    },
-                    innerShadow = {
-                        InnerShadow(
-                            radius = if (hovered) 12.dp else 7.dp,
-                            alpha = if (hovered) 0.42f else 0.22f,
-                        )
-                    },
-                    onDrawSurface = {
-                        drawRect(containerColor)
-                        drawRect(Color.White.copy(alpha = if (hovered) 0.16f else 0.055f))
-                        drawRect(Color.Black.copy(alpha = if (hovered) 0.025f else 0.012f))
-                    },
-                )
-            } else {
-                Modifier.background(containerColor, ContinuousCapsule)
-            }
-        )
-        .border(0.75.dp, borderColor, ContinuousCapsule)
+        .testTag(testTag)
         .clickable(
             interactionSource = remember { MutableInteractionSource() },
             indication = null,
+            enabled = enabled,
             onClick = onClick,
         )
 
-    Box(
+    hk.uwu.mixui.components.NavigationQuickActionSurface(
+        backdrop = backdrop,
         modifier = baseModifier,
-        contentAlignment = Alignment.Center,
+        hovered = hovered,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp),
@@ -824,12 +538,12 @@ private fun NavigationQuickActionButton(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = style.contentColor,
+                tint = contentColor,
                 modifier = Modifier.size(19.dp),
             )
             AutoShrinkText(
                 text = label,
-                color = style.contentColor,
+                color = contentColor,
                 maxFontSize = 12.sp,
                 minFontSize = 9.sp,
                 fontWeight = FontWeight.Medium,
@@ -837,98 +551,6 @@ private fun NavigationQuickActionButton(
             )
         }
     }
-}
-
-@Composable
-private fun rememberNavigationQuickActionStyle(
-    navigationBarMode: ModuleNavigationBarMode,
-): NavigationQuickActionStyle {
-    val isLight = MiuixTheme.colorScheme.surface.luminance() >= 0.5f
-    val outline = MiuixTheme.colorScheme.dividerLine.copy(alpha = if (isLight) 0.7f else 0.86f)
-    val primaryTint = MiuixTheme.colorScheme.primary.copy(alpha = if (isLight) 0.14f else 0.2f)
-    return when (navigationBarMode) {
-        ModuleNavigationBarMode.NORMAL -> NavigationQuickActionStyle(
-            containerColor = MiuixTheme.colorScheme.surface,
-            contentColor = MiuixTheme.colorScheme.onSurface,
-            borderColor = outline,
-            hoveredContainerColor = blendColors(MiuixTheme.colorScheme.surface, primaryTint),
-            selectedContainerColor = blendColors(MiuixTheme.colorScheme.surface, primaryTint),
-            selectedBorderColor = outline,
-            shadowAlpha = if (isLight) 0.13f else 0.28f,
-            shadowElevation = 10.dp,
-            usesGlass = false,
-        )
-
-        ModuleNavigationBarMode.SEMI_TRANSPARENT -> NavigationQuickActionStyle(
-            containerColor = MiuixTheme.colorScheme.surface.copy(alpha = 0.9f),
-            contentColor = MiuixTheme.colorScheme.onSurface,
-            borderColor = outline.copy(alpha = 0.9f),
-            hoveredContainerColor = blendColors(
-                MiuixTheme.colorScheme.surface.copy(alpha = 0.94f),
-                primaryTint
-            ),
-            selectedContainerColor = blendColors(
-                MiuixTheme.colorScheme.surface.copy(alpha = 0.94f),
-                primaryTint
-            ),
-            selectedBorderColor = outline.copy(alpha = 0.9f),
-            shadowAlpha = if (isLight) 0.16f else 0.3f,
-            shadowElevation = 12.dp,
-            usesGlass = false,
-        )
-
-        ModuleNavigationBarMode.FLOATING -> NavigationQuickActionStyle(
-            containerColor = MiuixTheme.colorScheme.surfaceContainer,
-            contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
-            borderColor = outline,
-            hoveredContainerColor = blendColors(
-                MiuixTheme.colorScheme.surfaceContainer,
-                primaryTint
-            ),
-            selectedContainerColor = blendColors(
-                MiuixTheme.colorScheme.surfaceContainer,
-                primaryTint
-            ),
-            selectedBorderColor = outline,
-            shadowAlpha = if (isLight) 0.18f else 0.34f,
-            shadowElevation = 14.dp,
-            usesGlass = false,
-        )
-
-        ModuleNavigationBarMode.FLOATING_GLASS -> NavigationQuickActionStyle(
-            containerColor = if (isLight) {
-                Color.White.copy(alpha = 0.115f)
-            } else {
-                Color.White.copy(alpha = 0.065f)
-            },
-            contentColor = MiuixTheme.colorScheme.onSurface,
-            borderColor = Color.White.copy(alpha = if (isLight) 0.34f else 0.15f),
-            hoveredContainerColor = if (isLight) {
-                Color.White.copy(alpha = 0.18f)
-            } else {
-                Color.White.copy(alpha = 0.105f)
-            },
-            selectedContainerColor = if (isLight) {
-                Color.White.copy(alpha = 0.245f)
-            } else {
-                Color.White.copy(alpha = 0.145f)
-            },
-            selectedBorderColor = Color.White.copy(alpha = if (isLight) 0.58f else 0.28f),
-            shadowAlpha = if (isLight) 0.14f else 0.3f,
-            shadowElevation = 16.dp,
-            usesGlass = true,
-        )
-    }
-}
-
-private fun blendColors(base: Color, overlay: Color): Color {
-    val alpha = overlay.alpha.coerceIn(0f, 1f)
-    return Color(
-        red = base.red * (1f - alpha) + overlay.red * alpha,
-        green = base.green * (1f - alpha) + overlay.green * alpha,
-        blue = base.blue * (1f - alpha) + overlay.blue * alpha,
-        alpha = base.alpha,
-    )
 }
 
 @Composable
@@ -961,7 +583,10 @@ private fun AutoShrinkText(
 }
 
 private class NavigationQuickMenuController {
-    private var densityScaleFallback = 1f
+    private var hostCoordinates: LayoutCoordinates? = null
+    // Coordinates stay live through popup/hover animations. Detached entries cannot hit;
+    // retaining them across close/reopen also covers an interrupted exit without a relayout.
+    private val targetCoordinates = mutableMapOf<String, LayoutCoordinates>()
 
     var hoveredKey by mutableStateOf<String?>(null)
         private set
@@ -969,147 +594,51 @@ private class NavigationQuickMenuController {
     var showEditTarget by mutableStateOf(false)
         private set
 
-    private var anchorCenterX = 0f
-    private var anchorTop = 0f
-
-    fun begin(anchorCenterX: Float, anchorTop: Float, density: Float) {
-        densityScaleFallback = density
-        this.anchorCenterX = anchorCenterX
-        this.anchorTop = anchorTop
-        hoveredKey = null
-        showEditTarget = false
+    fun positionHost(coordinates: LayoutCoordinates) {
+        hostCoordinates = coordinates
     }
+
+    fun positionTarget(key: String, coordinates: LayoutCoordinates) {
+        targetCoordinates[key] = coordinates
+    }
+
+    fun begin() = reset()
 
     fun reset() {
         hoveredKey = null
         showEditTarget = false
-        anchorCenterX = 0f
-        anchorTop = 0f
     }
 
     fun updateHover(pointer: Offset, actions: List<NavigationQuickAction>): String? {
-        val buttonWidth = QUICK_ACTION_BUTTON_WIDTH_DP * densityScaleFallback
-        val buttonHeight = 40f * densityScaleFallback
-        val gap = 8f * densityScaleFallback
-        val menuBottom = anchorTop - 10f * densityScaleFallback
-        val menuTop =
-            menuBottom - actions.size * buttonHeight - (actions.size - 1).coerceAtLeast(0) * gap
-        val xInMenu =
-            pointer.x in (anchorCenterX - buttonWidth / 2f)..(anchorCenterX + buttonWidth / 2f)
-
-        if (pointer.y <= menuTop + buttonHeight / 2f && xInMenu) {
+        val host = hostCoordinates?.takeIf { it.isAttached }
+        if (host == null) {
+            hoveredKey = null
+            return null
+        }
+        // The navigation pointer is in the activity's root; the targets live in a Popup
+        // with its own root/window. Screen conversion accounts for the real padding,
+        // popup placement/clamping and transforms instead of reconstructing anchor offsets.
+        val pointerOnScreen = host.findRootCoordinates().localToScreen(pointer)
+        fun target(key: String) = targetCoordinates[key]?.takeIf { it.isAttached }
+        fun contains(key: String): Boolean {
+            val coordinates = target(key) ?: return false
+            val local = coordinates.screenToLocal(pointerOnScreen)
+            return local.x >= 0f && local.x < coordinates.size.width &&
+                local.y >= 0f && local.y < coordinates.size.height
+        }
+        if (contains(EDIT_QUICK_ACTIONS_KEY)) {
             showEditTarget = true
+            hoveredKey = EDIT_QUICK_ACTIONS_KEY
+            return hoveredKey
         }
-
-        val actionIndex = ((pointer.y - menuTop) / (buttonHeight + gap)).toInt()
-        val action = actions.getOrNull(actionIndex)
-        val actionTop = menuTop + actionIndex * (buttonHeight + gap)
-        val actionHovered =
-            action != null && xInMenu && pointer.y in actionTop..(actionTop + buttonHeight)
-
-        if (showEditTarget) {
-            val editTop = menuTop - gap - buttonHeight
-            val editBottom = editTop + buttonHeight
-            if (xInMenu && pointer.y in editTop..editBottom) {
-                hoveredKey = EDIT_QUICK_ACTIONS_KEY
-                return hoveredKey
-            }
-            if (actionHovered && actionIndex > 0) {
-                showEditTarget = false
-            }
-        }
-
-        hoveredKey = if (actionHovered) {
-            action.id
-        } else {
-            null
-        }
+        val actionIndex = actions.indexOfFirst { contains(it.id) }
+        hoveredKey = actions.getOrNull(actionIndex)?.id
         return hoveredKey
     }
 }
 
-private fun Modifier.navigationQuickActionDragGesture(
-    enabled: Boolean,
-    actions: List<NavigationQuickAction>,
-    quickMenuController: NavigationQuickMenuController,
-    onOpenQuickActions: (anchorCenterX: Float, anchorTop: Float, density: Float) -> Unit,
-    onDismissQuickActions: () -> Unit,
-    onOpenEditor: () -> Unit,
-    onQuickActionSelected: (NavigationQuickTarget) -> Unit,
-): Modifier {
-    if (!enabled) return this
-
-    var rootOffset = Offset.Zero
-    return this
-        .onGloballyPositioned { coordinates ->
-            rootOffset = coordinates.positionInRoot()
-        }
-        .pointerInput(actions) {
-            awaitEachGesture {
-                val down =
-                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                val longPressTimeout = maxOf(
-                    QUICK_ACTION_HALF_LONG_PRESS_MIN_MS,
-                    viewConfiguration.longPressTimeoutMillis / 2,
-                )
-                val longPressTriggered = withTimeoutOrNull(longPressTimeout) {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        val change = event.changes.firstOrNull { it.id == down.id }
-                            ?: return@withTimeoutOrNull false
-                        if (!change.pressed || change.isConsumed ||
-                            (change.position - down.position).getDistance() > viewConfiguration.touchSlop ||
-                            event.changes.count { it.pressed } > 1
-                        ) {
-                            return@withTimeoutOrNull false
-                        }
-                    }
-                } == null
-
-                if (!longPressTriggered) return@awaitEachGesture
-
-                val anchorCenterX = rootOffset.x + size.width / 2f
-                val anchorTop = rootOffset.y
-                onOpenQuickActions(anchorCenterX, anchorTop, density)
-                var latestRootPosition = rootOffset + down.position
-                quickMenuController.updateHover(latestRootPosition, actions)
-
-                var released = false
-                while (!released) {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    event.changes.forEach { change ->
-                        if (change.id == down.id) {
-                            latestRootPosition = rootOffset + change.position
-                            quickMenuController.updateHover(latestRootPosition, actions)
-                            if (change.changedToUpIgnoreConsumed()) {
-                                released = true
-                            }
-                            change.consume()
-                        }
-                    }
-                }
-
-                quickMenuController.updateHover(latestRootPosition, actions)
-                val hoveredKey = quickMenuController.hoveredKey
-                quickMenuController.reset()
-                when (hoveredKey) {
-                    EDIT_QUICK_ACTIONS_KEY -> onOpenEditor()
-                    null -> onDismissQuickActions()
-                    else -> {
-                        val action = actions.firstOrNull { it.id == hoveredKey }
-                        if (action != null) {
-                            onQuickActionSelected(action.target)
-                        } else {
-                            onDismissQuickActions()
-                        }
-                    }
-                }
-            }
-        }
-}
-
 @Composable
-private fun NavigationQuickActionEditor(
+internal fun NavigationQuickActionEditor(
     show: Boolean,
     selectedIds: List<String>,
     allActions: List<NavigationQuickAction>,
@@ -1123,7 +652,6 @@ private fun NavigationQuickActionEditor(
             .distinctBy { it.id }
             .take(MaxNavigationQuickActions)
             .map { it.id }
-            .ifEmpty { DefaultNavigationQuickActionIds }
             .toMutableStateList()
     }
     val selectedLookup = selectedState.toSet()
@@ -1131,24 +659,64 @@ private fun NavigationQuickActionEditor(
         .filterNot { it.id in selectedLookup }
         .sortedBy { it.label }
     val maxHint = stringResource(R.string.navigation_quick_max_hint, MaxNavigationQuickActions)
-    val bottomPadding = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+    val scrollState = rememberScrollState()
+    LaunchedEffect(show) { if (show) scrollState.scrollTo(0) }
+    // Retained native header callbacks must not commit the same session twice.
+    var submitted by remember(show) { mutableStateOf(false) }
 
-    OverlayBottomSheet(
+    GlassBottomSheet(
         show = show,
+        size = GlassBottomSheetSize.Content,
+        // Reorder handles own vertical drags, including at the scroll boundary.
+        enableNestedScroll = false,
+        isContentScrolled = scrollState.value > 0,
         title = stringResource(R.string.navigation_quick_edit_title),
         onDismissRequest = onDismissRequest,
+        startAction = {
+            BottomSheetActionButton(
+                onClick = { if (show) onDismissRequest() },
+                modifier = Modifier.testTag("quick-editor-cancel"),
+                enabled = show,
+            ) {
+                BottomSheetActionIcon(
+                    BottomSheetAction.Close,
+                    Icons.Outlined.Close,
+                    contentDescription = stringResource(R.string.navigation_quick_cancel),
+                )
+            }
+        },
+        endAction = {
+            BottomSheetActionButton(
+                onClick = {
+                    if (show && !submitted) {
+                        submitted = true
+                        onSave(selectedState.toList())
+                    }
+                },
+                modifier = Modifier.testTag("quick-editor-save"),
+                enabled = show && !submitted,
+            ) {
+                BottomSheetActionIcon(
+                    BottomSheetAction.Save,
+                    Icons.Outlined.Check,
+                    contentDescription = stringResource(R.string.navigation_quick_save),
+                )
+            }
+        },
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 560.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = bottomPadding + 8.dp),
+                .testTag("quick-editor-body")
+                .verticalScroll(scrollState)
+                // The sheet host consumes safe drawing/IME insets once.
+                .padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
                 text = maxHint,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(horizontal = 4.dp),
             )
@@ -1158,26 +726,6 @@ private fun NavigationQuickActionEditor(
                 availableActions = availableActions,
                 allActionLookup = allActionLookup,
             )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                TextButton(
-                    text = stringResource(R.string.navigation_quick_cancel),
-                    modifier = Modifier.weight(1f),
-                    onClick = onDismissRequest,
-                )
-                Button(
-                    onClick = { onSave(selectedState.toList()) },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                ) {
-                    Text(text = stringResource(R.string.navigation_quick_save))
-                }
-            }
         }
     }
 }
@@ -1186,7 +734,7 @@ private fun NavigationQuickActionEditor(
 private fun NavigationQuickEditorSectionTitle(text: String) {
     Text(
         text = text,
-        color = MiuixTheme.colorScheme.onSurface,
+        color = MixTheme.colorScheme.onSurface,
         fontSize = 14.sp,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(horizontal = 4.dp),
@@ -1320,7 +868,7 @@ private fun NavigationQuickEditorDropList(
                         if (draggingToFullActive) {
                             Modifier.border(
                                 width = 1.dp,
-                                color = MiuixTheme.colorScheme.dividerLine.copy(alpha = 0.9f),
+                                color = MixTheme.colorScheme.dividerLine.copy(alpha = 0.9f),
                                 shape = RoundedCornerShape(18.dp),
                             )
                         } else {
@@ -1332,7 +880,7 @@ private fun NavigationQuickEditorDropList(
                 if (previewActiveIds.isEmpty()) {
                     Text(
                         text = stringResource(R.string.navigation_quick_active_empty),
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(8.dp),
                     )
@@ -1388,7 +936,7 @@ private fun NavigationQuickEditorDropList(
                 if (availableActions.isEmpty()) {
                     Text(
                         text = stringResource(R.string.navigation_quick_available_empty),
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(8.dp),
                     )
@@ -1472,7 +1020,7 @@ private fun NavigationQuickEditorActionRow(
         animationSpec = tween(180, easing = FastOutSlowInEasing),
         label = "EditorRowAlpha",
     )
-    val contentColor = MiuixTheme.colorScheme.onSurfaceContainer
+    val contentColor = MixTheme.colorScheme.onSurfaceContainer
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1485,10 +1033,10 @@ private fun NavigationQuickEditorActionRow(
                 shape = ContinuousCapsule
                 clip = false
             }
-            .background(MiuixTheme.colorScheme.surfaceContainer, ContinuousCapsule)
+            .background(MixTheme.colorScheme.surfaceContainer, ContinuousCapsule)
             .border(
                 0.75.dp,
-                MiuixTheme.colorScheme.dividerLine.copy(alpha = 0.72f),
+                MixTheme.colorScheme.dividerLine.copy(alpha = 0.72f),
                 ContinuousCapsule
             )
             .padding(start = 14.dp, end = 8.dp),
@@ -1509,6 +1057,7 @@ private fun NavigationQuickEditorActionRow(
             modifier = Modifier.weight(1f),
         )
         NavigationQuickDragHandle(
+            id = action.id,
             enabled = dragEnabled,
             onDragStart = onDragStart,
             onDrag = onDrag,
@@ -1520,6 +1069,7 @@ private fun NavigationQuickEditorActionRow(
 
 @Composable
 private fun NavigationQuickDragHandle(
+    id: String,
     enabled: Boolean,
     onDragStart: (Float) -> Unit,
     onDrag: (Float) -> Unit,
@@ -1530,6 +1080,7 @@ private fun NavigationQuickDragHandle(
     Box(
         modifier = Modifier
             .size(width = 36.dp, height = 40.dp)
+            .then(if (enabled) Modifier.testTag("quick-editor-drag-$id") else Modifier)
             .onGloballyPositioned { coordinates ->
                 handleTopInRoot = coordinates.positionInRoot().y
             }
@@ -1541,23 +1092,27 @@ private fun NavigationQuickDragHandle(
                             val downRootY = handleTopInRoot + down.position.y
                             onDragStart(downRootY)
                             onDrag(downRootY)
-                            var cancelled = false
-                            var dragging = true
-                            while (dragging) {
-                                val event = awaitPointerEvent()
-                                event.changes.forEach { change ->
-                                    if (change.changedToUpIgnoreConsumed()) {
-                                        dragging = false
-                                    } else if (change.pressed) {
-                                        onDrag(handleTopInRoot + change.position.y)
-                                        change.consume()
-                                    } else {
-                                        cancelled = true
-                                        dragging = false
+                            var cancelled = true
+                            try {
+                                var dragging = true
+                                while (dragging) {
+                                    val event = awaitPointerEvent()
+                                    event.changes.forEach { change ->
+                                        if (change.changedToUp()) {
+                                            cancelled = false
+                                            dragging = false
+                                        } else if (change.pressed) {
+                                            onDrag(handleTopInRoot + change.position.y)
+                                            change.consume()
+                                        } else {
+                                            cancelled = true
+                                            dragging = false
+                                        }
                                     }
                                 }
+                            } finally {
+                                if (cancelled) onDragCancel() else onDragEnd()
                             }
-                            if (cancelled) onDragCancel() else onDragEnd()
                         }
                     }
                 } else {
@@ -1569,7 +1124,7 @@ private fun NavigationQuickDragHandle(
         Icon(
             imageVector = Icons.Rounded.Menu,
             contentDescription = null,
-            tint = MiuixTheme.colorScheme.onSurfaceContainer.copy(alpha = 0.62f),
+            tint = MixTheme.colorScheme.onSurfaceContainer.copy(alpha = 0.62f),
             modifier = Modifier.size(22.dp),
         )
     }
@@ -1609,6 +1164,8 @@ private fun findNavigationEditorInsertIndex(
 }
 
 private class NavigationQuickActionsPopupPositionProvider(
+    private val anchor: NavigationAnchor,
+    private val hostPosition: Offset,
     private val spacingPx: Int,
     private val windowPaddingPx: Int,
 ) : PopupPositionProvider {
@@ -1618,16 +1175,17 @@ private class NavigationQuickActionsPopupPositionProvider(
         layoutDirection: LayoutDirection,
         popupContentSize: IntSize,
     ): IntOffset {
-        val preferredX = anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2
+        val preferredX = (anchorBounds.left + anchor.centerX - hostPosition.x - popupContentSize.width / 2f).toInt()
         val minX = windowPaddingPx
         val maxX = (windowSize.width - popupContentSize.width - windowPaddingPx)
             .coerceAtLeast(minX)
         val x = preferredX.coerceIn(minX, maxX)
 
-        val preferredY = anchorBounds.top - popupContentSize.height - spacingPx
+        val anchorTopInWindow = (anchorBounds.top + anchor.top - hostPosition.y).toInt()
+        val preferredY = anchorTopInWindow - popupContentSize.height - spacingPx
         val maxY = (windowSize.height - popupContentSize.height - windowPaddingPx)
             .coerceAtLeast(windowPaddingPx)
-        val fallbackY = anchorBounds.bottom + spacingPx
+        val fallbackY = anchorTopInWindow + spacingPx
         val y = if (preferredY >= windowPaddingPx) {
             preferredY
         } else {

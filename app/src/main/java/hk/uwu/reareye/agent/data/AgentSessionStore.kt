@@ -30,6 +30,8 @@ data class AgentSession(
     val contextMessages: List<ChatMessage>? = null,
     val pendingInteraction: String? = null,
     val interrupted: Boolean = false,
+    val selectedModelId: String? = null,
+    val transcriptModel: MaryTranscriptModel? = null,
 )
 
 @Serializable
@@ -50,7 +52,9 @@ private data class AgentSessionIndex(val sessions: List<AgentSessionSummary> = e
 private data class SuccessorTransaction(val previous: AgentSession, val successor: AgentSession)
 
 /** File-backed store. Session files are authoritative; the index is a rebuildable cache. */
-class AgentSessionStore(root: File) {
+class AgentSessionStore internal constructor(root: File, imagePreparation: WorkspaceImagePreparation) {
+    constructor(root: File) : this(root, WorkspaceImagePreparation())
+
     private val dir = File(root, "agent/sessions")
     private val indexFile = File(root, "agent/index.json")
     private val transactionFile = File(root, "agent/successor-transaction.json")
@@ -60,9 +64,12 @@ class AgentSessionStore(root: File) {
         prettyPrint = false
     }
 
+    val workspace = SessionWorkspace(root, this, { sessionFile(it).isFile }, ::readSession, imagePreparation)
+
     init {
         check(dir.isDirectory || dir.mkdirs()) { "Cannot create session directory" }
         recoverTransaction()
+        workspace.recover()
     }
 
     @Synchronized
@@ -100,8 +107,22 @@ class AgentSessionStore(root: File) {
             require(session.messages == existing.messages && session.contextMessages == existing.contextMessages) {
                 "A locked session's history and context cannot be changed"
             }
+            require(session.selectedModelId == existing.selectedModelId && session.transcriptModel == existing.transcriptModel) {
+                "A locked session's model and transcript route cannot be changed"
+            }
         }
         write(session.copy(updatedAt = System.currentTimeMillis()))
+    }
+
+    @Synchronized
+    fun selectModel(id: String, modelId: String): AgentSession {
+        sessionFile(id)
+        require(modelId.isNotBlank()) { "Model ID must not be blank" }
+        recoverTransaction()
+        val existing = requireNotNull(readSession(id)) { "Session does not exist" }
+        require(!existing.locked) { "A locked session's model cannot be changed" }
+        if (existing.selectedModelId == modelId) return existing
+        return existing.copy(selectedModelId = modelId, updatedAt = System.currentTimeMillis()).also(::write)
     }
 
     /** Idempotently locks this conversation and starts an empty, independent conversation. */
@@ -132,14 +153,16 @@ class AgentSessionStore(root: File) {
         val file = sessionFile(id)
         recoverTransaction()
         deleteChecked(file)
+        workspace.delete(id)
         rebuildIndex()
     }
 
     @Synchronized
     fun deleteAll(): List<String> {
         recoverTransaction()
-        val ids = readSessions().map { it.id }
+        val ids = sessionIds()
         ids.forEach { deleteChecked(sessionFile(it)) }
+        workspace.deleteAll()
         rebuildIndex()
         return ids
     }
@@ -169,11 +192,12 @@ class AgentSessionStore(root: File) {
         return session.copy(schemaVersion = 3)
     }
 
-    private fun readSessions(): List<AgentSession> =
+    private fun sessionIds(): List<String> =
         (dir.listFiles() ?: throw IOException("Cannot list session directory"))
-            .filter { it.isFile && it.extension == "json" }
-            .filter { SESSION_ID.matches(it.nameWithoutExtension) }
-            .mapNotNull { readSession(it.nameWithoutExtension) }
+            .filter { it.isFile && it.extension == "json" && SESSION_ID.matches(it.nameWithoutExtension) }
+            .map { it.nameWithoutExtension }
+
+    private fun readSessions(): List<AgentSession> = sessionIds().mapNotNull(::readSession)
 
     private fun write(session: AgentSession) {
         validateSession(session)
@@ -275,6 +299,7 @@ class AgentSessionStore(root: File) {
                 ?.replace('\n', ' ')
                 ?.take(24)
                 ?.takeIf { it.isNotEmpty() }
+                ?: messages.firstOrNull { it.role == MessageRole.USER }?.attachments?.firstOrNull()?.name?.take(24)
                 ?: DEFAULT_TITLE
     }
 }

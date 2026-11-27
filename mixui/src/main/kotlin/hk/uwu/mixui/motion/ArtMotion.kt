@@ -1,0 +1,317 @@
+package hk.uwu.mixui.motion
+
+import android.provider.Settings
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+
+@Composable
+fun rememberReduceMotionEnabled(): Boolean {
+    val context = LocalContext.current
+    return remember(context) {
+        runCatching {
+            Settings.Global.getFloat(
+                context.contentResolver,
+                Settings.Global.ANIMATOR_DURATION_SCALE,
+                1f,
+            ) == 0f
+        }.getOrDefault(false)
+    }
+}
+
+private const val DEFAULT_VISIBILITY_DELAY = 0
+
+private enum class ArtRevealPhase {
+    Hidden,
+    Primed,
+    Visible,
+}
+
+@Composable
+fun ArtRevealItem(
+    visible: Boolean,
+    delayMillis: Int = 0,
+    content: @Composable () -> Unit,
+) {
+    ArtVisibilityMotion(
+        visible = visible,
+        delayMillis = delayMillis,
+        enterAlphaDurationMillis = 240,
+        enterTransformDurationMillis = 360,
+        exitAlphaDurationMillis = 120,
+        exitTransformDurationMillis = 160,
+        hiddenEnterScale = 0.985f,
+        hiddenExitScale = 0.992f,
+        slideDivisor = 14,
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun ArtStaggeredReveal(
+    visible: Boolean,
+    revealKey: Any,
+    delayMillis: Int = DEFAULT_VISIBILITY_DELAY,
+    content: @Composable () -> Unit,
+) {
+    ArtVisibilityMotion(
+        visible = visible,
+        revealKey = revealKey,
+        delayMillis = delayMillis,
+        enterAlphaDurationMillis = 220,
+        enterTransformDurationMillis = 320,
+        exitAlphaDurationMillis = 90,
+        exitTransformDurationMillis = 120,
+        hiddenEnterScale = 0.988f,
+        hiddenExitScale = 0.992f,
+        slideDivisor = 18,
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun ArtVisibilityMotion(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+    delayMillis: Int = 0,
+    enterAlphaDurationMillis: Int,
+    enterTransformDurationMillis: Int,
+    exitAlphaDurationMillis: Int,
+    exitTransformDurationMillis: Int,
+    hiddenEnterScale: Float,
+    hiddenExitScale: Float,
+    slideDivisor: Int,
+    hiddenOffsetFallback: Dp = 18.dp,
+    revealKey: Any = Unit,
+    content: @Composable () -> Unit,
+) {
+    if (rememberReduceMotionEnabled()) {
+        Box(
+            modifier = modifier.graphicsLayer { alpha = if (visible) 1f else 0f },
+        ) {
+            content()
+        }
+        return
+    }
+    var revealPhase by remember(revealKey) {
+        mutableStateOf(if (visible) ArtRevealPhase.Primed else ArtRevealPhase.Hidden)
+    }
+
+    LaunchedEffect(visible, revealKey, delayMillis) {
+        if (visible) {
+            revealPhase = ArtRevealPhase.Primed
+            if (delayMillis > 0) {
+                delay(delayMillis.toLong())
+            }
+            revealPhase = ArtRevealPhase.Visible
+        } else {
+            revealPhase = ArtRevealPhase.Hidden
+        }
+    }
+
+    val transition = updateTransition(revealPhase, label = "ArtReveal")
+    val revealAlpha by transition.animateFloat(
+        transitionSpec = {
+            if (targetState == ArtRevealPhase.Visible) {
+                tween(enterAlphaDurationMillis, easing = LinearOutSlowInEasing)
+            } else {
+                tween(exitAlphaDurationMillis, easing = FastOutLinearInEasing)
+            }
+        },
+        label = "ArtRevealAlpha",
+    ) { phase -> if (phase == ArtRevealPhase.Visible) 1f else 0f }
+    val revealScale by transition.animateFloat(
+        transitionSpec = {
+            if (targetState == ArtRevealPhase.Visible) {
+                tween(enterTransformDurationMillis, easing = FastOutSlowInEasing)
+            } else {
+                tween(exitTransformDurationMillis, easing = FastOutLinearInEasing)
+            }
+        },
+        label = "ArtRevealScale",
+    ) { phase ->
+        when (phase) {
+            ArtRevealPhase.Hidden -> hiddenExitScale
+            ArtRevealPhase.Primed -> hiddenEnterScale
+            ArtRevealPhase.Visible -> 1f
+        }
+    }
+    val offsetFraction by transition.animateFloat(
+        transitionSpec = {
+            if (targetState == ArtRevealPhase.Visible) {
+                tween(enterTransformDurationMillis, easing = FastOutSlowInEasing)
+            } else {
+                tween(exitTransformDurationMillis, easing = FastOutLinearInEasing)
+            }
+        },
+        label = "ArtRevealOffset",
+    ) { phase -> if (phase == ArtRevealPhase.Visible) 0f else 1f }
+
+    Box(
+        // Reveal transforms belong to drawing only. Reading the layer's current size avoids
+        // rebuilding a layout modifier whenever an asynchronous notice changes content height.
+        modifier = modifier.graphicsLayer {
+            alpha = revealAlpha
+            scaleX = revealScale
+            scaleY = revealScale
+            val hiddenOffsetPx = if (size.height > 0f) {
+                size.height / slideDivisor
+            } else {
+                hiddenOffsetFallback.toPx()
+            }
+            translationY = hiddenOffsetPx * offsetFraction
+        },
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun <T> ArtSwapContent(
+    targetState: T,
+    modifier: Modifier = Modifier,
+    contentKey: (T) -> Any = { it as Any },
+    content: @Composable (T) -> Unit,
+) {
+    val reduceMotion = rememberReduceMotionEnabled()
+    AnimatedContent(
+        modifier = modifier.graphicsLayer { clip = true },
+        targetState = targetState,
+        contentKey = contentKey,
+        transitionSpec = {
+            if (reduceMotion) {
+                fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+            } else {
+                (fadeIn(
+                    animationSpec = tween(
+                        durationMillis = 200,
+                        delayMillis = 40,
+                        easing = LinearOutSlowInEasing,
+                    )
+                ) + scaleIn(
+                    initialScale = 0.992f,
+                    animationSpec = tween(
+                        durationMillis = 260,
+                        easing = FastOutSlowInEasing,
+                    ),
+                ) + slideInVertically(
+                    animationSpec = tween(
+                        durationMillis = 260,
+                        easing = FastOutSlowInEasing,
+                    )
+                ) { it / 20 }) togetherWith (
+                        fadeOut(
+                            animationSpec = tween(
+                                durationMillis = 100,
+                                easing = FastOutLinearInEasing,
+                            )
+                        ) + scaleOut(
+                            targetScale = 0.996f,
+                            animationSpec = tween(
+                                durationMillis = 120,
+                                easing = FastOutLinearInEasing,
+                            ),
+                        ) + slideOutVertically(
+                            animationSpec = tween(
+                                durationMillis = 120,
+                                easing = FastOutLinearInEasing,
+                            )
+                        ) { it / 24 }
+                        )
+            }
+        },
+        label = "ArtSwapContent",
+        content = { state -> content(state) },
+    )
+}
+
+/**
+ * A highlight that sweeps across the content, the way Codex marks a run that is still working.
+ *
+ * The band is clipped to the pixels the content actually painted rather than to the layout bounds, so
+ * it lights up glyphs and leaves the surrounding row untouched. That also means the content needs no
+ * brush-carrying text API, and the sweep reads the same on text and icons.
+ */
+@Composable
+fun ArtShimmerSweep(
+    modifier: Modifier = Modifier,
+    durationMillis: Int = 1600,
+    bandFraction: Float = 0.6f,
+    highlight: Color = Color.White.copy(alpha = 0.55f),
+    content: @Composable () -> Unit,
+) {
+    if (rememberReduceMotionEnabled()) {
+        Box(modifier = modifier) {
+            content()
+        }
+        return
+    }
+    val transition = rememberInfiniteTransition(label = "ArtShimmerSweep")
+    val sweep by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "ArtShimmerProgress",
+    )
+    Box(
+        // Offscreen compositing keeps SrcAtop inside this element: without its own layer the band
+        // would also clip against whatever sits behind the content.
+        modifier = modifier
+            .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+            .drawWithContent {
+                drawContent()
+                val band = size.width * bandFraction
+                if (band <= 0f) return@drawWithContent
+                // Travel one full band past each edge, so the sweep rests briefly between passes.
+                val startX = -band + (size.width + band * 2f) * sweep
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color.Transparent, highlight, Color.Transparent),
+                        startX = startX,
+                        endX = startX + band,
+                    ),
+                    blendMode = BlendMode.SrcAtop,
+                )
+            },
+    ) {
+        content()
+    }
+}

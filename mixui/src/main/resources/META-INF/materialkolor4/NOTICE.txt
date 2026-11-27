@@ -1,0 +1,3 @@
+MaterialKolor material-color-utilities 4.1.1
+https://github.com/jordond/MaterialKolor/tree/4.1.1
+Resolved from Maven Central. Its binary namespace is relocated at build time to hk.uwu.mixui.shaded.materialkolor4 for Mochi compatibility.

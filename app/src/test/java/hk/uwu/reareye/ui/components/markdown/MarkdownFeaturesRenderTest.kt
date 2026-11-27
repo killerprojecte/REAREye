@@ -52,9 +52,10 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
+import hk.uwu.mixui.MixColorSchemeMode
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.MixUiHost
+import hk.uwu.mixui.theme.MixTheme
 import java.io.ByteArrayOutputStream
 
 @RunWith(org.robolectric.RobolectricTestRunner::class)
@@ -82,16 +83,16 @@ class MarkdownFeaturesRenderTest {
         }
     }
 
-    private fun host(mode: State<ColorSchemeMode>? = null, content: @Composable () -> Unit) {
+    private fun host(mode: State<MixColorSchemeMode>? = null, content: @Composable () -> Unit) {
         compose.runOnUiThread {
             activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
                 .also { controller ->
                     controller.get().setContent {
-                        MiuixTheme(ThemeController(mode?.value ?: ColorSchemeMode.Light)) {
+                        MixUiHost(backend = MixUiBackend.Miuix, colorMode = mode?.value ?: MixColorSchemeMode.Light) {
                             CompositionLocalProvider(LocalMarkdownImageLoader provides loader) {
                                 Box(
                                     Modifier
-                                        .background(MiuixTheme.colorScheme.background)
+                                        .background(MixTheme.colorScheme.background)
                                         .width(320.dp)
                                         .verticalScroll(rememberScrollState())
                                 ) { content() }
@@ -314,12 +315,12 @@ class MarkdownFeaturesRenderTest {
     fun themeLanguageAndStreamReplacementRefreshHighlightAndCopyContent() {
         val code = "val answer = 42"
         val markdown = mutableStateOf("```kotlin\n$code\n```")
-        val mode = mutableStateOf(ColorSchemeMode.Light)
+        val mode = mutableStateOf(MixColorSchemeMode.Light)
         host(mode) { MarkdownText(markdown.value) }
         awaitText(code)
         compose.waitUntil(15_000) { highlighted(code) }
         val light = layout(code).layoutInput.text.spanStyles
-        compose.runOnIdle { mode.value = ColorSchemeMode.Dark }
+        compose.runOnIdle { mode.value = MixColorSchemeMode.Dark }
         compose.waitUntil(15_000) { highlighted(code) && layout(code).layoutInput.text.spanStyles != light }
         compose.runOnIdle { markdown.value = "```made-up-language\n$code\n```" }
         compose.waitUntil(15_000) { !highlighted(code) }

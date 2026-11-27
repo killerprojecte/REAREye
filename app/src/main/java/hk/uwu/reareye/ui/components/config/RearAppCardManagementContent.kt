@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components.config
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -8,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -38,7 +41,9 @@ import hk.uwu.reareye.repository.rearwidget.RearAppCardRepository
 import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
 import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.reareye.ui.components.OverlayDialog
+import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.GlassPreferenceScene
+import androidx.compose.ui.platform.testTag
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
@@ -51,20 +56,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.DialogActions
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.InfiniteProgressIndicator
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.EditorTextField
+import androidx.compose.runtime.mutableIntStateOf
+import hk.uwu.mixui.theme.MixTheme
 
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
 internal fun RearAppCardManagementContent(
+    listState: LazyListState = rememberLazyListState(),
     prefsManager: PrefsManager,
     onOpenStoreDetail: (String) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -73,15 +77,17 @@ internal fun RearAppCardManagementContent(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
     val cards = remember { mutableStateListOf<RearAppCardInfo>() }
     val businesses = remember { mutableStateListOf<RearBusinessConfig>() }
     var loading by remember { mutableStateOf(true) }
     var errorText by remember { mutableStateOf<String?>(null) }
     var editingCard by remember { mutableStateOf<RearAppCardInfo?>(null) }
+    var renameSessionId by remember { mutableIntStateOf(0) }
+    var renamePending by remember { mutableStateOf(false) }
     var draftTitle by remember { mutableStateOf("") }
     var orderChanged by remember { mutableStateOf(false) }
     var orderSaving by remember { mutableStateOf(false) }
+    var pendingDeleteCard by remember { mutableStateOf<RearAppCardInfo?>(null) }
     val previewRenderingIds = remember { mutableStateListOf<String>() }
 
     fun reload() {
@@ -158,264 +164,331 @@ internal fun RearAppCardManagementContent(
 
     LaunchedEffect(refreshRevision, prefsManager) { reload() }
 
-    LazyColumn(
-        state = listState,
-        modifier = modifier.fillMaxSize(),
-        contentPadding = contentPadding,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        overscrollEffect = null,
+    RearAppCardRenameScene(
+        show = editingCard != null,
+        draftTitle = draftTitle,
+        focusSessionKey = renameSessionId,
+        submitting = renamePending,
+        onTitleChange = { draftTitle = it },
+        onDismissRequest = { editingCard = null },
+        onConfirm = confirm@{
+            val target = editingCard ?: return@confirm
+            if (renamePending) return@confirm
+            val submittedTitle = draftTitle.trim().takeIf { it.isNotBlank() } ?: return@confirm
+            val submittedSession = renameSessionId
+            renamePending = true
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    RearAppCardRepository.rename(context, target.appId, submittedTitle)
+                }
+                renamePending = false
+                showResult(
+                    result.success,
+                    result.error,
+                    context.getString(R.string.rear_widget_app_name_updated),
+                )
+                if (result.success) {
+                    if (renameSessionId == submittedSession) editingCard = null
+                    delay(350)
+                    reload()
+                }
+            }
+        },
+        extraOverlayContent = {
+            GlassFormDialog(
+                show = pendingDeleteCard != null,
+                modifier = Modifier.testTag("app-card-delete-dialog"),
+                title = stringResource(R.string.rear_widget_delete_app_card_title),
+                onDismissRequest = { pendingDeleteCard = null },
+            ) {
+                androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        hk.uwu.mixui.components.ListItem(
+                            animateContentSize = true,
+                            title = stringResource(
+                                R.string.rear_widget_delete_app_card_message,
+                                pendingDeleteCard?.let { it.title.ifBlank { it.appId } }.orEmpty(),
+                            ),
+                        )
+                    }
+                    DialogActions(
+                        cancelText = stringResource(R.string.rear_widget_cancel),
+                        confirmText = stringResource(R.string.rear_widget_action_delete),
+                        destructive = true,
+                        onCancel = { pendingDeleteCard = null },
+                        onConfirm = {
+                            val target = pendingDeleteCard
+                            pendingDeleteCard = null
+                            if (target != null) {
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        RearAppCardRepository.delete(context, target.appId)
+                                    }
+                                    showResult(
+                                        result.success,
+                                        result.error,
+                                        context.getString(R.string.rear_widget_app_deleted),
+                                    )
+                                    if (result.success) {
+                                        delay(350)
+                                        reload()
+                                    }
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        },
+        modifier = modifier,
     ) {
-        if (loading) {
-            item(key = "app_card_loading") {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        InfiniteProgressIndicator()
-                        Text(stringResource(R.string.rear_widget_loading_data))
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = contentPadding,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            overscrollEffect = null,
+        ) {
+            if (loading) {
+                item(key = "app_card_loading") {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            InfiniteProgressIndicator()
+                            Text(stringResource(R.string.rear_widget_loading_data))
+                        }
+                    }
+                }
+            } else if (cards.isEmpty()) {
+                item(key = "app_card_empty") {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = errorText ?: stringResource(R.string.rear_widget_empty_app_card),
+                            modifier = Modifier.padding(16.dp),
+                        )
                     }
                 }
             }
-        } else if (cards.isEmpty()) {
-            item(key = "app_card_empty") {
-                Card(modifier = Modifier.fillMaxWidth()) {
+
+            itemsIndexed(
+                items = cards,
+                key = { _, card -> "app_card_" + card.appId },
+                contentType = { _, _ -> "app_card_item" },
+            ) { _, card ->
+                val itemKey = "app_card_" + card.appId
+                val relatedBusiness = card.componentBusiness?.let { component ->
+                    businesses.firstOrNull { it.business == component }
+                }
+                val storeWidgetId = relatedBusiness?.storeWidgetId
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                DraggableItem(
+                    key = itemKey,
+                    state = draggableState,
+                ) { isDragging, hoveredItemKey ->
+                    ModuleStyleManagerCard(
+                        modifier = Modifier
+                            .then(
+                                if (!orderSaving) {
+                                    Modifier.longPressDraggable(draggableState, itemKey)
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .then(
+                                if (isDragging) {
+                                    Modifier.shadow(
+                                        elevation = 12.dp,
+                                        shape = RoundedCornerShape(20.dp),
+                                        clip = false,
+                                    )
+                                } else {
+                                    Modifier
+                                }
+                            ),
+                        backgroundColor = if (hoveredItemKey == itemKey) {
+                            MixTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
+                        } else {
+                            null
+                        },
+                        title = card.title.ifBlank { card.appId },
+                        summaryLines = emptyList(),
+                        badges = buildList {
+                            add(rearWidgetAppCardBadge())
+                            if (card.ownedByRearEye) {
+                                add(rearWidgetRearEyeBadge())
+                            } else {
+                                add(rearWidgetExternalBadge())
+                            }
+                            if (!card.canRename && !card.canDelete) {
+                                add(rearWidgetReadOnlyBadge())
+                            }
+                            card.componentBusiness?.let { component ->
+                                add(rearWidgetComponentBadge(component))
+                                relatedBusiness?.let { business ->
+                                    addAll(
+                                        rearWidgetSourceBadges(
+                                            downloadedFromStore = business.downloadedFromStore,
+                                            storeWidgetId = business.storeWidgetId,
+                                        )
+                                    )
+                                }
+                            }
+                        },
+                        onCardClick = if (card.canRename) {
+                            {
+                                draftTitle = card.title
+                                renameSessionId++
+                                editingCard = card
+                            }
+                        } else {
+                            null
+                        },
+                        leftAction = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                if (card.canRenderPreview) {
+                                    ModuleStyleIconAction(
+                                        icon = Icons.Outlined.PhotoCamera,
+                                        contentDescription = stringResource(
+                                            R.string.rear_widget_app_render_preview,
+                                        ),
+                                        onClick = {
+                                            if (card.appId in previewRenderingIds) {
+                                                return@ModuleStyleIconAction
+                                            }
+                                            previewRenderingIds += card.appId
+                                            scope.launch {
+                                                val result = withContext(Dispatchers.IO) {
+                                                    RearAppCardRepository.renderPreview(
+                                                        context,
+                                                        card.appId,
+                                                    )
+                                                }
+                                                previewRenderingIds -= card.appId
+                                                showResult(
+                                                    result.success,
+                                                    result.error,
+                                                    context.getString(
+                                                        R.string.rear_widget_app_preview_rendered,
+                                                    ),
+                                                )
+                                                if (result.success) {
+                                                    delay(350)
+                                                    reload()
+                                                }
+                                            }
+                                        },
+                                    )
+                                }
+                                if (card.canRename) {
+                                    ModuleStyleIconAction(
+                                        icon = Icons.Rounded.EditNote,
+                                        contentDescription = stringResource(
+                                            R.string.rear_widget_edit_app_card,
+                                        ),
+                                        onClick = {
+                                            draftTitle = card.title
+                                            renameSessionId++
+                                            editingCard = card
+                                        },
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Lock,
+                                        contentDescription = null,
+                                        tint = MixTheme.colorScheme.onSurfaceVariantSummary,
+                                    )
+                                }
+                                storeWidgetId?.let { widgetId ->
+                                    ModuleStyleIconAction(
+                                        icon = MaterialSymbols.Rounded.Storefront,
+                                        contentDescription = stringResource(
+                                            R.string.rear_store_open_detail,
+                                        ),
+                                        onClick = { onOpenStoreDetail(widgetId) },
+                                    )
+                                }
+                            }
+                        },
+                        rightAction = {
+                            if (card.canDelete) {
+                                ModuleStyleDeleteAction(
+                                    icon = UiIcons.Delete,
+                                    text = stringResource(R.string.rear_widget_action_delete),
+                                    onClick = { pendingDeleteCard = card },
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+
+            errorText?.takeIf { cards.isNotEmpty() }?.let { message ->
+                item(key = "app_card_error") {
                     Text(
-                        text = errorText ?: stringResource(R.string.rear_widget_empty_app_card),
-                        modifier = Modifier.padding(16.dp),
+                        text = message,
+                        color = Color(0xFFD32F2F),
+                        modifier = Modifier.padding(horizontal = 4.dp),
                     )
                 }
             }
         }
-
-        itemsIndexed(
-            items = cards,
-            key = { _, card -> "app_card_" + card.appId },
-            contentType = { _, _ -> "app_card_item" },
-        ) { _, card ->
-            val itemKey = "app_card_" + card.appId
-            val relatedBusiness = card.componentBusiness?.let { component ->
-                businesses.firstOrNull { it.business == component }
-            }
-            val storeWidgetId = relatedBusiness?.storeWidgetId
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
-            DraggableItem(
-                key = itemKey,
-                state = draggableState,
-            ) { isDragging, hoveredItemKey ->
-                ModuleStyleManagerCard(
-                    modifier = Modifier
-                        .then(
-                            if (!orderSaving) {
-                                Modifier.longPressDraggable(draggableState, itemKey)
-                            } else {
-                                Modifier
-                            }
-                        )
-                        .then(
-                            if (isDragging) {
-                                Modifier.shadow(
-                                    elevation = 12.dp,
-                                    shape = RoundedCornerShape(20.dp),
-                                    clip = false,
-                                )
-                            } else {
-                                Modifier
-                            }
-                        ),
-                    backgroundColor = if (hoveredItemKey == itemKey) {
-                        MiuixTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
-                    } else {
-                        null
-                    },
-                    title = card.title.ifBlank { card.appId },
-                    summaryLines = emptyList(),
-                    badges = buildList {
-                        add(rearWidgetAppCardBadge())
-                        if (card.ownedByRearEye) {
-                            add(rearWidgetRearEyeBadge())
-                        } else {
-                            add(rearWidgetExternalBadge())
-                        }
-                        if (!card.canRename && !card.canDelete) {
-                            add(rearWidgetReadOnlyBadge())
-                        }
-                        card.componentBusiness?.let { component ->
-                            add(rearWidgetComponentBadge(component))
-                            relatedBusiness?.let { business ->
-                                addAll(
-                                    rearWidgetSourceBadges(
-                                        downloadedFromStore = business.downloadedFromStore,
-                                        storeWidgetId = business.storeWidgetId,
-                                    )
-                                )
-                            }
-                        }
-                    },
-                    onCardClick = if (card.canRename) {
-                        {
-                            draftTitle = card.title
-                            editingCard = card
-                        }
-                    } else {
-                        null
-                    },
-                    leftAction = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            if (card.canRenderPreview) {
-                                ModuleStyleIconAction(
-                                    icon = Icons.Outlined.PhotoCamera,
-                                    contentDescription = stringResource(
-                                        R.string.rear_widget_app_render_preview,
-                                    ),
-                                    onClick = {
-                                        if (card.appId in previewRenderingIds) {
-                                            return@ModuleStyleIconAction
-                                        }
-                                        previewRenderingIds += card.appId
-                                        scope.launch {
-                                            val result = withContext(Dispatchers.IO) {
-                                                RearAppCardRepository.renderPreview(
-                                                    context,
-                                                    card.appId,
-                                                )
-                                            }
-                                            previewRenderingIds -= card.appId
-                                            showResult(
-                                                result.success,
-                                                result.error,
-                                                context.getString(
-                                                    R.string.rear_widget_app_preview_rendered,
-                                                ),
-                                            )
-                                            if (result.success) {
-                                                delay(350)
-                                                reload()
-                                            }
-                                        }
-                                    },
-                                )
-                            }
-                            if (card.canRename) {
-                                ModuleStyleIconAction(
-                                    icon = Icons.Rounded.EditNote,
-                                    contentDescription = stringResource(
-                                        R.string.rear_widget_edit_app_card,
-                                    ),
-                                    onClick = {
-                                        draftTitle = card.title
-                                        editingCard = card
-                                    },
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Outlined.Lock,
-                                    contentDescription = null,
-                                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                )
-                            }
-                            storeWidgetId?.let { widgetId ->
-                                ModuleStyleIconAction(
-                                    icon = MaterialSymbols.Rounded.Storefront,
-                                    contentDescription = stringResource(
-                                        R.string.rear_store_open_detail,
-                                    ),
-                                    onClick = { onOpenStoreDetail(widgetId) },
-                                )
-                            }
-                        }
-                    },
-                    rightAction = {
-                        if (card.canDelete) {
-                            ModuleStyleDeleteAction(
-                                icon = MiuixIcons.Delete,
-                                text = stringResource(R.string.rear_widget_action_delete),
-                                onClick = {
-                                    scope.launch {
-                                        val result = withContext(Dispatchers.IO) {
-                                            RearAppCardRepository.delete(context, card.appId)
-                                        }
-                                        showResult(
-                                            result.success,
-                                            result.error,
-                                            context.getString(R.string.rear_widget_app_deleted),
-                                        )
-                                        if (result.success) {
-                                            delay(350)
-                                            reload()
-                                        }
-                                    }
-                                },
-                            )
-                        }
-                    },
-                )
-            }
-        }
-
-        errorText?.takeIf { cards.isNotEmpty() }?.let { message ->
-            item(key = "app_card_error") {
-                Text(
-                    text = message,
-                    color = Color(0xFFD32F2F),
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                )
-            }
-        }
     }
+}
 
-    val editing = editingCard
-    OverlayDialog(
-        show = editing != null,
-        title = stringResource(R.string.rear_widget_edit_app_card),
-        onDismissRequest = { editingCard = null },
-    ) {
-        DialogFormColumn {
-            TextField(
-                value = draftTitle,
-                onValueChange = { draftTitle = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_widget_app_card_name),
-                singleLine = true,
-            )
-            Button(
-                modifier = Modifier.fillMaxWidth(),
-                enabled = draftTitle.isNotBlank(),
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                onClick = {
-                    val target = editing ?: return@Button
-                    scope.launch {
-                        val result = withContext(Dispatchers.IO) {
-                            RearAppCardRepository.rename(context, target.appId, draftTitle)
-                        }
-                        showResult(
-                            result.success,
-                            result.error,
-                            context.getString(R.string.rear_widget_app_name_updated),
-                        )
-                        if (result.success) {
-                            editingCard = null
-                            delay(350)
-                            reload()
-                        }
-                    }
-                },
+/** Body-only source: the rename window must never enter its own backdrop. */
+@Composable
+internal fun RearAppCardRenameScene(
+    show: Boolean,
+    draftTitle: String,
+    onTitleChange: (String) -> Unit,
+    onDismissRequest: () -> Unit,
+    onConfirm: () -> Unit,
+    modifier: Modifier = Modifier,
+    focusSessionKey: Any? = Unit,
+    submitting: Boolean = false,
+    extraOverlayContent: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    GlassPreferenceScene(
+        modifier = modifier,
+        overlayContent = {
+            GlassFormDialog(
+                show = show,
+                title = stringResource(R.string.rear_widget_edit_app_card),
+                onDismissRequest = onDismissRequest,
             ) {
-                Text(stringResource(R.string.rear_widget_confirm))
+                DialogFormColumn {
+                    EditorTextField(
+                        value = draftTitle,
+                        onValueChange = onTitleChange,
+                        modifier = Modifier.fillMaxWidth().testTag("app-card-rename-title"),
+                        label = stringResource(R.string.rear_widget_app_card_name),
+                        singleLine = true,
+                        autoFocus = show,
+                        selectAllOnFocus = true,
+                        focusSessionKey = focusSessionKey,
+                    )
+                    DialogActions(
+                        modifier = Modifier.testTag("app-card-rename-actions"),
+                        cancelText = stringResource(R.string.rear_widget_cancel),
+                        confirmText = stringResource(R.string.rear_widget_confirm),
+                        onCancel = onDismissRequest,
+                        onConfirm = onConfirm,
+                        confirmEnabled = !submitting && draftTitle.isNotBlank(),
+                    )
+                }
             }
-            Button(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { editingCard = null },
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
-            }
-        }
-    }
+            extraOverlayContent()
+        },
+        content = content,
+    )
 }

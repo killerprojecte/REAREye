@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.screen
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -47,6 +49,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -64,6 +67,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -73,31 +77,31 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import hk.uwu.reareye.BuildConfig
+import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearstore.RearStoreAuthor
 import hk.uwu.reareye.repository.rearstore.RearStoreInstallConflict
 import hk.uwu.reareye.repository.rearstore.RearStoreInstallConflictSource
 import hk.uwu.reareye.repository.rearstore.RearStoreInstallProgressStage
+import hk.uwu.reareye.repository.rearstore.RearStoreInstallProgress
+import hk.uwu.reareye.repository.rearstore.RearStoreUninstallResult
 import hk.uwu.reareye.repository.rearstore.RearStoreInstalledWidget
 import hk.uwu.reareye.repository.rearstore.RearStoreListItem
 import hk.uwu.reareye.repository.rearstore.RearStorePreparedInstallAsset
@@ -105,6 +109,7 @@ import hk.uwu.reareye.repository.rearstore.RearStoreQuickInstallResult
 import hk.uwu.reareye.repository.rearstore.RearStoreRelease
 import hk.uwu.reareye.repository.rearstore.RearStoreReleaseAsset
 import hk.uwu.reareye.repository.rearstore.RearStoreRepository
+import hk.uwu.reareye.repository.rearstore.RearStoreReadme
 import hk.uwu.reareye.repository.rearstore.RearStoreWidgetDetail
 import hk.uwu.reareye.repository.rearstore.RearStoreWidgetInfoType
 import hk.uwu.reareye.repository.rearstore.RearStoreWidgetMetadataType
@@ -114,22 +119,20 @@ import hk.uwu.reareye.repository.rearstore.supportsModuleVersion
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperRepository
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.reareye.ui.components.OverlayDialog
-import hk.uwu.reareye.ui.components.RearBadgeGroup
-import hk.uwu.reareye.ui.components.RearBadgeItem
-import hk.uwu.reareye.ui.components.RearBadgePalette
-import hk.uwu.reareye.ui.components.RearSearchBar
+import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.GlassEditorSheet
+import hk.uwu.mixui.components.DialogActions
+import hk.uwu.mixui.components.BadgeGroup
+import hk.uwu.mixui.components.BadgeItem
+import hk.uwu.mixui.components.BadgePalette
+import hk.uwu.mixui.components.SearchBar
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
-import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.mixui.components.ListItem
 import hk.uwu.reareye.ui.components.config.WallpaperMetadataFields
-import hk.uwu.reareye.ui.components.rememberRearAccentBadgePalette
+import hk.uwu.mixui.components.rememberAccentBadgePalette
 import hk.uwu.reareye.ui.components.webview.ScrollWebView
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -138,37 +141,27 @@ import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Surface
-import top.yukonga.miuix.kmp.basic.TabRowWithContour
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.Link
-import top.yukonga.miuix.kmp.icon.extended.Sort
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import hk.uwu.mixui.components.ListItemDefaults
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
+import hk.uwu.mixui.components.HorizontalDivider
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.GlassAnchoredMenu
+import hk.uwu.mixui.components.GlassMenuOption
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.InfiniteProgressIndicator
+import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.LargeTitleLazyScaffold
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.LocalPageTopBarScrollConnection
+import hk.uwu.mixui.components.pageScrollFeedback
+import hk.uwu.mixui.components.TopBarIconButton
+import hk.uwu.mixui.components.Surface
+import hk.uwu.mixui.components.GlassTabs
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.theme.MixTheme
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.text.DecimalFormat
@@ -331,6 +324,7 @@ private fun formatSize(size: Long): String {
 
 @Composable
 private fun rememberSkeletonPulseAlpha(label: String): Float {
+    if (hk.uwu.mixui.motion.rememberReduceMotionEnabled()) return 0.65f
     val infiniteTransition = rememberInfiniteTransition(label = label)
     val alpha = infiniteTransition.animateFloat(
         initialValue = 0.45f,
@@ -868,6 +862,7 @@ fun RearStoreScreen(
         } else {
             RearStoreDetailContent(
                 widgetId = currentWidgetId,
+                prefsManager = prefsManager,
                 bottomInnerPadding = bottomInnerPadding,
                 installedWidget = installedWidgets[currentWidgetId],
                 onBack = { selectedWidgetIdState.value = null },
@@ -878,18 +873,16 @@ fun RearStoreScreen(
 }
 
 @Composable
-private fun RearStoreRootContent(
+internal fun RearStoreRootContent(
     bottomInnerPadding: Dp,
     prefsManager: hk.uwu.reareye.ui.config.PrefsManager,
     installedWidgets: Map<String, RearStoreInstalledWidget>,
     onOpenDetail: (String) -> Unit,
     onBack: (() -> Unit)? = null,
+    loadItems: suspend () -> List<RearStoreListItem>? = { RearStoreRepository.loadWidgets(prefsManager) },
 ) {
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val scrollBehavior = MiuixScrollBehavior()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
 
     var searchInput by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
@@ -907,7 +900,7 @@ private fun RearStoreRootContent(
         loadFailed = false
         val result = withContext(Dispatchers.IO) {
             runCatching {
-                RearStoreRepository.loadWidgets(prefsManager)
+                loadItems()
             }.getOrNull()
         }
         if (result == null) {
@@ -946,190 +939,123 @@ private fun RearStoreRootContent(
         )
     }
 
-    Scaffold(
-        topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .rearAcrylicEffect(hazeState, hazeStyle),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                TopAppBar(
-                    color = Color.Transparent,
-                    title = stringResource(R.string.store_navigation),
-                    navigationIconPadding = 12.dp,
-                    navigationIcon = {
-                        if (onBack != null) {
-                            IconButton(onClick = onBack) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = null,
-                                )
-                            }
-                        }
-                    },
-                    actionIconPadding = 12.dp,
-                    actions = {
-                        Box {
-                            IconButton(
-                                onClick = { showSortMenu.value = true },
-                                holdDownState = showSortMenu.value,
-                            ) {
-                                Icon(
-                                    imageVector = MiuixIcons.Regular.Sort,
-                                    contentDescription = stringResource(R.string.app_list_sort),
-                                    tint = MiuixTheme.colorScheme.onBackground,
-                                )
-                            }
-                            OverlayListPopup(
-                                show = showSortMenu.value,
-                                popupModifier = Modifier,
-                                popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                                alignment = PopupPositionProvider.Align.End,
-                                enableWindowDim = true,
-                                onDismissRequest = { showSortMenu.value = false },
-                                maxHeight = null,
-                                minWidth = 220.dp,
-                                renderInRootScaffold = true,
-                                content = {
-                                    ListPopupColumn {
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.rear_store_prioritize_updates)),
-                                            optionSize = 5,
-                                            isSelected = prioritizeUpdates,
-                                            index = 0,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                prioritizeUpdates = !prioritizeUpdates
-                                            },
-                                        )
-                                        HorizontalDivider(
-                                            thickness = 0.5.dp,
-                                            color = MiuixTheme.colorScheme.outline.copy(alpha = 0.35f),
-                                        )
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_updated_at)),
-                                            optionSize = 5,
-                                            isSelected = sortMode == RearStoreSortMode.UPDATED_AT,
-                                            index = 1,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                showSortMenu.value = false
-                                                sortMode = RearStoreSortMode.UPDATED_AT
-                                            },
-                                        )
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_installed_at)),
-                                            optionSize = 5,
-                                            isSelected = sortMode == RearStoreSortMode.INSTALLED_AT,
-                                            index = 2,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                showSortMenu.value = false
-                                                sortMode = RearStoreSortMode.INSTALLED_AT
-                                            },
-                                        )
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_name)),
-                                            optionSize = 5,
-                                            isSelected = sortMode == RearStoreSortMode.NAME,
-                                            index = 3,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                showSortMenu.value = false
-                                                sortMode = RearStoreSortMode.NAME
-                                            },
-                                        )
-                                        DropdownImpl(
-                                            item = DropdownItem(title = stringResource(R.string.rear_store_sort_by_stars)),
-                                            optionSize = 5,
-                                            isSelected = sortMode == RearStoreSortMode.STARS,
-                                            index = 4,
-                                            dropdownColors = DropdownDefaults.dropdownColors(),
-                                            onSelectedIndexChange = {
-                                                showSortMenu.value = false
-                                                sortMode = RearStoreSortMode.STARS
-                                            },
-                                        )
-                                    }
-                                },
-                            )
-                        }
-                    },
-                    scrollBehavior = scrollBehavior,
-                )
-                RearSearchBar(
-                    query = searchInput,
-                    hint = stringResource(R.string.rear_store_search_hint),
-                    prefsManager = prefsManager,
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp),
-                    onQueryChange = { searchInput = it },
-                    onSearchSubmit = { searchQuery = searchInput.trim() },
-                    onSearchFocusChange = { focused -> searchFocusedState.value = focused },
-                )
-            }
-        },
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets.systemBars,
-    ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .rearAcrylicSource(hazeState)
-                .padding(horizontal = 12.dp),
-            contentPadding = PaddingValues(
-                top = paddingValues.calculateTopPadding() + 12.dp,
-                bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
-            ),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            overscrollEffect = null,
-        ) {
-            if (loading) {
-                item {
-                    RearStoreLoadingCard()
-                }
-            } else if (loadFailed) {
-                item {
-                    RearStoreMessageCard(text = stringResource(R.string.rear_store_load_failed))
-                }
-            } else if (items.isEmpty()) {
-                item {
-                    RearStoreMessageCard(text = stringResource(R.string.rear_store_search_empty))
-                }
-            } else {
-                itemsIndexed(items, key = { _, item -> item.id }) { _, item ->
-                    RearStoreListCard(
-                        item = item,
-                        installedWidget = installedWidgets[item.id],
-                        updateAvailable = item.hasAvailableUpdate(installedWidgets),
-                        onClick = { onOpenDetail(item.id) },
+    LargeTitleLazyScaffold(
+        title = stringResource(R.string.store_navigation),
+        bottomObstruction = bottomInnerPadding,
+        navigationIcon = {
+            if (onBack != null) {
+                TopBarIconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.scene_route_navigate_back),
+                        modifier = Modifier.size(24.dp),
                     )
                 }
+            }
+        },
+        actions = {
+            GlassAnchoredMenu(
+                expanded = showSortMenu.value,
+                onExpandedChange = { showSortMenu.value = it },
+                options = listOf(
+                    GlassMenuOption(stringResource(R.string.rear_store_prioritize_updates),
+                        selected = prioritizeUpdates, dismissOnClick = false),
+                    GlassMenuOption(stringResource(R.string.rear_store_sort_by_updated_at),
+                        selected = sortMode == RearStoreSortMode.UPDATED_AT, dividerBefore = true),
+                    GlassMenuOption(stringResource(R.string.rear_store_sort_by_installed_at),
+                        selected = sortMode == RearStoreSortMode.INSTALLED_AT),
+                    GlassMenuOption(stringResource(R.string.rear_store_sort_by_name),
+                        selected = sortMode == RearStoreSortMode.NAME),
+                    GlassMenuOption(stringResource(R.string.rear_store_sort_by_stars),
+                        selected = sortMode == RearStoreSortMode.STARS),
+                ),
+                onOptionClick = { index ->
+                    when (index) {
+                        0 -> prioritizeUpdates = !prioritizeUpdates
+                        1 -> sortMode = RearStoreSortMode.UPDATED_AT
+                        2 -> sortMode = RearStoreSortMode.INSTALLED_AT
+                        3 -> sortMode = RearStoreSortMode.NAME
+                        4 -> sortMode = RearStoreSortMode.STARS
+                    }
+                },
+            ) {
+                TopBarIconButton(onClick = { showSortMenu.value = true }) {
+                    Icon(
+                        imageVector = UiIcons.Regular.Sort,
+                        contentDescription = stringResource(R.string.app_list_sort),
+                        tint = MixTheme.colorScheme.onBackground,
+                    )
+                }
+            }
+        },
+        searchBar = {
+            SearchBar(
+                query = searchInput,
+                hint = stringResource(R.string.rear_store_search_hint),
+                onQueryChange = { searchInput = it },
+                onSearchSubmit = { searchQuery = searchInput.trim() },
+                onSearchFocusChange = { focused -> searchFocusedState.value = focused },
+            )
+        },
+    ) {
+        if (loading) {
+            item {
+                RearStoreLoadingCard()
+            }
+        } else if (loadFailed) {
+            item {
+                RearStoreMessageCard(text = stringResource(R.string.rear_store_load_failed))
+            }
+        } else if (items.isEmpty()) {
+            item {
+                RearStoreMessageCard(text = stringResource(R.string.rear_store_search_empty))
+            }
+        } else {
+            itemsIndexed(items, key = { _, item -> item.id }) { _, item ->
+                RearStoreListCard(
+                    item = item,
+                    installedWidget = installedWidgets[item.id],
+                    updateAvailable = item.hasAvailableUpdate(installedWidgets),
+                    onClick = { onOpenDetail(item.id) },
+                )
             }
         }
     }
 }
 
+/** Production delegates unchanged; local page tests can replace every store side effect. */
+internal class RearStoreDetailOperations(
+    val loadInstallDetail: suspend (PrefsManager, RearStoreWidgetDetail, String?) -> RearStoreWidgetDetail =
+        RearStoreRepository::loadWidgetDetailForRelease,
+    val resolveInstallConflict: (PrefsManager, RearStoreWidgetDetail) -> RearStoreInstallConflict? =
+        RearStoreRepository::resolveInstallConflict,
+    val prepareInstallAsset: suspend (PrefsManager, RearStoreWidgetDetail, String?, String?,
+        (RearStoreInstallProgress) -> Unit) -> RearStorePreparedInstallAsset = RearStoreRepository::prepareInstallAsset,
+    val quickInstallWidget: suspend (Context, PrefsManager, RearStoreWidgetDetail, String?, String?, Boolean,
+        RearStorePreparedInstallAsset?, RearWallpaperMetadataOptions?,
+        (RearStoreInstallProgress) -> Unit) -> RearStoreQuickInstallResult = RearStoreRepository::quickInstallWidget,
+    val uninstallWidget: suspend (Context, PrefsManager, String) -> RearStoreUninstallResult =
+        RearStoreRepository::uninstallWidget,
+)
+
+private val defaultRearStoreDetailOperations = RearStoreDetailOperations()
+
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
-private fun RearStoreDetailContent(
+internal fun RearStoreDetailContent(
     widgetId: String,
+    prefsManager: PrefsManager,
     bottomInnerPadding: Dp,
     installedWidget: RearStoreInstalledWidget?,
     onBack: () -> Unit,
     onInstalled: suspend () -> Unit,
+    loadDetail: suspend (PrefsManager, String, String?) -> RearStoreWidgetDetail? = RearStoreRepository::loadWidgetDetail,
+    loadReadme: suspend (PrefsManager, String) -> RearStoreReadme? = RearStoreRepository::loadWidgetReadme,
+    operations: RearStoreDetailOperations = defaultRearStoreDetailOperations,
 ) {
     val context = LocalContext.current
-    val prefsManager = remember { context.getPrefsManager() }
-    val layoutDirection = LocalLayoutDirection.current
     val scope = rememberCoroutineScope()
-    val scrollBehavior = MiuixScrollBehavior()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
+    val listState = rememberLazyListState()
 
     var detail by remember(widgetId) { mutableStateOf<RearStoreWidgetDetail?>(null) }
     var loading by remember(widgetId) { mutableStateOf(true) }
@@ -1161,11 +1087,7 @@ private fun RearStoreDetailContent(
         loadFailed = false
         detail = withContext(Dispatchers.IO) {
             runCatching {
-                RearStoreRepository.loadWidgetDetail(
-                    prefsManager = prefsManager,
-                    widgetId = widgetId,
-                    widgetInfoVersion = installedWidget?.releaseTag,
-                )
+                loadDetail(prefsManager, widgetId, installedWidget?.releaseTag)
             }.getOrNull()
         }
         readmeLoading = false
@@ -1187,7 +1109,7 @@ private fun RearStoreDetailContent(
         }
         readmeLoading = true
         val loadedReadme = withContext(Dispatchers.IO) {
-            runCatching { RearStoreRepository.loadWidgetReadme(prefsManager, widgetId) }.getOrNull()
+            runCatching { loadReadme(prefsManager, widgetId) }.getOrNull()
         }
         detail = detail?.copy(readme = loadedReadme)
         readmeLoaded = true
@@ -1202,11 +1124,7 @@ private fun RearStoreDetailContent(
         val widgetDetail = detail ?: return null
         return withContext(Dispatchers.IO) {
             runCatching {
-                RearStoreRepository.loadWidgetDetailForRelease(
-                    prefsManager = prefsManager,
-                    detail = widgetDetail,
-                    releaseTag = release.tagName,
-                )
+                operations.loadInstallDetail(prefsManager, widgetDetail, release.tagName)
             }.getOrDefault(widgetDetail)
         }
     }
@@ -1223,16 +1141,10 @@ private fun RearStoreDetailContent(
         val assetKey = installAssetKey(release, asset)
         activeInstall = RearStoreActiveInstall(assetKey = assetKey)
         val result = runCatching {
-            RearStoreRepository.quickInstallWidget(
-                context = context,
-                prefsManager = prefsManager,
-                detail = widgetDetail,
-                releaseTag = release.tagName,
-                assetName = asset.name,
-                forceOverwrite = forceOverwrite,
-                preparedAsset = preparedAsset,
-                wallpaperMetadataOptions = wallpaperMetadataOptions,
-                onProgress = { progress ->
+            operations.quickInstallWidget(
+                context, prefsManager, widgetDetail, release.tagName, asset.name,
+                forceOverwrite, preparedAsset, wallpaperMetadataOptions,
+                { progress ->
                     if (activeInstall?.assetKey == assetKey) {
                         activeInstall = activeInstall?.copy(
                             phase = progress.stage,
@@ -1297,12 +1209,9 @@ private fun RearStoreDetailContent(
         val assetKey = installAssetKey(release, asset)
         activeInstall = RearStoreActiveInstall(assetKey = assetKey)
         val preparedResult = runCatching {
-            RearStoreRepository.prepareInstallAsset(
-                prefsManager = prefsManager,
-                detail = widgetDetail,
-                releaseTag = release.tagName,
-                assetName = asset.name,
-                onProgress = { progress ->
+            operations.prepareInstallAsset(
+                prefsManager, widgetDetail, release.tagName, asset.name,
+                { progress ->
                     if (activeInstall?.assetKey == assetKey) {
                         activeInstall = activeInstall?.copy(
                             phase = progress.stage,
@@ -1357,7 +1266,7 @@ private fun RearStoreDetailContent(
             return
         }
         val conflict = withContext(Dispatchers.IO) {
-            RearStoreRepository.resolveInstallConflict(prefsManager, widgetDetail)
+            operations.resolveInstallConflict(prefsManager, widgetDetail)
         }
         if (conflict != null && !forceOverwrite) {
             installConflict = RearStorePendingInstallConflict(
@@ -1381,11 +1290,7 @@ private fun RearStoreDetailContent(
 
     suspend fun performUninstall(targetWidgetId: String) {
         val result = runCatching {
-            RearStoreRepository.uninstallWidget(
-                context = context,
-                prefsManager = prefsManager,
-                widgetId = targetWidgetId,
-            )
+            operations.uninstallWidget(context, prefsManager, targetWidgetId)
         }
         val uninstallResult = result.getOrNull()
         if (uninstallResult != null) {
@@ -1415,58 +1320,281 @@ private fun RearStoreDetailContent(
         }
     }
 
-    Scaffold(
-        topBar = {
-            val repositoryUrl = detail?.repository?.url?.normalizedOrNull()
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                color = Color.Transparent,
-                title = detail?.let { stringResource(R.string.rear_store_detail_header) }
-                    ?: stringResource(R.string.store_navigation),
-                navigationIconPadding = 12.dp,
-                actionIconPadding = 12.dp,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            modifier = Modifier.graphicsLayer {
-                                if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
+    val repositoryUrl = detail?.repository?.url?.normalizedOrNull()
+    GlassTopBarScaffold(
+        title = detail?.let { stringResource(R.string.rear_store_detail_header) }
+            ?: stringResource(R.string.store_navigation),
+        isContentScrolled = listState.canScrollBackward,
+        contentListState = listState,
+        attachNestedScrollToContent = false,
+        pinnedHeader = {
+            if (!loading && !loadFailed && detail != null) {
+                GlassTabs(
+                    tabs = listOf(
+                        stringResource(R.string.rear_store_tab_readme),
+                        stringResource(R.string.rear_store_tab_downloads),
+                        stringResource(R.string.rear_store_tab_info),
+                    ),
+                    selectedTabIndex = selectedTab.ordinal,
+                    onTabSelected = { selectedTab = RearStoreDetailTab.entries[it] },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+        },
+        overlayContent = {
+            GlassFormDialog(
+                modifier = Modifier.testTag("store-uninstall-dialog"),
+                show = showUninstallDialog && installedWidget != null,
+                title = stringResource(R.string.rear_store_uninstall_dialog_title),
+                onDismissRequest = { showUninstallDialog = false },
+            ) {
+                DialogFormColumn {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        RearStoreDialogMessageCard(
+                            message = stringResource(
+                                R.string.rear_store_uninstall_dialog_message,
+                                installedWidget?.widgetName ?: widgetId,
+                            ),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().testTag("store-uninstall-actions"),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Button(onClick = { showUninstallDialog = false }, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.rear_widget_cancel))
+                        }
+                        Button(
+                            onClick = {
+                                showUninstallDialog = false
+                                scope.launch { performUninstall(widgetId) }
                             },
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
+                            colors = ButtonDefaults.buttonColorsDanger(),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(stringResource(R.string.rear_store_uninstall_action))
+                        }
+                    }
+                }
+            }
+
+            GlassFormDialog(
+                modifier = Modifier.testTag("store-blocked-dialog"),
+                show = blockedInstallMessage != null,
+                title = stringResource(R.string.rear_store_install_blocked_title),
+                onDismissRequest = { blockedInstallMessage = null },
+            ) {
+                DialogFormColumn {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        RearStoreDialogMessageCard(message = blockedInstallMessage.orEmpty())
+                    }
+                    Button(
+                        onClick = { blockedInstallMessage = null },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.rear_widget_cancel))
+                    }
+                }
+            }
+
+            val postInstallBrowser = postInstallBrowserState
+            GlassFormDialog(
+                modifier = Modifier.testTag("store-browser-dialog"),
+                show = postInstallBrowser != null,
+                title = postInstallBrowser?.title
+                    ?: stringResource(R.string.rear_store_postinstall_browser_title),
+                onDismissRequest = { postInstallBrowserState = null },
+            ) {
+                // Native panels own their margins. Bound the browser and action region together
+                // so the WebView cannot consume all height in a short/IME-constrained window.
+                DialogFormColumn {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        RearStorePostInstallBrowser(
+                            url = postInstallBrowser?.url.orEmpty(),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().testTag("store-browser-actions"),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Button(onClick = { postInstallBrowserState = null }, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.rear_widget_cancel))
+                        }
+                        Button(
+                            onClick = {
+                                val targetUrl = postInstallBrowser?.url ?: return@Button
+                                context.startActivity(Intent(Intent.ACTION_VIEW, targetUrl.toUri()))
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(stringResource(R.string.rear_store_postinstall_open_in_browser))
+                        }
+                    }
+                }
+            }
+
+            val conflictDialog = installConflict
+            GlassFormDialog(
+                modifier = Modifier.testTag("store-conflict-dialog"),
+                show = conflictDialog != null,
+                title = stringResource(R.string.rear_store_install_conflict_title),
+                onDismissRequest = { installConflict = null },
+            ) {
+                val conflict = conflictDialog?.conflict ?: return@GlassFormDialog
+                DialogFormColumn {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        RearStoreDialogMessageCard(
+                            message = buildInstallConflictMessage(context, conflict),
+                        )
+                    }
+                    if (conflict.source == RearStoreInstallConflictSource.OTHER_STORE_WIDGET &&
+                        conflict.existingWidgetId != null
+                    ) {
+                        Button(
+                            onClick = {
+                                val targetWidgetId = conflict.existingWidgetId
+                                installConflict = null
+                                scope.launch { performUninstall(targetWidgetId) }
+                            },
+                            colors = ButtonDefaults.buttonColorsDanger(),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.rear_store_uninstall_conflicting_widget))
+                        }
+                    }
+                    DialogActions(
+                        modifier = Modifier.testTag("store-conflict-actions"),
+                        cancelText = stringResource(R.string.rear_widget_cancel),
+                        confirmText = stringResource(R.string.rear_store_force_overwrite),
+                        destructive = true,
+                        onCancel = { installConflict = null },
+                        onConfirm = {
+                            installConflict = null
+                            scope.launch {
+                                startInstallFlow(
+                                    release = conflictDialog.release,
+                                    asset = conflictDialog.asset,
+                                    forceOverwrite = true,
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+
+            val wallpaperDraft = wallpaperMetadataDraft
+            val pendingWallpaper = pendingWallpaperInstall
+            GlassEditorSheet(
+                modifier = Modifier.testTag("store-wallpaper-dialog"),
+                show = pendingWallpaper != null && wallpaperDraft != null,
+                title = stringResource(R.string.rear_store_wallpaper_metadata_title),
+                onDismissRequest = {
+                    pendingWallpaperInstall = null
+                    wallpaperMetadataDraft = null
+                },
+                confirmText = stringResource(R.string.rear_widget_confirm),
+                cancelText = stringResource(R.string.rear_widget_cancel),
+                sessionKey = pendingWallpaper?.preparedAsset,
+                onConfirm = confirm@{
+                    val currentDraft = wallpaperMetadataDraft ?: return@confirm
+                    val prepared = pendingWallpaperInstall?.preparedAsset ?: return@confirm
+                    val release = prepared.release
+                    val asset = prepared.asset
+                    pendingWallpaperInstall = null
+                    wallpaperMetadataDraft = null
+                    scope.launch {
+                        performInstall(
+                            release = release,
+                            asset = asset,
+                            preparedAsset = prepared,
+                            wallpaperMetadataOptions = currentDraft,
                         )
                     }
                 },
-                actions = {
-                    if (installedWidget != null) {
-                        IconButton(onClick = { showUninstallDialog = true }) {
-                            Icon(
-                                imageVector = MiuixIcons.Delete,
-                                contentDescription = stringResource(R.string.rear_store_uninstall_action),
-                                tint = MiuixTheme.colorScheme.error,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    WallpaperMetadataFields(
+                        titleFallback = wallpaperDraft?.titleFallback.orEmpty(),
+                        titleZhCn = wallpaperDraft?.titleZhCn.orEmpty(),
+                        descriptionFallback = wallpaperDraft?.descriptionFallback.orEmpty(),
+                        descriptionZhCn = wallpaperDraft?.descriptionZhCn.orEmpty(),
+                        author = wallpaperDraft?.author.orEmpty(),
+                        designer = wallpaperDraft?.designer.orEmpty(),
+                        category = wallpaperDraft?.category.orEmpty(),
+                        resSubType = wallpaperDraft?.resSubType.orEmpty(),
+                        editable = wallpaperDraft?.editable ?: false,
+                        thirdParties = wallpaperDraft?.thirdParties ?: true,
+                        supportAon = wallpaperDraft?.supportAon ?: false,
+                        onTitleFallbackChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(titleFallback = it)
+                        },
+                        onTitleZhCnChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(titleZhCn = it)
+                        },
+                        onDescriptionFallbackChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(descriptionFallback = it)
+                        },
+                        onDescriptionZhCnChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(descriptionZhCn = it)
+                        },
+                        onAuthorChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(author = it)
+                        },
+                        onDesignerChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(designer = it)
+                        },
+                        onCategoryChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(category = it)
+                        },
+                        onResSubTypeChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(resSubType = it)
+                        },
+                        onEditableChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(editable = it)
+                        },
+                        onThirdPartiesChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(thirdParties = it)
+                        },
+                        onSupportAonChange = {
+                            wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(supportAon = it)
+                        },
+                    )
+                }
+            }
+        },
+        navigationIcon = {
+            TopBarIconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.scene_route_navigate_back))
+            }
+        },
+        actions = {
+            if (installedWidget != null) {
+                TopBarIconButton(onClick = { showUninstallDialog = true }) {
+                    Icon(
+                        imageVector = UiIcons.Delete,
+                        contentDescription = stringResource(R.string.rear_store_uninstall_action),
+                        tint = MixTheme.colorScheme.error,
+                    )
+                }
+            }
+            if (repositoryUrl != null) {
+                TopBarIconButton(
+                    onClick = {
+                        context.startActivity(
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                repositoryUrl.toUri()
                             )
-                        }
+                        )
                     }
-                    if (repositoryUrl != null) {
-                        IconButton(
-                            onClick = {
-                                context.startActivity(
-                                    Intent(
-                                        Intent.ACTION_VIEW,
-                                        repositoryUrl.toUri()
-                                    )
-                                )
-                            }
-                        ) {
-                            Icon(
-                                imageVector = MiuixIcons.Regular.Link,
-                                contentDescription = stringResource(R.string.rear_store_open_repository),
-                                tint = MiuixTheme.colorScheme.onBackground,
-                            )
-                        }
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-            )
+                ) {
+                    Icon(
+                        imageVector = UiIcons.Regular.Link,
+                        contentDescription = stringResource(R.string.rear_store_open_repository),
+                        tint = MixTheme.colorScheme.onBackground,
+                    )
+                }
+            }
         },
     ) { paddingValues ->
         if (loading) {
@@ -1478,7 +1606,7 @@ private fun RearStoreDetailContent(
             ) {
                 InfiniteProgressIndicator()
             }
-            return@Scaffold
+            return@GlassTopBarScaffold
         }
 
         val widgetDetail = detail
@@ -1492,7 +1620,7 @@ private fun RearStoreDetailContent(
             ) {
                 RearStoreMessageCard(text = stringResource(R.string.rear_store_detail_failed))
             }
-            return@Scaffold
+            return@GlassTopBarScaffold
         }
 
         val authorPlaceholderAlpha = rememberSkeletonPulseAlpha("rear-store-author-avatar")
@@ -1509,19 +1637,17 @@ private fun RearStoreDetailContent(
         val updateAvailable = installedReleaseTag != null &&
                 latestReleaseTag != null &&
                 installedReleaseTag != latestReleaseTag
-        val tabs = listOf(
-            stringResource(R.string.rear_store_tab_readme),
-            stringResource(R.string.rear_store_tab_downloads),
-            stringResource(R.string.rear_store_tab_info),
-        )
 
+        val topBarScrollConnection = LocalPageTopBarScrollConnection.current
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .rearAcrylicSource(hazeState)
+                .testTag("store-detail-list")
+                .pageScrollFeedback()
+                // The native bar must receive top-edge post-scroll before elastic feedback
+                // consumes it. Attach here (not the scaffold's outer Box), exactly once.
+                .then(topBarScrollConnection?.let { Modifier.nestedScroll(it) } ?: Modifier)
                 .padding(horizontal = 12.dp),
             contentPadding = PaddingValues(
                 top = paddingValues.calculateTopPadding(),
@@ -1537,15 +1663,6 @@ private fun RearStoreDetailContent(
                     latestReleaseTag = latestReleaseTag,
                     updateAvailable = updateAvailable,
                     metadataType = widgetDetail.displayMetadataType(),
-                )
-            }
-
-            item {
-                TabRowWithContour(
-                    tabs = tabs,
-                    selectedTabIndex = selectedTab.ordinal,
-                    onTabSelected = { selectedTab = RearStoreDetailTab.entries[it] },
-                    modifier = Modifier.fillMaxWidth(),
                 )
             }
 
@@ -1568,235 +1685,6 @@ private fun RearStoreDetailContent(
                         scope.launch { startInstallFlow(release, asset) }
                     },
                 )
-            }
-        }
-    }
-
-    OverlayDialog(
-        show = showUninstallDialog && installedWidget != null,
-        title = stringResource(R.string.rear_store_uninstall_dialog_title),
-        onDismissRequest = { showUninstallDialog = false },
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                RearStoreDialogMessageCard(
-                    message = stringResource(
-                        R.string.rear_store_uninstall_dialog_message,
-                        installedWidget?.widgetName ?: widgetId,
-                    ),
-                )
-            }
-            Button(
-                onClick = {
-                    showUninstallDialog = false
-                    scope.launch { performUninstall(widgetId) }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    color = MiuixTheme.colorScheme.error,
-                    contentColor = MiuixTheme.colorScheme.onPrimary,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_store_uninstall_action))
-            }
-            Button(
-                onClick = { showUninstallDialog = false },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
-            }
-        }
-    }
-
-    OverlayDialog(
-        show = blockedInstallMessage != null,
-        title = stringResource(R.string.rear_store_install_blocked_title),
-        onDismissRequest = { blockedInstallMessage = null },
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                RearStoreDialogMessageCard(message = blockedInstallMessage.orEmpty())
-            }
-            Button(
-                onClick = { blockedInstallMessage = null },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
-            }
-        }
-    }
-
-    val postInstallBrowser = postInstallBrowserState
-    OverlayDialog(
-        show = postInstallBrowser != null,
-        title = postInstallBrowser?.title
-            ?: stringResource(R.string.rear_store_postinstall_browser_title),
-        onDismissRequest = { postInstallBrowserState = null },
-        outsideMargin = DpSize(width = 10.dp, height = 10.dp),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                RearStorePostInstallBrowser(
-                    url = postInstallBrowser?.url.orEmpty(),
-                )
-            }
-            Button(
-                onClick = {
-                    val targetUrl = postInstallBrowser?.url ?: return@Button
-                    context.startActivity(Intent(Intent.ACTION_VIEW, targetUrl.toUri()))
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_store_postinstall_open_in_browser))
-            }
-            Button(
-                onClick = { postInstallBrowserState = null },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
-            }
-        }
-    }
-
-    val conflictDialog = installConflict
-    OverlayDialog(
-        show = conflictDialog != null,
-        title = stringResource(R.string.rear_store_install_conflict_title),
-        onDismissRequest = { installConflict = null },
-    ) {
-        val conflict = conflictDialog?.conflict ?: return@OverlayDialog
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                RearStoreDialogMessageCard(
-                    message = buildInstallConflictMessage(context, conflict),
-                )
-            }
-            if (conflict.source == RearStoreInstallConflictSource.OTHER_STORE_WIDGET &&
-                conflict.existingWidgetId != null
-            ) {
-                Button(
-                    onClick = {
-                        val targetWidgetId = conflict.existingWidgetId
-                        installConflict = null
-                        scope.launch { performUninstall(targetWidgetId) }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.rear_store_uninstall_conflicting_widget))
-                }
-            }
-            Button(
-                onClick = {
-                    installConflict = null
-                    scope.launch {
-                        startInstallFlow(
-                            release = conflictDialog.release,
-                            asset = conflictDialog.asset,
-                            forceOverwrite = true,
-                        )
-                    }
-                },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_store_force_overwrite))
-            }
-            Button(
-                onClick = { installConflict = null },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
-            }
-        }
-    }
-
-    val wallpaperDraft = wallpaperMetadataDraft
-    val pendingWallpaper = pendingWallpaperInstall
-    OverlayDialog(
-        show = pendingWallpaper != null && wallpaperDraft != null,
-        title = stringResource(R.string.rear_store_wallpaper_metadata_title),
-        onDismissRequest = {
-            pendingWallpaperInstall = null
-            wallpaperMetadataDraft = null
-        },
-    ) {
-        DialogFormColumn(maxHeight = 620.dp) {
-            WallpaperMetadataFields(
-                titleFallback = wallpaperDraft?.titleFallback.orEmpty(),
-                titleZhCn = wallpaperDraft?.titleZhCn.orEmpty(),
-                descriptionFallback = wallpaperDraft?.descriptionFallback.orEmpty(),
-                descriptionZhCn = wallpaperDraft?.descriptionZhCn.orEmpty(),
-                author = wallpaperDraft?.author.orEmpty(),
-                designer = wallpaperDraft?.designer.orEmpty(),
-                category = wallpaperDraft?.category.orEmpty(),
-                resSubType = wallpaperDraft?.resSubType.orEmpty(),
-                editable = wallpaperDraft?.editable ?: false,
-                thirdParties = wallpaperDraft?.thirdParties ?: true,
-                supportAon = wallpaperDraft?.supportAon ?: false,
-                onTitleFallbackChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(titleFallback = it)
-                },
-                onTitleZhCnChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(titleZhCn = it)
-                },
-                onDescriptionFallbackChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(descriptionFallback = it)
-                },
-                onDescriptionZhCnChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(descriptionZhCn = it)
-                },
-                onAuthorChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(author = it)
-                },
-                onDesignerChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(designer = it)
-                },
-                onCategoryChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(category = it)
-                },
-                onResSubTypeChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(resSubType = it)
-                },
-                onEditableChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(editable = it)
-                },
-                onThirdPartiesChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(thirdParties = it)
-                },
-                onSupportAonChange = {
-                    wallpaperMetadataDraft = wallpaperMetadataDraft?.copy(supportAon = it)
-                },
-            )
-            Button(
-                onClick = {
-                    val currentDraft = wallpaperMetadataDraft ?: return@Button
-                    val prepared = pendingWallpaperInstall?.preparedAsset ?: return@Button
-                    val release = prepared.release
-                    val asset = prepared.asset
-                    pendingWallpaperInstall = null
-                    wallpaperMetadataDraft = null
-                    scope.launch {
-                        performInstall(
-                            release = release,
-                            asset = asset,
-                            preparedAsset = prepared,
-                            wallpaperMetadataOptions = currentDraft,
-                        )
-                    }
-                },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_confirm))
-            }
-            Button(
-                onClick = {
-                    pendingWallpaperInstall = null
-                    wallpaperMetadataDraft = null
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
             }
         }
     }
@@ -1898,7 +1786,7 @@ private fun RearStoreUninstallCard(
     installedWidget: RearStoreInstalledWidget,
     onClick: () -> Unit,
 ) {
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
     val darkTheme = colorScheme.surface.luminance() < 0.5f
     val backgroundColor = if (darkTheme) {
         lerp(colorScheme.error, Color.White, 0.12f).copy(alpha = 0.94f)
@@ -1967,7 +1855,7 @@ private fun RearStoreUninstallCard(
                 )
             }
             ModuleStyleDeleteAction(
-                icon = MiuixIcons.Delete,
+                icon = UiIcons.Delete,
                 text = stringResource(R.string.rear_store_uninstall_action),
                 backgroundColor = actionBackgroundColor,
                 contentColor = actionContentColor,
@@ -1984,7 +1872,7 @@ private fun RearStoreDialogMessageCard(message: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
-        color = MiuixTheme.colorScheme.onBackground,
+        color = MixTheme.colorScheme.onBackground,
         fontSize = 15.sp,
         fontWeight = FontWeight.Normal,
         textAlign = TextAlign.Start,
@@ -2014,7 +1902,7 @@ private fun RearStoreListCard(
     val badges = buildList {
         statusBadgeText?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = it,
                     emphasized = updateAvailable,
                 )
@@ -2022,7 +1910,7 @@ private fun RearStoreListCard(
         }
         metadataLabelRes?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(it),
                     emphasized = false,
                     palette = metadataPalette,
@@ -2032,27 +1920,28 @@ private fun RearStoreListCard(
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        SuperCard(
+        ListItem(
+            animateContentSize = true,
             title = item.displayName,
             summary = item.author.displayName.ifBlank {
                 stringResource(R.string.rear_store_unknown_author)
             },
             endActions = {
-                RearBadgeGroup(badges = badges)
+                BadgeGroup(badges = badges)
             },
             onClick = onClick,
             bottomAction = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     HorizontalDivider(
                         thickness = 0.5.dp,
-                        color = MiuixTheme.colorScheme.outline.copy(alpha = 0.4f),
+                        color = MixTheme.colorScheme.outline.copy(alpha = 0.4f),
                     )
                     descriptionText?.let {
                         Text(
                             text = it,
                             fontSize = 15.sp,
                             lineHeight = 22.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            color = MixTheme.colorScheme.onSurfaceVariantSummary,
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -2069,12 +1958,12 @@ private fun RearStoreListCard(
                             Icon(
                                 imageVector = Icons.Outlined.StarBorder,
                                 contentDescription = null,
-                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                                 modifier = Modifier.size(16.dp),
                             )
                             Text(
                                 text = item.stargazersCount.toString(),
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                                 fontSize = 12.sp,
                             )
                         }
@@ -2085,12 +1974,12 @@ private fun RearStoreListCard(
                             Icon(
                                 imageVector = Icons.Outlined.AccessTime,
                                 contentDescription = null,
-                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                                 modifier = Modifier.size(16.dp),
                             )
                             Text(
                                 text = isoDateLabel(item.updatedAt),
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                                 fontSize = 12.sp,
                             )
                         }
@@ -2122,7 +2011,7 @@ private fun RearStoreDetailHeroCard(
     val trailingHeroBadges = buildList {
         updateStateBadgeText?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = it,
                     emphasized = updateAvailable,
                 )
@@ -2130,7 +2019,7 @@ private fun RearStoreDetailHeroCard(
         }
         metadataLabelRes?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(it),
                     emphasized = false,
                     palette = metadataPalette,
@@ -2140,7 +2029,8 @@ private fun RearStoreDetailHeroCard(
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        SuperCard(
+        ListItem(
+            animateContentSize = true,
             title = detail.name,
             summary = detail.author.displayName.ifBlank {
                 stringResource(R.string.rear_store_unknown_author)
@@ -2170,14 +2060,14 @@ private enum class RearStoreDetailHeroBadgeSlot {
 private fun RearStoreDetailHeroBadges(
     installedVersionLabel: String,
     installedVersionValue: String,
-    trailingBadges: List<RearBadgeItem>,
+    trailingBadges: List<BadgeItem>,
     modifier: Modifier = Modifier,
 ) {
     val installedFullBadge = remember(installedVersionLabel, installedVersionValue) {
-        RearBadgeItem(text = "$installedVersionLabel  $installedVersionValue")
+        BadgeItem(text = "$installedVersionLabel  $installedVersionValue")
     }
     val installedCompactBadge = remember(installedVersionLabel) {
-        RearBadgeItem(text = installedVersionLabel)
+        BadgeItem(text = installedVersionLabel)
     }
     val spacing = 6.dp
 
@@ -2188,10 +2078,10 @@ private fun RearStoreDetailHeroBadges(
 
         fun measureBadgeGroup(
             slot: RearStoreDetailHeroBadgeSlot,
-            badges: List<RearBadgeItem>,
+            badges: List<BadgeItem>,
             maxGroupWidth: Int = maxWidth,
         ) = subcompose(slot) {
-            RearBadgeGroup(
+            BadgeGroup(
                 badges = badges,
                 horizontalAlignment = Alignment.End,
             )
@@ -2266,7 +2156,7 @@ private fun RearStoreDetailHeroBadges(
 }
 
 @Composable
-private fun rememberMetadataBadgePalette(metadataType: RearStoreWidgetMetadataType): RearBadgePalette {
+private fun rememberMetadataBadgePalette(metadataType: RearStoreWidgetMetadataType): BadgePalette {
     val accent = when (metadataType) {
         RearStoreWidgetMetadataType.CARD -> Color(0xFF3B82F6)
         RearStoreWidgetMetadataType.NOTIFICATION -> Color(0xFF34A853)
@@ -2274,38 +2164,15 @@ private fun rememberMetadataBadgePalette(metadataType: RearStoreWidgetMetadataTy
         RearStoreWidgetMetadataType.WALLPAPER -> Color(0xFFEF4444)
         RearStoreWidgetMetadataType.UNKNOWN -> Color(0xFF64748B)
     }
-    return rememberRearAccentBadgePalette(accent)
+    return rememberAccentBadgePalette(accent)
 }
 
 @Composable
-private fun RearStoreDownloadBadge(
+internal fun RearStoreDownloadBadge(
     text: String,
     onClick: () -> Unit,
 ) {
-    Surface(
-        color = MiuixTheme.colorScheme.primary.copy(alpha = 0.18f),
-        shape = RoundedCornerShape(18.dp),
-        onClick = onClick,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = text,
-                color = MiuixTheme.colorScheme.primary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Icon(
-                imageVector = MiuixIcons.Download,
-                contentDescription = null,
-                tint = MiuixTheme.colorScheme.primary,
-                modifier = Modifier.size(15.dp),
-            )
-        }
-    }
+    hk.uwu.reareye.ui.components.StoreDownloadBadge(text = text, onClick = onClick)
 }
 
 @Composable
@@ -2318,7 +2185,8 @@ private fun RearStoreReleaseCard(
     onInstallAsset: (RearStoreReleaseAsset) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        SuperCard(
+        ListItem(
+            animateContentSize = true,
             title = release.name.ifBlank {
                 release.tagName.ifBlank { stringResource(R.string.rear_store_unknown_release) }
             },
@@ -2326,7 +2194,7 @@ private fun RearStoreReleaseCard(
             endActions = {
                 Text(
                     text = isoDateLabel(release.publishedAt.ifBlank { release.createdAt }),
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
                     fontSize = 12.sp,
                 )
             },
@@ -2344,7 +2212,7 @@ private fun RearStoreReleaseCard(
                     if (release.assets.isNotEmpty()) {
                         HorizontalDivider(
                             thickness = 0.5.dp,
-                            color = MiuixTheme.colorScheme.outline.copy(alpha = 0.35f),
+                            color = MixTheme.colorScheme.outline.copy(alpha = 0.35f),
                         )
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2359,7 +2227,7 @@ private fun RearStoreReleaseCard(
                             if (index != release.assets.lastIndex) {
                                 HorizontalDivider(
                                     thickness = 0.5.dp,
-                                    color = MiuixTheme.colorScheme.outline.copy(alpha = 0.35f),
+                                    color = MixTheme.colorScheme.outline.copy(alpha = 0.35f),
                                 )
                             }
                         }
@@ -2407,7 +2275,7 @@ private fun RearStoreAssetRow(
                     asset.downloadCount,
                 ),
                 fontSize = 12.sp,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
         }
         Box(
@@ -2463,61 +2331,18 @@ private fun RearStoreInstallProgressChip(installState: RearStoreActiveInstall) {
     val downloadedBytes = installState.downloadedBytes.coerceAtLeast(0L)
     val determinateProgress = if (totalBytes > 0L) {
         (downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
-    } else {
-        null
-    }
+    } else null
     val statusText = when (installState.phase) {
-        RearStoreInstallProgressStage.CONNECTING -> {
-            stringResource(R.string.rear_store_install_progress_connecting)
-        }
-
-        RearStoreInstallProgressStage.DOWNLOADING -> {
-            determinateProgress?.let {
-                stringResource(
-                    R.string.rear_store_install_progress_downloading_percent,
-                    (it * 100f).roundToInt(),
-                )
-            } ?: stringResource(R.string.rear_store_install_progress_downloading)
-        }
-
-        RearStoreInstallProgressStage.INSTALLING -> {
-            stringResource(R.string.rear_store_install_progress_installing)
-        }
+        RearStoreInstallProgressStage.CONNECTING -> stringResource(R.string.rear_store_install_progress_connecting)
+        RearStoreInstallProgressStage.DOWNLOADING -> determinateProgress?.let {
+            stringResource(R.string.rear_store_install_progress_downloading_percent, (it * 100f).roundToInt())
+        } ?: stringResource(R.string.rear_store_install_progress_downloading)
+        RearStoreInstallProgressStage.INSTALLING -> stringResource(R.string.rear_store_install_progress_installing)
     }
-    Surface(
-        color = MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (determinateProgress != null && installState.phase == RearStoreInstallProgressStage.DOWNLOADING) {
-                androidx.compose.material3.CircularProgressIndicator(
-                    progress = { determinateProgress },
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.2.dp,
-                    color = MiuixTheme.colorScheme.primary,
-                    trackColor = MiuixTheme.colorScheme.primary.copy(alpha = 0.16f),
-                )
-            } else {
-                androidx.compose.material3.CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.2.dp,
-                    color = MiuixTheme.colorScheme.primary,
-                    trackColor = MiuixTheme.colorScheme.primary.copy(alpha = 0.16f),
-                )
-            }
-            Text(
-                text = statusText,
-                color = MiuixTheme.colorScheme.primary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-            )
-        }
-    }
+    hk.uwu.reareye.ui.components.StoreProgressChip(
+        text = statusText,
+        progress = determinateProgress.takeIf { installState.phase == RearStoreInstallProgressStage.DOWNLOADING },
+    )
 }
 
 private enum class RearStoreInstallInfoBadgeGroup {
@@ -2529,26 +2354,26 @@ private enum class RearStoreInstallInfoBadgeGroup {
 }
 
 @Composable
-private fun rememberInstallInfoBadgePalette(group: RearStoreInstallInfoBadgeGroup): RearBadgePalette {
+private fun rememberInstallInfoBadgePalette(group: RearStoreInstallInfoBadgeGroup): BadgePalette {
     return when (group) {
         RearStoreInstallInfoBadgeGroup.COMPONENT -> {
-            rememberRearAccentBadgePalette(Color(0xFF10B981))
+            rememberAccentBadgePalette(Color(0xFF10B981))
         }
 
         RearStoreInstallInfoBadgeGroup.CARD -> {
-            rememberRearAccentBadgePalette(Color(0xFF6366F1))
+            rememberAccentBadgePalette(Color(0xFF6366F1))
         }
 
         RearStoreInstallInfoBadgeGroup.NOTIFICATION -> {
-            rememberRearAccentBadgePalette(Color(0xFF8B5CF6))
+            rememberAccentBadgePalette(Color(0xFF8B5CF6))
         }
 
         RearStoreInstallInfoBadgeGroup.WALLPAPER -> {
-            rememberRearAccentBadgePalette(Color(0xFF06B6D4))
+            rememberAccentBadgePalette(Color(0xFF06B6D4))
         }
 
         RearStoreInstallInfoBadgeGroup.WARNING -> {
-            rememberRearAccentBadgePalette(Color(0xFFF59E0B))
+            rememberAccentBadgePalette(Color(0xFFF59E0B))
         }
     }
 }
@@ -2571,14 +2396,14 @@ private fun RearStoreInstallInfoCard(
     val componentBadges = buildList {
         if (!installInfo.hasComponent) return@buildList
         add(
-            RearBadgeItem(
+            BadgeItem(
                 text = stringResource(R.string.rear_store_install_mode_widget_badge),
                 palette = componentPalette,
             )
         )
         installInfo.componentId?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(R.string.rear_store_install_badge_component_id, it),
                     palette = componentPalette,
                 )
@@ -2588,14 +2413,14 @@ private fun RearStoreInstallInfoCard(
     val cardBadges = buildList {
         if (!installInfo.hasCard) return@buildList
         add(
-            RearBadgeItem(
+            BadgeItem(
                 text = stringResource(R.string.rear_store_install_badge_card),
                 palette = cardPalette,
             )
         )
         installInfo.cardPackageName?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(R.string.rear_store_install_badge_card_package, it),
                     palette = cardPalette,
                 )
@@ -2605,14 +2430,14 @@ private fun RearStoreInstallInfoCard(
     val notificationBadges = buildList {
         if (!installInfo.hasScene) return@buildList
         add(
-            RearBadgeItem(
+            BadgeItem(
                 text = stringResource(R.string.rear_store_install_badge_scene),
                 palette = notificationPalette,
             )
         )
         installInfo.scenePackageName?.let {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(R.string.rear_store_install_badge_scene_package, it),
                     palette = notificationPalette,
                 )
@@ -2622,7 +2447,7 @@ private fun RearStoreInstallInfoCard(
     val wallpaperBadges = buildList {
         if (!installInfo.hasWallpaper) return@buildList
         add(
-            RearBadgeItem(
+            BadgeItem(
                 text = stringResource(R.string.rear_store_install_mode_wallpaper_badge),
                 palette = wallpaperPalette,
             )
@@ -2631,7 +2456,7 @@ private fun RearStoreInstallInfoCard(
     val warningBadges = buildList {
         if (installInfo.hasComponent && !installInfo.hasBusinessSetup) {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(R.string.rear_store_install_missing_business_setup),
                     palette = warningPalette,
                 )
@@ -2639,7 +2464,7 @@ private fun RearStoreInstallInfoCard(
         }
         if (!installInfo.appListPermissionGranted && installInfo.missingPackages.isNotEmpty()) {
             add(
-                RearBadgeItem(
+                BadgeItem(
                     text = stringResource(R.string.rear_store_install_requirements_packages_permission),
                     palette = warningPalette,
                 )
@@ -2648,7 +2473,7 @@ private fun RearStoreInstallInfoCard(
         if (installInfo.missingPackages.isNotEmpty() && installInfo.appListPermissionGranted) {
             installInfo.missingPackages.forEach { pkg ->
                 add(
-                    RearBadgeItem(
+                    BadgeItem(
                         text = stringResource(
                             R.string.rear_store_install_requirements_missing_package_item,
                             pkg
@@ -2661,7 +2486,7 @@ private fun RearStoreInstallInfoCard(
         if (installInfo.failedConfigReasons.isNotEmpty()) {
             installInfo.failedConfigReasons.values.forEach { reason ->
                 add(
-                    RearBadgeItem(
+                    BadgeItem(
                         text = reason,
                         palette = warningPalette,
                     )
@@ -2680,22 +2505,22 @@ private fun RearStoreInstallInfoCard(
                 text = stringResource(R.string.rear_store_install_info_title),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MiuixTheme.colorScheme.onBackground,
+                color = MixTheme.colorScheme.onBackground,
             )
             if (componentBadges.isNotEmpty()) {
-                RearBadgeGroup(badges = componentBadges)
+                BadgeGroup(badges = componentBadges)
             }
             if (cardBadges.isNotEmpty()) {
-                RearBadgeGroup(badges = cardBadges)
+                BadgeGroup(badges = cardBadges)
             }
             if (notificationBadges.isNotEmpty()) {
-                RearBadgeGroup(badges = notificationBadges)
+                BadgeGroup(badges = notificationBadges)
             }
             if (wallpaperBadges.isNotEmpty()) {
-                RearBadgeGroup(badges = wallpaperBadges)
+                BadgeGroup(badges = wallpaperBadges)
             }
             if (warningBadges.isNotEmpty()) {
-                RearBadgeGroup(badges = warningBadges)
+                BadgeGroup(badges = warningBadges)
             }
         }
     }
@@ -2706,11 +2531,11 @@ private fun RearStoreRepositoryCard(detail: RearStoreWidgetDetail) {
     val context = LocalContext.current
     val repositoryUrl = detail.repository?.url?.normalizedOrNull()
     Card(modifier = Modifier.fillMaxWidth()) {
-        BasicComponent(
+        ListItem(
             title = stringResource(R.string.rear_store_repository_card_title),
             summary = detail.repository?.fullName?.normalizedOrNull()
                 ?: stringResource(R.string.rear_store_repository_missing),
-            summaryColor = BasicComponentDefaults.summaryColor(),
+            summaryColor = ListItemDefaults.summaryColor(),
             onClick = repositoryUrl?.let {
                 { context.startActivity(Intent(Intent.ACTION_VIEW, it.toUri())) }
             },
@@ -2726,7 +2551,7 @@ private fun RearStoreAuthorCard(
     val context = LocalContext.current
     val authorUrl = author.url.normalizedOrNull()
     Card(modifier = Modifier.fillMaxWidth()) {
-        BasicComponent(
+        ListItem(
             startAction = {
                 RearStoreAuthorAvatar(
                     avatarUrl = author.avatarUrl,
@@ -2751,7 +2576,7 @@ private fun RearStoreAuthorCard(
                 author.login.normalizedOrNull()?.let {
                     Text(
                         text = it,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                     )
                 }
             },
@@ -2787,7 +2612,7 @@ private fun RearStoreAuthorAvatar(
             modifier = modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(MiuixTheme.colorScheme.secondaryContainer.copy(alpha = placeholderAlpha)),
+                .background(MixTheme.colorScheme.secondaryContainer.copy(alpha = placeholderAlpha)),
         )
     }
 }
@@ -2799,7 +2624,7 @@ private fun RearStoreReadmeCard(
     webViewCache: MutableMap<String, WebView>,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        BasicComponent(
+        ListItem(
             onClick = null,
             insideMargin = PaddingValues(0.dp),
             content = {
@@ -2828,7 +2653,7 @@ private fun MarkdownCardBody(
         ConfigKeys.MODULE_STORE_WEBVIEW_HARDWARE_ACCELERATION,
         true,
     )
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
     val backgroundColor = colorScheme.background
     val surfaceColor = colorScheme.surface
     val onSurfaceColor = colorScheme.onSurface
@@ -2842,24 +2667,58 @@ private fun MarkdownCardBody(
         surfaceColor
     }
     val darkMode = backgroundColor.luminance() < 0.5f
+    val errorColor = colorScheme.error
+    val surfaceContainerHighColor = colorScheme.surfaceContainerHigh
     val themeCssVariables = remember(
         backgroundColor,
         surfaceColor,
+        surfaceContainerHighColor,
         onSurfaceColor,
         onSurfaceVariantColor,
         primaryColor,
+        errorColor,
         outlineColor,
         secondaryContainerColor,
         webViewBackgroundColor,
     ) {
+        val borderCss = outlineColor.copy(alpha = 0.42f).toCssColor()
+        val subtleFillCss = onSurfaceColor.copy(alpha = if (darkMode) 0.08f else 0.05f).toCssColor()
+        val altRowCss = onSurfaceColor.copy(alpha = if (darkMode) 0.04f else 0.025f).toCssColor()
         buildString {
             append("--background:${webViewBackgroundColor.toCssColor()};")
             append("--textPrimary:${onSurfaceColor.toCssColor()};")
             append("--textSecondary:${onSurfaceVariantColor.toCssColor()};")
+            append("--textTertiary:${onSurfaceVariantColor.copy(alpha = 0.78f).toCssColor()};")
             append("--link:${primaryColor.toCssColor()};")
-            append("--border:${outlineColor.copy(alpha = 0.42f).toCssColor()};")
+            append("--link-highlight:${primaryColor.copy(alpha = 0.16f).toCssColor()};")
+            append("--link-hover:${primaryColor.copy(alpha = 0.10f).toCssColor()};")
+            append("--border:$borderCss;")
             append("--surface:${secondaryContainerColor.copy(alpha = 0.92f).toCssColor()};")
             append("--quote:${onSurfaceVariantColor.toCssColor()};")
+            append("--blockquote-color:${onSurfaceVariantColor.toCssColor()};")
+            append("--blockquote-border:${outlineColor.copy(alpha = 0.65f).toCssColor()};")
+            append("--hr-background:$borderCss;")
+            append("--code-font:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;")
+            append("--code-background:$subtleFillCss;")
+            append("--pre-background:${surfaceContainerHighColor.copy(alpha = 0.92f).toCssColor()};")
+            append("--thead-border:$borderCss;")
+            append("--tr-border:${outlineColor.copy(alpha = 0.30f).toCssColor()};")
+            append("--tr-alt-background:$altRowCss;")
+            append("--thead-background:$subtleFillCss;")
+            append("--kbd-color:${onSurfaceColor.toCssColor()};")
+            append("--kbd-background:${surfaceContainerHighColor.toCssColor()};")
+            append("--kbd-border:${outlineColor.copy(alpha = 0.55f).toCssColor()};")
+            append("--heading-color:${onSurfaceColor.toCssColor()};")
+            append("--h6-color:${onSurfaceVariantColor.toCssColor()};")
+            append("--keyword-color:${onSurfaceVariantColor.toCssColor()};")
+            append("--mention-color:${primaryColor.toCssColor()};")
+            append("--red-600:${errorColor.toCssColor()};")
+            append("--color-icon-success:${if (darkMode) "#3fb950" else "#1a7f37"};")
+            append("--color-text-danger:${errorColor.toCssColor()};")
+            append("--purple-500:${if (darkMode) "#bc8cff" else "#8250df"};")
+            append("--frame-border:$borderCss;")
+            append("--frame-color:${onSurfaceVariantColor.toCssColor()};")
+            append("--videoBackground:#000000;")
         }
     }
     val normalizedBaseUrl = remember(repoBaseUrl) {
@@ -2875,15 +2734,18 @@ private fun MarkdownCardBody(
             themeCssVariables = themeCssVariables,
         )
     } ?: return
+    val fontScale = density.fontScale
     val webViewKey = remember(
         htmlDocument,
         normalizedBaseUrl,
         webViewHardwareAccelerationEnabled,
+        fontScale,
     ) {
         listOf(
             normalizedBaseUrl.orEmpty(),
             htmlDocument.hashCode().toString(),
             webViewHardwareAccelerationEnabled.toString(),
+            fontScale.toString(),
         )
             .joinToString(separator = "\u0000")
     }
@@ -2898,7 +2760,10 @@ private fun MarkdownCardBody(
             .fillMaxWidth()
             .height(webViewHeightDp),
         factory = { viewContext ->
-            webViewCache.getOrPut(webViewKey) {
+            // Equal markdown can appear in several simultaneously visible releases.
+            // A View cannot belong to two AndroidView holders at the same time.
+            val cached = webViewCache[webViewKey]
+            if (cached != null && cached.parent == null) cached else {
                 createGithubMarkdownWebView(
                     context = viewContext,
                     hardwareAccelerationEnabled = webViewHardwareAccelerationEnabled,
@@ -2907,6 +2772,7 @@ private fun MarkdownCardBody(
                     },
                     backgroundColor = webViewBackgroundColor.toArgb(),
                 ).apply {
+                    if (cached == null) webViewCache[webViewKey] = this
                     tag = htmlDocument
                     loadDataWithBaseURL(
                         normalizedBaseUrl ?: "about:blank",
@@ -2917,6 +2783,9 @@ private fun MarkdownCardBody(
                     )
                 }
             }
+        },
+        onRelease = { webView ->
+            if (webViewCache[webViewKey] !== webView) webView.destroy()
         },
         update = { webView ->
             webView.setLayerType(
@@ -2989,7 +2858,9 @@ private fun createGithubMarkdownWebView(
             allowFileAccess = false
             setGeolocationEnabled(false)
             cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-            textZoom = 80
+            textZoom = (85f * context.resources.configuration.fontScale)
+                .roundToInt()
+                .coerceIn(70, 180)
         }
         webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String?) {
@@ -3083,7 +2954,7 @@ private fun RearStorePostInstallBrowser(url: String) {
         ConfigKeys.MODULE_STORE_WEBVIEW_HARDWARE_ACCELERATION,
         true,
     )
-    val colorScheme = MiuixTheme.colorScheme
+    val colorScheme = MixTheme.colorScheme
     val backgroundColor = if (webViewHardwareAccelerationEnabled) {
         Color.Transparent
     } else {

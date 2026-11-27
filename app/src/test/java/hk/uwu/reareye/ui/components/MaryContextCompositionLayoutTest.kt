@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components
 
+import hk.uwu.mixui.components.CompactTabs
+
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
@@ -29,7 +31,7 @@ import hk.uwu.reareye.agent.ProviderConfig
 import hk.uwu.reareye.agent.context.ContextCategory
 import hk.uwu.reareye.agent.context.ContextComposition
 import hk.uwu.reareye.agent.context.ContextSegment
-import hk.uwu.reareye.ui.components.navigation.RearNavigationBar
+import hk.uwu.reareye.ui.components.navigation.AppNavigationBar
 import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
 import hk.uwu.reareye.ui.screen.*
 import org.junit.*
@@ -40,9 +42,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
+import hk.uwu.mixui.MixColorSchemeMode
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.MixUiHost
+import hk.uwu.mixui.theme.MixTheme
 import java.io.File
 
 /** Production header/composer/navigation/sidebar with deterministic local composition snapshots. */
@@ -75,12 +78,45 @@ class MaryContextCompositionLayoutTest {
     }
     @After fun cleanup() { compose.runOnUiThread { try { activity?.close() } finally { ContextPreviewActivity.testFontScale = 1f } } }
 
+    @Test fun glassContextPreservesSelectionTabsCloseAndReopenAcrossBackends() {
+        for (backend in MixUiBackend.entries) for (mode in listOf(MixColorSchemeMode.Light, MixColorSchemeMode.Dark)) {
+            compose.runOnUiThread { activity?.close(); activity = null }
+            useComposition()
+            host(mode = mode, backend = backend)
+            val headerBefore = node("mary-open-sidebar").getUnclippedBoundsInRoot()
+            openPopup()
+            selectItem("mary-context-legend-TOOL_RESULTS")
+            assertTrue(hasPercent(semanticText("mary-context-detail"), 35))
+            assertTrue(hasPercent(semanticText("mary-context-capacity"), 25))
+            modeTab(true).performClick()
+            modeTab(true).assertIsSelected()
+            modeTab(false).performClick()
+            modeTab(false).assertIsSelected()
+            assertPopupWithinViewport()
+            screenshot("glass-context-${backend.name}-${mode.name}", "mary-context-popup")
+            closePopup()
+            assertEquals(headerBefore, node("mary-open-sidebar").getUnclippedBoundsInRoot())
+            openPopup()
+            closePopup()
+            node("mary-composer-input").assertIsDisplayed()
+        }
+    }
+
+    @Test fun freshMochiDarkWindowShowsActualContextPanel() {
+        useComposition()
+        host(mode = MixColorSchemeMode.Dark, backend = MixUiBackend.Mochi)
+        openPopup()
+        selectItem("mary-context-legend-TOOL_RESULTS")
+        screenshot("fresh-mochi-dark", "mary-context-popup")
+        closePopup()
+    }
+
     @Test fun collapsedContextKeepsOriginalRingAndDoesNotAddAChatRow() {
         useComposition()
         host()
         val chip = node("mary-context-usage").getUnclippedBoundsInRoot()
-        assertEquals("Existing Miuix IconButton visual size", 40f, chip.height.value, 1f)
-        assertEquals("Existing Miuix IconButton visual size", 40f, chip.width.value, 1f)
+        assertEquals("Existing compact toolbar touch target", 48f, chip.height.value, 1f)
+        assertEquals("Existing compact toolbar touch target", 48f, chip.width.value, 1f)
         val ring = node("mary-context-ring").getUnclippedBoundsInRoot()
         assertEquals(20f, ring.width.value, 1f)
         assertEquals(20f, ring.height.value, 1f)
@@ -213,7 +249,7 @@ class MaryContextCompositionLayoutTest {
     @Test @Config(qualifiers = "zh-rCN-w320dp-h568dp-mdpi")
     fun narrowDarkPopupKeepsSelectedDetailInsideViewport() {
         useComposition()
-        host(ColorSchemeMode.Dark)
+        host(MixColorSchemeMode.Dark)
         openPopup()
         selectItem("mary-context-legend-TOOL_RESULTS")
         assertPopupWithinViewport()
@@ -247,10 +283,10 @@ class MaryContextCompositionLayoutTest {
         useComposition()
         host()
         openPopup()
-        val popupView = popupView()
-        compose.runOnUiThread {
-            val event = android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_OUTSIDE, -1f, -1f, 0)
-            try { popupView.dispatchTouchEvent(event) } finally { event.recycle() }
+        // The native glass popup is in-tree, not a separate Window receiving
+        // ACTION_OUTSIDE. Send an actual down/up to its full-page outside layer.
+        node("context-host").performTouchInput {
+            click(androidx.compose.ui.geometry.Offset(width / 2f, height - 2f))
         }
         compose.waitForIdle()
         node("mary-context-popup").assertDoesNotExist()
@@ -312,12 +348,12 @@ class MaryContextCompositionLayoutTest {
         node("mary-context-popup").assertDoesNotExist()
     }
 
-    @Test fun compactLegendPressedLightKeepsFullTouchArea() { capturePressedLegend(ColorSchemeMode.Light, "refined-pressed-light") }
+    @Test fun compactLegendPressedLightKeepsFullTouchArea() { capturePressedLegend(MixColorSchemeMode.Light, "refined-pressed-light") }
 
     @Test @Config(qualifiers = "zh-rCN-w320dp-h568dp-mdpi")
-    fun compactLegendPressedDarkKeepsFullTouchArea() { capturePressedLegend(ColorSchemeMode.Dark, "refined-pressed-dark") }
+    fun compactLegendPressedDarkKeepsFullTouchArea() { capturePressedLegend(MixColorSchemeMode.Dark, "refined-pressed-dark") }
 
-    private fun capturePressedLegend(mode: ColorSchemeMode, name: String) {
+    private fun capturePressedLegend(mode: MixColorSchemeMode, name: String) {
         useComposition(); host(mode); openPopup()
         val tag = "mary-context-legend-USER"
         node("mary-context-legend-list").performScrollToNode(hasTestTag(tag))
@@ -400,8 +436,8 @@ class MaryContextCompositionLayoutTest {
         compose.runOnUiThread {
             activity = Robolectric.buildActivity(ContextPreviewActivity::class.java).setup().also {
                 it.get().setContent {
-                    MiuixTheme(ThemeController(ColorSchemeMode.Light)) {
-                        RearCompactTabs(labels.value, index.value, { chosen -> index.value = chosen }, Modifier.testTag("direct-tabs"))
+                    MixUiHost(backend = MixUiBackend.Miuix, colorMode = MixColorSchemeMode.Light) {
+                        CompactTabs(labels.value, index.value, { chosen -> index.value = chosen }, Modifier.testTag("direct-tabs"))
                     }
                 }
             }
@@ -419,6 +455,52 @@ class MaryContextCompositionLayoutTest {
         tabs.assertCountEquals(0)
     }
 
+    @Test fun miuixModeTabsDragToSwitchOnlyOnRelease() {
+        useComposition(); host(backend = MixUiBackend.Miuix); openPopup()
+        val track = node("compact-glass-tabs-miuix")
+        val popupId = node("mary-context-popup").fetchSemanticsNode().id
+        modeTab(false).assertIsSelected()
+        track.performTouchInput {
+            down(Offset(width * 0.25f, height * 0.5f))
+            moveTo(Offset(width * 0.75f, height * 0.5f))
+        }
+        modeTab(false).assertIsSelected()
+        node("mary-context-legend-TOOL_RESULTS").assertExists()
+        node("mary-context-sequence-0").assertDoesNotExist()
+        screenshot("mode-drag-held", "mary-context-popup")
+        track.performTouchInput { up() }
+        modeTab(true).assertIsSelected()
+        node("mary-context-sequence-0").assertExists()
+        assertEquals(popupId, node("mary-context-popup").fetchSemanticsNode().id)
+        screenshot("mode-drag-released", "mary-context-popup")
+        track.performTouchInput {
+            down(Offset(width * 0.75f, height * 0.5f))
+            moveTo(Offset(width * 0.25f, height * 0.5f))
+            cancel()
+        }
+        modeTab(true).assertIsSelected()
+        track.performTouchInput { swipe(Offset(width * 0.75f, height * 0.5f), Offset(width * 0.25f, height * 0.5f)) }
+        modeTab(false).assertIsSelected()
+        node("mary-context-legend-TOOL_RESULTS").assertExists()
+    }
+
+    @Test fun compactGlassTabsWithoutBackdropStillDrag() {
+        var selection by mutableIntStateOf(0)
+        compose.runOnUiThread {
+            activity = Robolectric.buildActivity(ContextPreviewActivity::class.java).setup().also {
+                it.get().setContent {
+                    MixUiHost(backend = MixUiBackend.Miuix, colorMode = MixColorSchemeMode.Light) {
+                        CompactTabs(listOf("First", "Second"), selection, { selection = it }, glass = true)
+                    }
+                }
+            }
+        }
+        node("compact-glass-tabs-miuix").performTouchInput {
+            swipe(Offset(width * 0.25f, height * 0.5f), Offset(width * 0.75f, height * 0.5f))
+        }
+        compose.onNodeWithText("Second").assertIsSelected()
+    }
+
     @Test fun headerTabsStayLeftOfCloseAndAnimateNativeIndicatorContinuously() {
         useComposition(); host(); openPopup()
         val first = modeTab(false).getUnclippedBoundsInRoot()
@@ -426,7 +508,7 @@ class MaryContextCompositionLayoutTest {
         assertEquals("Equal-width mode cells", first.width.value, second.width.value, 1f)
         val modes = node("mary-context-modes").getUnclippedBoundsInRoot()
         val popup = node("mary-context-popup").getUnclippedBoundsInRoot()
-        assertTrue("Header tabs remain readable, not tiny: $modes", modes.width.value in 124f..140f)
+        assertTrue("Header tabs remain readable, not tiny: $modes", modes.width.value in 124f..200f)
         val close = node("mary-context-close").getUnclippedBoundsInRoot()
         val title = node("mary-context-title").getUnclippedBoundsInRoot()
         assertEquals("Mode tabs share header center with close", close.top.value + close.height.value / 2f, modes.top.value + modes.height.value / 2f, 1f)
@@ -435,20 +517,23 @@ class MaryContextCompositionLayoutTest {
         assertTrue("Header retains at least48dp for title", title.width.value >= 48f)
         assertTrue("Removing dedicated mode row keeps popup compact", popup.height.value <= 304f)
         val popupId = node("mary-context-popup").fetchSemanticsNode().id
-        val track = node("rear-compact-tabs-track")
+        val track = node("compact-glass-tabs-miuix")
         val stableTrackBounds = track.getUnclippedBoundsInRoot()
-        assertEquals("Each tab fills half the shared track", (stableTrackBounds.width.value - 12f) / 2f, first.width.value, 1f)
-        assertEquals("Second cell reaches contour trailing inset", stableTrackBounds.right.value - 5f, second.right.value, 1f)
+        assertEquals("Each tab fills half the shared track", (stableTrackBounds.width.value - 14f) / 2f, first.width.value, 1f)
+        assertEquals("Second cell reaches native glass track inset", stableTrackBounds.right.value - 3f, second.right.value, 1f)
         val directory = File(requireNotNull(System.getProperty("mary.ui.screenshotDir")), "context")
         val initial = track.captureToImage().asAndroidBitmap()
         val y = initial.height - 8
         fun light(bitmap: Bitmap, x: Int): Int = android.graphics.Color.red(bitmap.getPixel(x, y))
         val selectedColor = light(initial, initial.width / 4)
         val backgroundColor = light(initial, initial.width * 3 / 4)
-        assertTrue("Native indicator has measurable contrast", selectedColor > backgroundColor + 2)
+        assertTrue("Native indicator has measurable contrast", kotlin.math.abs(selectedColor - backgroundColor) > 2)
         val threshold = (selectedColor + backgroundColor) / 2
         fun center(bitmap: Bitmap): Double {
-            val xs = (6 until bitmap.width - 6).filter { light(bitmap, it) > threshold }
+            val xs = (6 until bitmap.width - 6).filter {
+                if (selectedColor < backgroundColor) light(bitmap, it) < threshold
+                else light(bitmap, it) > threshold
+            }
             assertTrue("A native indicator must remain visible", xs.size > bitmap.width / 4)
             return xs.average()
         }
@@ -469,7 +554,7 @@ class MaryContextCompositionLayoutTest {
             modeTab(true).assertIsSelected()
             lines += "clickClock=$clickClock selectionAppliedClock=${compose.mainClock.currentTime}"
             val startClock = compose.mainClock.currentTime
-            for (time in listOf(0L, 50L, 100L, 150L, 200L, 240L)) {
+            for (time in listOf(0L, 16L, 32L, 50L, 80L, 120L, 180L, 260L, 400L, 600L)) {
                 val remaining = startClock + time - compose.mainClock.currentTime
                 if (remaining > 0) compose.mainClock.advanceTimeBy(remaining, ignoreFrameDuration = true)
                 compose.waitForIdle()
@@ -485,7 +570,8 @@ class MaryContextCompositionLayoutTest {
         } finally { compose.mainClock.autoAdvance = true }
         File(directory, "row-tabs-animation-times.txt").writeText(lines.joinToString("\n"))
         assertTrue("Indicator reaches second cell: $centers", centers.last() > startCenter + initial.width * 0.35)
-        assertTrue("100ms must show a genuine intermediate position: $centers", centers[2] > startCenter + 10 && centers[2] < centers.last() - 10)
+        assertTrue("Native motion must include a genuine intermediate position: $centers",
+            centers.any { it > startCenter + 5 && it < centers.last() - 5 })
         centers.zipWithNext().forEach { (a, b) -> assertTrue("Indicator moves continuously forward: $centers", b >= a - 1) }
     }
 
@@ -496,6 +582,10 @@ class MaryContextCompositionLayoutTest {
 
     private fun popupView(): android.view.View = (node("mary-context-popup").fetchSemanticsNode().root as ViewRootForTest).view.rootView
     private fun dismissPopupWithKey(code: Int) {
+        if (code == android.view.KeyEvent.KEYCODE_BACK) {
+            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }
+            return
+        }
         val view = popupView()
         compose.runOnUiThread {
             view.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code))
@@ -526,13 +616,14 @@ class MaryContextCompositionLayoutTest {
         assertTrue("Popup must remain compact", popup.size.width <= 340)
     }
 
-    private fun host(mode: ColorSchemeMode = ColorSchemeMode.Light, fontScale: Float = 1f) {
+    private fun host(mode: MixColorSchemeMode = MixColorSchemeMode.Light, fontScale: Float = 1f, backend: MixUiBackend = MixUiBackend.Miuix) {
         compose.runOnUiThread {
             ContextPreviewActivity.testFontScale = fontScale
             activity = Robolectric.buildActivity(ContextPreviewActivity::class.java).setup().also { controller ->
                 controller.get().enableEdgeToEdge()
                 controller.get().setContent {
-                    MiuixTheme(ThemeController(mode)) {
+                    MixUiHost(backend = backend, colorMode = mode) {
+                    hk.uwu.mixui.components.CompactGlassTopBarScene { bodyModifier ->
                         inputModes = androidx.compose.ui.platform.LocalInputModeManager.current
                         val pageHost = remember { MarySidebarPageGestureHost() }
                         val gestures = remember { MarySidebarGestureState() }
@@ -543,10 +634,10 @@ class MaryContextCompositionLayoutTest {
                             beforeOpen = { focus.clearFocus(force = true); keyboard?.hide(); menuFocus.requestFocus() },
                             onOpen = { sidebar.value = true })
                         CompositionLocalProvider(LocalMarySidebarPageGestureHost provides pageHost) {
-                            Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.background)
+                            Box(Modifier.fillMaxSize().background(MixTheme.colorScheme.background)
                                 .marySidebarPageGesture(pageHost, true).testTag("context-host")) {
                                 Box(Modifier.fillMaxSize().marySidebarBackground(pageHost)) {
-                                    MaryFloatingChatLayout(bottomInset = 80.dp, modifier = Modifier.fillMaxSize(),
+                                    MaryFloatingChatLayout(bottomInset = 80.dp, modifier = Modifier.fillMaxSize().then(bodyModifier),
                                         content = { padding -> MaryLandingTranscript(padding, 56.dp, Modifier.testTag("context-transcript"), onPick = {}) },
                                         footer = { MaryComposer(value = draft.value, onValueChange = { draft.value = it },
                                             running = false, locked = false, configuring = false,
@@ -555,8 +646,8 @@ class MaryContextCompositionLayoutTest {
                                     MaryTopBar(summary.value, onOpenMenu = { sidebar.value = true }, menuFocusRequester = menuFocus)
                                 }
                                 Box(Modifier.fillMaxWidth().align(Alignment.BottomCenter).marySidebarBackground(pageHost)) {
-                                    RearNavigationBar(currentScreen = "mary", navigationBarMode = ModuleNavigationBarMode.NORMAL,
-                                        backdrop = rememberLayerBackdrop(), onScreenSelected = { navigated++ })
+                                    AppNavigationBar(currentScreen = "mary", navigationBarMode = ModuleNavigationBarMode.NORMAL,
+                                        backdrop = hk.uwu.mixui.components.rememberNavigationBackdrop(), onScreenSelected = { navigated++ })
                                 }
                                 MaryConversationSidebar(show = sidebar.value, revision = 0, currentSessionId = null,
                                     hasSession = false, locked = false, load = { emptyList() }, onDismiss = { sidebar.value = false },
@@ -565,6 +656,7 @@ class MaryContextCompositionLayoutTest {
                                 MarySidebarPagePreview(pageHost, true)
                             }
                         }
+                    }
                     }
                 }
             }
@@ -589,10 +681,14 @@ class MaryContextCompositionLayoutTest {
         val directory = File(requireNotNull(System.getProperty("mary.ui.screenshotDir")), "context")
         check(directory.mkdirs() || directory.isDirectory)
         val baseNode = node("context-host")
+        val wholeWindow = compose.runOnUiThread {
+            hk.uwu.reareye.ui.capture.captureWindowBitmap(activity!!.get().window)
+        }
         val base = baseNode.captureToImage().asAndroidBitmap()
         fun save(bitmap: Bitmap, suffix: String) = File(directory, "$name$suffix.png").outputStream().use {
             check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
         }
+        save(wholeWindow, "-window")
         save(base, if (popupTag == null) "" else "-activity")
         if (popupTag != null) {
             val popup = node(popupTag)

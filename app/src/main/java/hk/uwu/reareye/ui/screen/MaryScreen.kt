@@ -1,9 +1,14 @@
 package hk.uwu.reareye.ui.screen
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.content.Context
 import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -13,6 +18,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -71,7 +77,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -83,11 +91,19 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.ChatEntry
+import hk.uwu.reareye.agent.MaryUiAttachment
 import hk.uwu.reareye.agent.MaryViewModel
+import hk.uwu.reareye.agent.voice.MaryVoicePhase
 import hk.uwu.reareye.agent.pendingInteractionToolRowId
+import hk.uwu.reareye.agent.withReasoningCatalog
 import hk.uwu.reareye.agent.voice.rememberMaryVoiceInput
 import hk.uwu.reareye.ui.components.ContextUsageButton
+import hk.uwu.reareye.ui.components.MaryAttachmentCard
 import hk.uwu.reareye.ui.components.MaryComposer
+import hk.uwu.reareye.ui.components.MaryComposerAttachmentStrip
+import hk.uwu.reareye.ui.components.MaryComposerAttachments
+import hk.uwu.reareye.ui.components.MaryComposerModels
+import hk.uwu.reareye.ui.components.maryModelDisplayName
 import hk.uwu.reareye.ui.components.MaryFollowConversationTail
 import hk.uwu.reareye.ui.components.MaryQuestionCard
 import hk.uwu.reareye.ui.components.MaryScrollToLatest
@@ -96,24 +112,22 @@ import hk.uwu.reareye.ui.components.MaryUsageSummary
 import hk.uwu.reareye.ui.components.ToolCardExpansion
 import hk.uwu.reareye.ui.components.markdown.MarkdownText
 import hk.uwu.reareye.ui.components.maryErrorColors
-import hk.uwu.reareye.ui.components.motion.ArtShimmerSweep
+import hk.uwu.mixui.motion.ArtShimmerSweep
 import hk.uwu.reareye.ui.components.rememberMaryTailFollowState
 import hk.uwu.reareye.ui.components.scrollMaryConversationToBottom
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
-import top.yukonga.miuix.kmp.icon.extended.More
-import top.yukonga.miuix.kmp.icon.extended.Refresh
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.CompactGlassTopBarScene
+import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.CompactGlassTopBar
+import hk.uwu.mixui.components.CompactTopBarIconButton
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.theme.MixTheme
+import hk.uwu.mixui.components.rememberHeaderContentOverlapState
+import hk.uwu.mixui.components.pageScrollFeedback
 
 /**
  * Mary — the in-app agent.
@@ -135,6 +149,29 @@ fun MaryScreen(
     }
     val controller = owner.controller
     val uiState by controller.state.collectAsState()
+    val reasoningCatalog by controller.reasoningCatalog.collectAsState()
+    val reasoningProvider = remember(uiState.provider, reasoningCatalog) {
+        uiState.provider.withReasoningCatalog(reasoningCatalog)
+    }
+    val pickDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) controller.importAttachment(uri)
+    }
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) controller.importAttachment(uri)
+    }
+    val attachments = MaryComposerAttachments(
+        drafts = uiState.draftAttachments,
+        importing = uiState.importingAttachment,
+        onChooseFile = { pickDocument.launch(arrayOf("*/*")) },
+        onChooseImage = { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onRemoveDraft = controller::removeDraftAttachment,
+        menuBottomInset = bottomInnerPadding,
+    )
+    val activeModel = uiState.availableModels.firstOrNull { it.id == uiState.activeModelId }
+    val modelName = activeModel?.name ?: reasoningProvider.model
+        .takeIf { uiState.availableModels.isEmpty() && it.isNotBlank() }
+        ?.let(::maryModelDisplayName) ?: stringResource(R.string.mary_chat_model_not_selected)
+    val models = MaryComposerModels(uiState.activeModelId, modelName, uiState.availableModels, controller::selectModel)
 
     // Deliberately no MiuixScrollBehavior here. A collapsing large title changes the bar's measured
     // height, which the Scaffold reports as the top padding this screen feeds into the list's
@@ -142,7 +179,18 @@ fun MaryScreen(
     // bar keeps that padding constant.
     LaunchedEffect(controller) { controller.refreshConfiguration() }
     val listState = rememberLazyListState()
+    val transcriptOverlap = rememberHeaderContentOverlapState(controller.sessionId)
+    // The landing page has its own scroll container. Keep its state in the empty
+    // branch's lifetime, but share it with the pinned bar rather than observing
+    // the unmounted conversation list (which cannot report landing scrolls).
+    val landingScrollState = if (uiState.entries.isEmpty()) rememberScrollState() else null
     var input by remember { mutableStateOf("") }
+    LaunchedEffect(uiState.unsentText) {
+        uiState.unsentText?.let { previous ->
+            input = if (input.isBlank()) previous else "$previous\n$input"
+            controller.acknowledgeUnsentText(previous)
+        }
+    }
     val voice = rememberMaryVoiceInput()
     LaunchedEffect(voice.error) {
         val message = voice.error ?: return@LaunchedEffect
@@ -180,8 +228,9 @@ fun MaryScreen(
         knownEntryIds.remember(uiState.entries.asSequence().map { it.id })
     }
     val askToolRowId = pendingInteractionToolRowId(uiState.entries, uiState.pendingAsk?.toolCallId)
-    val approvalToolRowId =
-        pendingInteractionToolRowId(uiState.entries, uiState.pendingApproval?.request?.id)
+    val approvalToolRowId = pendingInteractionToolRowId(
+        uiState.entries, uiState.pendingApproval?.takeIf { it.subagentId == null }?.request?.id,
+    )
 
     val tailFollow = rememberMaryTailFollowState(listState, controller.sessionId)
     MaryFollowConversationTail(
@@ -189,7 +238,12 @@ fun MaryScreen(
         canFollow = { tailFollow.following },
     )
 
+    CompactGlassTopBarScene(
+        isContentScrolled = landingScrollState?.canScrollBackward
+            ?: (listState.canScrollBackward || transcriptOverlap.overlapsHeader),
+    ) { bodyModifier ->
     Scaffold(
+        popupHost = {},
         modifier = if (pageGestureHost == null && !showSidebar) Modifier.marySidebarOpenGesture(
             sidebarGestures, beforeSidebarOpen, onOpen = { showSidebar = true },
         ) else Modifier,
@@ -205,6 +259,7 @@ fun MaryScreen(
                 ),
                 onOpenMenu = { showSidebar = true },
                 menuFocusRequester = menuFocus,
+                modifier = transcriptOverlap.headerModifier(),
             )
         },
         contentWindowInsets = WindowInsets.systemBars,
@@ -213,13 +268,22 @@ fun MaryScreen(
             bottomInset = maxOf(bottomInnerPadding, paddingValues.calculateBottomPadding()),
             modifier = Modifier
                 .fillMaxSize()
+                .then(bodyModifier)
                 .nestedScroll(tailFollow.connection),
             content = { contentPaddingBottom ->
                 if (uiState.entries.isEmpty()) {
                     MaryLandingTranscript(
                         contentPaddingBottom = contentPaddingBottom,
                         appBarInset = paddingValues.calculateTopPadding(),
-                        onPick = { controller.send(it) },
+                        scrollState = checkNotNull(landingScrollState),
+                        suggestionsEnabled = !uiState.importingAttachment,
+                        onPick = pick@ { suggestion ->
+                            val latest = controller.state.value
+                            if (latest.importingAttachment) return@pick
+                            // A suggestion must not upload a prepared attachment without an explicit send.
+                            if (latest.draftAttachments.isNotEmpty()) input = suggestion
+                            else controller.send(suggestion)
+                        },
                     )
                 } else {
                     MaryConversationList(
@@ -234,7 +298,7 @@ fun MaryScreen(
                         itemsIndexed(
                             uiState.entries,
                             key = { _, entry -> entry.id }) { index, entry ->
-                            Column {
+                            Column(modifier = if (index == 0) transcriptOverlap.leadingContentModifier() else Modifier) {
                                 // A new speaker gets a wider gap than a continuation, which is what
                                 // makes a turn boundary readable without any extra decoration.
                                 val previous = uiState.entries.getOrNull(index - 1)
@@ -243,7 +307,7 @@ fun MaryScreen(
                                 Spacer(modifier = Modifier.height(if (startsTurn && index > 0) MaryTurnSpacing else 0.dp))
                                 EntryAppearance(new = knownEntryIds.isNew(entry.id)) {
                                     when (entry) {
-                                        is ChatEntry.UserMessage -> UserBubble(entry.text)
+                                        is ChatEntry.UserMessage -> UserBubble(entry.text, entry.attachments)
                                         is ChatEntry.AssistantMessage -> AssistantBubble(
                                             text = entry.text,
                                             streaming = entry.streaming,
@@ -318,25 +382,61 @@ fun MaryScreen(
             },
         ) {
             Box(modifier = Modifier.fillMaxWidth()) {
-                MaryComposer(
-                    value = input,
-                    onValueChange = { input = it },
-                    running = uiState.running,
-                    locked = uiState.locked,
-                    configuring = uiState.configuring,
-                    provider = uiState.provider,
-                    onReasoningSelected = { controller.setReasoningEffort(it) },
-                    approvalMode = uiState.approvalMode,
-                    onApprovalModeSelected = { controller.setApprovalMode(it) },
-                    onSend = {
-                        controller.send(input)
-                        input = ""
-                    },
-                    onStop = { controller.cancel() },
-                    voicePhase = voice.phase,
-                    onStartVoice = { voice.start(input) { input = it } },
-                    onInterruptVoice = { voice.interrupt() },
-                )
+                Column(Modifier.fillMaxWidth()) {
+                    val backgroundApproval = uiState.pendingApproval?.takeIf { approvalToolRowId == null }
+                    if (backgroundApproval != null) {
+                        val request = backgroundApproval.request
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                            backgroundApproval.subagentId?.let { id ->
+                                Text(stringResource(R.string.mary_subagent_approval, id.take(8)))
+                            }
+                            MaryToolCallCard(
+                                entry = ChatEntry.ToolCall(backgroundApproval.id, request.name, request.argumentsJson, running = true),
+                                expansion = toolExpansion,
+                                pendingApproval = backgroundApproval,
+                                onAnswer = { id, selected, custom -> controller.answerAsk(id, selected, custom) },
+                                onApprove = { id, allowed -> controller.answerApproval(allowed, interactionId = id) },
+                            )
+                        }
+                    }
+                    if (!uiState.running && uiState.runningSubagents > 0) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(pluralStringResource(R.plurals.mary_subagents_running, uiState.runningSubagents, uiState.runningSubagents))
+                            Text(stringResource(R.string.mary_stop_subagents),
+                                modifier = Modifier.clickable(role = Role.Button, onClick = controller::cancel).padding(8.dp),
+                                color = MixTheme.colorScheme.primary)
+                        }
+                    }
+                    MaryComposerAttachmentStrip(
+                        attachments, enabled = !uiState.locked && !uiState.running,
+                    )
+                    MaryComposer(
+                        value = input,
+                        onValueChange = { input = it },
+                        running = uiState.running,
+                        locked = uiState.locked,
+                        configuring = uiState.configuring,
+                        provider = reasoningProvider,
+                        onReasoningSelected = { controller.setReasoningEffort(it) },
+                        approvalMode = uiState.approvalMode,
+                        onApprovalModeSelected = { controller.setApprovalMode(it) },
+                        agentMode = uiState.agentMode,
+                        onSend = send@ {
+                            val latest = controller.state.value
+                            if (latest.importingAttachment || latest.running || latest.locked || latest.configuring ||
+                                voice.phase != MaryVoicePhase.IDLE || (input.isBlank() && latest.draftAttachments.isEmpty())
+                            ) return@send
+                            if (controller.send(input)) input = ""
+                        },
+                        onStop = { controller.cancel() },
+                        voicePhase = voice.phase,
+                        onStartVoice = { voice.start(input) { input = it } },
+                        onInterruptVoice = { voice.interrupt() },
+                        models = models,
+                        attachments = attachments,
+                    )
+                }
 
                 MaryScrollToLatest(
                     awayFromBottom = !tailFollow.following && uiState.entries.isNotEmpty(),
@@ -354,6 +454,8 @@ fun MaryScreen(
                 )
             }
         }
+    }
+
     }
 
     MaryConversationSidebar(
@@ -379,6 +481,7 @@ fun MaryScreen(
                 historyRevision++
             }
         },
+        confirmDelete = true,
     )
 }
 
@@ -389,14 +492,16 @@ internal fun MaryTopBar(
     onOpenMenu: () -> Unit,
     menuModifier: Modifier = Modifier,
     menuFocusRequester: androidx.compose.ui.focus.FocusRequester? = null,
+    modifier: Modifier = Modifier,
 ) {
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val menuFocus = menuFocusRequester ?: remember { androidx.compose.ui.focus.FocusRequester() }
-    SmallTopAppBar(
+    CompactGlassTopBar(
         title = stringResource(R.string.mary_title),
+        modifier = modifier,
         navigationIcon = {
-            IconButton(onClick = {
+            CompactTopBarIconButton(onClick = {
                 focusManager.clearFocus(force = true)
                 keyboard?.hide()
                 // Restore keyboard navigation here, not to the composer, after the dialog closes.
@@ -406,7 +511,7 @@ internal fun MaryTopBar(
                 Icon(Icons.Outlined.Menu, stringResource(R.string.mary_sidebar_open))
             }
         },
-        actions = { ContextUsageButton(summary) },
+        actions = { ContextUsageButton(summary, topBar = true) },
     )
 }
 
@@ -416,13 +521,15 @@ internal fun MaryLandingTranscript(
     contentPaddingBottom: Dp,
     appBarInset: Dp,
     gestureModifier: Modifier = Modifier,
+    scrollState: ScrollState = rememberScrollState(),
+    suggestionsEnabled: Boolean = true,
     onPick: (String) -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().then(gestureModifier)
             .padding(horizontal = 16.dp).padding(bottom = contentPaddingBottom),
     ) {
-        LandingState(appBarInset = appBarInset, onPick = onPick)
+        LandingState(appBarInset, scrollState, onPick.takeIf { suggestionsEnabled })
     }
 }
 
@@ -436,7 +543,7 @@ internal fun MaryConversationList(
 ) {
     LazyColumn(
         state = state,
-        modifier = Modifier.fillMaxSize().then(gestureModifier).scrollEndHaptic().overScrollVertical(),
+        modifier = Modifier.fillMaxSize().then(gestureModifier).pageScrollFeedback(),
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(MaryRowSpacing),
         overscrollEffect = null,
@@ -505,13 +612,14 @@ internal fun MaryFloatingChatLayout(
 /**
  * Empty-chat state: brand mark, greeting and rotating suggestions.
  *
- * A real scroll container drives the same collapsing title as the conversation and remains
- * usable when the IME leaves too little space for the centred suggestions.
+ * Its real scroll state drives the pinned bar's glass independently of the conversation list
+ * and remains usable when the IME leaves too little space for the centred suggestions.
  */
 @Composable
 private fun ColumnScope.LandingState(
     appBarInset: Dp,
-    onPick: (String) -> Unit,
+    scrollState: ScrollState,
+    onPick: ((String) -> Unit)?,
 ) {
     val suggestionPages = rememberMarySuggestionPages()
     var suggestionPage by remember { mutableIntStateOf(0) }
@@ -530,7 +638,7 @@ private fun ColumnScope.LandingState(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(top = appBarInset, bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -541,7 +649,7 @@ private fun ColumnScope.LandingState(
 
             Text(
                 text = stringResource(R.string.mary_greeting),
-                style = MiuixTheme.textStyles.title4,
+                style = MixTheme.textStyles.title4,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
@@ -551,8 +659,8 @@ private fun ColumnScope.LandingState(
 
             Text(
                 text = stringResource(R.string.mary_greeting_subtitle),
-                style = MiuixTheme.textStyles.footnote1,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.footnote1,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -560,7 +668,7 @@ private fun ColumnScope.LandingState(
             Spacer(modifier = Modifier.height(if (tight) 18.dp else 26.dp))
 
             suggestions.forEach { suggestion ->
-                SuggestionCard(text = suggestion, onClick = { onPick(suggestion) })
+                SuggestionCard(text = suggestion, onClick = onPick?.let { pick -> { pick(suggestion) } })
                 Spacer(modifier = Modifier.height(gapMedium))
             }
 
@@ -572,16 +680,16 @@ private fun ColumnScope.LandingState(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = MiuixIcons.Refresh,
+                    imageVector = UiIcons.Refresh,
                     contentDescription = null,
-                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = stringResource(R.string.mary_shuffle),
-                    style = MiuixTheme.textStyles.footnote2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    style = MixTheme.textStyles.footnote2,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
         }
@@ -641,21 +749,32 @@ internal fun EntryAppearance(new: Boolean, content: @Composable () -> Unit) {
  * squared off so the bubble reads as coming from that side.
  */
 @Composable
-private fun UserBubble(text: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+internal fun UserBubble(text: String, attachments: List<MaryUiAttachment> = emptyList()) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        attachments.forEach { attachment ->
+            MaryAttachmentCard(
+                attachment,
+                modifier = Modifier.widthIn(max = 260.dp).testTag("mary-sent-file-${attachment.id}"),
+            )
+        }
+        if (text.isBlank()) return@Column
         Card(
             // Capped rather than a fixed 85%: a short "好的" should not become a wide slab.
             modifier = Modifier.widthIn(max = 300.dp),
             cornerRadius = 18.dp,
             colors = CardDefaults.defaultColors(
-                color = MiuixTheme.colorScheme.primary,
-                contentColor = MiuixTheme.colorScheme.onPrimary,
+                color = MixTheme.colorScheme.primary,
+                contentColor = MixTheme.colorScheme.onPrimary,
             ),
         ) {
             Text(
                 text = text,
-                style = MiuixTheme.textStyles.body1,
-                color = MiuixTheme.colorScheme.onPrimary,
+                style = MixTheme.textStyles.body1,
+                color = MixTheme.colorScheme.onPrimary,
                 // Dense CJK text at the default line height is what makes a bubble feel cramped.
                 lineHeight = 24.sp,
                 modifier = Modifier
@@ -680,7 +799,7 @@ private fun UserBubble(text: String) {
  * reply rather than as a separate item in the transcript.
  */
 @Composable
-private fun AssistantBubble(
+internal fun AssistantBubble(
     text: String,
     streaming: Boolean,
     reasoning: String,
@@ -704,15 +823,15 @@ private fun AssistantBubble(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
                 Card(
                     colors = CardDefaults.defaultColors(
-                        color = MiuixTheme.colorScheme.surfaceContainer,
-                        contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
+                        color = MixTheme.colorScheme.surfaceContainer,
+                        contentColor = MixTheme.colorScheme.onSurfaceContainer,
                     ),
                     cornerRadius = 18.dp,
                 ) {
                     if (text.isEmpty() && streaming) {
                         Text(
                             text = "…",
-                            style = MiuixTheme.textStyles.body1,
+                            style = MixTheme.textStyles.body1,
                             lineHeight = 24.sp,
                             modifier = Modifier
                                 .clip(
@@ -730,7 +849,7 @@ private fun AssistantBubble(
                         // exactly as typed, so a stray `*` cannot silently reformat it.
                         MarkdownText(
                             markdown = text,
-                            textColor = MiuixTheme.colorScheme.onSurfaceContainer,
+                            textColor = MixTheme.colorScheme.onSurfaceContainer,
                             modifier = Modifier
                                 .clip(
                                     RoundedCornerShape(
@@ -802,8 +921,8 @@ private fun rememberBlockExpansion(): BlockExpansion = remember { BlockExpansion
 private fun ReasoningHeaderLabel(streaming: Boolean) {
     Text(
         text = stringResource(if (streaming) R.string.mary_thinking else R.string.mary_thought),
-        style = MiuixTheme.textStyles.footnote2,
-        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        style = MixTheme.textStyles.footnote2,
+        color = MixTheme.colorScheme.onSurfaceVariantSummary,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
@@ -816,20 +935,25 @@ private fun ReasoningHeaderLabel(streaming: Boolean) {
  */
 @Composable
 private fun ThinkingPulseIcon() {
-    val pulse = rememberInfiniteTransition(label = "thinkingPulse")
-    val glow by pulse.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "thinkingGlow",
-    )
+    val glow = if (hk.uwu.mixui.motion.rememberReduceMotionEnabled()) {
+        0.78f
+    } else {
+        val pulse = rememberInfiniteTransition(label = "thinkingPulse")
+        val animated by pulse.animateFloat(
+            initialValue = 0.45f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "thinkingGlow",
+        )
+        animated
+    }
     Icon(
-        imageVector = MiuixIcons.More,
+        imageVector = UiIcons.More,
         contentDescription = null,
-        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = glow),
+        tint = MixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = glow),
         modifier = Modifier.size(15.dp),
     )
 }
@@ -865,8 +989,8 @@ internal fun ReasoningCard(
             ),
         cornerRadius = 16.dp,
         colors = CardDefaults.defaultColors(
-            color = MiuixTheme.colorScheme.surfaceContainer,
-            contentColor = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            color = MixTheme.colorScheme.surfaceContainer,
+            contentColor = MixTheme.colorScheme.onSurfaceVariantSummary,
         ),
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
@@ -888,9 +1012,9 @@ internal fun ReasoningCard(
                     ThinkingPulseIcon()
                 } else {
                     Icon(
-                        imageVector = MiuixIcons.More,
+                        imageVector = UiIcons.More,
                         contentDescription = null,
-                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier.size(15.dp),
                     )
                 }
@@ -911,9 +1035,9 @@ internal fun ReasoningCard(
                     label = "chevronRotation",
                 )
                 Icon(
-                    imageVector = MiuixIcons.ExpandMore,
+                    imageVector = UiIcons.ExpandMore,
                     contentDescription = null,
-                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    tint = MixTheme.colorScheme.onSurfaceVariantSummary,
                     modifier = Modifier
                         .size(16.dp)
                         .graphicsLayer { rotationZ = chevron },
@@ -925,7 +1049,7 @@ internal fun ReasoningCard(
                 MarkdownText(
                     markdown = text,
                     modifier = Modifier.testTag("mary-reasoning-markdown-$stateKey"),
-                    textColor = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    textColor = MixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
         }
@@ -942,20 +1066,20 @@ internal fun NoticeCard(text: String, isError: Boolean) {
             color = if (isError) {
                 errorColors.container
             } else {
-                MiuixTheme.colorScheme.surfaceContainerHigh
+                MixTheme.colorScheme.surfaceContainerHigh
             },
             contentColor = if (isError) {
                 errorColors.content
             } else {
-                MiuixTheme.colorScheme.onSurfaceContainer
+                MixTheme.colorScheme.onSurfaceContainer
             },
         ),
     ) {
         Text(
             text = text,
-            style = MiuixTheme.textStyles.footnote1,
+            style = MixTheme.textStyles.footnote1,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            color = if (isError) errorColors.content else MiuixTheme.colorScheme.onSurfaceContainer,
+            color = if (isError) errorColors.content else MixTheme.colorScheme.onSurfaceContainer,
         )
     }
 }
@@ -964,12 +1088,14 @@ internal fun NoticeCard(text: String, isError: Boolean) {
 
 @Composable
 private fun MaryBrandMark() {
+    val brandTitle = stringResource(R.string.mary_title)
     Box(
         modifier = Modifier
             .size(72.dp)
             .clip(RoundedCornerShape(22.dp))
             .background(Color(0xFFFF5C93))
-            .semantics { contentDescription = "mary_brand_mark" },
+            .testTag("mary_brand_mark")
+            .semantics { contentDescription = brandTitle },
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -982,19 +1108,19 @@ private fun MaryBrandMark() {
 }
 
 @Composable
-private fun SuggestionCard(text: String, onClick: () -> Unit) {
+private fun SuggestionCard(text: String, onClick: (() -> Unit)?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.defaultColors(
-            color = MiuixTheme.colorScheme.surfaceContainer,
-            contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
+            color = MixTheme.colorScheme.surfaceContainer,
+            contentColor = MixTheme.colorScheme.onSurfaceContainer,
         ),
         cornerRadius = 20.dp,
         onClick = onClick,
     ) {
         Text(
             text = text,
-            style = MiuixTheme.textStyles.body1,
+            style = MixTheme.textStyles.body1,
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
         )
     }

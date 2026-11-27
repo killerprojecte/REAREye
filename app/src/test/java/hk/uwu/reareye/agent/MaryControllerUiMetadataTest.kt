@@ -3,6 +3,10 @@ package hk.uwu.reareye.agent
 import ai.koog.prompt.message.ResponseMetaInfo
 import ai.koog.prompt.streaming.StreamFrame
 import android.content.res.Resources
+import hk.uwu.reareye.agent.catalog.ModelsDevReasoningCatalog
+import hk.uwu.reareye.agent.catalog.ReasoningCatalogIndex
+import hk.uwu.reareye.agent.catalog.ReasoningCatalogRecord
+import hk.uwu.reareye.agent.catalog.ReasoningCatalogSnapshot
 import hk.uwu.reareye.agent.context.ContextBudget
 import hk.uwu.reareye.agent.data.AgentSessionStore
 import hk.uwu.reareye.agent.data.AgentSettingsSource
@@ -15,12 +19,14 @@ import hk.uwu.reareye.agent.model.ToolResult
 import hk.uwu.reareye.agent.model.ToolRisk
 import hk.uwu.reareye.agent.model.ToolSpec
 import hk.uwu.reareye.agent.provider.KoogConnection
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
@@ -245,6 +251,62 @@ class MaryControllerUiMetadataTest {
         }
     }
 
+    @Test
+    fun cachedCatalogAllowsSelectingNewModelLevelsAndAnActiveTurnKeepsItsSnapshot() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val release = CompletableDeferred<Unit>()
+        try {
+            val settings = Settings()
+            val provider = ProviderConfig(
+                baseUrl = "https://api.openai.com/v1",
+                apiKey = "secret",
+                model = "gpt-catalog-test",
+                protocol = Protocol.RESPONSES,
+            )
+            settings.value = settings.value.copy(configuration = AgentConfig(provider = provider))
+            val catalog = MutableStateFlow(ReasoningCatalogIndex.Empty)
+            val calls = kotlinx.coroutines.channels.Channel<ProviderConfig>(2)
+            val controller = MaryController(
+                RuntimeEnvironment.getApplication(), scope, settings = settings,
+                store = AgentSessionStore(temporary.root), reasoningCatalog = catalog,
+                connectionOverride = { config ->
+                    maryTestConnection(config) { _, _ ->
+                        calls.send(config)
+                        release.await()
+                        emitText("Done")
+                    }
+                },
+            )
+            ready(controller)
+            controller.setReasoningEffort(ReasoningEffort.HIGH)
+            assertEquals(0, settings.writes)
+
+            val record = ReasoningCatalogRecord("openai", provider.model, listOf(ReasoningEffort.LOW, ReasoningEffort.HIGH))
+            catalog.value = ReasoningCatalogIndex.from(listOf(ReasoningCatalogSnapshot.from(ModelsDevReasoningCatalog, listOf(record))))
+            val visible = controller.state.value.provider.withReasoningCatalog(catalog.value)
+            assertEquals("", visible.apiKey)
+            assertEquals(listOf(ReasoningEffort.LOW, ReasoningEffort.HIGH), ReasoningPolicy.support(visible).levels)
+            controller.setReasoningEffort(ReasoningEffort.HIGH)
+            ready(controller)
+            assertEquals(1, settings.writes)
+            assertEquals(ReasoningEffort.HIGH, settings.value.configuration.provider.reasoningEffort)
+            assertNull(settings.value.configuration.provider.reasoningCatalogCapability)
+
+            controller.send("Use the catalog level")
+            val active = withTimeout(10_000) { calls.receive() }
+            catalog.value = ReasoningCatalogIndex.Empty
+            assertEquals(ReasoningEffort.HIGH, ReasoningPolicy.support(active).effectiveEffort(active.reasoningEffort))
+            release.complete(Unit)
+            ready(controller)
+            controller.send("Use the next snapshot")
+            val next = withTimeout(10_000) { calls.receive() }
+            assertNull(next.reasoningCatalogCapability)
+            ready(controller)
+        } finally {
+            release.complete(Unit)
+            scope.cancel()
+        }
+    }
     @Test
     fun configuringQueuesRapidChangesAndBlocksSendUntilLastDurableSave() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)

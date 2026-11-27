@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components.script
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.annotation.SuppressLint
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -9,28 +11,27 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.CreateNewFolder
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.outlined.NoteAdd
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,50 +54,51 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.drawWithContent
+import hk.uwu.mixui.LocalMixUiBackend
+import hk.uwu.mixui.MixUiBackend
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.script.ScriptProject
 import hk.uwu.reareye.script.ScriptProjectKind
 import hk.uwu.reareye.script.ScriptProjectStore
-import hk.uwu.reareye.ui.components.RearBadgeItem
+import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
-import hk.uwu.reareye.ui.components.card.SuperCard
-import hk.uwu.reareye.ui.components.rememberRearAccentBadgePalette
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
+import hk.uwu.mixui.components.ListItem
+import hk.uwu.mixui.components.rememberAccentBadgePalette
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
-import top.yukonga.miuix.kmp.window.WindowBottomSheet
-import top.yukonga.miuix.kmp.window.WindowDialog
+import hk.uwu.mixui.components.BottomSheetAction
+import hk.uwu.mixui.components.BottomSheetActionButton
+import hk.uwu.mixui.components.BottomSheetActionIcon
+import hk.uwu.mixui.components.GlassBottomSheet
+import hk.uwu.mixui.components.GlassBottomSheetSize
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.LargeTitleLazyScaffold
+import hk.uwu.mixui.components.TopBarIconButton
+import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.CompactTopBar
+import hk.uwu.mixui.components.CompactGlassTopBar
+import hk.uwu.mixui.components.CompactGlassTopBarScene
+import hk.uwu.mixui.components.CompactTopBarIconButton
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.GlassPreferenceScene
+import hk.uwu.mixui.components.TextField
+import hk.uwu.mixui.theme.MixTheme
 
 private sealed interface ScriptRoute {
     data object List : ScriptRoute
@@ -106,15 +109,20 @@ private sealed interface ScriptImportRequest {
     data class Project(val uri: Uri, val suggestedName: String) : ScriptImportRequest
 }
 
-private data class ScriptOverwriteRequest(
+private class ScriptOverwriteRequest(
     val title: String,
     val message: String,
+    val confirmLabel: String? = null,
     val confirm: () -> Unit,
 )
 
 @SuppressLint("LocalContextGetResourceValueCall")
 @Composable
-fun ScriptManagementScreen(onBack: () -> Unit, bottomInnerPadding: Dp = 0.dp) {
+fun ScriptManagementScreen(
+    onBack: () -> Unit,
+    bottomInnerPadding: Dp = 0.dp,
+    onEditingModeChange: (Boolean) -> Unit = {},
+) {
     val context = LocalContext.current
     val store = remember { ScriptProjectStore(context) }
     var projects by remember { mutableStateOf(emptyList<ScriptProject>()) }
@@ -124,6 +132,13 @@ fun ScriptManagementScreen(onBack: () -> Unit, bottomInnerPadding: Dp = 0.dp) {
     var overwriteRequest by remember { mutableStateOf<ScriptOverwriteRequest?>(null) }
     var pendingExport by remember { mutableStateOf<ScriptProject?>(null) }
     var pendingExportIsProject by remember { mutableStateOf(false) }
+    val isEditingScript = route is ScriptRoute.Editor
+    LaunchedEffect(isEditingScript) {
+        onEditingModeChange(isEditingScript)
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { onEditingModeChange(false) }
+    }
     fun refresh() {
         projects = store.list()
     }
@@ -167,87 +182,108 @@ fun ScriptManagementScreen(onBack: () -> Unit, bottomInnerPadding: Dp = 0.dp) {
     }
     LaunchedEffect(Unit) { refresh() }
     BackHandler(enabled = route !is ScriptRoute.List) { route = ScriptRoute.List }
-    when (val current = route) {
-        ScriptRoute.List -> ScriptList(
-            projects = projects,
-            bottomInnerPadding = bottomInnerPadding,
-            onBack = onBack,
-            onRefresh = ::refresh,
-            onImport = { importer.launch(arrayOf("*/*")) },
-            onExport = { project ->
-                pendingExport = project
-                pendingExportIsProject = project.kind != ScriptProjectKind.STANDALONE
-                exportLauncher.launch(if (pendingExportIsProject) "${project.name}.zip" else "${project.name}.lua")
-            },
-            onOpen = { route = ScriptRoute.Editor(it) },
-            onRename = { renameProject = it },
-            onDelete = { store.delete(it); refresh() },
-            onNew = {
-                val project =
-                    store.createStandalone("script_${System.currentTimeMillis()}", DEFAULT_SCRIPT)
-                refresh()
-                route = ScriptRoute.Editor(project)
-            },
-            onNewProject = {
-                val project =
-                    store.createProject("project_${System.currentTimeMillis()}", DEFAULT_PROJECT)
-                refresh()
-                route = ScriptRoute.Editor(project)
-            },
-        )
-
-        is ScriptRoute.Editor -> ScriptEditor(
-            project = current.project,
-            store = store,
-            bottomInnerPadding = bottomInnerPadding,
-            onBack = { route = ScriptRoute.List },
-            onSaved = { refresh() },
-        )
-    }
-    ScriptRenameDialog(
-        show = renameProject != null,
-        title = stringResource(R.string.script_rename_project),
-        initialName = renameProject?.name.orEmpty(),
-        onDismiss = { renameProject = null },
-        onConfirm = { name ->
-            renameProject?.let { store.renameProject(it, name) }
-            renameProject = null
-            refresh()
+    // Record the script page, never the confirmation or its scrim. The native
+    // dialog stays in this window; editable naming/debug sheets keep their hosts.
+    GlassPreferenceScene(
+        overlayContent = {
+            ScriptOverwriteDialog(
+                show = overwriteRequest != null,
+                sessionKey = overwriteRequest,
+                title = overwriteRequest?.title.orEmpty(),
+                message = overwriteRequest?.message.orEmpty(),
+                confirmText = overwriteRequest?.confirmLabel,
+                onDismiss = { overwriteRequest = null },
+                onConfirm = {
+                    overwriteRequest?.confirm?.invoke()
+                    overwriteRequest = null
+                },
+            )
         },
-    )
-    val projectImport = importRequest as? ScriptImportRequest.Project
-    ScriptRenameDialog(
-        show = projectImport != null,
-        title = stringResource(R.string.script_import_project),
-        initialName = projectImport?.suggestedName.orEmpty(),
-        onDismiss = { importRequest = null },
-        onConfirm = { name ->
-            projectImport?.let { request ->
-                importRequest = null
-                if (store.hasProject(name)) {
+    ) {
+        when (val current = route) {
+            ScriptRoute.List -> ScriptList(
+                projects = projects,
+                bottomInnerPadding = bottomInnerPadding,
+                onBack = onBack,
+                onRefresh = ::refresh,
+                onImport = { importer.launch(arrayOf("*/*")) },
+                onExport = { project ->
+                    pendingExport = project
+                    pendingExportIsProject = project.kind != ScriptProjectKind.STANDALONE
+                    exportLauncher.launch(if (pendingExportIsProject) "${project.name}.zip" else "${project.name}.lua")
+                },
+                onOpen = { route = ScriptRoute.Editor(it) },
+                onRename = { renameProject = it },
+                onDelete = { project ->
                     overwriteRequest = ScriptOverwriteRequest(
-                        title = context.getString(R.string.script_overwrite_title),
-                        message = context.getString(R.string.script_overwrite_project, name),
+                        title = context.getString(R.string.script_delete_title),
+                        message = context.getString(R.string.script_delete_message, project.name),
+                        confirmLabel = context.getString(R.string.script_delete),
                         confirm = {
-                            store.importProject(request.uri, name, overwrite = true)
+                            store.delete(project)
                             refresh()
                         },
                     )
-                } else {
-                    store.importProject(request.uri, name, overwrite = false)
+                },
+                onNew = {
+                    val project =
+                        store.createStandalone("script_${System.currentTimeMillis()}", DEFAULT_SCRIPT)
                     refresh()
+                    route = ScriptRoute.Editor(project)
+                },
+                onNewProject = {
+                    val project =
+                        store.createProject("project_${System.currentTimeMillis()}", DEFAULT_PROJECT)
+                    refresh()
+                    route = ScriptRoute.Editor(project)
+                },
+            )
+
+            is ScriptRoute.Editor -> ScriptEditor(
+                project = current.project,
+                store = store,
+                bottomInnerPadding = bottomInnerPadding,
+                onBack = { route = ScriptRoute.List },
+                onSaved = { refresh() },
+            )
+        }
+        ScriptRenameDialog(
+            show = renameProject != null,
+            title = stringResource(R.string.script_rename_project),
+            initialName = renameProject?.name.orEmpty(),
+            onDismiss = { renameProject = null },
+            onConfirm = { name ->
+                renameProject?.let { store.renameProject(it, name) }
+                renameProject = null
+                refresh()
+            },
+        )
+        val projectImport = importRequest as? ScriptImportRequest.Project
+        ScriptRenameDialog(
+            show = projectImport != null,
+            title = stringResource(R.string.script_import_project),
+            initialName = projectImport?.suggestedName.orEmpty(),
+            onDismiss = { importRequest = null },
+            onConfirm = { name ->
+                projectImport?.let { request ->
+                    importRequest = null
+                    if (store.hasProject(name)) {
+                        overwriteRequest = ScriptOverwriteRequest(
+                            title = context.getString(R.string.script_overwrite_title),
+                            message = context.getString(R.string.script_overwrite_project, name),
+                            confirm = {
+                                store.importProject(request.uri, name, overwrite = true)
+                                refresh()
+                            },
+                        )
+                    } else {
+                        store.importProject(request.uri, name, overwrite = false)
+                        refresh()
+                    }
                 }
-            }
-        },
-    )
-    ScriptOverwriteDialog(
-        request = overwriteRequest,
-        onDismiss = { overwriteRequest = null },
-        onConfirm = {
-            overwriteRequest?.confirm?.invoke()
-            overwriteRequest = null
-        },
-    )
+            },
+        )
+    }
 }
 
 @Composable
@@ -264,139 +300,95 @@ internal fun ScriptList(
     onNew: () -> Unit,
     onNewProject: () -> Unit,
 ) {
-    val haze = rememberAcrylicHazeState()
-    val style = rememberAcrylicHazeStyle()
-    val scrollBehavior = MiuixScrollBehavior()
-    val listState = rememberLazyListState()
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(haze, style),
-                color = Color.Transparent,
-                title = stringResource(R.string.script_management_title),
-                navigationIconPadding = 12.dp,
-                actionIconPadding = 12.dp,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            null
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onNew) {
-                        Icon(
-                            Icons.Outlined.NoteAdd,
-                            stringResource(R.string.script_new)
-                        )
-                    }
-                    IconButton(onClick = onNewProject) {
-                        Icon(
-                            Icons.Outlined.CreateNewFolder,
-                            stringResource(R.string.script_new_project)
-                        )
-                    }
-                    IconButton(onClick = onImport) {
-                        Icon(
-                            Icons.Outlined.FileUpload,
-                            stringResource(R.string.script_import)
-                        )
-                    }
-                    IconButton(onClick = onRefresh) {
-                        Icon(
-                            Icons.Outlined.Refresh,
-                            stringResource(R.string.script_refresh)
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-            )
+    LargeTitleLazyScaffold(
+        title = stringResource(R.string.script_management_title),
+        modifier = Modifier.testTag("script-project-list"),
+        bottomObstruction = bottomInnerPadding,
+        navigationIcon = {
+            TopBarIconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.scene_route_navigate_back))
+            }
         },
-    ) { padding ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .rearAcrylicSource(haze)
-                .padding(horizontal = 12.dp)
-                .testTag("script-project-list"),
-            contentPadding = PaddingValues(
-                top = padding.calculateTopPadding() + 12.dp,
-                bottom = padding.calculateBottomPadding() + bottomInnerPadding + 12.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            overscrollEffect = null,
-        ) {
-            if (projects.isEmpty()) item(key = "empty") {
-                Card(Modifier.fillMaxWidth()) { SuperCard(title = stringResource(R.string.script_empty)) }
+        actions = {
+            TopBarIconButton(onClick = onNew) {
+                Icon(Icons.Outlined.NoteAdd, stringResource(R.string.script_new))
             }
-            // Standalone scripts share a root; their entry file is their unique identity.
-            items(items = projects, key = { it.mainFile.absolutePath }) { project ->
-                val kindLabel = stringResource(
-                    when (project.kind) {
-                        ScriptProjectKind.STANDALONE -> R.string.script_kind_standalone
-                        ScriptProjectKind.PROJECT -> R.string.script_kind_project
-                        ScriptProjectKind.COMPONENT -> R.string.script_kind_component
-                    }
-                )
-                ModuleStyleManagerCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    bottomPadding = 0.dp,
-                    title = project.name,
-                    summaryLines = buildList {
-                        add(project.id)
-                        if (project.description.isNotBlank()) add(project.description)
-                        project.error?.let { add(it) }
-                    },
-                    badges = listOf(
-                        RearBadgeItem(
-                            kindLabel, palette = rememberRearAccentBadgePalette(
-                                when (project.kind) {
-                                    ScriptProjectKind.PROJECT -> Color(0xFF4A78D0)
-                                    ScriptProjectKind.STANDALONE -> Color(0xFF279879)
-                                    ScriptProjectKind.COMPONENT -> Color(0xFF9470C8)
-                                },
-                            )
+            TopBarIconButton(onClick = onNewProject) {
+                Icon(Icons.Outlined.CreateNewFolder, stringResource(R.string.script_new_project))
+            }
+            TopBarIconButton(onClick = onImport) {
+                Icon(Icons.Outlined.FileUpload, stringResource(R.string.script_import))
+            }
+            TopBarIconButton(onClick = onRefresh) {
+                Icon(Icons.Outlined.Refresh, stringResource(R.string.script_refresh))
+            }
+        },
+    ) {
+        if (projects.isEmpty()) item(key = "empty") {
+            Card(Modifier.fillMaxWidth()) { ListItem(animateContentSize = true, title = stringResource(R.string.script_empty)) }
+        }
+        // Standalone scripts share a root; their entry file is their unique identity.
+        items(items = projects, key = { it.mainFile.absolutePath }) { project ->
+            val kindLabel = stringResource(
+                when (project.kind) {
+                    ScriptProjectKind.STANDALONE -> R.string.script_kind_standalone
+                    ScriptProjectKind.PROJECT -> R.string.script_kind_project
+                    ScriptProjectKind.COMPONENT -> R.string.script_kind_component
+                }
+            )
+            ModuleStyleManagerCard(
+                modifier = Modifier.fillMaxWidth(),
+                bottomPadding = 0.dp,
+                title = project.name,
+                summaryLines = buildList {
+                    add(project.id)
+                    if (project.description.isNotBlank()) add(project.description)
+                    project.error?.let { add(it) }
+                },
+                badges = listOf(
+                    BadgeItem(
+                        kindLabel, palette = rememberAccentBadgePalette(
+                            when (project.kind) {
+                                ScriptProjectKind.PROJECT -> Color(0xFF4A78D0)
+                                ScriptProjectKind.STANDALONE -> Color(0xFF279879)
+                                ScriptProjectKind.COMPONENT -> Color(0xFF9470C8)
+                            },
                         )
-                    ) +
-                            listOfNotNull(project.componentId?.let { RearBadgeItem(it) }),
-                    onCardClick = { onOpen(project) },
-                    leftAction = {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            ModuleStyleIconAction(
-                                icon = Icons.Outlined.EditNote,
-                                contentDescription = stringResource(R.string.script_edit),
-                                onClick = { onOpen(project) },
-                            )
-                            if (project.kind != ScriptProjectKind.COMPONENT) {
-                                ModuleStyleIconAction(
-                                    icon = Icons.Outlined.DriveFileRenameOutline,
-                                    contentDescription = stringResource(R.string.script_rename),
-                                    onClick = { onRename(project) },
-                                )
-                            }
-                            ModuleStyleIconAction(
-                                icon = Icons.Outlined.FileDownload,
-                                contentDescription = stringResource(R.string.script_export),
-                                onClick = { onExport(project) },
-                            )
-                        }
-                    },
-                    rightAction = {
+                    )
+                ) +
+                        listOfNotNull(project.componentId?.let { BadgeItem(it) }),
+                onCardClick = { onOpen(project) },
+                leftAction = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ModuleStyleIconAction(
+                            icon = Icons.Outlined.EditNote,
+                            contentDescription = stringResource(R.string.script_edit),
+                            onClick = { onOpen(project) },
+                        )
                         if (project.kind != ScriptProjectKind.COMPONENT) {
-                            ModuleStyleDeleteAction(
-                                icon = MiuixIcons.Delete,
-                                text = stringResource(R.string.script_delete),
-                                onClick = { onDelete(project) },
+                            ModuleStyleIconAction(
+                                icon = Icons.Outlined.DriveFileRenameOutline,
+                                contentDescription = stringResource(R.string.script_rename),
+                                onClick = { onRename(project) },
                             )
                         }
-                    },
-                )
-            }
+                        ModuleStyleIconAction(
+                            icon = Icons.Outlined.FileDownload,
+                            contentDescription = stringResource(R.string.script_export),
+                            onClick = { onExport(project) },
+                        )
+                    }
+                },
+                rightAction = {
+                    if (project.kind != ScriptProjectKind.COMPONENT) {
+                        ModuleStyleDeleteAction(
+                            icon = UiIcons.Delete,
+                            text = stringResource(R.string.script_delete),
+                            onClick = { onDelete(project) },
+                        )
+                    }
+                },
+            )
         }
     }
 }
@@ -407,7 +399,30 @@ private fun ScriptEditor(
     store: ScriptProjectStore,
     bottomInnerPadding: Dp,
     onBack: () -> Unit,
-    onSaved: () -> Unit
+    onSaved: () -> Unit,
+) {
+    val context = LocalContext.current
+    val executor = remember(context) { hk.uwu.reareye.script.ScriptExecutor(context) }
+    ScriptEditorContent(
+        project, store, bottomInnerPadding, onBack, onSaved,
+        loadProviders = { executor.providers(project) },
+        runProvider = { provider, params ->
+            val result = executor.execute(project, provider, params)
+            result.error ?: result.data?.toString().orEmpty()
+        },
+    )
+}
+
+/** The production editor UI and file operations, independent of the native Lua runtime. */
+@Composable
+internal fun ScriptEditorContent(
+    project: ScriptProject,
+    store: ScriptProjectStore,
+    bottomInnerPadding: Dp,
+    onBack: () -> Unit,
+    onSaved: () -> Unit,
+    loadProviders: suspend () -> List<hk.uwu.reareye.script.ScriptProvider>,
+    runProvider: suspend (String, Map<String, String>) -> String,
 ) {
     var files by remember(project.root.absolutePath) { mutableStateOf(store.projectEntries(project)) }
     var selectedFile by remember(project.root.absolutePath) { mutableStateOf(project.mainFile) }
@@ -420,11 +435,9 @@ private fun ScriptEditor(
     var runResult by remember(project.id) { mutableStateOf("") }
     var showDebug by remember(project.id) { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val scriptContext = LocalContext.current
-    val executor = remember(scriptContext) { hk.uwu.reareye.script.ScriptExecutor(scriptContext) }
     LaunchedEffect(project.id) {
         try {
-            providers = executor.providers(project)
+            providers = loadProviders()
             providerId = providers.firstOrNull()?.id.orEmpty()
         } catch (e: CancellationException) {
             throw e
@@ -433,8 +446,6 @@ private fun ScriptEditor(
         }
     }
     val editor = rememberLuaCodeEditorState()
-    val haze = rememberAcrylicHazeState()
-    val style = rememberAcrylicHazeStyle()
     fun saveCurrentFile() {
         source = editor.text()
         store.saveFile(selectedFile, source)
@@ -450,24 +461,36 @@ private fun ScriptEditor(
         source = store.readFile(file)
         showFiles = false
     }
+    val progressiveEditor = LocalMixUiBackend.current == MixUiBackend.Miuix
+    val density = LocalDensity.current
+    val editorScrolled by remember(editor, progressiveEditor) {
+        derivedStateOf { progressiveEditor && editor.verticalScroll > 0 }
+    }
+    val editorContent: @Composable (Modifier) -> Unit = { bodyModifier ->
     Scaffold(
         topBar = {
-            SmallTopAppBar(
-                modifier = Modifier.rearAcrylicEffect(haze, style),
-                color = Color.Transparent,
+            @Composable
+            fun EditorButton(onClick: () -> Unit, content: @Composable () -> Unit) {
+                if (progressiveEditor) CompactTopBarIconButton(onClick = onClick, content = content)
+                else IconButton(onClick = onClick, content = content)
+            }
+            @Composable
+            fun EditorBar(title: String, navigationIcon: @Composable () -> Unit, actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+                if (progressiveEditor) CompactGlassTopBar(title = title, navigationIcon = navigationIcon, actions = actions)
+                else CompactTopBar(title = title, navigationIcon = navigationIcon, actions = actions)
+            }
+            EditorBar(
                 title = selectedFile.name,
-                navigationIconPadding = 12.dp,
-                actionIconPadding = 12.dp,
                 navigationIcon = {
                     Row {
-                        IconButton(onClick = onBack) {
+                        EditorButton(onClick = onBack) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
-                                null
+                                stringResource(R.string.scene_route_navigate_back)
                             )
                         }
                         if (project.kind != ScriptProjectKind.STANDALONE) {
-                            IconButton(onClick = { showFiles = !showFiles }) {
+                            EditorButton(onClick = { showFiles = !showFiles }) {
                                 Icon(
                                     Icons.Outlined.MoreVert,
                                     stringResource(R.string.script_file_structure)
@@ -477,25 +500,43 @@ private fun ScriptEditor(
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
+                    EditorButton(onClick = {
                         saveCurrentFile()
                         editor.editor.value?.clearFocus()
                         showDebug = true
                     }) { Icon(Icons.Outlined.BugReport, stringResource(R.string.script_debug)) }
-                    IconButton(onClick = { saveCurrentFile(); onSaved(); onBack() }) {
+                    EditorButton(onClick = { saveCurrentFile(); onSaved(); onBack() }) {
                         Icon(Icons.Outlined.Check, stringResource(R.string.script_save))
                     }
                 },
             )
         },
     ) { padding ->
+        val topPadding = padding.calculateTopPadding()
+        val imeBottom = with(density) {
+            androidx.compose.foundation.layout.WindowInsets.ime.getBottom(density).toDp()
+        }
+        val editorTopPadding by remember(editor, progressiveEditor, density, topPadding) {
+            derivedStateOf {
+                if (progressiveEditor) with(density) {
+                    (topPadding.toPx() - editor.verticalScroll).coerceAtLeast(0f).toDp()
+                } else topPadding
+            }
+        }
         Box(
             Modifier
                 .fillMaxSize()
-                .rearAcrylicSource(haze)
+                .then(if (progressiveEditor) bodyModifier else Modifier)
+                .drawWithContent {
+                    // AndroidView invalidation must also refresh the recorded Compose source.
+                    if (progressiveEditor) editor.verticalScroll
+                    drawContent()
+                }
                 .padding(
-                    top = padding.calculateTopPadding(),
-                    bottom = padding.calculateBottomPadding() + bottomInnerPadding
+                    top = editorTopPadding,
+                    start = padding.calculateStartPadding(androidx.compose.ui.platform.LocalLayoutDirection.current),
+                    end = padding.calculateEndPadding(androidx.compose.ui.platform.LocalLayoutDirection.current),
+                    bottom = maxOf(padding.calculateBottomPadding(), bottomInnerPadding, imeBottom)
                 )
         ) {
             Column(Modifier.fillMaxSize()) {
@@ -511,7 +552,7 @@ private fun ScriptEditor(
                         modifier = Modifier
                             .fillMaxHeight()
                             .fillMaxWidth(1f / 3f)
-                            .background(MiuixTheme.colorScheme.surfaceContainerHigh),
+                            .background(MixTheme.colorScheme.surfaceContainerHigh),
                     ) {
                         Column(
                             modifier = Modifier
@@ -555,9 +596,9 @@ private fun ScriptEditor(
                                         },
                                         contentDescription = null,
                                         tint = when {
-                                            file.isDirectory -> MiuixTheme.colorScheme.onSurfaceVariantSummary
-                                            isLua -> MiuixTheme.colorScheme.primary
-                                            else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                            file.isDirectory -> MixTheme.colorScheme.onSurfaceVariantSummary
+                                            isLua -> MixTheme.colorScheme.primary
+                                            else -> MixTheme.colorScheme.onSurfaceVariantSummary
                                         },
                                     )
                                     Text(
@@ -567,9 +608,9 @@ private fun ScriptEditor(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         color = if (file.absolutePath == selectedFile.absolutePath) {
-                                            MiuixTheme.colorScheme.primary
+                                            MixTheme.colorScheme.primary
                                         } else {
-                                            MiuixTheme.colorScheme.onSurface
+                                            MixTheme.colorScheme.onSurface
                                         },
                                     )
                                 }
@@ -587,6 +628,12 @@ private fun ScriptEditor(
                 }
             }
         }
+    }
+    }
+    if (progressiveEditor) {
+        CompactGlassTopBarScene(isContentScrolled = editorScrolled, content = editorContent)
+    } else {
+        editorContent(Modifier)
     }
     ScriptRenameDialog(
         show = renameFileTarget != null,
@@ -608,6 +655,7 @@ private fun ScriptEditor(
             renameFileTarget = null
         },
     )
+    val noProviderMessage = stringResource(R.string.script_debug_no_provider)
     ScriptDebugBottomSheet(
         show = showDebug,
         providerId = providerId,
@@ -620,9 +668,10 @@ private fun ScriptEditor(
             scope.launch {
                 val params = paramsText.split('&').filter { it.contains('=') }
                     .associate { it.substringBefore('=') to it.substringAfter('=') }
-                runResult = if (selectedProvider.isBlank()) "No provider" else {
-                    val result = executor.execute(project, selectedProvider, params)
-                    result.error ?: result.data?.toString().orEmpty()
+                runResult = if (selectedProvider.isBlank()) {
+                    noProviderMessage
+                } else {
+                    runProvider(selectedProvider, params)
                 }
             }
         },
@@ -631,7 +680,7 @@ private fun ScriptEditor(
 }
 
 @Composable
-private fun ScriptRenameDialog(
+internal fun ScriptRenameDialog(
     show: Boolean,
     title: String,
     initialName: String,
@@ -639,47 +688,113 @@ private fun ScriptRenameDialog(
     onConfirm: (String) -> Unit,
 ) {
     var value by remember(show, initialName) { mutableStateOf(initialName) }
-    if (!show) return
-    WindowDialog(show = show, title = title, onDismissRequest = onDismiss) {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            TextField(
-                value = value,
-                onValueChange = { value = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.script_name),
-                singleLine = true,
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                IconButton(onClick = { if (value.isNotBlank()) onConfirm(value) }) {
-                    Icon(Icons.Outlined.Check, stringResource(R.string.script_save))
-                }
+    // The host retains its foreground during exit. Ignore repeated Save actions
+    // in that interval, and reset the guard for the next naming session.
+    var submitted by remember(show, initialName) { mutableStateOf(false) }
+    GlassBottomSheet(
+        show = show,
+        title = title,
+        onDismissRequest = onDismiss,
+        startAction = {
+            BottomSheetActionButton(onClick = onDismiss, modifier = Modifier.testTag("script-name-cancel")) {
+                BottomSheetActionIcon(BottomSheetAction.Close, Icons.Outlined.Close, stringResource(R.string.script_cancel))
             }
-        }
+        },
+        endAction = {
+            BottomSheetActionButton(
+                onClick = {
+                    if (show && !submitted && value.isNotBlank()) {
+                        submitted = true
+                        onConfirm(value)
+                    }
+                },
+                enabled = show && !submitted && value.isNotBlank(),
+                modifier = Modifier.testTag("script-name-save"),
+            ) {
+                BottomSheetActionIcon(BottomSheetAction.Save, Icons.Outlined.Check, stringResource(R.string.script_save))
+            }
+        },
+    ) {
+        TextField(
+            value = value,
+            onValueChange = { value = it },
+            modifier = Modifier.fillMaxWidth().testTag("script-name-input"),
+            label = stringResource(R.string.script_name),
+            singleLine = true,
+        )
     }
 }
 
+/** Native in-window confirmation; kept composed while the backend animates dismissal. */
 @Composable
-private fun ScriptOverwriteDialog(
-    request: ScriptOverwriteRequest?,
+internal fun ScriptOverwriteDialog(
+    show: Boolean,
+    title: String,
+    message: String,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
+    sessionKey: Any? = Unit,
+    confirmText: String? = null,
 ) {
-    if (request == null) return
-    WindowDialog(show = true, title = request.title, onDismissRequest = onDismiss) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text(request.message, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                TextButton(
-                    text = stringResource(R.string.script_cancel),
-                    modifier = Modifier.weight(1f),
-                    onClick = onDismiss,
+    var handled by remember(show, sessionKey) { mutableStateOf(false) }
+    val currentSession = remember {
+        mutableStateOf(sessionKey, androidx.compose.runtime.referentialEqualityPolicy())
+    }
+    currentSession.value = sessionKey
+    val currentShow by androidx.compose.runtime.rememberUpdatedState(show)
+    val defaultConfirmText = stringResource(R.string.script_overwrite)
+    // The request is cleared immediately on dismissal, but its text must survive exit.
+    var lastTitle by remember { mutableStateOf(title) }
+    var lastMessage by remember { mutableStateOf(message) }
+    var lastConfirmText by remember { mutableStateOf(confirmText ?: defaultConfirmText) }
+    androidx.compose.runtime.SideEffect {
+        if (show) {
+            lastTitle = title
+            lastMessage = message
+            lastConfirmText = confirmText ?: defaultConfirmText
+        }
+    }
+    val dismiss = {
+        if (show && currentShow && currentSession.value === sessionKey && !handled) {
+            handled = true
+            onDismiss()
+        }
+    }
+    GlassFormDialog(
+        show = show,
+        title = if (show) title else lastTitle,
+        onDismissRequest = dismiss,
+    ) {
+        // Do not reuse native clickable nodes across request generations: their
+        // retained semantics actions otherwise forward to the newest callback.
+        androidx.compose.runtime.key(sessionKey) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    if (show) message else lastMessage,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.testTag("script-overwrite-message"),
                 )
-                Button(
-                    onClick = onConfirm,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                ) {
-                    Text(stringResource(R.string.script_overwrite))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        modifier = Modifier.weight(1f).testTag("script-overwrite-cancel"),
+                        enabled = show && !handled,
+                        onClick = dismiss,
+                    ) {
+                        Text(stringResource(R.string.script_cancel))
+                    }
+                    Button(
+                        onClick = {
+                            if (show && currentShow && currentSession.value === sessionKey && !handled) {
+                                handled = true
+                                onConfirm()
+                            }
+                        },
+                        enabled = show && !handled,
+                        modifier = Modifier.weight(1f).testTag("script-overwrite-confirm"),
+                        colors = ButtonDefaults.buttonColorsDanger(),
+                    ) {
+                        Text(if (show) (confirmText ?: defaultConfirmText) else lastConfirmText)
+                    }
                 }
             }
         }
@@ -687,7 +802,7 @@ private fun ScriptOverwriteDialog(
 }
 
 @Composable
-private fun ScriptDebugBottomSheet(
+internal fun ScriptDebugBottomSheet(
     show: Boolean,
     providerId: String,
     onProviderIdChange: (String) -> Unit,
@@ -697,39 +812,48 @@ private fun ScriptDebugBottomSheet(
     onRun: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    WindowBottomSheet(
+    val contentScroll = rememberScrollState()
+    val resultScroll = rememberScrollState()
+    LaunchedEffect(show) {
+        if (show) {
+            contentScroll.scrollTo(0)
+            resultScroll.scrollTo(0)
+        }
+    }
+    GlassBottomSheet(
         show = show,
         title = stringResource(R.string.script_debug_title),
         onDismissRequest = onDismiss,
         endAction = {
-            IconButton(onClick = onRun) {
+            BottomSheetActionButton(onClick = { if (show) onRun() }, enabled = show) {
                 Icon(Icons.Outlined.PlayArrow, stringResource(R.string.script_debug_run))
             }
         },
-        defaultWindowInsetsPadding = true,
+        size = GlassBottomSheetSize.Content,
+        isContentScrolled = contentScroll.value > 0 || resultScroll.value > 0,
         enableNestedScroll = false,
-        insideMargin = DpSize(24.dp, 28.dp),
+        horizontalPadding = 24.dp,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 520.dp)
-                .verticalScroll(rememberScrollState())
-                .windowInsetsPadding(WindowInsets.navigationBars)
+                .verticalScroll(contentScroll)
+                .testTag("script-debug-content")
                 .padding(bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             TextField(
                 value = providerId,
                 onValueChange = onProviderIdChange,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("script-debug-provider"),
                 label = stringResource(R.string.script_debug_provider),
                 singleLine = true,
             )
             TextField(
                 value = paramsText,
                 onValueChange = onParamsTextChange,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("script-debug-params"),
                 label = stringResource(R.string.script_debug_params),
                 singleLine = true,
             )
@@ -739,8 +863,9 @@ private fun ScriptDebugBottomSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 180.dp)
-                        .verticalScroll(rememberScrollState()),
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                        .verticalScroll(resultScroll)
+                        .testTag("script-debug-result"),
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary
                 )
             }
         }

@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,7 +38,6 @@ import androidx.compose.foundation.text.contextmenu.provider.TextContextMenuProv
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -67,6 +68,10 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -94,13 +99,22 @@ import androidx.compose.ui.unit.width
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import hk.uwu.reareye.R
+import hk.uwu.reareye.agent.AgentConfig
 import hk.uwu.reareye.agent.ChatEntry
 import hk.uwu.reareye.agent.PendingApproval
 import hk.uwu.reareye.agent.Protocol
 import hk.uwu.reareye.agent.ProviderConfig
 import hk.uwu.reareye.agent.ReasoningEffort
 import hk.uwu.reareye.agent.ReasoningPolicy
+import hk.uwu.reareye.agent.catalog.ModelsDevReasoningCatalog
+import hk.uwu.reareye.agent.catalog.ReasoningCatalogIndex
+import hk.uwu.reareye.agent.catalog.ReasoningCatalogRecord
+import hk.uwu.reareye.agent.catalog.ReasoningCatalogSnapshot
+import hk.uwu.reareye.agent.data.LEGACY_DIALOGUE_MODEL_ID
+import hk.uwu.reareye.agent.data.LEGACY_DIALOGUE_PROVIDER_ID
+import hk.uwu.reareye.agent.data.SettingsSnapshot
 import hk.uwu.reareye.agent.interaction.ApprovalMode
 import hk.uwu.reareye.agent.interaction.AskOption
 import hk.uwu.reareye.agent.interaction.AskRequest
@@ -117,8 +131,10 @@ import hk.uwu.reareye.ui.screen.MarySettingsScreen
 import hk.uwu.reareye.ui.screen.NoticeCard
 import hk.uwu.reareye.ui.screen.ReasoningCard
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -134,10 +150,12 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
+import hk.uwu.mixui.components.CompactGlassTopBarScene
+import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.MixColorSchemeMode
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.MixUiHost
+import hk.uwu.mixui.theme.MixTheme
 import java.io.File
 
 /** Real page layout and controls, measured and drawn by Compose on the JVM. */
@@ -277,8 +295,8 @@ class MaryChatLayoutTest {
         )
         val enabled = mutableStateOf(true)
         val selections = mutableListOf<ReasoningEffort>()
-        host {
-            Scaffold {
+        host(glassSheets = true) {
+            Scaffold(popupHost = {}) {
                 Box(Modifier
                     .fillMaxSize()
                     .padding(top = 48.dp)) {
@@ -332,8 +350,8 @@ class MaryChatLayoutTest {
     @Test
     fun reasoningPickerReturnKeepsEmptyEditingExpandedUntilFocusActuallyLeaves() {
         lateinit var outside: FocusRequester
-        host {
-            Scaffold {
+        host(glassSheets = true) {
+            Scaffold(popupHost = {}) {
                 outside = remember { FocusRequester() }
                 Box(
                     Modifier
@@ -397,8 +415,8 @@ class MaryChatLayoutTest {
             )
         )
         var saved = 0
-        host {
-            Scaffold {
+        host(glassSheets = true) {
+            Scaffold(popupHost = {}) {
                 ReasoningStrengthButton(provider.value, true, {}, {
                     saved++
                     provider.value = provider.value.copy(reasoningEffort = it)
@@ -592,7 +610,7 @@ class MaryChatLayoutTest {
 
     @Test
     fun errorsUseLegibleRedForNoticesAndToolResults() {
-        host(ColorSchemeMode.Dark) {
+        host(MixColorSchemeMode.Dark) {
             Column(
                 Modifier
                     .requiredSize(360.dp, 640.dp)
@@ -750,7 +768,43 @@ class MaryChatLayoutTest {
     }
 
     @Test
-    fun jumpButtonIsCenteredOverComposerShowsOnlyWhenIdleAndFadesOutAfterTimeout() {
+    fun jumpButtonIsCenteredOverComposerShowsOnlyWhenIdleAndFadesOutAfterTimeout() =
+        verifyJumpButton(MixUiBackend.Miuix)
+
+    @Test
+    fun mochiJumpButtonKeepsGeometryClickAndFadeBehavior() = verifyJumpButton(MixUiBackend.Mochi)
+
+    @Test
+    fun nativeDisabledReadOnlyFieldRejectsTouchEditingAndClear() {
+        val value = mutableStateOf("Protected")
+        var writes = 0
+        host(backend = MixUiBackend.Mochi) {
+            hk.uwu.mixui.components.TextField(
+                value = value.value,
+                onValueChange = { writes++; value.value = it },
+                enabled = false,
+                readOnly = true,
+                singleLine = true,
+                modifier = Modifier.testTag("disabled-read-only"),
+            )
+        }
+        compose.onNodeWithText("Protected").assertIsNotEnabled()
+        compose.onNode(hasSetTextAction()).assertDoesNotExist()
+        node("disabled-read-only").performTouchInput { click() }
+        compose.onNode(isFocused()).assertDoesNotExist()
+        compose.onNode(hasSetTextAction()).assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(0, writes)
+            assertEquals("Protected", value.value)
+        }
+        // Recomposition with a new protected value must not activate the editor.
+        compose.runOnIdle { value.value = "Updated" }
+        compose.onNodeWithText("Updated").assertIsDisplayed()
+        compose.onNodeWithText("Updated").assertIsNotEnabled()
+        compose.onNode(isFocused()).assertDoesNotExist()
+    }
+
+    private fun verifyJumpButton(backend: MixUiBackend) {
         fun advanceUi(millis: Long) {
             compose.mainClock.advanceTimeByFrame()
             compose.waitForIdle()
@@ -764,7 +818,7 @@ class MaryChatLayoutTest {
         val away = mutableStateOf(true)
         val session = mutableStateOf("one")
         val enabledClicks = mutableStateOf(0)
-        host {
+        host(backend = backend) {
             Box(
                 Modifier
                     .requiredSize(360.dp, 640.dp)
@@ -789,6 +843,8 @@ class MaryChatLayoutTest {
         compose.runOnIdle { scrolling.value = false }
         node("mary-jump-to-latest").assertIsDisplayed()
         compose.mainClock.autoAdvance = false
+        assertEquals(androidx.compose.ui.semantics.Role.Button,
+            node("mary-jump-to-latest").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Role])
         val button = bounds("mary-jump-to-latest")
         val composer = bounds("mary-composer")
         assertEquals(46f, button.width.value, 0.5f)
@@ -799,7 +855,7 @@ class MaryChatLayoutTest {
         )
         node("mary-jump-to-latest").performClick()
         compose.runOnIdle { assertEquals(1, enabledClicks.value) }
-        screenshot("jump-centered-over-composer.png")
+        screenshot("jump-centered-over-composer-${backend.name.lowercase()}.png")
         advanceUi(3_200)
         node("mary-jump-to-latest").assertDoesNotExist()
         compose.runOnIdle { scrolling.value = true }
@@ -925,9 +981,11 @@ class MaryChatLayoutTest {
     fun topBarUsesLeadingMenuAndOnlyContextAction() {
         var opens = 0
         host {
-            Scaffold(topBar = {
-                MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { opens++ })
-            }) { }
+            hk.uwu.mixui.components.CompactGlassTopBarScene { bodyModifier ->
+                Scaffold(popupHost = {}, topBar = {
+                    MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { opens++ })
+                }) { Box(Modifier.fillMaxSize().then(bodyModifier)) }
+            }
         }
         node("mary-open-sidebar").assertIsEnabled()
         assertTrue(bounds("mary-open-sidebar").center.x < 72.dp)
@@ -942,6 +1000,71 @@ class MaryChatLayoutTest {
     }
 
     @Test
+    fun nativeMaryTopBarRetainsMenuAndContextAcrossBackends() {
+        for (backend in hk.uwu.mixui.MixUiBackend.entries) {
+            var opens = 0
+            compose.runOnUiThread {
+                activity?.close()
+                val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+                activity = controller
+                controller.get().setContent {
+                    hk.uwu.mixui.MixUiHost(backend = backend, colorMode = hk.uwu.mixui.MixColorSchemeMode.Light) {
+                        hk.uwu.mixui.components.CompactGlassTopBarScene { bodyModifier ->
+                            Scaffold(popupHost = {}, topBar = {
+                                MaryTopBar(MaryUsageSummary(1200, 32000, null), onOpenMenu = { opens++ })
+                            }) { Box(Modifier.fillMaxSize().then(bodyModifier)) }
+                        }
+                    }
+                }
+            }
+            compose.waitForIdle()
+            node("mary-open-sidebar").assertIsEnabled().assertIsDisplayed()
+            node("mary-context-usage").assertIsDisplayed()
+            assertTrue(bounds("mary-open-sidebar").center.x < 72.dp)
+            repeat(2) { node("mary-open-sidebar").performClick() }
+            compose.runOnIdle { assertEquals(2, opens) }
+            screenshot("native-mary-topbar-${backend.name}.png", "root")
+        }
+    }
+
+    @Test
+    fun nativeLargeTitleHostsReachLastRowAndRestoreScroll() {
+        for (backend in hk.uwu.mixui.MixUiBackend.entries) {
+            val scroll = ScrollState(0)
+            compose.runOnUiThread {
+                activity?.close()
+                val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+                activity = controller
+                controller.get().setContent {
+                    hk.uwu.mixui.MixUiHost(backend = backend, colorMode = hk.uwu.mixui.MixColorSchemeMode.Light) {
+                        hk.uwu.mixui.components.LargeTitleColumnScaffold(
+                            title = "Mary settings", scrollState = scroll, bottomObstruction = 72.dp,
+                        ) {
+                            repeat(30) { index ->
+                                hk.uwu.mixui.components.Text("Setting $index",
+                                    Modifier.fillMaxWidth().height(44.dp).testTag("large-title-row-$index"))
+                            }
+                        }
+                    }
+                }
+            }
+            compose.waitForIdle()
+            node("large-title-row-0").assertIsDisplayed()
+            compose.runOnIdle {
+                assertTrue(scroll.maxValue > 0)
+                runBlocking { scroll.scrollTo(scroll.maxValue) }
+            }
+            compose.waitForIdle()
+            node("large-title-row-29").assertIsDisplayed()
+            screenshot("native-large-title-scrolled-${backend.name}.png", "root")
+            compose.runOnIdle { runBlocking { scroll.scrollTo(0) } }
+            compose.waitForIdle()
+            node("large-title-row-0").assertIsDisplayed()
+            screenshot("native-large-title-restored-${backend.name}.png", "root")
+        }
+    }
+
+    @Test
     fun darkQuestionUsesToolAccentAndComposerHasASubtleFeatheredHalo() {
         val request = AskRequest(
             "dark-drink", "Choose a drink", listOf(
@@ -951,12 +1074,12 @@ class MaryChatLayoutTest {
                 AskOption("water", "Water")
             )
         )
-        host(ColorSchemeMode.Dark) {
+        host(MixColorSchemeMode.Dark) {
             val expansion = remember { ToolCardExpansion() }
             Box(
                 Modifier
                     .requiredSize(360.dp, 760.dp)
-                    .background(MiuixTheme.colorScheme.background)
+                    .background(MixTheme.colorScheme.background)
                     .testTag("layout-container")
             ) {
                 Column(Modifier
@@ -1021,12 +1144,12 @@ class MaryChatLayoutTest {
             ),
             CompletableDeferred(), "reference-approval"
         )
-        host(ColorSchemeMode.Dark) {
+        host(MixColorSchemeMode.Dark) {
             val expansion = remember { ToolCardExpansion() }
             Column(
                 Modifier
                     .requiredSize(360.dp, 760.dp)
-                    .background(MiuixTheme.colorScheme.background)
+                    .background(MixTheme.colorScheme.background)
                     .padding(8.dp)
                     .testTag("layout-container"),
                 verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
@@ -1070,7 +1193,7 @@ class MaryChatLayoutTest {
         val mode = mutableStateOf(ApprovalMode.ASK)
         val saving = mutableStateOf(false)
         host {
-            Scaffold {
+            Scaffold(popupHost = {}) {
                 Box(Modifier
                     .fillMaxSize()
                     .background(pageBackground)
@@ -1141,30 +1264,30 @@ class MaryChatLayoutTest {
 
     @Test
     fun approvalComposerIconsMatchSelectedMenuAccentAndKeepDisabledHueInBothThemes() {
-        val theme = mutableStateOf(ColorSchemeMode.Light)
+        val theme = mutableStateOf(MixColorSchemeMode.Light)
         var themePrimary = Color.Unspecified
         var selections = 0
         host {
-            MiuixTheme(ThemeController(theme.value)) {
-                val currentPrimary = MiuixTheme.colorScheme.primary
+            MixUiHost(backend = MixUiBackend.Miuix, colorMode = theme.value) {
+                val currentPrimary = MixTheme.colorScheme.primary
                 SideEffect { themePrimary = currentPrimary }
-                Scaffold {
+                Scaffold(popupHost = {}) {
                     Column(
                         Modifier
                             .fillMaxSize()
-                            .background(MiuixTheme.colorScheme.background)
+                            .background(MixTheme.colorScheme.background)
                             .padding(24.dp)
                             .testTag("layout-container")
                     ) {
                         BasicText(
                             "${theme.value.name}: enabled / disabled",
-                            style = MiuixTheme.textStyles.body2.copy(color = MiuixTheme.colorScheme.onSurfaceContainer)
+                            style = MixTheme.textStyles.body2.copy(color = MixTheme.colorScheme.onSurfaceContainer)
                         )
                         ApprovalMode.entries.forEach { mode ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 BasicText(
                                     mode.name, modifier = Modifier.weight(1f),
-                                    style = MiuixTheme.textStyles.body2.copy(color = MiuixTheme.colorScheme.onSurfaceContainer)
+                                    style = MixTheme.textStyles.body2.copy(color = MixTheme.colorScheme.onSurfaceContainer)
                                 )
                                 listOf(true, false).forEach { enabled ->
                                     ApprovalModeButton(mode, enabled, {}, { selections++ })
@@ -1175,7 +1298,7 @@ class MaryChatLayoutTest {
                 }
             }
         }
-        listOf(ColorSchemeMode.Light, ColorSchemeMode.Dark).forEach { scheme ->
+        listOf(MixColorSchemeMode.Light, MixColorSchemeMode.Dark).forEach { scheme ->
             compose.runOnIdle { theme.value = scheme }
             compose.waitForIdle()
             ApprovalMode.entries.forEachIndexed { index, mode ->
@@ -1292,7 +1415,8 @@ class MaryChatLayoutTest {
         host {
             // The popup host and navigation stay full-window; only the settings page
             // avoids the IME. This mirrors MainActivity + MarySettingsScreen.
-            Scaffold {
+            hk.uwu.mixui.components.GlassPreferenceScene {
+            Scaffold(popupHost = {}) {
                 Box(Modifier
                     .fillMaxSize()
                     .testTag("mary-fixed-root")) {
@@ -1313,6 +1437,7 @@ class MaryChatLayoutTest {
                     )
                 }
             }
+        }
         }
         fieldLabel(R.string.mary_provider_endpoint).performClick()
         val editor =
@@ -1415,27 +1540,59 @@ class MaryChatLayoutTest {
     }
 
     @Test
-    fun modelAdvancedFieldsAreInitiallyCollapsedAndToggleWithRealUiClick() {
-        modelSettings()
-        fieldLabel(R.string.mary_behaviour_temperature).assertDoesNotExist()
-        fieldLabel(R.string.mary_behaviour_max_tokens).assertDoesNotExist()
-        fieldLabel(R.string.mary_provider_context).assertDoesNotExist()
-        fieldLabel(R.string.mary_settings_advanced_model).performScrollTo().performClick()
-        fieldLabel(R.string.mary_behaviour_temperature).performScrollTo().assertIsDisplayed()
-        fieldLabel(R.string.mary_behaviour_max_tokens).performScrollTo().assertIsDisplayed()
-        fieldLabel(R.string.mary_provider_context).performScrollTo().assertIsDisplayed()
-        fieldLabel(R.string.mary_settings_advanced_model).performScrollTo().performClick()
-        fieldLabel(R.string.mary_behaviour_temperature).assertDoesNotExist()
-        fieldLabel(R.string.mary_behaviour_max_tokens).assertDoesNotExist()
-        fieldLabel(R.string.mary_provider_context).assertDoesNotExist()
+    fun advancedModelSettingsShowPublishedCatalogWithoutEditingTheDraft() {
+        val provider = ProviderConfig(
+            baseUrl = "https://api.openai.com/v1", model = "gpt-catalog-test", protocol = Protocol.RESPONSES,
+        )
+        val catalog = MutableStateFlow(ReasoningCatalogIndex.Empty)
+        val draft = mutableStateOf(ModelDraft(provider))
+        settingsComponent {
+            ReasoningConfiguration(draft.value, catalog.collectAsStateWithLifecycle().value) { draft.value = it }
+        }
+        fieldLabel(R.string.mary_capability_source_unknown).assertExists()
+
+        val record = ReasoningCatalogRecord("openai", provider.model, listOf(ReasoningEffort.LOW, ReasoningEffort.HIGH))
+        compose.runOnIdle {
+            catalog.value = ReasoningCatalogIndex.from(listOf(ReasoningCatalogSnapshot.from(ModelsDevReasoningCatalog, listOf(record))))
+        }
+        val context = requireNotNull(activity).get()
+        compose.onNodeWithText(context.getString(R.string.mary_capability_source_catalog, "Models.dev"))
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.mary_capability_status_levels, "low, high")).assertExists()
+        compose.runOnIdle { assertEquals(provider, draft.value.provider) }
+    }
+    @Test
+    fun realModelDetailsLiveInTheNativeEditorAndCloseOnCancel() {
+        realSettings()
+        selectSettingsTab(R.string.mary_phase_tab_models, "mary-settings-models")
+        val model = node("mary-settings-model-$LEGACY_DIALOGUE_MODEL_ID")
+        val editor = node("mary-settings-model-editor")
+        val context = node("mary-settings-model-context")
+        val output = node("mary-settings-model-output")
+        val temperature = node("mary-settings-model-temperature")
+        fun assertClosed() {
+            editor.assertDoesNotExist()
+            context.assertDoesNotExist()
+            output.assertDoesNotExist()
+            temperature.assertDoesNotExist()
+        }
+        assertClosed()
+        model.assertIsDisplayed().performClick()
+        editor.assertIsDisplayed()
+        context.performScrollTo().assertIsDisplayed()
+        output.performScrollTo().assertIsDisplayed()
+        temperature.performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription(requireNotNull(activity).get().getString(R.string.rear_widget_cancel)).performClick()
+        assertClosed()
     }
 
     @Test
-    fun modelSettingsSectionTitleSitsOutsideAndAboveTheCard() {
-        modelSettings()
-        val title = bounds("mary-model-section-${R.string.mary_settings_provider}")
+    fun realMainAgentSectionTitleSitsOutsideAndAboveItsCard() {
+        realSettings()
+        val titleTag = "mary-model-section-${R.string.mary_phase_main_agent}"
+        val title = bounds(titleTag)
         val card = bounds("mary-model-card-${R.string.mary_settings_provider}")
-        node("mary-model-section-${R.string.mary_settings_provider}").assertIsDisplayed()
+        node(titleTag).assertIsDisplayed()
         assertTrue(
             "Section title must be outside the card: $title / $card",
             title.bottom <= card.top
@@ -1445,39 +1602,24 @@ class MaryChatLayoutTest {
     }
 
     @Test
-    fun outlinedModelTestPlayButtonIsInsideTheFieldAtTheRightWithoutSendingRequests() {
-        modelSettings()
-        val field = node("mary-model-input-${R.string.mary_settings_provider}")
-        field.performScrollTo().assertIsDisplayed()
-        val model = field.getUnclippedBoundsInRoot()
-        val play = node("mary-model-test-${R.string.mary_settings_provider}")
-        play.assertIsDisplayed()
-        val button = play.getUnclippedBoundsInRoot()
-        assertTrue(
-            "Play action must be embedded inside the model field",
-            button.left >= model.left && button.right <= model.right
-        )
-        assertTrue(
-            "Play action must sit at the right of the field",
-            button.center.x > model.left + model.width * 0.75f
-        )
-        assertTrue(
-            "Play action must fit inside the field vertically",
-            button.top >= model.top && button.bottom <= model.bottom
-        )
-        val pixels = play.captureToImage().toPixelMap()
-        assertColorNear(pixels[2, 2], pixels[pixels.width / 2, pixels.height / 2])
-        assertTrue(
-            "Outlined play icon must have a visible outline",
-            (0 until pixels.height).any { y ->
-                (0 until pixels.width).any { x ->
-                    colorDistance(
-                        pixels[2, 2],
-                        pixels[x, y]
-                    ) > 0.15f
-                }
-            })
-        // Do not click Play or Available models: both are network actions.
+    fun realProviderConnectionActionsSitTogetherBelowTheEndpointWithoutSendingRequests() {
+        realSettings()
+        selectSettingsTab(R.string.mary_phase_tab_providers, "mary-settings-providers")
+        node("mary-settings-provider-$LEGACY_DIALOGUE_PROVIDER_ID").assertIsDisplayed().performClick()
+        node("mary-settings-provider-editor").assertIsDisplayed()
+        val test = node("mary-settings-provider-test")
+        val fetch = node("mary-settings-provider-fetch")
+        test.performScrollTo().assertIsDisplayed().assertIsEnabled().assertHasClickAction()
+        fetch.assertIsDisplayed().assertIsEnabled().assertHasClickAction()
+        val endpoint = bounds("mary-settings-provider-address")
+        val testBounds = test.getUnclippedBoundsInRoot()
+        val fetchBounds = fetch.getUnclippedBoundsInRoot()
+        assertTrue("Test and fetch must be separate actions in the same connection form", testBounds.right <= fetchBounds.left)
+        assertTrue("Provider actions must sit below the connection fields", endpoint.bottom <= testBounds.top)
+        assertEquals(testBounds.center.y.value, fetchBounds.center.y.value, 0.5f)
+        fieldLabel(R.string.mary_provider_test).assertIsDisplayed()
+        fieldLabel(R.string.mary_phase_fetch_models).assertIsDisplayed()
+        // These are production network actions: this layout test deliberately never clicks them.
     }
 
     @Test
@@ -1512,7 +1654,7 @@ class MaryChatLayoutTest {
         listOf(0.83f to 0.17f, 0.17f to 0.17f, 0.17f to 0.83f, 0.83f to 0.83f).forEach { (x, y) ->
             assertColorNear(outline, sample(unknown, x, y))
         }
-        assertColorNear(primary, sample(quarter, 0.83f, 0.17f))
+        assertColorNear(MaryContextProgressBlue, sample(quarter, 0.83f, 0.17f))
         listOf(0.17f to 0.17f, 0.17f to 0.83f, 0.83f to 0.83f).forEach { (x, y) ->
             assertColorNear(outline, sample(quarter, x, y))
         }
@@ -1594,6 +1736,147 @@ class MaryChatLayoutTest {
     }
 
     @Test
+    fun miuixAttachmentMenuTracksImeAndKeepsComposerFocus() = attachmentMenuTracksIme(MixUiBackend.Miuix)
+
+    @Test
+    fun mochiAttachmentMenuTracksImeAndKeepsComposerFocus() = attachmentMenuTracksIme(MixUiBackend.Mochi)
+
+    private fun attachmentMenuTracksIme(backend: MixUiBackend) {
+        val actions = mutableListOf<String>()
+        var transcriptTaps = 0
+        val text = mutableStateOf("draft")
+        val navHeight = 80.dp
+        host(backend = backend, setup = { it.enableEdgeToEdge() }) {
+            Box(Modifier.fillMaxSize().padding(start = 24.dp, top = 20.dp)) {
+                CompactGlassTopBarScene { body ->
+                    MaryFloatingChatLayout(
+                        bottomInset = navHeight,
+                        modifier = Modifier.fillMaxSize().then(body),
+                        content = {
+                            Box(Modifier.fillMaxSize().clickable { transcriptTaps++ })
+                        },
+                        footer = {
+                            MaryComposer(
+                                value = text.value, onValueChange = { text.value = it },
+                                running = false, locked = false, configuring = false, provider = ProviderConfig(),
+                                onReasoningSelected = {}, onSend = {}, onStop = {},
+                                attachments = MaryComposerAttachments(emptyList(), false,
+                                    onChooseFile = { actions += "file" }, onChooseImage = { actions += "image" },
+                                    onRemoveDraft = {}, menuBottomInset = navHeight),
+                            )
+                        },
+                    )
+                }
+            }
+        }
+        val input = node("mary-composer-input")
+        input.performClick().assertIsFocused()
+        val attach = node("mary-composer-attach")
+        attach.performTouchInput { click() }
+        val menu = node("glass-anchored-menu-above")
+        val initial = menu.getUnclippedBoundsInRoot()
+        val root = compose.onRoot()
+        val window = root.getUnclippedBoundsInRoot()
+        val file = compose.onNodeWithText(requireNotNull(activity).get().getString(R.string.mary_attachment_choose_file))
+        val image = compose.onNodeWithText(requireNotNull(activity).get().getString(R.string.mary_attachment_choose_image))
+        for (ime in listOf(0, 260, 310, 40)) {
+            setKeyboardInset(ime, status = 24, navigation = 26)
+            val button = attach.getUnclippedBoundsInRoot()
+            val panel = menu.getUnclippedBoundsInRoot()
+            assertEquals((button.top - 6.dp).value, panel.bottom.value, 0.5f)
+            assertEquals(button.left.value, panel.left.value, 0.5f)
+            assertEquals(initial.height.value, panel.height.value, 0.5f)
+            assertTrue(panel.bottom < window.bottom - maxOf(ime.dp, navHeight))
+            assertTrue(panel.top >= window.top + 32.dp)
+            if (ime >= 260) assertTrue(panel.bottom < initial.bottom - 100.dp)
+            file.assertIsDisplayed()
+            image.assertIsDisplayed()
+            input.assertIsFocused()
+            if (ime == 0 || ime == 310) screenshot("attachment-menu-${backend.name}-ime-$ime.png", "root")
+        }
+        setKeyboardInset(260)
+        compose.runOnUiThread { requireNotNull(activity).get().onBackPressedDispatcher.onBackPressed() }
+        menu.assertDoesNotExist()
+        input.assertIsFocused()
+        attach.performTouchInput { click() }
+        setKeyboardInset(0)
+        // Mary can release editor focus on user-initiated IME dismissal, but keeps the menu anchored.
+        assertEquals((attach.getUnclippedBoundsInRoot().top - 6.dp).value,
+            menu.getUnclippedBoundsInRoot().bottom.value, 0.5f)
+        root.performTouchInput { click(Offset(50f, 100f)) }
+        menu.assertDoesNotExist()
+        compose.runOnIdle { assertEquals(0, transcriptTaps) }
+        input.performClick().assertIsFocused()
+        setKeyboardInset(260)
+        attach.performTouchInput { click() }
+        file.performTouchInput { click() }
+        menu.assertDoesNotExist()
+        input.assertIsFocused()
+        attach.performTouchInput { click() }
+        image.performTouchInput { click() }
+        menu.assertDoesNotExist()
+        input.assertIsFocused()
+        compose.runOnIdle { assertEquals(listOf("file", "image"), actions) }
+    }
+
+    @Test
+    fun miuixAttachmentMenuFallsBackOrScrollsInsideSmallViewport() = attachmentMenuSmallViewport(MixUiBackend.Miuix)
+
+    @Test
+    fun mochiAttachmentMenuFallsBackOrScrollsInsideSmallViewport() = attachmentMenuSmallViewport(MixUiBackend.Mochi)
+
+    private fun attachmentMenuSmallViewport(backend: MixUiBackend) {
+        val height = mutableStateOf(270.dp)
+        val anchorY = mutableStateOf(62.dp)
+        var imageActions = 0
+        host(backend = backend, setup = { it.enableEdgeToEdge() }) {
+            Box(Modifier.fillMaxWidth().padding(start = 30.dp, top = 20.dp)) {
+                Box(Modifier.fillMaxWidth().height(height.value)) {
+                    CompactGlassTopBarScene { body ->
+                        Box(Modifier.fillMaxSize().then(body)) {
+                            Box(Modifier.align(Alignment.TopEnd).offset(x = (-32).dp, y = anchorY.value)) {
+                                MaryComposerAttachButton(false, MaryComposerAttachments(emptyList(), false,
+                                    onChooseFile = {}, onChooseImage = { imageActions++ }, onRemoveDraft = {}))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        setKeyboardInset(0, status = 28, navigation = 26, right = 32)
+        val attach = node("mary-composer-attach")
+        attach.performTouchInput { click() }
+        val menu = node("glass-anchored-menu-above")
+        val fullPanel = menu.getUnclippedBoundsInRoot()
+        val button = attach.getUnclippedBoundsInRoot()
+        val root = compose.onRoot().getUnclippedBoundsInRoot()
+        assertEquals((button.bottom + 6.dp).value, fullPanel.top.value, 0.5f)
+        setKeyboardInset(0, status = 28, navigation = 26, right = 36)
+        assertEquals("The open menu follows a new side inset", (root.right - 44.dp).value,
+            menu.getUnclippedBoundsInRoot().right.value, 0.5f)
+        assertEquals("First layout honors the inset delivered before opening", (root.right - 40.dp).value,
+            fullPanel.right.value, 0.5f)
+
+        // Upper space is 60 dp and lower space 73 dp: neither can fit the full menu.
+        compose.runOnIdle {
+            height.value = 213.dp
+            anchorY.value = 82.dp
+        }
+        val scrollPanel = menu.getUnclippedBoundsInRoot()
+        val movedButton = attach.getUnclippedBoundsInRoot()
+        assertEquals((movedButton.top - 6.dp).value, scrollPanel.bottom.value, 0.5f)
+        assertEquals((root.top + 36.dp).value, scrollPanel.top.value, 0.5f)
+        assertTrue(scrollPanel.height < fullPanel.height)
+        val image = compose.onNodeWithText(requireNotNull(activity).get().getString(R.string.mary_attachment_choose_image))
+        image.performScrollTo().assertIsDisplayed()
+        val visible = image.getUnclippedBoundsInRoot()
+        assertTrue(visible.top >= scrollPanel.top && visible.bottom <= scrollPanel.bottom)
+        image.performTouchInput { click() }
+        menu.assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, imageActions) }
+    }
+
+    @Test
     fun transcriptFillsViewportAndRemainsVisibleThroughTransparentFooterMargins() {
         composer(colorBands = true)
         val viewport = bounds("layout-container")
@@ -1637,52 +1920,57 @@ class MaryChatLayoutTest {
     }
 
     @Test
-    fun realSettingsHeaderShowsSaveAfterPresetsAndDisablesActionsWhenStoreNotReady() {
-        host {
-            Box(Modifier
-                .requiredSize(360.dp, 720.dp)
-                .testTag("layout-container")) {
-                MarySettingsScreen(onBack = {})
+    fun realSettingsHeaderDisablesOnlyTheActionsForTheActiveTabWhenStoreNotReady() {
+        realSettings(ready = false)
+        val saveTag = "mary-settings-save"
+        val modelRegistration = "mary-settings-model-add"
+        val providerRegistration = "mary-settings-provider-add"
+        fun assertDisabledActions(registration: String? = null) {
+            fieldLabel(R.string.mary_settings_not_ready).assertIsDisplayed()
+            // Disabled native Miuix buttons retain their footprint without a click action.
+            node(saveTag).assertIsDisplayed().assertHasNoClickAction()
+            if (registration != null) {
+                node(registration).assertIsDisplayed().assertHasNoClickAction()
+                val action = bounds(registration)
+                val save = bounds(saveTag)
+                assertTrue("Save must follow the active registration action", action.right <= save.left)
+                assertEquals(action.center.y.value, save.center.y.value, 0.5f)
             }
         }
-        val notReady = requireNotNull(activity).get().getString(R.string.mary_settings_not_ready)
-        compose.waitUntil(5_000) {
-            compose.onAllNodesWithText(notReady, useUnmergedTree = true).fetchSemanticsNodes()
-                .isNotEmpty()
-        }
-        // Miuix IconButton removes clickable entirely when disabled (rather than Disabled semantics).
-        node("mary-settings-presets").assertIsDisplayed().assertHasNoClickAction()
-        node("mary-settings-save").assertIsDisplayed().assertHasNoClickAction()
-        val presets = bounds("mary-settings-presets")
-        val save = bounds("mary-settings-save")
-        assertTrue(
-            "Save must be to the right of Tune in the real TopAppBar",
-            presets.right <= save.left
-        )
-        assertEquals(presets.center.y.value, save.center.y.value, 0.5f)
+        assertDisabledActions()
+        node(modelRegistration).assertDoesNotExist()
+        node(providerRegistration).assertDoesNotExist()
         screenshot("settings-header.png")
-        // No click: save and presets must not mutate the real settings store.
+        selectSettingsTab(R.string.mary_phase_tab_models, "mary-settings-models")
+        assertDisabledActions(modelRegistration)
+        node(providerRegistration).assertDoesNotExist()
+        selectSettingsTab(R.string.mary_phase_tab_providers, "mary-settings-providers")
+        assertDisabledActions(providerRegistration)
+        node(modelRegistration).assertDoesNotExist()
     }
 
     @Test
     fun nativePreferenceEditorCancelsDraftAndOnlyCommitsOnConfirm() {
-        val draft = modelSettings()
-        val original = draft.value.provider.baseUrl
+        val original = "https://example.invalid/v1"
+        val draft = mutableStateOf(original)
+        settingsComponent {
+            MarySettingsField(draft.value, { draft.value = it }, R.string.mary_provider_endpoint)
+        }
         val replacement = "https://edited.example.invalid/v1"
         fieldLabel(R.string.mary_provider_endpoint).performScrollTo().performClick()
         val editor =
             compose.onNode(hasSetTextAction() and hasText(original), useUnmergedTree = true)
         editor.assertIsDisplayed().performTextReplacement(replacement)
-        compose.runOnIdle { assertEquals(original, draft.value.provider.baseUrl) }
+        compose.runOnIdle { assertEquals(original, draft.value) }
         screenshot("editor.png")
         fieldLabel(R.string.rear_widget_cancel).performClick()
-        compose.runOnIdle { assertEquals(original, draft.value.provider.baseUrl) }
+        compose.runOnIdle { assertEquals(original, draft.value) }
         fieldLabel(R.string.mary_provider_endpoint).performScrollTo().performClick()
         val reopened =
             compose.onNode(hasSetTextAction() and hasText(original), useUnmergedTree = true)
         reopened.assertIsDisplayed().performTextReplacement(replacement)
         fieldLabel(R.string.rear_widget_confirm).performClick()
-        compose.runOnIdle { assertEquals(replacement, draft.value.provider.baseUrl) }
+        compose.runOnIdle { assertEquals(replacement, draft.value) }
         compose.onNodeWithText(replacement, useUnmergedTree = true).assertIsDisplayed()
     }
 
@@ -1714,7 +2002,7 @@ class MaryChatLayoutTest {
                         .background(pageBackground)
                         .testTag("layout-container")
                 ) {
-                    Scaffold { padding ->
+                    Scaffold(popupHost = {}) { padding ->
                         Column(Modifier
                             .padding(padding)
                             .padding(top = 20.dp)) {
@@ -1780,40 +2068,46 @@ class MaryChatLayoutTest {
         }
     }
 
-    private fun modelSettings(): MutableState<ModelDraft> {
-        val draft = mutableStateOf(
-            ModelDraft(
-                provider = ProviderConfig(
-                    model = "custom-model", baseUrl = "https://example.invalid/v1", apiKey = "",
-                )
-            )
-        )
+    private fun realSettings(ready: Boolean = true) {
+        host(setup = { current ->
+            val editor = current.getSharedPreferences("reareye_agent_secrets", 0).edit().clear()
+            if (ready) {
+                val provider = ProviderConfig(model = "offline-model", baseUrl = "https://example.invalid/v1")
+                val snapshot = Json.encodeToString(SettingsSnapshot.serializer(), SettingsSnapshot(AgentConfig(provider)))
+                editor.putString("settings_snapshot_v1", snapshot)
+            }
+            check(editor.commit())
+        }) {
+            Box(Modifier.requiredSize(360.dp, 720.dp).testTag("layout-container")) {
+                MarySettingsScreen(onBack = {})
+            }
+        }
+        compose.waitUntil(5_000) {
+            if (ready) compose.onAllNodesWithTag("mary-settings-mode-tabs").fetchSemanticsNodes().isNotEmpty()
+            else compose.onAllNodesWithText(requireNotNull(activity).get().getString(R.string.mary_settings_not_ready),
+                useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun selectSettingsTab(label: Int, pageTag: String) {
+        val title = requireNotNull(activity).get().getString(label)
+        val tab = compose.onNode(hasText(title) and hasClickAction() and hasAnyAncestor(hasTestTag("mary-settings-tabs")))
+        tab.assertIsDisplayed().performTouchInput { click() }.assertIsSelected()
+        node(pageTag).assertIsDisplayed()
+    }
+
+    /** Isolated contracts of the shared reasoning controls and native preference editor. */
+    private fun settingsComponent(content: @Composable () -> Unit) {
         host {
-            Box(
-                Modifier
-                    .requiredSize(360.dp, 720.dp)
-                    .background(pageBackground)
-                    .testTag("layout-container")
-            ) {
-                Scaffold { padding ->
-                    Column(
-                        Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(padding)
-                            .padding(horizontal = 12.dp, vertical = 12.dp)
-                    ) {
-                        ModelConfigurationCard(
-                            title = R.string.mary_settings_provider,
-                            draft = draft.value,
-                            onChange = { draft.value = it },
-                            unreadable = false,
-                        )
+            Box(Modifier.requiredSize(360.dp, 720.dp).background(pageBackground).testTag("layout-container")) {
+                Scaffold(popupHost = {}) { padding ->
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                        .padding(padding).padding(12.dp)) {
+                        hk.uwu.mixui.components.Card(Modifier.fillMaxWidth()) { content() }
                     }
                 }
             }
         }
-        return draft
     }
 
     private fun fieldLabel(resource: Int) = compose.onNodeWithText(
@@ -1920,13 +2214,17 @@ class MaryChatLayoutTest {
         assertEquals(height.value, bounds("layout-container").height.value, 0.5f)
     }
 
-    private fun setKeyboardInset(bottomPx: Int) {
+    private fun setKeyboardInset(bottomPx: Int, status: Int = 0, navigation: Int = 0, right: Int = 0) {
         compose.runOnUiThread {
             val current = requireNotNull(activity).get()
             current.enableEdgeToEdge()
             val insets = WindowInsetsCompat.Builder()
                 .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, bottomPx))
                 .setVisible(WindowInsetsCompat.Type.ime(), bottomPx > 0)
+                .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, status, 0, 0))
+                .setVisible(WindowInsetsCompat.Type.statusBars(), status > 0)
+                .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, right, navigation))
+                .setVisible(WindowInsetsCompat.Type.navigationBars(), navigation > 0 || right > 0)
                 .build()
             ViewCompat.dispatchApplyWindowInsets(current.window.decorView, insets)
         }
@@ -1934,21 +2232,28 @@ class MaryChatLayoutTest {
     }
 
     private fun host(
-        mode: ColorSchemeMode = ColorSchemeMode.Light,
+        mode: MixColorSchemeMode = MixColorSchemeMode.Light,
+        glassSheets: Boolean = false,
+        backend: MixUiBackend = MixUiBackend.Miuix,
+        setup: (ComponentActivity) -> Unit = {},
         content: @Composable () -> Unit
     ) {
         compose.runOnUiThread {
             val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity = controller
+            setup(controller.get())
             controller.get().setContent {
-                MiuixTheme(ThemeController(mode)) {
-                    val scheme = MiuixTheme.colorScheme
+                MixUiHost(backend = backend, colorMode = mode) {
+                    val scheme = MixTheme.colorScheme
                     SideEffect {
                         primary = scheme.primary
                         surfaceContainer = scheme.surfaceContainer
                         outline = scheme.outline
                     }
-                    content()
+                    hk.uwu.mixui.components.GlassPreferenceScene {
+                        if (glassSheets) hk.uwu.mixui.components.GlassBottomSheetScene { content() }
+                        else content()
+                    }
                 }
             }
         }

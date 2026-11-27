@@ -191,6 +191,28 @@ class ModelCapabilitiesTest {
     }
 
     @Test
+    fun `catalog fills only missing capability and its selected effort reaches the request`() {
+        val known = config.copy(model = "gpt-5.4", protocol = Protocol.RESPONSES)
+        val catalog = manual(known, levels = listOf(ReasoningEffort.LOW, ReasoningEffort.MAX)).copy(
+            source = CapabilitySource.CATALOG_METADATA,
+            catalogSourceName = "Models.dev",
+        )
+        val coarse = parse(""""reasoning":true""", known)
+        val resolved = known.copy(reasoningMetadata = coarse, reasoningCatalogCapability = catalog)
+        assertEquals(CapabilitySource.CATALOG_METADATA, ReasoningPolicy.support(resolved).source)
+        assertEquals("Models.dev", ReasoningPolicy.support(resolved).catalogSourceName)
+        val wire = ReasoningPolicy.apply(resolved, buildJsonObject { put("temperature", 0.5) })
+        assertEquals("max", wire.getValue("reasoning").jsonObject.getValue("effort").jsonPrimitive.content)
+        assertFalse(wire.containsKey("temperature"))
+        assertNull(Json.decodeFromString<ProviderConfig>(Json.encodeToString(resolved)).reasoningCatalogCapability)
+        assertEquals(CapabilitySource.OFFLINE, ReasoningPolicy.support(resolved.copy(apiKey = "different-key")).source)
+
+        val unsupported = parse(""""reasoning_capabilities":{"supported":false}""", known)
+        val denied = resolved.copy(reasoningMetadata = unsupported)
+        assertEquals(ReasoningStatus.UNSUPPORTED, ReasoningPolicy.support(denied).status)
+        assertEquals(CapabilitySource.MANUAL, ReasoningPolicy.support(denied.copy(reasoningOverride = manual(known))).source)
+    }
+    @Test
     fun `endpoint protocol model and credential changes invalidate manual and metadata`() {
         val cap = manual()
         val settings = config.copy(

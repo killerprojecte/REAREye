@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components.config
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,13 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toColorInt
 import com.composables.icons.materialsymbols.MaterialSymbols
@@ -55,46 +55,37 @@ import hk.uwu.reareye.repository.bounds.CustomBoundsCompatConfigCodec
 import hk.uwu.reareye.repository.bounds.CustomBoundsFillMode
 import hk.uwu.reareye.repository.bounds.CustomBoundsMode
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.reareye.ui.components.OverlayDialog
-import hk.uwu.reareye.ui.components.RearBadgeItem
+import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.GlassEditorSheet
+import hk.uwu.mixui.components.BadgeItem
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
-import hk.uwu.reareye.ui.components.card.SuperCard
-import hk.uwu.reareye.ui.components.motion.ArtRevealItem
-import hk.uwu.reareye.ui.components.rememberRearAccentBadgePalette
+import hk.uwu.mixui.components.ListItem
+import hk.uwu.mixui.motion.ArtRevealItem
+import hk.uwu.mixui.components.rememberAccentBadgePalette
 import hk.uwu.reareye.ui.config.ConfigItem
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.ConfigType
 import hk.uwu.reareye.ui.config.PrefsManager
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.ColorPalette
-import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.ColorPalette
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.TopBarIconButton
+import hk.uwu.mixui.components.pageScrollFeedback
+import hk.uwu.mixui.components.InfiniteProgressIndicator
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.EditorTextField
+import hk.uwu.mixui.components.SwitchPreference
+import hk.uwu.mixui.components.SpinnerPreference
+import hk.uwu.mixui.theme.MixTheme
 import java.util.Locale
 
 private data class CustomBoundsOption(
@@ -134,10 +125,7 @@ fun CustomBoundsCompatManagerScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val layoutDirection = LocalLayoutDirection.current
-    val scrollBehavior = MiuixScrollBehavior()
-    val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
+    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val configs = remember { mutableStateListOf<CustomBoundsCompatAppConfig>() }
     var loaded by remember { mutableStateOf(false) }
@@ -272,6 +260,7 @@ fun CustomBoundsCompatManagerScreen(
     }
 
     fun submitDialog() {
+        if (!showDialog) return
         val packageName = editingPackageName ?: return
         val mode = when (draftMode) {
             1 -> CustomBoundsMode.CUSTOM_RATIO
@@ -417,55 +406,229 @@ fun CustomBoundsCompatManagerScreen(
         return
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                color = Color.Transparent,
-                title = stringResource(R.string.custom_bounds_compat_manager),
-                navigationIconPadding = 12.dp,
-                actionIconPadding = 12.dp,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            modifier = Modifier.graphicsLayer {
-                                if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
+    val managerDialogs: @Composable () -> Unit = {
+        GlassEditorSheet(
+            show = showDialog,
+            title = stringResource(R.string.custom_bounds_edit_app),
+            onDismissRequest = { showDialog = false },
+            onConfirm = { submitDialog() },
+            confirmText = stringResource(R.string.rear_widget_confirm),
+            cancelText = stringResource(R.string.rear_widget_cancel),
+            sessionKey = editingPackageName,
+            modifier = Modifier.testTag("bounds-edit-form"),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                EditorTextField(
+                    value = editingPackageName.orEmpty(),
+                    onValueChange = {},
+                    modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.rear_widget_target_package),
+                    enabled = false,
+                    readOnly = true,
+                    singleLine = true,
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.custom_bounds_enable_app),
+                    checked = draftEnabled,
+                    onCheckedChange = { draftEnabled = it },
+                )
+                CustomBoundsDropdownPreference(
+                    title = stringResource(R.string.custom_bounds_mode),
+                    description = stringResource(R.string.custom_bounds_mode_help),
+                    options = modeOptions,
+                    selectedValue = draftMode,
+                    onSelected = { draftMode = it },
+                )
+                if (draftMode == 1) {
+                    EditorTextField(
+                        value = draftAspectRatio,
+                        onValueChange = { draftAspectRatio = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.custom_bounds_aspect_ratio),
+                        singleLine = true,
+                    )
+                }
+                if (draftMode == 2) {
+                    EditorTextField(
+                        value = draftInsetLeft,
+                        onValueChange = { draftInsetLeft = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.custom_bounds_inset_left),
+                        singleLine = true,
+                    )
+                    EditorTextField(
+                        value = draftInsetTop,
+                        onValueChange = { draftInsetTop = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.custom_bounds_inset_top),
+                        singleLine = true,
+                    )
+                    EditorTextField(
+                        value = draftInsetRight,
+                        onValueChange = { draftInsetRight = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.custom_bounds_inset_right),
+                        singleLine = true,
+                    )
+                    EditorTextField(
+                        value = draftInsetBottom,
+                        onValueChange = { draftInsetBottom = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.custom_bounds_inset_bottom),
+                        singleLine = true,
+                    )
+                }
+                if (draftMode == 0) {
+                    CustomBoundsInfoText(
+                        text = stringResource(R.string.custom_bounds_auto_ratio_hint),
+                    )
+                }
+                CustomBoundsDropdownPreference(
+                    title = stringResource(R.string.custom_bounds_gravity),
+                    description = stringResource(R.string.custom_bounds_gravity_help),
+                    options = gravityOptions,
+                    selectedValue = draftGravity,
+                    onSelected = { draftGravity = it },
+                )
+                EditorTextField(
+                    value = draftScale,
+                    onValueChange = { draftScale = it },
+                    modifier = Modifier.fillMaxWidth().testTag("bounds-edit-form-scale"),
+                    label = stringResource(R.string.custom_bounds_scale),
+                    singleLine = true,
+                )
+                EditorTextField(
+                    value = draftDensityDpi,
+                    onValueChange = { draftDensityDpi = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.custom_bounds_density_dpi),
+                    singleLine = true,
+                )
+                CustomBoundsDropdownPreference(
+                    title = stringResource(R.string.custom_bounds_rotation_degrees),
+                    description = stringResource(R.string.custom_bounds_rotation_help),
+                    options = rotationOptions,
+                    selectedValue = draftRotationDegrees,
+                    onSelected = { draftRotationDegrees = it },
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.custom_bounds_fill_enable),
+                    checked = draftFillEnabled,
+                    onCheckedChange = { draftFillEnabled = it },
+                )
+                if (draftFillEnabled) {
+                    CustomBoundsDropdownPreference(
+                        title = stringResource(R.string.custom_bounds_fill_mode),
+                        description = stringResource(R.string.custom_bounds_fill_mode_help),
+                        options = listOf(
+                            CustomBoundsOption(0, R.string.custom_bounds_fill_mode_auto),
+                            CustomBoundsOption(1, R.string.custom_bounds_fill_mode_custom),
+                        ),
+                        selectedValue = draftFillMode,
+                        onSelected = { draftFillMode = it },
+                    )
+                    if (draftFillMode == 0) {
+                        CustomBoundsInfoText(
+                            text = stringResource(R.string.custom_bounds_fill_auto_hint),
+                        )
+                    } else {
+                        CustomBoundsColorEditor(
+                            value = draftFillColor,
+                            onValueChange = {
+                                draftFillColor = it
+                                draftFillColorError = parseColorInt(it) == null
                             },
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
+                            error = draftFillColorError,
                         )
                     }
+                }
+            }
+        }
+
+        GlassFormDialog(
+            show = pendingOverwriteConfig != null,
+            title = stringResource(R.string.custom_bounds_rule_import_overwrite_title),
+            onDismissRequest = { pendingOverwriteConfig = null },
+        ) {
+            DialogFormColumn(modifier = Modifier.testTag("bounds-overwrite-form")) {
+                Text(
+                    text = stringResource(
+                        R.string.custom_bounds_rule_import_overwrite_message,
+                        pendingOverwriteConfig?.packageName.orEmpty(),
+                    ),
+                    style = MixTheme.textStyles.body2,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(
+                        onClick = { pendingOverwriteConfig = null },
+                        modifier = Modifier.weight(1f).testTag("bounds-overwrite-form-cancel"),
+                    ) {
+                        Text(stringResource(R.string.rear_widget_cancel))
+                    }
+                    Button(
+                        onClick = {
+                            pendingOverwriteConfig?.let(::applyImportedConfig)
+                            pendingOverwriteConfig = null
+                        },
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.weight(1f).testTag("bounds-overwrite-form-confirm"),
+                    ) {
+                        Text(stringResource(R.string.custom_bounds_rule_import_overwrite_confirm))
+                    }
+                }
+            }
+        }
+    }
+
+    GlassTopBarScaffold(
+        title = stringResource(R.string.custom_bounds_compat_manager),
+        isContentScrolled = listState.canScrollBackward,
+        contentListState = listState,
+        navigationIcon = {
+            TopBarIconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.scene_route_navigate_back))
+            }
+        },
+        overlayContent = {
+            managerDialogs()
+            CustomBoundsImportNotice(
+                title = stringResource(R.string.custom_bounds_rule_import_rejected_title),
+                message = rejectedImportPackage?.let {
+                    stringResource(R.string.custom_bounds_rule_import_app_missing, it)
                 },
-                actions = {
-                    IconButton(onClick = {
-                        if (loaded) importLauncher.launch(
-                            arrayOf(
-                                "application/octet-stream",
-                                "text/plain",
-                                "*/*"
-                            )
-                        )
-                    }) {
-                        Icon(
-                            imageVector = MaterialSymbols.Rounded.Deployed_code_update,
-                            contentDescription = null
-                        )
-                    }
-                    IconButton(onClick = { if (loaded) showAppSelector = true }) {
-                        Icon(imageVector = Icons.Filled.Add, contentDescription = null)
-                    }
-                },
-                scrollBehavior = scrollBehavior,
+                tag = "bounds-import-rejected",
+                onDismiss = { rejectedImportPackage = null },
             )
+            CustomBoundsImportNotice(
+                title = stringResource(R.string.custom_bounds_rule_import_failed_title),
+                message = importErrorMessage,
+                tag = "bounds-import-failed",
+                onDismiss = { importErrorMessage = null },
+            )
+        },
+        actions = {
+            TopBarIconButton(enabled = loaded, onClick = {
+                importLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*"))
+            }) {
+                Icon(MaterialSymbols.Rounded.Deployed_code_update,
+                    contentDescription = stringResource(R.string.script_import))
+            }
+            TopBarIconButton(enabled = loaded, onClick = { showAppSelector = true }) {
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.custom_bounds_pick_apps))
+            }
         },
     ) { paddingValues ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .rearAcrylicSource(hazeState)
+                .testTag("bounds-manager-list")
+                .pageScrollFeedback()
                 .padding(horizontal = 12.dp),
             contentPadding = PaddingValues(
                 top = paddingValues.calculateTopPadding() + 12.dp,
@@ -480,7 +643,8 @@ fun CustomBoundsCompatManagerScreen(
                         .padding(bottom = 12.dp)
                         .fillMaxWidth(),
                 ) {
-                    SuperCard(
+                    ListItem(
+                        animateContentSize = true,
                         title = stringResource(R.string.custom_bounds_hint_title),
                         summary = stringResource(R.string.custom_bounds_hint),
                         onClick = {},
@@ -555,7 +719,7 @@ fun CustomBoundsCompatManagerScreen(
                         },
                         rightAction = {
                             ModuleStyleDeleteAction(
-                                icon = MiuixIcons.Delete,
+                                icon = UiIcons.Delete,
                                 text = stringResource(R.string.rear_widget_action_delete),
                                 onClick = {
                                     configs.remove(item)
@@ -582,231 +746,50 @@ fun CustomBoundsCompatManagerScreen(
         }
     }
 
-    OverlayDialog(
-        show = showDialog,
-        title = stringResource(R.string.custom_bounds_edit_app),
-        onDismissRequest = { showDialog = false },
-    ) {
-        DialogFormColumn {
-            TextField(
-                value = editingPackageName.orEmpty(),
-                onValueChange = {},
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_widget_target_package),
-                enabled = false,
-                readOnly = true,
-                singleLine = true,
-            )
-            SwitchPreference(
-                title = stringResource(R.string.custom_bounds_enable_app),
-                checked = draftEnabled,
-                onCheckedChange = { draftEnabled = it },
-            )
-            CustomBoundsDropdownPreference(
-                title = stringResource(R.string.custom_bounds_mode),
-                description = stringResource(R.string.custom_bounds_mode_help),
-                options = modeOptions,
-                selectedValue = draftMode,
-                onSelected = { draftMode = it },
-            )
-            if (draftMode == 1) {
-                TextField(
-                    value = draftAspectRatio,
-                    onValueChange = { draftAspectRatio = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.custom_bounds_aspect_ratio),
-                    singleLine = true,
+
+
+
+}
+
+/** Informational only: no editable field, anchored popup, or independent-window dependency. */
+@Composable
+private fun CustomBoundsImportNotice(
+    title: String,
+    message: String?,
+    tag: String,
+    onDismiss: () -> Unit,
+) {
+    // Keep the old text through native exit, but never allow its retained action
+    // to dismiss a newer import result, even when both messages are identical.
+    val token = remember(message) { Any() }
+    val currentToken by androidx.compose.runtime.rememberUpdatedState(token)
+    val currentMessage by androidx.compose.runtime.rememberUpdatedState(message)
+    var handled by remember(token) { mutableStateOf(false) }
+    var lastMessage by remember { mutableStateOf(message.orEmpty()) }
+    androidx.compose.runtime.SideEffect { if (message != null) lastMessage = message }
+    val dismiss = {
+        if (message != null && currentMessage != null && currentToken === token && !handled) {
+            handled = true
+            onDismiss()
+        }
+    }
+    GlassFormDialog(show = message != null, title = title, onDismissRequest = dismiss) {
+        androidx.compose.runtime.key(token) {
+            DialogFormColumn {
+                Text(
+                    text = message ?: lastMessage,
+                    style = MixTheme.textStyles.body2,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.testTag("$tag-message"),
                 )
-            }
-            if (draftMode == 2) {
-                TextField(
-                    value = draftInsetLeft,
-                    onValueChange = { draftInsetLeft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.custom_bounds_inset_left),
-                    singleLine = true,
-                )
-                TextField(
-                    value = draftInsetTop,
-                    onValueChange = { draftInsetTop = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.custom_bounds_inset_top),
-                    singleLine = true,
-                )
-                TextField(
-                    value = draftInsetRight,
-                    onValueChange = { draftInsetRight = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.custom_bounds_inset_right),
-                    singleLine = true,
-                )
-                TextField(
-                    value = draftInsetBottom,
-                    onValueChange = { draftInsetBottom = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.custom_bounds_inset_bottom),
-                    singleLine = true,
-                )
-            }
-            if (draftMode == 0) {
-                CustomBoundsInfoText(
-                    text = stringResource(R.string.custom_bounds_auto_ratio_hint),
-                )
-            }
-            CustomBoundsDropdownPreference(
-                title = stringResource(R.string.custom_bounds_gravity),
-                description = stringResource(R.string.custom_bounds_gravity_help),
-                options = gravityOptions,
-                selectedValue = draftGravity,
-                onSelected = { draftGravity = it },
-            )
-            TextField(
-                value = draftScale,
-                onValueChange = { draftScale = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.custom_bounds_scale),
-                singleLine = true,
-            )
-            TextField(
-                value = draftDensityDpi,
-                onValueChange = { draftDensityDpi = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.custom_bounds_density_dpi),
-                singleLine = true,
-            )
-            CustomBoundsDropdownPreference(
-                title = stringResource(R.string.custom_bounds_rotation_degrees),
-                description = stringResource(R.string.custom_bounds_rotation_help),
-                options = rotationOptions,
-                selectedValue = draftRotationDegrees,
-                onSelected = { draftRotationDegrees = it },
-            )
-            SwitchPreference(
-                title = stringResource(R.string.custom_bounds_fill_enable),
-                checked = draftFillEnabled,
-                onCheckedChange = { draftFillEnabled = it },
-            )
-            if (draftFillEnabled) {
-                CustomBoundsDropdownPreference(
-                    title = stringResource(R.string.custom_bounds_fill_mode),
-                    description = stringResource(R.string.custom_bounds_fill_mode_help),
-                    options = listOf(
-                        CustomBoundsOption(0, R.string.custom_bounds_fill_mode_auto),
-                        CustomBoundsOption(1, R.string.custom_bounds_fill_mode_custom),
-                    ),
-                    selectedValue = draftFillMode,
-                    onSelected = { draftFillMode = it },
-                )
-                if (draftFillMode == 0) {
-                    CustomBoundsInfoText(
-                        text = stringResource(R.string.custom_bounds_fill_auto_hint),
-                    )
-                } else {
-                    CustomBoundsColorEditor(
-                        value = draftFillColor,
-                        onValueChange = {
-                            draftFillColor = it
-                            draftFillColorError = parseColorInt(it) == null
-                        },
-                        error = draftFillColorError,
-                    )
-                }
-            }
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
                 Button(
-                    onClick = { submitDialog() },
+                    onClick = dismiss,
+                    enabled = message != null && !handled,
                     colors = ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("$tag-confirm"),
                 ) {
                     Text(stringResource(R.string.rear_widget_confirm))
                 }
-                Button(
-                    onClick = { showDialog = false },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.rear_widget_cancel))
-                }
-            }
-        }
-    }
-
-    OverlayDialog(
-        show = rejectedImportPackage != null,
-        title = stringResource(R.string.custom_bounds_rule_import_rejected_title),
-        onDismissRequest = { rejectedImportPackage = null },
-    ) {
-        DialogFormColumn {
-            Text(
-                text = stringResource(
-                    R.string.custom_bounds_rule_import_app_missing,
-                    rejectedImportPackage.orEmpty(),
-                ),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-            Button(
-                onClick = { rejectedImportPackage = null },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_confirm))
-            }
-        }
-    }
-
-    OverlayDialog(
-        show = pendingOverwriteConfig != null,
-        title = stringResource(R.string.custom_bounds_rule_import_overwrite_title),
-        onDismissRequest = { pendingOverwriteConfig = null },
-    ) {
-        DialogFormColumn {
-            Text(
-                text = stringResource(
-                    R.string.custom_bounds_rule_import_overwrite_message,
-                    pendingOverwriteConfig?.packageName.orEmpty(),
-                ),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-            Button(
-                onClick = {
-                    pendingOverwriteConfig?.let(::applyImportedConfig)
-                    pendingOverwriteConfig = null
-                },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.custom_bounds_rule_import_overwrite_confirm))
-            }
-            Button(
-                onClick = { pendingOverwriteConfig = null },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
-            }
-        }
-    }
-
-    OverlayDialog(
-        show = importErrorMessage != null,
-        title = stringResource(R.string.custom_bounds_rule_import_failed_title),
-        onDismissRequest = { importErrorMessage = null },
-    ) {
-        DialogFormColumn {
-            Text(
-                text = importErrorMessage.orEmpty(),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-            Button(
-                onClick = { importErrorMessage = null },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_confirm))
             }
         }
     }
@@ -829,13 +812,10 @@ private fun CustomBoundsDropdownPreference(
     onSelected: (Int) -> Unit,
 ) {
     val optionTitles = options.map { stringResource(it.titleRes) }
-    val optionEntries = remember(optionTitles) {
-        optionTitles.map { DropdownItem(title = it) }
-    }
     val selectedIndex = options.indexOfFirst { it.value == selectedValue }.coerceAtLeast(0)
-    WindowSpinnerPreference(
+    SpinnerPreference(
         modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
-        items = optionEntries,
+        options = optionTitles,
         selectedIndex = selectedIndex,
         title = title,
         summary = description,
@@ -850,20 +830,20 @@ private fun CustomBoundsInfoText(text: String) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
-            .background(MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f))
+            .background(MixTheme.colorScheme.secondaryContainer.copy(alpha = 0.42f))
             .border(
                 width = 0.5.dp,
-                color = MiuixTheme.colorScheme.outline.copy(alpha = 0.18f),
+                color = MixTheme.colorScheme.outline.copy(alpha = 0.18f),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
             )
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        style = MiuixTheme.textStyles.body2,
-        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        style = MixTheme.textStyles.body2,
+        color = MixTheme.colorScheme.onSurfaceVariantSummary,
     )
 }
 
 @Composable
-private fun CustomBoundsColorEditor(
+internal fun CustomBoundsColorEditor(
     value: String,
     onValueChange: (String) -> Unit,
     error: Boolean,
@@ -881,8 +861,8 @@ private fun CustomBoundsColorEditor(
     ) {
         Text(
             text = stringResource(R.string.custom_bounds_fill_palette),
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            style = MixTheme.textStyles.body2,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
         )
         ColorPalette(
             color = composeColor,
@@ -891,8 +871,8 @@ private fun CustomBoundsColorEditor(
         )
         Text(
             text = stringResource(R.string.custom_bounds_fill_color_help),
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            style = MixTheme.textStyles.body2,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -905,24 +885,26 @@ private fun CustomBoundsColorEditor(
                     .clip(RoundedCornerShape(999.dp))
                     .border(
                         width = 1.dp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                         shape = RoundedCornerShape(999.dp),
                     )
                     .background(parsedColor?.let(::Color) ?: Color.Transparent),
             )
-            TextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.weight(1f),
-                label = stringResource(R.string.custom_bounds_fill_color),
-                singleLine = true,
-            )
+            Box(Modifier.weight(1f)) {
+                EditorTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.custom_bounds_fill_color),
+                    singleLine = true,
+                )
+            }
         }
         if (error) {
             Text(
                 text = stringResource(R.string.custom_bounds_fill_color_invalid),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.error,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.error,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -939,17 +921,17 @@ private fun formatColorInt(color: Int): String =
     String.format(Locale.US, "#%08X", color)
 
 @Composable
-private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<RearBadgeItem> {
-    val statePalette = rememberRearAccentBadgePalette(
+private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<BadgeItem> {
+    val statePalette = rememberAccentBadgePalette(
         if (item.enabled) Color(0xFF10B981) else Color(0xFF64748B)
     )
-    val ratioPalette = rememberRearAccentBadgePalette(Color(0xFF6366F1))
-    val positionPalette = rememberRearAccentBadgePalette(Color(0xFF8B5CF6))
-    val densityPalette = rememberRearAccentBadgePalette(Color(0xFF0EA5E9))
-    val rotationPalette = rememberRearAccentBadgePalette(Color(0xFFF59E0B))
-    val fillPalette = rememberRearAccentBadgePalette(Color(0xFFEF4444))
+    val ratioPalette = rememberAccentBadgePalette(Color(0xFF6366F1))
+    val positionPalette = rememberAccentBadgePalette(Color(0xFF8B5CF6))
+    val densityPalette = rememberAccentBadgePalette(Color(0xFF0EA5E9))
+    val rotationPalette = rememberAccentBadgePalette(Color(0xFFF59E0B))
+    val fillPalette = rememberAccentBadgePalette(Color(0xFFEF4444))
     return listOf(
-        RearBadgeItem(
+        BadgeItem(
             text = if (item.enabled) {
                 stringResource(R.string.custom_bounds_enabled)
             } else {
@@ -958,7 +940,7 @@ private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<RearBadg
             emphasized = item.enabled,
             palette = statePalette,
         ),
-        RearBadgeItem(
+        BadgeItem(
             text = stringResource(
                 R.string.custom_bounds_badge_mode,
                 modeTitle(item.mode),
@@ -966,7 +948,7 @@ private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<RearBadg
             palette = ratioPalette,
         ),
         when (item.mode) {
-            CustomBoundsMode.CUSTOM_RATIO -> RearBadgeItem(
+            CustomBoundsMode.CUSTOM_RATIO -> BadgeItem(
                 text = stringResource(
                     R.string.custom_bounds_badge_ratio,
                     formatFloat(item.aspectRatio),
@@ -974,7 +956,7 @@ private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<RearBadg
                 palette = ratioPalette,
             )
 
-            CustomBoundsMode.EXACT_INSETS -> RearBadgeItem(
+            CustomBoundsMode.EXACT_INSETS -> BadgeItem(
                 text = stringResource(
                     R.string.custom_bounds_badge_insets,
                     "${item.insetLeft},${item.insetTop},${item.insetRight},${item.insetBottom}",
@@ -982,26 +964,26 @@ private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<RearBadg
                 palette = ratioPalette,
             )
 
-            else -> RearBadgeItem(
+            else -> BadgeItem(
                 text = stringResource(R.string.custom_bounds_auto_ratio_hint),
                 palette = ratioPalette,
             )
         },
-        RearBadgeItem(
+        BadgeItem(
             text = stringResource(
                 R.string.custom_bounds_badge_scale,
                 formatFloat(item.scale),
             ),
             palette = ratioPalette,
         ),
-        RearBadgeItem(
+        BadgeItem(
             text = stringResource(
                 R.string.custom_bounds_badge_position,
                 gravityTitle(item.gravity),
             ),
             palette = positionPalette,
         ),
-        RearBadgeItem(
+        BadgeItem(
             text = stringResource(
                 R.string.custom_bounds_badge_density,
                 item.densityDpi.takeIf { it > 0 }?.toString()
@@ -1009,14 +991,14 @@ private fun customBoundsBadges(item: CustomBoundsCompatAppConfig): List<RearBadg
             ),
             palette = densityPalette,
         ),
-        RearBadgeItem(
+        BadgeItem(
             text = stringResource(
                 R.string.custom_bounds_badge_rotation,
                 formatRotation(item.rotationDegrees),
             ),
             palette = rotationPalette,
         ),
-        RearBadgeItem(
+        BadgeItem(
             text = if (!item.fillEnabled) {
                 stringResource(R.string.custom_bounds_fill_disabled)
             } else if (item.fillMode == CustomBoundsFillMode.AUTO) {

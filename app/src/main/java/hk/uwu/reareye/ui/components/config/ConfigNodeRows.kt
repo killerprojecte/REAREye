@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,9 +25,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import hk.uwu.reareye.R
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.reareye.ui.theme.AppThemeMode
+import hk.uwu.reareye.ui.theme.AppThemePreferences
+import hk.uwu.reareye.ui.theme.AppMochiThemeStyle
+import hk.uwu.reareye.ui.theme.ThemeStyleSheet
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.NonCancellable
 import hk.uwu.reareye.ui.components.rememberPackageIconBitmap
 import hk.uwu.reareye.ui.config.ConfigCategory
 import hk.uwu.reareye.ui.config.ConfigCategoryIcon
@@ -44,20 +55,18 @@ import hk.uwu.reareye.ui.config.validateRearStoreCustomDomain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.Slider
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.Slider
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.TextField
+import hk.uwu.mixui.components.ArrowPreference
+import hk.uwu.mixui.components.PreferenceRow
+import hk.uwu.mixui.components.GlassSelectPreference
+import hk.uwu.mixui.components.GlassChoicePreference
+import hk.uwu.mixui.components.PreferenceSupportingText
+import hk.uwu.mixui.components.ChoiceOption
+import hk.uwu.mixui.components.SwitchPreference
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 fun ConfigNodeRow(
@@ -88,7 +97,7 @@ fun ConfigNodeRow(
 
 @Composable
 fun ConfigCategoryNodeRow(category: ConfigCategory, onClick: () -> Unit) {
-    ArrowPreference(
+    PreferenceRow(
         title = stringResource(category.titleRes),
         summary = category.descriptionRes?.let { stringResource(it) },
         startAction = category.icon?.let { icon ->
@@ -108,7 +117,7 @@ private fun ConfigCategoryStartIcon(icon: ConfigCategoryIcon) {
                 Icon(
                     imageVector = icon.imageVector,
                     contentDescription = null,
-                    tint = MiuixTheme.colorScheme.onBackground,
+                    tint = MixTheme.colorScheme.onBackground,
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -215,7 +224,7 @@ fun AppListConfigInput(
         "$description\n$selectedSummary"
     }
 
-    ArrowPreference(
+    PreferenceRow(
         title = stringResource(item.titleRes),
         summary = summary,
         onClick = onClick
@@ -241,9 +250,6 @@ fun MaskMultiSelectConfigInput(
     val optionTitles = remember(item.key, options, configuration) {
         options.map { context.getString(it.titleRes) }
     }
-    val optionEntries = remember(item.key, optionTitles) {
-        optionTitles.map { DropdownItem(title = it) }
-    }
 
     val selectedLabels = options
         .mapIndexedNotNull { index, option ->
@@ -262,48 +268,26 @@ fun MaskMultiSelectConfigInput(
         "$description\n$selectedSummary"
     }
 
-    Box {
-        ArrowPreference(
-            title = stringResource(item.titleRes),
-            summary = summary,
-            holdDownState = showModePopup.value,
-            onClick = { showModePopup.value = true }
-        )
-
-        OverlayListPopup(
-            show = showModePopup.value,
-            popupModifier = Modifier,
-            popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-            alignment = PopupPositionProvider.Align.End,
-            enableWindowDim = true,
-            onDismissRequest = { showModePopup.value = false },
-            maxHeight = null,
-            minWidth = 220.dp,
-            renderInRootScaffold = true,
-        ) {
-            ListPopupColumn {
-                options.forEachIndexed { index, option ->
-                    DropdownImpl(
-                        item = optionEntries[index],
-                        optionSize = options.size,
-                        isSelected = (selectedMask and option.maskValue) != 0,
-                        index = index,
-                        dropdownColors = DropdownDefaults.dropdownColors(),
-                        onSelectedIndexChange = {
-                            val nextMask = selectedMask xor option.maskValue
-                            showModePopup.value = false
-                            popupScope.launch {
-                                withFrameNanos { }
-                                selectedMask = nextMask
-                                prefsManager.putInt(item.key, selectedMask)
-                                onPreferenceChanged(item)
-                            }
-                        },
-                    )
-                }
+    GlassChoicePreference(
+        title = stringResource(item.titleRes),
+        summary = summary,
+        supportingText = PreferenceSupportingText(description, selectedSummary),
+        expanded = showModePopup.value,
+        onExpandedChange = { showModePopup.value = it },
+        multiple = true,
+        options = options.mapIndexed { index, option ->
+            ChoiceOption(title = optionTitles[index], selected = (selectedMask and option.maskValue) != 0)
+        },
+        onOptionClick = { index ->
+            val nextMask = selectedMask xor options[index].maskValue
+            popupScope.launch {
+                withFrameNanos { }
+                selectedMask = nextMask
+                prefsManager.putInt(item.key, selectedMask)
+                onPreferenceChanged(item)
             }
-        }
-    }
+        },
+    )
 }
 
 @SuppressLint("LocalContextGetResourceValueCall")
@@ -315,22 +299,26 @@ fun EnumSingleSelectConfigInput(
     prefsManager: PrefsManager,
     onPreferenceChanged: (ConfigItem) -> Unit = {},
 ) {
+    if (item.key == ConfigKeys.MODULE_THEME_MODE) {
+        ThemeStyleConfigInput(item, prefsManager, onPreferenceChanged)
+        return
+    }
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val popupScope = rememberCoroutineScope()
-    val showEnumPopup = remember(item.key) { mutableStateOf(false) }
     var selectedValue by remember(item.key) {
-        mutableIntStateOf(prefsManager.getInt(item.key, defaultValue))
+        mutableIntStateOf(
+            prefsManager.getInt(item.key, defaultValue)
+        )
     }
+    val selectedOptionValue = selectedValue
+    val enabled = true
     val optionTitles = remember(item.key, options, configuration) {
         options.map { context.getString(it.titleRes) }
     }
-    val optionEntries = remember(item.key, optionTitles) {
-        optionTitles.map { DropdownItem(title = it) }
-    }
 
     val selectedLabel = options
-        .indexOfFirst { it.value == selectedValue }
+        .indexOfFirst { it.value == selectedOptionValue }
         .takeIf { it >= 0 }
         ?.let { optionTitles[it] }
         ?: optionTitles.firstOrNull().orEmpty()
@@ -341,47 +329,94 @@ fun EnumSingleSelectConfigInput(
         "$description\n$selectedLabel"
     }
 
-    Box {
-        ArrowPreference(
-            title = stringResource(item.titleRes),
-            summary = summary,
-            holdDownState = showEnumPopup.value,
-            onClick = { showEnumPopup.value = true }
-        )
-
-        OverlayListPopup(
-            show = showEnumPopup.value,
-            popupModifier = Modifier,
-            popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-            alignment = PopupPositionProvider.Align.End,
-            enableWindowDim = true,
-            onDismissRequest = { showEnumPopup.value = false },
-            maxHeight = null,
-            minWidth = 220.dp,
-            renderInRootScaffold = true,
-        ) {
-            ListPopupColumn {
-                options.forEachIndexed { index, option ->
-                    DropdownImpl(
-                        item = optionEntries[index],
-                        optionSize = options.size,
-                        isSelected = selectedValue == option.value,
-                        index = index,
-                        dropdownColors = DropdownDefaults.dropdownColors(),
-                        onSelectedIndexChange = {
-                            showEnumPopup.value = false
-                            popupScope.launch {
-                                withFrameNanos { }
-                                selectedValue = option.value
-                                prefsManager.putInt(item.key, selectedValue)
-                                onPreferenceChanged(item)
-                            }
-                        },
-                    )
-                }
+    GlassSelectPreference(
+        title = stringResource(item.titleRes),
+        summary = summary,
+        supportingText = PreferenceSupportingText(description, selectedLabel),
+        items = optionTitles,
+        selectedIndex = options.indexOfFirst { it.value == selectedOptionValue },
+        enabled = enabled,
+        onSelectedIndexChange = { index ->
+            val option = options[index]
+            popupScope.launch {
+                withFrameNanos { }
+                prefsManager.putInt(item.key, option.value)
+                selectedValue = option.value
+                onPreferenceChanged(item)
             }
+        },
+    )
+}
+
+/** The production Settings entry. Only a successful atomic save notifies the app host. */
+@Composable
+internal fun ThemeStyleConfigInput(
+    item: ConfigItem,
+    prefsManager: PrefsManager,
+    onPreferenceChanged: (ConfigItem) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val currentOnPreferenceChanged by rememberUpdatedState(onPreferenceChanged)
+    var mode by remember(prefsManager) { mutableStateOf(AppThemePreferences.readMode(prefsManager.prefs)) }
+    var style by remember(prefsManager) { mutableStateOf(AppMochiThemeStyle.fromValue(
+        prefsManager.getInt(ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value))) }
+    var navigationStyle by remember(prefsManager) { mutableStateOf(AppThemePreferences.readNavigationStyle(prefsManager.prefs)) }
+    var show by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    val themeRevision by AppThemePreferences.changes.collectAsState()
+    LaunchedEffect(themeRevision, show) {
+        if (!show) {
+            navigationStyle = AppThemePreferences.readNavigationStyle(prefsManager.prefs)
+            mode = AppThemePreferences.readMode(prefsManager.prefs)
+            style = AppMochiThemeStyle.fromValue(prefsManager.getInt(
+                ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value))
         }
     }
+    ArrowPreference(
+        modifier = Modifier.testTag("theme-style-entry"),
+        title = stringResource(R.string.theme_editor_title),
+        summary = stringResource(mode.titleRes) + if (mode.backend == MixUiBackend.Mochi) {
+            " · " + stringResource(style.titleRes)
+        } else "",
+        onClick = { if (!saving) {
+            navigationStyle = AppThemePreferences.readNavigationStyle(prefsManager.prefs)
+            mode = AppThemePreferences.readMode(prefsManager.prefs)
+            style = AppMochiThemeStyle.fromValue(prefsManager.getInt(
+                ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value))
+            failed = false
+            show = true
+        } },
+    )
+    ThemeStyleSheet(
+        show = show, appliedMode = mode, appliedStyle = style, appliedNavigationStyle = navigationStyle,
+        saving = saving, saveFailed = failed,
+        onDismiss = { if (!saving) { show = false; failed = false } },
+        onSave = { draft ->
+            if (!saving) {
+                saving = true
+                failed = false
+                scope.launch {
+                    // Once commit starts, navigation must not cancel delivery of its result.
+                    withContext(NonCancellable) {
+                        val saved = withContext(Dispatchers.IO) {
+                            AppThemePreferences.saveTheme(prefsManager.prefs, draft.mode, draft.mochiStyle, draft.navigationStyle)
+                        }
+                        if (saved) {
+                            mode = draft.mode
+                            style = draft.mochiStyle
+                            navigationStyle = draft.navigationStyle
+                            show = false
+                            currentOnPreferenceChanged(item)
+                        } else {
+                            failed = true
+                        }
+                        saving = false
+                    }
+                }
+            }
+        },
+    )
 }
 
 @SuppressLint("LocalContextGetResourceValueCall")
@@ -395,7 +430,6 @@ fun RearStoreApiConfigInput(
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val popupScope = rememberCoroutineScope()
-    val showApiPopup = remember(item.key) { mutableStateOf(false) }
     var selectedProviderValue by remember(item.key) {
         mutableIntStateOf(prefsManager.getInt(item.key, apiConfig.defaultProviderValue))
     }
@@ -406,9 +440,6 @@ fun RearStoreApiConfigInput(
     val validation = remember(customDomain) { validateRearStoreCustomDomain(customDomain) }
     val optionTitles = remember(configuration) {
         StoreApiProvider.selectableEntries.map { context.getString(it.titleRes) }
-    }
-    val optionEntries = remember(optionTitles) {
-        optionTitles.map { DropdownItem(title = it) }
     }
     val selectedLabel = optionTitles[StoreApiProvider.selectableEntries.indexOf(provider)]
     val description = item.descriptionRes?.let { stringResource(it) }
@@ -429,53 +460,27 @@ fun RearStoreApiConfigInput(
         else -> validation.baseUrl
     }
     val customHelperColor = when {
-        customDomain.isBlank() -> MiuixTheme.colorScheme.onSurfaceVariantSummary
-        validation == null -> MiuixTheme.colorScheme.error
-        else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+        customDomain.isBlank() -> MixTheme.colorScheme.onSurfaceVariantSummary
+        validation == null -> MixTheme.colorScheme.error
+        else -> MixTheme.colorScheme.onSurfaceVariantSummary
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Box {
-            ArrowPreference(
-                title = stringResource(item.titleRes),
-                summary = summary,
-                holdDownState = showApiPopup.value,
-                onClick = { showApiPopup.value = true },
-            )
-
-            OverlayListPopup(
-                show = showApiPopup.value,
-                popupModifier = Modifier,
-                popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                alignment = PopupPositionProvider.Align.End,
-                enableWindowDim = true,
-                onDismissRequest = { showApiPopup.value = false },
-                maxHeight = null,
-                minWidth = 220.dp,
-                renderInRootScaffold = true,
-            ) {
-                ListPopupColumn {
-                    StoreApiProvider.selectableEntries.forEachIndexed { index, option ->
-                        DropdownImpl(
-                            item = optionEntries[index],
-                            optionSize = StoreApiProvider.selectableEntries.size,
-                            isSelected = provider == option,
-                            index = index,
-                            dropdownColors = DropdownDefaults.dropdownColors(),
-                            onSelectedIndexChange = {
-                                showApiPopup.value = false
-                                popupScope.launch {
-                                    withFrameNanos { }
-                                    selectedProviderValue = option.value
-                                    prefsManager.putInt(item.key, selectedProviderValue)
-                                    onPreferenceChanged(item)
-                                }
-                            },
-                        )
-                    }
+        GlassSelectPreference(
+            title = stringResource(item.titleRes),
+            summary = summary,
+            items = optionTitles,
+            selectedIndex = StoreApiProvider.selectableEntries.indexOf(provider),
+            onSelectedIndexChange = { index ->
+                val option = StoreApiProvider.selectableEntries[index]
+                popupScope.launch {
+                    withFrameNanos { }
+                    selectedProviderValue = option.value
+                    prefsManager.putInt(item.key, selectedProviderValue)
+                    onPreferenceChanged(item)
                 }
-            }
-        }
+            },
+        )
 
         if (provider == StoreApiProvider.CUSTOM) {
             Column(
@@ -545,8 +550,8 @@ fun FloatSliderConfigInput(
         )
         Text(
             text = summary,
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            style = MixTheme.textStyles.body2,
+            color = MixTheme.colorScheme.onSurfaceVariantSummary,
             modifier = Modifier.padding(top = 2.dp)
         )
         Slider(
@@ -566,14 +571,14 @@ fun FloatSliderConfigInput(
         Row(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = sliderConfig.formatValue(sliderConfig.minValue),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
             Spacer(modifier = Modifier.weight(1f))
             Text(
                 text = sliderConfig.formatValue(sliderConfig.maxValue),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                style = MixTheme.textStyles.body2,
+                color = MixTheme.colorScheme.onSurfaceVariantSummary,
             )
         }
     }
@@ -581,7 +586,7 @@ fun FloatSliderConfigInput(
 
 @Composable
 fun ManagerConfigInput(item: ConfigItem, onClick: () -> Unit) {
-    ArrowPreference(
+    PreferenceRow(
         title = stringResource(item.titleRes),
         summary = item.descriptionRes?.let { stringResource(it) },
         onClick = onClick,

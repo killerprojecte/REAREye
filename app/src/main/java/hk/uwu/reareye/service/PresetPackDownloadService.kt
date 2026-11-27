@@ -30,6 +30,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
+enum class PresetPackDownloadPhase { IDLE, CONNECTING, DOWNLOADING, PROCESSING, PAUSED, FAILED, COMPLETED }
+
 data class PresetPackDownloadState(
     val running: Boolean = false,
     val release: PresetPackRelease? = null,
@@ -37,6 +39,7 @@ data class PresetPackDownloadState(
     val total: Long = -1,
     val manifest: PresetPackManifest? = null,
     val message: String? = null,
+    val phase: PresetPackDownloadPhase = PresetPackDownloadPhase.IDLE,
 )
 
 /** Download lifetime belongs to this foreground service, not the Compose dialog. */
@@ -56,7 +59,7 @@ class PresetPackDownloadService : Service() {
         // Called on the UI thread. Mark pending immediately to prevent duplicate taps.
         fun start(context: Context, release: PresetPackRelease) {
             if (state.value.running) return
-            mutableState.value = PresetPackDownloadState(running = true, release = release)
+            mutableState.value = PresetPackDownloadState(running = true, release = release, phase = PresetPackDownloadPhase.CONNECTING)
             try {
                 context.startForegroundService(
                     Intent(
@@ -74,6 +77,7 @@ class PresetPackDownloadService : Service() {
                 mutableState.update {
                     it.copy(
                         running = false,
+                        phase = PresetPackDownloadPhase.FAILED,
                         message = "无法启动后台下载：${error.message}"
                     )
                 }
@@ -125,7 +129,7 @@ class PresetPackDownloadService : Service() {
             assetSize = intent.getLongExtra("size", -1),
             releaseUrl = intent.getStringExtra("releaseUrl").orEmpty(),
         )
-        mutableState.value = PresetPackDownloadState(running = true, release = release)
+        mutableState.value = PresetPackDownloadState(running = true, release = release, phase = PresetPackDownloadPhase.CONNECTING)
         try {
             startForeground(
                 NOTIFICATION_ID,
@@ -136,6 +140,7 @@ class PresetPackDownloadService : Service() {
             mutableState.update {
                 it.copy(
                     running = false,
+                    phase = PresetPackDownloadPhase.FAILED,
                     message = "无法启动后台下载：${error.message}"
                 )
             }
@@ -154,7 +159,11 @@ class PresetPackDownloadService : Service() {
                             applicationContext.getPrefsManager()
                         )
                             .downloadLatest(release) { done, total ->
-                                mutableState.update { it.copy(downloaded = done, total = total) }
+                                mutableState.update {
+                                    it.copy(downloaded = done, total = total,
+                                        phase = if (total > 0 && done >= total) PresetPackDownloadPhase.PROCESSING
+                                            else PresetPackDownloadPhase.DOWNLOADING)
+                                }
                                 // Downloader serializes callbacks; avoid flooding the notification manager.
                                 val now = SystemClock.elapsedRealtime()
                                 if (now - lastNotification >= 1000 || done == total) {
@@ -168,17 +177,18 @@ class PresetPackDownloadService : Service() {
                 mutableState.update {
                     it.copy(
                         manifest = manifest,
+                        phase = PresetPackDownloadPhase.COMPLETED,
                         message = "已下载 ${manifest.packVersion}，点击应用"
                     )
                 }
             } catch (error: TimeoutCancellationException) {
-                mutableState.update { it.copy(message = "下载超时，已保留进度，点击下载可继续") }
+                mutableState.update { it.copy(phase = PresetPackDownloadPhase.FAILED, message = "下载超时，已保留进度，点击下载可继续") }
             } catch (error: CancellationException) {
-                mutableState.update { it.copy(message = pauseMessage) }
+                mutableState.update { it.copy(phase = PresetPackDownloadPhase.PAUSED, message = pauseMessage) }
                 throw error
             } catch (error: Exception) {
                 mutableState.update {
-                    it.copy(message = "下载未完成：${error.message}。重试时将续传可用分段")
+                    it.copy(phase = PresetPackDownloadPhase.FAILED, message = "下载未完成：${error.message}。重试时将续传可用分段")
                 }
             } finally {
                 if (wakeLock.isHeld) wakeLock.release()

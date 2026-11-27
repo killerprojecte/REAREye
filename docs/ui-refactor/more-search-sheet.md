@@ -1,0 +1,9 @@
+# More settings search sheet
+
+The production More settings search sheet uses mixui BottomSheet and full-length ListItem rows rather than calling MIUIX OverlayBottomSheet/ArrowPreference directly. Its former StableSearchInputField implementation is removed. The header now uses the same backend-native SearchBar as the Store and application selector; filtering still follows every query change.
+
+Search results retain their original icon, full setting title, category summary and directional arrow. The previous 16dp horizontal content margin is passed to the sheet once, rather than adding a second padding inside its default margin.
+
+Navigation is deferred until the native sheet's exit animation completes. The new neutral onDismissFinished is separate from onDismissRequest. MIUIX uses its existing completion callback. The exact Maven Mochi 0.2.0 onDismiss runs after its top offset animation completes; programmatic hides must not invoke the request callback, which would clear the retained query and pending navigation. Native user dismissal still requests closing and then completes. Reopening during exit must not navigate a retired result.
+
+Local tests use the real production sheet and REAREyeConfig index with the ConfigScreen callback state machine. Passed coverage: both backends, ordinary/glass scene, light/dark, live filtering, delayed result navigation, close/reset/reopen, interrupted exit, plus the existing theme sheet regression. All three local native-graphics methods passed; the existing theme sheet regression also passed in the preceding compile/test run. An initial combined-text assertion was corrected to test EditableText exactly because the native MIUIX field also exposes an empty Text property. Device IME behavior is not claimed from a simulated keyboard controller.

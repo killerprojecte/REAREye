@@ -1,5 +1,6 @@
 package hk.uwu.reareye.ui.components
 
+import hk.uwu.mixui.components.GlassOverlayDialog
 import android.content.ComponentName
 import android.content.Context
 import android.os.Process
@@ -27,11 +28,11 @@ import hk.uwu.reareye.utils.SubscreenNotificationAccessState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.layout.DialogDefaults
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.OverlayDialogDefaults
+import hk.uwu.mixui.theme.MixTheme
 
 @Composable
 internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
@@ -55,10 +56,59 @@ internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
         show = state == SubscreenNotificationAccessState.MISSING
     }
 
-    OverlayDialog(
+    SubscreenNotificationAccessDialog(
         show = enabled && show,
+        granting = granting,
+        error = error,
+        onGrant = {
+            if (!granting) {
+                granting = true
+                error = null
+                scope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) {
+                            access.grant(userId, listenerAvailable(applicationContext))
+                        }
+                        if (result.granted) {
+                            show = false
+                            Toast.makeText(
+                                applicationContext,
+                                R.string.subscreen_notification_access_success,
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        } else {
+                            error = applicationContext.getString(
+                                R.string.subscreen_notification_access_failed,
+                            ) + result.detail.takeIf { it.isNotBlank() }
+                                ?.let { "\n$it" }.orEmpty()
+                        }
+                    } finally {
+                        granting = false
+                    }
+                }
+            }
+        },
+        // Grant starts synchronously. Guard again if Back/Later arrives before recomposition.
+        onDismiss = { if (!granting) show = false },
+    )
+}
+
+/**
+ * Presentation only: tests and previews supply inert callbacks, never permission services.
+ * The owning prompt retains all checking/granting state and side effects.
+ */
+@Composable
+internal fun SubscreenNotificationAccessDialog(
+    show: Boolean,
+    granting: Boolean,
+    error: String?,
+    onGrant: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    GlassOverlayDialog(
+        show = show,
         title = stringResource(R.string.subscreen_notification_access_title),
-        onDismissRequest = if (granting) null else ({ show = false }),
+        onDismissRequest = if (granting) null else onDismiss,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -75,9 +125,9 @@ internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
                         Text(
                             text = sentence,
                             modifier = Modifier.fillMaxWidth(),
-                            fontSize = MiuixTheme.textStyles.body1.fontSize,
+                            fontSize = MixTheme.textStyles.body1.fontSize,
                             textAlign = TextAlign.Start,
-                            color = DialogDefaults.summaryColor(),
+                            color = OverlayDialogDefaults.summaryColor(),
                         )
                     }
             }
@@ -86,38 +136,11 @@ internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
                     text = it,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Start,
-                    color = MiuixTheme.colorScheme.error,
+                    color = MixTheme.colorScheme.error,
                 )
             }
             Button(
-                onClick = {
-                    if (!granting) {
-                        granting = true
-                        error = null
-                        scope.launch {
-                            try {
-                                val result = withContext(Dispatchers.IO) {
-                                    access.grant(userId, listenerAvailable(applicationContext))
-                                }
-                                if (result.granted) {
-                                    show = false
-                                    Toast.makeText(
-                                        applicationContext,
-                                        R.string.subscreen_notification_access_success,
-                                        Toast.LENGTH_LONG,
-                                    ).show()
-                                } else {
-                                    error = applicationContext.getString(
-                                        R.string.subscreen_notification_access_failed,
-                                    ) + result.detail.takeIf { it.isNotBlank() }
-                                        ?.let { "\n$it" }.orEmpty()
-                                }
-                            } finally {
-                                granting = false
-                            }
-                        }
-                    }
-                },
+                onClick = onGrant,
                 enabled = !granting,
                 colors = ButtonDefaults.buttonColorsPrimary(),
                 modifier = Modifier.fillMaxWidth(),
@@ -130,7 +153,7 @@ internal fun SubscreenNotificationAccessPrompt(enabled: Boolean) {
                 )
             }
             Button(
-                onClick = { show = false },
+                onClick = onDismiss,
                 enabled = !granting,
                 modifier = Modifier.fillMaxWidth(),
             ) {

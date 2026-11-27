@@ -23,7 +23,7 @@ import dev.snipme.highlights.model.SyntaxLanguage
 import dev.snipme.highlights.model.SyntaxThemes
 import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.theme.MixTheme
 
 /** Preserve code indentation; upstream replaceIndent() also removes meaningful fenced indentation. */
 internal fun fencedCodeSource(content: String, node: ASTNode, fallback: String): String {
@@ -48,7 +48,7 @@ internal fun fencedCodeSource(content: String, node: ASTNode, fallback: String):
 
 @Composable
 internal fun MarkdownCodeContent(code: String, language: String?, style: TextStyle) {
-    val dark = MiuixTheme.colorScheme.surface.luminance() < .5f
+    val dark = MixTheme.colorScheme.surface.luminance() < .5f
     val normalized = language?.trim()?.substringBefore(' ')?.lowercase()
     // Upstream's async highlight state is keyed only by code. Recreate it for language/theme
     // changes too, and never share its mutable Highlights.Builder between code blocks/jobs.

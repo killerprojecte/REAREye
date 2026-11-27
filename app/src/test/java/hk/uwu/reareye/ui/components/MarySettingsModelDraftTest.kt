@@ -11,6 +11,11 @@ import hk.uwu.reareye.agent.ReasoningEffort
 import hk.uwu.reareye.agent.ReasoningMapping
 import hk.uwu.reareye.agent.ReasoningPolicy
 import hk.uwu.reareye.agent.ReasoningStatus
+import hk.uwu.reareye.agent.data.MaryModelCapability
+import hk.uwu.reareye.agent.data.MaryModelValueSource
+import hk.uwu.reareye.ui.screen.MaryModelCandidate
+import hk.uwu.reareye.ui.screen.MaryModelEntry
+import hk.uwu.reareye.ui.screen.mergeMaryModelCandidates
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
@@ -34,6 +39,53 @@ class MarySettingsModelDraftTest {
         output = "1024",
         context = "64000",
     )
+
+    @Test
+    fun publicCatalogEnrichesButDoesNotReplaceAnExplicitProviderList() {
+        val known = MaryModelCandidate(ModelDescriptor("same-id"), "Catalog name", context = 64_000,
+            output = 8_000, contextSource = MaryModelValueSource.CATALOG, outputSource = MaryModelValueSource.CATALOG)
+        val catalogOnly = MaryModelCandidate(ModelDescriptor("not-returned-by-provider"))
+        val available = MaryModelCandidate(ModelDescriptor("same-id"), "Endpoint name", context = 32_000)
+        val catalog = listOf(known, catalogOnly)
+        assertEquals(catalog, mergeMaryModelCandidates(null, catalog))
+        assertTrue(mergeMaryModelCandidates(emptyList(), catalog).isEmpty())
+        val merged = mergeMaryModelCandidates(listOf(available), catalog).single()
+        assertEquals(available.details, merged.details)
+        assertEquals("Endpoint name", merged.displayName)
+        assertEquals(32_000, merged.context)
+        assertEquals(MaryModelValueSource.PROVIDER, merged.contextSource)
+        assertEquals(8_000, merged.output)
+        assertEquals(MaryModelValueSource.CATALOG, merged.outputSource)
+    }
+
+    @Test
+    fun catalogCandidateFillsNewModelAndDoesNotReplaceManuallyEditedFields() {
+        val candidate = MaryModelCandidate(ModelDescriptor("public-model"), "Public display name", context = 32_000,
+            output = 4_096, capabilities = setOf(MaryModelCapability.TEXT, MaryModelCapability.TOOLS),
+            contextSource = MaryModelValueSource.CATALOG, outputSource = MaryModelValueSource.CATALOG)
+        val connection = ModelDraft(ProviderConfig(apiKey = "fixture-key"))
+        val initial = MaryModelEntry("registry-id", "provider-id", ModelDraft())
+        val suggested = initial.applySuggestion(candidate, connection)
+        assertEquals("registry-id", suggested.id)
+        assertEquals("public-model", suggested.draft.provider.model)
+        assertEquals("Public display name", suggested.displayName)
+        assertEquals("32000", suggested.draft.context)
+        assertEquals("4096", suggested.draft.output)
+        assertEquals(MaryModelValueSource.CATALOG, suggested.contextSource)
+        assertEquals(candidate.capabilities, suggested.capabilities)
+        assertEquals("", suggested.draft.provider.apiKey)
+
+        val manual = suggested.copy(displayName = "", manualDisplayName = true,
+            draft = suggested.draft.copy(context = "64000", output = ""),
+            contextSource = MaryModelValueSource.MANUAL, outputSource = MaryModelValueSource.MANUAL,
+            capabilities = emptySet(), manualCapabilities = true)
+        val reapplied = manual.applySuggestion(candidate, connection)
+        assertEquals("", reapplied.displayName)
+        assertEquals("64000", reapplied.draft.context)
+        assertEquals("", reapplied.draft.output)
+        assertEquals(emptySet<MaryModelCapability>(), reapplied.capabilities)
+        assertEquals(MaryModelValueSource.MANUAL, reapplied.outputSource)
+    }
 
     @Test
     fun manualCapabilityUsesEffectiveDraftCredentialAndDoesNotCrossRoutes() {

@@ -6,13 +6,15 @@ import androidx.compose.material.icons.filled.Tune
 import hk.uwu.reareye.R
 import hk.uwu.reareye.lyrics.LyricParser
 import hk.uwu.reareye.ui.theme.AppThemeMode
+import hk.uwu.reareye.ui.theme.AppMochiThemeStyle
 import kotlin.math.roundToInt
 
 object ConfigKeys {
     const val MODULE_HIDE_LAUNCHER_ENTRY = "module_hide_launcher_entry"
+    const val MODULE_MOCHI_THEME_STYLE = "module_mochi_theme_style"
+    const val MODULE_NAVIGATION_BAR_STYLE = "module_navigation_bar_style"
     const val MODULE_THEME_MODE = "module_theme_mode"
     const val MODULE_NAVIGATION_BAR_MODE = "module_navigation_bar_mode"
-    const val MODULE_SEARCH_BAR_STYLE = "module_search_bar_style"
     const val MODULE_STORE_API_PROVIDER = "module_store_api_provider"
     const val MODULE_STORE_API_CUSTOM_DOMAIN = "module_store_api_custom_domain"
     const val MODULE_STORE_WEBVIEW_HARDWARE_ACCELERATION =
@@ -180,32 +182,6 @@ enum class ModuleNavigationBarMode(
     }
 }
 
-enum class ModuleSearchBarStyle(
-    val value: Int,
-    @param:StringRes val titleRes: Int,
-) {
-    DEFAULT(
-        value = 0,
-        titleRes = R.string.module_search_bar_style_default,
-    ),
-    MIUIX(
-        value = 1,
-        titleRes = R.string.module_search_bar_style_miuix,
-    );
-
-    companion object {
-        val default = DEFAULT
-        val selectableEntries = listOf(
-            DEFAULT,
-            MIUIX,
-        )
-
-        fun fromValue(value: Int): ModuleSearchBarStyle {
-            return entries.firstOrNull { it.value == value } ?: default
-        }
-    }
-}
-
 enum class LyricProvider(val value: Int, val titleRes: Int) {
     LYRICON(value = 0, titleRes = R.string.lyric_provider_lyricon),
     SUPER_LYRIC(value = 1, titleRes = R.string.lyric_provider_superlyric);
@@ -243,39 +219,11 @@ val REAREyeConfig = listOf(
         children = listOf(
             ConfigItem(
                 key = ConfigKeys.MODULE_THEME_MODE,
-                titleRes = R.string.module_theme_mode,
+                titleRes = R.string.theme_editor_title,
                 descriptionRes = R.string.module_theme_mode_desc,
                 type = ConfigType.EnumSingleSelect(
                     defaultValue = AppThemeMode.default.value,
                     options = AppThemeMode.selectableEntries.map {
-                        ConfigType.EnumOption(
-                            titleRes = it.titleRes,
-                            value = it.value,
-                        )
-                    },
-                ),
-            ),
-            ConfigItem(
-                key = ConfigKeys.MODULE_NAVIGATION_BAR_MODE,
-                titleRes = R.string.module_navigation_bar_mode,
-                descriptionRes = R.string.module_navigation_bar_mode_desc,
-                type = ConfigType.EnumSingleSelect(
-                    defaultValue = ModuleNavigationBarMode.default.value,
-                    options = ModuleNavigationBarMode.selectableEntries.map {
-                        ConfigType.EnumOption(
-                            titleRes = it.titleRes,
-                            value = it.value,
-                        )
-                    },
-                ),
-            ),
-            ConfigItem(
-                key = ConfigKeys.MODULE_SEARCH_BAR_STYLE,
-                titleRes = R.string.module_search_bar_style,
-                descriptionRes = R.string.module_search_bar_style_desc,
-                type = ConfigType.EnumSingleSelect(
-                    defaultValue = ModuleSearchBarStyle.default.value,
-                    options = ModuleSearchBarStyle.selectableEntries.map {
                         ConfigType.EnumOption(
                             titleRes = it.titleRes,
                             value = it.value,

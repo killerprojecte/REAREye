@@ -26,9 +26,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
+import hk.uwu.mixui.MixColorSchemeMode
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.MixUiHost
+import hk.uwu.mixui.theme.MixTheme
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -61,12 +62,26 @@ class MaryContextRingRenderingTest {
     }
 
     @Test
-    fun lightThemeRingStartsAtTopAndFillsClockwise() = assertRingPixels(ColorSchemeMode.Light)
+    fun lightThemeRingStartsAtTopAndFillsClockwise() = assertRingPixels(MixColorSchemeMode.Light)
 
     @Test
-    fun darkThemeRingStartsAtTopAndFillsClockwise() = assertRingPixels(ColorSchemeMode.Dark)
+    fun darkThemeRingStartsAtTopAndFillsClockwise() = assertRingPixels(MixColorSchemeMode.Dark)
 
-    private fun assertRingPixels(mode: ColorSchemeMode) {
+    @Test
+    fun mochiStylesKeepTheSameBlueProgressAndClockwiseGeometry() {
+        for (style in hk.uwu.mixui.MixMochiStyle.entries) {
+            for (mode in listOf(MixColorSchemeMode.Light, MixColorSchemeMode.Dark)) {
+                compose.runOnUiThread { activity?.close(); activity = null }
+                assertRingPixels(mode, MixUiBackend.Mochi, style)
+            }
+        }
+    }
+
+    private fun assertRingPixels(
+        mode: MixColorSchemeMode,
+        backend: MixUiBackend = MixUiBackend.Miuix,
+        style: hk.uwu.mixui.MixMochiStyle = hk.uwu.mixui.MixMochiStyle.Default,
+    ) {
         // Quadrants are ordered clockwise from twelve o'clock: NE, SE, SW, NW.
         val cases = listOf(
             RingCase("unknown", MaryUsageSummary(null, 100, null), 0),
@@ -85,11 +100,13 @@ class MaryContextRingRenderingTest {
             val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity = controller
             controller.get().setContent {
-                MiuixTheme(ThemeController(mode)) {
-                    primary = MiuixTheme.colorScheme.primary
-                    track = MiuixTheme.colorScheme.outline
-                    Column(Modifier.background(MiuixTheme.colorScheme.background)) {
-                        cases.forEach { ContextUsageButton(it.summary) }
+                MixUiHost(backend = backend, colorMode = mode, mochiStyle = style) {
+                    primary = MaryContextProgressBlue
+                    track = MixTheme.colorScheme.outline
+                    hk.uwu.mixui.components.GlassPreferenceScene {
+                        Column(Modifier.background(MixTheme.colorScheme.background)) {
+                            cases.forEach { ContextUsageButton(it.summary) }
+                        }
                     }
                 }
             }
@@ -103,7 +120,7 @@ class MaryContextRingRenderingTest {
             System.getProperty("mary.ui.screenshotDir")?.let { path ->
                 val directory = java.io.File(path, "context-ring")
                 check(directory.mkdirs() || directory.isDirectory)
-                val filename = "$mode-${case.name.replace(' ', '-')}.png"
+                val filename = "$backend-$style-$mode-${case.name.replace(' ', '-')}.png"
                 java.io.File(directory, filename).outputStream().use { output ->
                     check(
                         image.asAndroidBitmap()
@@ -123,7 +140,7 @@ class MaryContextRingRenderingTest {
                     val x = (pixels.width / 2.0 + radius * cos(angle)).toInt()
                     val y = (pixels.height / 2.0 + radius * sin(angle)).toInt()
                     val actual = pixels[x, y]
-                    val label = "$mode ${case.name}, quadrant $quadrant, pixel ($x,$y)"
+                    val label = "$backend $style $mode ${case.name}, quadrant $quadrant, pixel ($x,$y)"
                     assertEquals("$label red", expected.red, actual.red, 0.08f)
                     assertEquals("$label green", expected.green, actual.green, 0.08f)
                     assertEquals("$label blue", expected.blue, actual.blue, 0.08f)

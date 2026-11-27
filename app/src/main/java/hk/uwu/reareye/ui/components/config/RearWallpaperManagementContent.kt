@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.components.config
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,7 +18,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
+import hk.uwu.mixui.components.pageScrollFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,43 +56,38 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.rounded.Storefront
-import dev.chrisbanes.haze.HazeState
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearstore.RearStoreInstalledWallpaper
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperInfo
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperMetadataOptions
 import hk.uwu.reareye.ui.LocalFeatureGuideDemo
 import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.reareye.ui.components.OverlayDialog
-import hk.uwu.reareye.ui.components.RearBadgeGroup
+import hk.uwu.mixui.components.GlassFormDialog
+import hk.uwu.mixui.components.GlassEditorSheet
+import hk.uwu.mixui.components.GlassPreferenceScene
+import hk.uwu.mixui.components.DialogActions
+import hk.uwu.mixui.components.BadgeGroup
 import hk.uwu.reareye.ui.components.card.ModuleStyleDeleteAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleIconAction
 import hk.uwu.reareye.ui.components.card.ModuleStyleManagerCard
 import hk.uwu.reareye.ui.components.card.ModuleStyleTextAction
-import hk.uwu.reareye.ui.components.card.SuperCard
+import hk.uwu.mixui.components.ListItem
 import hk.uwu.reareye.ui.components.config.draggable.library.draggable.DraggableItem
 import hk.uwu.reareye.ui.components.config.draggable.library.draggable.rememberDraggableLazyListState
 import hk.uwu.reareye.ui.components.config.draggable.longPressDraggable
 import hk.uwu.reareye.ui.components.rememberRearWallpaperPreviewBitmap
 import hk.uwu.reareye.ui.featureGuideAnchor
-import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.widgetapi.RearWallpaperScheduleEntry
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.ScrollBehavior
-import top.yukonga.miuix.kmp.basic.Switch
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import hk.uwu.mixui.components.ListItemDefaults
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.InfiniteProgressIndicator
+import hk.uwu.mixui.components.Switch
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.EditorTextField
 import kotlin.math.roundToInt
 
 private const val MANAGE_PREVIEW_RATIO = 1.6f
@@ -95,8 +95,7 @@ private const val MANAGE_PREVIEW_RATIO = 1.6f
 @Composable
 fun RearWallpaperManagementContent(
     paddingValues: PaddingValues,
-    scrollBehavior: ScrollBehavior,
-    hazeState: HazeState?,
+    listState: LazyListState = rememberLazyListState(),
     wallpapers: List<RearWallpaperInfo>,
     storeWallpaperSources: Map<Int, RearStoreInstalledWallpaper>,
     currentWallpaperId: Int?,
@@ -229,263 +228,276 @@ fun RearWallpaperManagementContent(
         }
     }
 
-    RearWallpaperManagementList(
-        paddingValues = paddingValues,
-        scrollBehavior = scrollBehavior,
-        hazeState = hazeState,
-        wallpapers = wallpapers,
-        storeWallpaperSources = storeWallpaperSources,
-        currentWallpaperId = currentWallpaperId,
-        loading = loading,
-        refreshing = refreshing,
-        schedule = schedule,
-        scheduleEnabled = scheduleEnabled,
-        onScheduleEnabledChange = onScheduleEnabledChange,
-        onScheduleChange = onScheduleChange,
-        onRefresh = onRefresh,
-        onImportClick = {
-            resetImportDialog()
-            showImportDialog = true
-        },
-        onSetCurrent = onSetCurrent,
-        onEditInterval = { entry ->
-            intervalTargetId = entry.wallpaperId
-            intervalInput = entry.delayMs.toString()
-        },
-        onEditMetadata = { editTarget = it },
-        onEditTemplate = onEditTemplate,
-        onGeneratePreview = onGeneratePreview,
-        onOpenStoreDetail = onOpenStoreDetail,
-        onDelete = { deleteTarget = it },
-    )
-
-    OverlayDialog(
-        show = showImportDialog,
-        title = stringResource(R.string.rear_wallpaper_import),
-        onDismissRequest = { showImportDialog = false },
-    ) {
-        WallpaperImportForm(
-            packageLabel = packageLabel,
-            metadataLabel = metadataLabel,
-            previewLabel = previewLabel,
-            titleFallback = importTitleFallback,
-            titleZhCn = importTitleZhCn,
-            descriptionFallback = importDescriptionFallback,
-            descriptionZhCn = importDescriptionZhCn,
-            author = importAuthor,
-            designer = importDesigner,
-            category = importCategory,
-            resSubType = importResSubType,
-            editable = importEditable,
-            thirdParties = importThirdParties,
-            supportAon = importSupportAon,
-            onPickPackage = {
-                packagePickerLauncher.launch(
-                    arrayOf(
-                        "application/zip",
-                        "application/x-zip-compressed",
-                        "application/octet-stream",
-                        "*/*",
+    // Only the management list is recorded. Native windows and their ordinary
+    // form controls stay in the sibling overlay slot throughout dismissal.
+    GlassPreferenceScene(
+        overlayContent = {
+            GlassEditorSheet(
+                show = showImportDialog,
+                modifier = Modifier.testTag("wallpaper-import-dialog"),
+                title = stringResource(R.string.rear_wallpaper_import),
+                onDismissRequest = { showImportDialog = false },
+                confirmText = stringResource(R.string.rear_widget_confirm),
+                cancelText = stringResource(R.string.rear_widget_cancel),
+                confirmEnabled = packageLabel.isNotBlank(),
+                onConfirm = confirm@{
+                    val source = packageUri ?: return@confirm
+                    onImport(
+                        source,
+                        metadataUri,
+                        previewUri,
+                        RearWallpaperMetadataOptions(
+                            titleFallback = importTitleFallback.ifBlank {
+                                packageLabel.ifBlank { "Imported Wallpaper" }
+                            },
+                            titleZhCn = importTitleZhCn.ifBlank { importTitleFallback },
+                            descriptionFallback = importDescriptionFallback,
+                            descriptionZhCn = importDescriptionZhCn.ifBlank { importDescriptionFallback },
+                            author = importAuthor,
+                            designer = importDesigner,
+                            category = importCategory.ifBlank { "REAREye" },
+                            resSubType = importResSubType.ifBlank { "reareye_import" },
+                            editable = importEditable,
+                            thirdParties = importThirdParties,
+                            supportAon = importSupportAon,
+                        ),
                     )
+                    showImportDialog = false
+                },
+            ) {
+                WallpaperImportForm(
+                    packageLabel = packageLabel,
+                    metadataLabel = metadataLabel,
+                    previewLabel = previewLabel,
+                    titleFallback = importTitleFallback,
+                    titleZhCn = importTitleZhCn,
+                    descriptionFallback = importDescriptionFallback,
+                    descriptionZhCn = importDescriptionZhCn,
+                    author = importAuthor,
+                    designer = importDesigner,
+                    category = importCategory,
+                    resSubType = importResSubType,
+                    editable = importEditable,
+                    thirdParties = importThirdParties,
+                    supportAon = importSupportAon,
+                    onPickPackage = {
+                        packagePickerLauncher.launch(
+                            arrayOf(
+                                "application/zip",
+                                "application/x-zip-compressed",
+                                "application/octet-stream",
+                                "*/*",
+                            )
+                        )
+                    },
+                    onPickMetadata = {
+                        metadataPickerLauncher.launch(
+                            arrayOf("application/json", "application/octet-stream", "*/*")
+                        )
+                    },
+                    onClearMetadata = {
+                        metadataUri = null
+                        metadataLabel = ""
+                    },
+                    onPickPreview = {
+                        previewPickerLauncher.launch(arrayOf("image/*", "application/octet-stream", "*/*"))
+                    },
+                    onClearPreview = {
+                        previewUri = null
+                        previewLabel = ""
+                    },
+                    onTitleFallbackChange = { importTitleFallback = it },
+                    onTitleZhCnChange = { importTitleZhCn = it },
+                    onDescriptionFallbackChange = { importDescriptionFallback = it },
+                    onDescriptionZhCnChange = { importDescriptionZhCn = it },
+                    onAuthorChange = { importAuthor = it },
+                    onDesignerChange = { importDesigner = it },
+                    onCategoryChange = { importCategory = it },
+                    onResSubTypeChange = { importResSubType = it },
+                    onEditableChange = { importEditable = it },
+                    onThirdPartiesChange = { importThirdParties = it },
+                    onSupportAonChange = { importSupportAon = it },
                 )
-            },
-            onPickMetadata = {
-                metadataPickerLauncher.launch(
-                    arrayOf("application/json", "application/octet-stream", "*/*")
-                )
-            },
-            onClearMetadata = {
-                metadataUri = null
-                metadataLabel = ""
-            },
-            onPickPreview = {
-                previewPickerLauncher.launch(arrayOf("image/*", "application/octet-stream", "*/*"))
-            },
-            onClearPreview = {
-                previewUri = null
-                previewLabel = ""
-            },
-            onTitleFallbackChange = { importTitleFallback = it },
-            onTitleZhCnChange = { importTitleZhCn = it },
-            onDescriptionFallbackChange = { importDescriptionFallback = it },
-            onDescriptionZhCnChange = { importDescriptionZhCn = it },
-            onAuthorChange = { importAuthor = it },
-            onDesignerChange = { importDesigner = it },
-            onCategoryChange = { importCategory = it },
-            onResSubTypeChange = { importResSubType = it },
-            onEditableChange = { importEditable = it },
-            onThirdPartiesChange = { importThirdParties = it },
-            onSupportAonChange = { importSupportAon = it },
-            onConfirm = {
-                val source = packageUri ?: return@WallpaperImportForm
-                onImport(
-                    source,
-                    metadataUri,
-                    previewUri,
-                    RearWallpaperMetadataOptions(
-                        titleFallback = importTitleFallback.ifBlank {
-                            packageLabel.ifBlank { "Imported Wallpaper" }
-                        },
-                        titleZhCn = importTitleZhCn.ifBlank { importTitleFallback },
-                        descriptionFallback = importDescriptionFallback,
-                        descriptionZhCn = importDescriptionZhCn.ifBlank { importDescriptionFallback },
-                        author = importAuthor,
-                        designer = importDesigner,
-                        category = importCategory.ifBlank { "REAREye" },
-                        resSubType = importResSubType.ifBlank { "reareye_import" },
-                        editable = importEditable,
-                        thirdParties = importThirdParties,
-                        supportAon = importSupportAon,
-                    ),
-                )
-                showImportDialog = false
-            },
-            onCancel = { showImportDialog = false },
-        )
-    }
+            }
 
-    OverlayDialog(
-        show = editTarget != null,
-        title = stringResource(R.string.rear_wallpaper_edit_metadata),
-        onDismissRequest = { editTarget = null },
-    ) {
-        WallpaperMetadataForm(
-            titleFallback = editTitleFallback,
-            titleZhCn = editTitleZhCn,
-            descriptionFallback = editDescriptionFallback,
-            descriptionZhCn = editDescriptionZhCn,
-            author = editAuthor,
-            designer = editDesigner,
-            category = editCategory,
-            resSubType = editResSubType,
-            editable = editEditable,
-            thirdParties = editThirdParties,
-            supportAon = editSupportAon,
-            previewLabel = editPreviewLabel,
-            onTitleFallbackChange = { editTitleFallback = it },
-            onTitleZhCnChange = { editTitleZhCn = it },
-            onDescriptionFallbackChange = { editDescriptionFallback = it },
-            onDescriptionZhCnChange = { editDescriptionZhCn = it },
-            onAuthorChange = { editAuthor = it },
-            onDesignerChange = { editDesigner = it },
-            onCategoryChange = { editCategory = it },
-            onResSubTypeChange = { editResSubType = it },
-            onEditableChange = { editEditable = it },
-            onThirdPartiesChange = { editThirdParties = it },
-            onSupportAonChange = { editSupportAon = it },
-            onPickPreview = {
-                editPreviewPickerLauncher.launch(
-                    arrayOf(
-                        "image/*",
-                        "application/octet-stream",
-                        "*/*"
+            GlassEditorSheet(
+                show = editTarget != null,
+                modifier = Modifier.testTag("wallpaper-metadata-dialog"),
+                title = stringResource(R.string.rear_wallpaper_edit_metadata),
+                onDismissRequest = { editTarget = null },
+                confirmText = stringResource(R.string.rear_widget_confirm),
+                cancelText = stringResource(R.string.rear_widget_cancel),
+                confirmEnabled = editTitleFallback.isNotBlank() || editTitleZhCn.isNotBlank(),
+                sessionKey = editTarget?.wallpaperId,
+                onConfirm = confirm@{
+                    val target = editTarget ?: return@confirm
+                    onUpdateMetadata(
+                        target,
+                        RearWallpaperMetadataOptions(
+                            titleFallback = editTitleFallback.ifBlank { target.name },
+                            titleZhCn = editTitleZhCn.ifBlank {
+                                editTitleFallback.ifBlank { target.name }
+                            },
+                            descriptionFallback = editDescriptionFallback,
+                            descriptionZhCn = editDescriptionZhCn.ifBlank { editDescriptionFallback },
+                            author = editAuthor,
+                            designer = editDesigner,
+                            category = editCategory.ifBlank { "REAREye" },
+                            resSubType = editResSubType.ifBlank { "reareye_import" },
+                            editable = editEditable,
+                            thirdParties = editThirdParties,
+                            supportAon = editSupportAon,
+                        ),
+                        editPreviewUri,
                     )
+                    editTarget = null
+                },
+            ) {
+                WallpaperMetadataForm(
+                    titleFallback = editTitleFallback,
+                    titleZhCn = editTitleZhCn,
+                    descriptionFallback = editDescriptionFallback,
+                    descriptionZhCn = editDescriptionZhCn,
+                    author = editAuthor,
+                    designer = editDesigner,
+                    category = editCategory,
+                    resSubType = editResSubType,
+                    editable = editEditable,
+                    thirdParties = editThirdParties,
+                    supportAon = editSupportAon,
+                    previewLabel = editPreviewLabel,
+                    onTitleFallbackChange = { editTitleFallback = it },
+                    onTitleZhCnChange = { editTitleZhCn = it },
+                    onDescriptionFallbackChange = { editDescriptionFallback = it },
+                    onDescriptionZhCnChange = { editDescriptionZhCn = it },
+                    onAuthorChange = { editAuthor = it },
+                    onDesignerChange = { editDesigner = it },
+                    onCategoryChange = { editCategory = it },
+                    onResSubTypeChange = { editResSubType = it },
+                    onEditableChange = { editEditable = it },
+                    onThirdPartiesChange = { editThirdParties = it },
+                    onSupportAonChange = { editSupportAon = it },
+                    onPickPreview = {
+                        editPreviewPickerLauncher.launch(
+                            arrayOf(
+                                "image/*",
+                                "application/octet-stream",
+                                "*/*"
+                            )
+                        )
+                    },
+                    onClearPreview = {
+                        editPreviewUri = null
+                        editPreviewLabel = ""
+                    },
                 )
-            },
-            onClearPreview = {
-                editPreviewUri = null
-                editPreviewLabel = ""
-            },
-            onConfirm = {
-                val target = editTarget ?: return@WallpaperMetadataForm
-                onUpdateMetadata(
-                    target,
-                    RearWallpaperMetadataOptions(
-                        titleFallback = editTitleFallback.ifBlank { target.name },
-                        titleZhCn = editTitleZhCn.ifBlank {
-                            editTitleFallback.ifBlank { target.name }
-                        },
-                        descriptionFallback = editDescriptionFallback,
-                        descriptionZhCn = editDescriptionZhCn.ifBlank { editDescriptionFallback },
-                        author = editAuthor,
-                        designer = editDesigner,
-                        category = editCategory.ifBlank { "REAREye" },
-                        resSubType = editResSubType.ifBlank { "reareye_import" },
-                        editable = editEditable,
-                        thirdParties = editThirdParties,
-                        supportAon = editSupportAon,
-                    ),
-                    editPreviewUri,
-                )
-                editTarget = null
-            },
-            onCancel = { editTarget = null },
-        )
-    }
+            }
 
-    OverlayDialog(
-        show = intervalTargetId != null,
-        title = stringResource(R.string.rear_wallpaper_edit_interval),
-        onDismissRequest = { intervalTargetId = null },
-    ) {
-        DialogFormColumn {
-            TextField(
-                value = intervalInput,
-                onValueChange = { intervalInput = it.filter(Char::isDigit) },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.rear_wallpaper_interval_millis),
-                singleLine = true,
-            )
-            Button(
-                onClick = {
-                    val targetId = intervalTargetId ?: return@Button
-                    val delayMs = intervalInput.toLongOrNull()
-                    if (delayMs == null || delayMs < hk.uwu.reareye.widgetapi.RearWallpaperScheduleCodec.MIN_DELAY_MS) return@Button
-                    val updated = schedule.map {
-                        if (it.wallpaperId == targetId) it.copy(delayMs = delayMs) else it
+            GlassFormDialog(
+                show = intervalTargetId != null,
+                modifier = Modifier.testTag("wallpaper-interval-dialog"),
+                title = stringResource(R.string.rear_wallpaper_edit_interval),
+                onDismissRequest = { intervalTargetId = null },
+            ) {
+                DialogFormColumn {
+                    EditorTextField(
+                        autoFocus = intervalTargetId != null,
+                        selectAllOnFocus = true,
+                        focusSessionKey = intervalTargetId,
+                        value = intervalInput,
+                        onValueChange = { intervalInput = it.filter(Char::isDigit) },
+                        modifier = Modifier.fillMaxWidth().testTag("wallpaper-interval-input"),
+                        label = stringResource(R.string.rear_wallpaper_interval_millis),
+                        singleLine = true,
+                    )
+                    DialogActions(
+                        modifier = Modifier.testTag("wallpaper-interval-actions"),
+                        cancelText = stringResource(R.string.rear_widget_cancel),
+                        confirmText = stringResource(R.string.rear_widget_confirm),
+                        onCancel = { intervalTargetId = null },
+                        onConfirm = confirm@{
+                            val targetId = intervalTargetId ?: return@confirm
+                            val delayMs = intervalInput.toLongOrNull()
+                            if (delayMs == null || delayMs < hk.uwu.reareye.widgetapi.RearWallpaperScheduleCodec.MIN_DELAY_MS) return@confirm
+                            val updated = schedule.map {
+                                if (it.wallpaperId == targetId) it.copy(delayMs = delayMs) else it
+                            }
+                            onScheduleChange(updated)
+                            intervalTargetId = null
+                        },
+                        confirmEnabled = intervalInput.toLongOrNull()?.let {
+                            it >= hk.uwu.reareye.widgetapi.RearWallpaperScheduleCodec.MIN_DELAY_MS
+                        } == true,
+                    )
+                }
+            }
+
+            GlassFormDialog(
+                show = deleteTarget != null,
+                modifier = Modifier.testTag("wallpaper-delete-dialog"),
+                title = stringResource(R.string.rear_wallpaper_delete_title),
+                onDismissRequest = { deleteTarget = null },
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Card(modifier = Modifier.fillMaxWidth().testTag("wallpaper-delete-message")) {
+                        ListItem(
+                            animateContentSize = true,
+                            title = stringResource(
+                                R.string.rear_wallpaper_delete_message,
+                                deleteTarget?.name.orEmpty(),
+                            ),
+                        )
                     }
-                    onScheduleChange(updated)
-                    intervalTargetId = null
-                },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.rear_widget_confirm)) }
-            Button(
-                onClick = { intervalTargetId = null },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.rear_widget_cancel)) }
-        }
-    }
-
-    OverlayDialog(
-        show = deleteTarget != null,
-        title = stringResource(R.string.rear_wallpaper_delete_title),
-        onDismissRequest = { deleteTarget = null },
+                    DialogActions(
+                        modifier = Modifier.testTag("wallpaper-delete-actions"),
+                        cancelText = stringResource(R.string.rear_widget_cancel),
+                        confirmText = stringResource(R.string.rear_widget_action_delete),
+                        destructive = true,
+                        onCancel = { deleteTarget = null },
+                        onConfirm = {
+                            deleteTarget?.let(onDelete)
+                            deleteTarget = null
+                        },
+                    )
+                }
+            }
+        },
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                SuperCard(
-                    title = stringResource(
-                        R.string.rear_wallpaper_delete_message,
-                        deleteTarget?.name.orEmpty(),
-                    ),
-                )
-            }
-            Button(
-                onClick = {
-                    deleteTarget?.let(onDelete)
-                    deleteTarget = null
-                },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_action_delete))
-            }
-            Button(
-                onClick = { deleteTarget = null },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.rear_widget_cancel))
-            }
-        }
+        RearWallpaperManagementList(
+            paddingValues = paddingValues,
+            listState = listState,
+            wallpapers = wallpapers,
+            storeWallpaperSources = storeWallpaperSources,
+            currentWallpaperId = currentWallpaperId,
+            loading = loading,
+            refreshing = refreshing,
+            schedule = schedule,
+            scheduleEnabled = scheduleEnabled,
+            onScheduleEnabledChange = onScheduleEnabledChange,
+            onScheduleChange = onScheduleChange,
+            onRefresh = onRefresh,
+            onImportClick = {
+                resetImportDialog()
+                showImportDialog = true
+            },
+            onSetCurrent = onSetCurrent,
+            onEditInterval = { entry ->
+                intervalTargetId = entry.wallpaperId
+                intervalInput = entry.delayMs.toString()
+            },
+            onEditMetadata = { editTarget = it },
+            onEditTemplate = onEditTemplate,
+            onGeneratePreview = onGeneratePreview,
+            onOpenStoreDetail = onOpenStoreDetail,
+            onDelete = { deleteTarget = it },
+        )
     }
 }
 
 @Composable
 private fun RearWallpaperManagementList(
     paddingValues: PaddingValues,
-    scrollBehavior: ScrollBehavior,
-    hazeState: HazeState?,
+    listState: LazyListState,
     wallpapers: List<RearWallpaperInfo>,
     storeWallpaperSources: Map<Int, RearStoreInstalledWallpaper>,
     currentWallpaperId: Int?,
@@ -507,7 +519,6 @@ private fun RearWallpaperManagementList(
 ) {
     val currentWallpaperName = wallpapers.firstOrNull { it.wallpaperId == currentWallpaperId }?.name
         ?: stringResource(R.string.rear_wallpaper_current_none)
-    val listState = rememberLazyListState()
     val guideDemo = LocalFeatureGuideDemo.current
     LaunchedEffect(guideDemo != null, wallpapers.size) {
         if (guideDemo != null && wallpapers.isNotEmpty()) listState.scrollToItem(2)
@@ -572,15 +583,8 @@ private fun RearWallpaperManagementList(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .scrollEndHaptic()
-            .overScrollVertical()
-            .then(
-                if (hazeState != null) {
-                    Modifier.rearAcrylicSource(hazeState)
-                } else {
-                    Modifier
-                }
-            )
+            .testTag("RearWallpaperManagerScreen-list")
+            .pageScrollFeedback()
             .padding(horizontal = 12.dp),
         state = listState,
         contentPadding = PaddingValues(
@@ -595,13 +599,13 @@ private fun RearWallpaperManagementList(
                 modifier = Modifier.fillMaxWidth(),
                 insideMargin = PaddingValues(16.dp),
             ) {
-                RearBadgeGroup(badges = overviewBadges)
+                BadgeGroup(badges = overviewBadges)
             }
         }
 
         item(key = "wallpaper-rotation-control") {
             Card(modifier = Modifier.fillMaxWidth()) {
-                BasicComponent(
+                ListItem(
                     title = stringResource(R.string.rear_wallpaper_rotation_toggle),
                     startAction = {
                         Icon(
@@ -666,7 +670,8 @@ private fun RearWallpaperManagementList(
         if (loading) {
             item(key = "wallpaper-loading") {
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    SuperCard(
+                    ListItem(
+                        animateContentSize = true,
                         title = stringResource(R.string.rear_wallpaper_loading),
                         startAction = { InfiniteProgressIndicator() })
                 }
@@ -674,7 +679,7 @@ private fun RearWallpaperManagementList(
         }
         if (!loading && wallpapers.isEmpty()) {
             item(key = "wallpaper-empty") {
-                Card(modifier = Modifier.fillMaxWidth()) { SuperCard(title = stringResource(R.string.rear_wallpaper_catalog_empty)) }
+                Card(modifier = Modifier.fillMaxWidth()) { ListItem(animateContentSize = true, title = stringResource(R.string.rear_wallpaper_catalog_empty)) }
             }
         }
         items(remainingWallpapers, key = { "library-${it.wallpaperId}" }) { wallpaper ->
@@ -727,7 +732,9 @@ private fun WallpaperManageCard(
         if (inSchedule) R.string.rear_wallpaper_rotation_remove else R.string.rear_wallpaper_rotation_add,
     )
     ModuleStyleManagerCard(
-        modifier = dragModifier.featureGuideAnchor("demo_wallpaper_preview"),
+        modifier = dragModifier
+            .testTag("wallpaper-card-${wallpaper.wallpaperId}")
+            .featureGuideAnchor("demo_wallpaper_preview"),
         title = wallpaper.name,
         summaryLines = emptyList(),
         badges = rearWallpaperManagementBadges(
@@ -791,7 +798,11 @@ private fun WallpaperManageCard(
                     )
                 }
                 if (wallpaper.canEditMetadata || wallpaper.editable) {
-                    ModuleStyleIconAction(icon = Icons.Rounded.EditNote, onClick = onEditMetadata)
+                    ModuleStyleIconAction(
+                        icon = Icons.Rounded.EditNote,
+                        contentDescription = stringResource(R.string.rear_wallpaper_edit_metadata),
+                        onClick = onEditMetadata,
+                    )
                 }
                 if (wallpaper.templateConfigAvailable) {
                     ModuleStyleTextAction(
@@ -805,7 +816,7 @@ private fun WallpaperManageCard(
         rightAction = {
             if (wallpaper.canDelete || wallpaper.imported) {
                 ModuleStyleDeleteAction(
-                    icon = MiuixIcons.Delete,
+                    icon = UiIcons.Delete,
                     text = stringResource(R.string.rear_widget_action_delete),
                     onClick = onDelete
                 )
@@ -855,22 +866,23 @@ private fun WallpaperImportForm(
     onEditableChange: (Boolean) -> Unit,
     onThirdPartiesChange: (Boolean) -> Unit,
     onSupportAonChange: (Boolean) -> Unit,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
 ) {
-    DialogFormColumn(maxHeight = 620.dp) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         FilePickRow(
+            modifier = Modifier.testTag("wallpaper-package-file"),
             title = stringResource(R.string.rear_wallpaper_package_file),
             label = packageLabel.ifBlank { stringResource(R.string.rear_wallpaper_no_file_selected) },
             onPick = onPickPackage,
         )
         FilePickRow(
+            modifier = Modifier.testTag("wallpaper-metadata-file"),
             title = stringResource(R.string.rear_wallpaper_metadata_file),
             label = metadataLabel.ifBlank { stringResource(R.string.rear_wallpaper_metadata_default_hint) },
             onPick = onPickMetadata,
             onClear = onClearMetadata.takeIf { metadataLabel.isNotBlank() },
         )
         FilePickRow(
+            modifier = Modifier.testTag("wallpaper-preview-file"),
             title = stringResource(R.string.rear_wallpaper_preview_file),
             label = previewLabel.ifBlank { stringResource(R.string.rear_wallpaper_preview_default_hint) },
             onPick = onPickPreview,
@@ -899,11 +911,6 @@ private fun WallpaperImportForm(
             onEditableChange = onEditableChange,
             onThirdPartiesChange = onThirdPartiesChange,
             onSupportAonChange = onSupportAonChange,
-        )
-        DialogButtons(
-            confirmEnabled = packageLabel.isNotBlank(),
-            onConfirm = onConfirm,
-            onCancel = onCancel,
         )
     }
 }
@@ -935,11 +942,10 @@ private fun WallpaperMetadataForm(
     onSupportAonChange: (Boolean) -> Unit,
     onPickPreview: () -> Unit,
     onClearPreview: () -> Unit,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
 ) {
-    DialogFormColumn(maxHeight = 620.dp) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         FilePickRow(
+            modifier = Modifier.testTag("wallpaper-preview-file"),
             title = stringResource(R.string.rear_wallpaper_preview_file),
             label = previewLabel.ifBlank { stringResource(R.string.rear_wallpaper_preview_keep_current) },
             onPick = onPickPreview,
@@ -969,11 +975,6 @@ private fun WallpaperMetadataForm(
             onThirdPartiesChange = onThirdPartiesChange,
             onSupportAonChange = onSupportAonChange,
         )
-        DialogButtons(
-            confirmEnabled = titleFallback.isNotBlank() || titleZhCn.isNotBlank(),
-            onConfirm = onConfirm,
-            onCancel = onCancel,
-        )
     }
 }
 
@@ -1002,54 +1003,54 @@ internal fun WallpaperMetadataFields(
     onThirdPartiesChange: (Boolean) -> Unit,
     onSupportAonChange: (Boolean) -> Unit,
 ) {
-    TextField(
+    EditorTextField(
         value = titleFallback,
         onValueChange = onTitleFallbackChange,
         label = stringResource(R.string.rear_wallpaper_meta_title_fallback),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testTag("wallpaper-title-fallback"),
         singleLine = true,
     )
-    TextField(
+    EditorTextField(
         value = titleZhCn,
         onValueChange = onTitleZhCnChange,
         label = stringResource(R.string.rear_wallpaper_meta_title_zh),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testTag("wallpaper-title-zh"),
         singleLine = true,
     )
-    TextField(
+    EditorTextField(
         value = descriptionFallback,
         onValueChange = onDescriptionFallbackChange,
         label = stringResource(R.string.rear_wallpaper_meta_desc_fallback),
         modifier = Modifier.fillMaxWidth(),
     )
-    TextField(
+    EditorTextField(
         value = descriptionZhCn,
         onValueChange = onDescriptionZhCnChange,
         label = stringResource(R.string.rear_wallpaper_meta_desc_zh),
         modifier = Modifier.fillMaxWidth(),
     )
-    TextField(
+    EditorTextField(
         value = author,
         onValueChange = onAuthorChange,
         label = stringResource(R.string.rear_wallpaper_meta_author),
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
     )
-    TextField(
+    EditorTextField(
         value = designer,
         onValueChange = onDesignerChange,
         label = stringResource(R.string.rear_wallpaper_meta_designer),
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
     )
-    TextField(
+    EditorTextField(
         value = category,
         onValueChange = onCategoryChange,
         label = stringResource(R.string.rear_wallpaper_meta_category),
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
     )
-    TextField(
+    EditorTextField(
         value = resSubType,
         onValueChange = onResSubTypeChange,
         label = stringResource(R.string.rear_wallpaper_meta_res_sub_type),
@@ -1079,12 +1080,13 @@ private fun FilePickRow(
     label: String,
     onPick: () -> Unit,
     onClear: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        BasicComponent(
+    Card(modifier = modifier.fillMaxWidth()) {
+        ListItem(
             title = title,
             summary = label,
-            summaryColor = BasicComponentDefaults.summaryColor(),
+            summaryColor = ListItemDefaults.summaryColor(),
             onClick = onPick,
             bottomAction = {
                 Row(
@@ -1119,7 +1121,7 @@ private fun MetadataSwitchRow(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        BasicComponent(
+        ListItem(
             title = title,
             onClick = { onCheckedChange(!checked) },
             endActions = {
@@ -1129,28 +1131,6 @@ private fun MetadataSwitchRow(
                 )
             },
         )
-    }
-}
-
-@Composable
-private fun DialogButtons(
-    confirmEnabled: Boolean,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    Button(
-        onClick = onConfirm,
-        enabled = confirmEnabled,
-        colors = ButtonDefaults.buttonColorsPrimary(),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text(stringResource(R.string.rear_widget_confirm))
-    }
-    Button(
-        onClick = onCancel,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text(stringResource(R.string.rear_widget_cancel))
     }
 }
 

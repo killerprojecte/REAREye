@@ -1,5 +1,7 @@
 package hk.uwu.reareye.ui.screen
 
+import hk.uwu.mixui.icons.Icons as UiIcons
+
 import android.content.Intent
 import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
@@ -63,7 +65,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
@@ -85,16 +86,17 @@ import hk.uwu.reareye.generated.AppProperties
 import hk.uwu.reareye.repository.contributor.ContributorLoadState
 import hk.uwu.reareye.repository.contributor.ContributorProfile
 import hk.uwu.reareye.repository.contributor.ContributorRepository
-import hk.uwu.reareye.ui.components.card.SuperCard
-import hk.uwu.reareye.ui.components.motion.ArtRevealItem
-import hk.uwu.reareye.ui.components.motion.ArtStaggeredReveal
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
+import hk.uwu.mixui.components.ListItem
+import hk.uwu.mixui.motion.ArtRevealItem
+import hk.uwu.mixui.motion.ArtStaggeredReveal
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
 import hk.uwu.reareye.utils.blend.ColorBlendToken
-import hk.uwu.reareye.utils.effect.BgEffectBackground
+import hk.uwu.mixui.effects.AnimatedGradientBackground
 import hk.uwu.reareye.utils.other.DeviceConfigTools
+import hk.uwu.reareye.utils.other.AboutLibraries
+import hk.uwu.reareye.utils.other.LibraryLicenseSheet
+import hk.uwu.reareye.utils.other.LibraryLicenseSheetState
 import hk.uwu.reareye.utils.other.LibraryItem
 import hk.uwu.reareye.utils.other.OSVersionTools
 import hk.uwu.reareye.utils.other.loadLibraries
@@ -104,35 +106,27 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.ScrollBehavior
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.BlurBlendMode
-import top.yukonga.miuix.kmp.blur.BlurColors
-import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.blur.textureBlur
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Create
-import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.Info
-import top.yukonga.miuix.kmp.icon.extended.Link
-import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import hk.uwu.mixui.components.ListItemDefaults
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.InfiniteProgressIndicator
+import hk.uwu.mixui.components.pageScrollFeedback
+import hk.uwu.mixui.components.CompactGlassTopBar
+import hk.uwu.mixui.components.CompactGlassTopBarScene
+import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.GlassTopBarScaffold
+import hk.uwu.mixui.components.TopBarIconButton
+import androidx.compose.ui.platform.testTag
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.effects.TextureBlendLayer
+import hk.uwu.mixui.effects.TextureBlendOperation
+import hk.uwu.mixui.effects.TextureBackdrop
+import hk.uwu.mixui.effects.textureBackdropSource
+import hk.uwu.mixui.effects.rememberTextureBackdrop
+import hk.uwu.mixui.effects.textureBlur
+import hk.uwu.mixui.theme.MixTheme.colorScheme
 import java.util.concurrent.ConcurrentHashMap
 
 private val AboutPageHorizontalPadding = 12.dp
@@ -202,8 +196,8 @@ private data class CreditEntry(
 private data class AboutVisualTokens(
     val isDarkTheme: Boolean,
     val backgroundColor: Color,
-    val cardBlendColors: List<BlendColorEntry>,
-    val logoBlendColors: List<BlendColorEntry>,
+    val cardBlendColors: List<TextureBlendLayer>,
+    val logoBlendColors: List<TextureBlendLayer>,
 )
 
 @Composable
@@ -221,7 +215,7 @@ private fun rememberAboutVisualTokens(): AboutVisualTokens {
     }
 }
 
-private fun aboutCardBlendColors(isDarkTheme: Boolean): List<BlendColorEntry> {
+private fun aboutCardBlendColors(isDarkTheme: Boolean): List<TextureBlendLayer> {
     return if (isDarkTheme) {
         ColorBlendToken.Overlay_Thin_Light
     } else {
@@ -229,24 +223,25 @@ private fun aboutCardBlendColors(isDarkTheme: Boolean): List<BlendColorEntry> {
     }
 }
 
-private fun aboutLogoBlendColors(isDarkTheme: Boolean): List<BlendColorEntry> {
+private fun aboutLogoBlendColors(isDarkTheme: Boolean): List<TextureBlendLayer> {
     return if (isDarkTheme) {
         listOf(
-            BlendColorEntry(Color(0xe6a1a1a1), BlurBlendMode.ColorDodge),
-            BlendColorEntry(Color(0x4de6e6e6), BlurBlendMode.LinearLight),
-            BlendColorEntry(Color(0xff1af500), BlurBlendMode.Lab),
+            TextureBlendLayer(Color(0xe6a1a1a1), TextureBlendOperation.ColorDodge),
+            TextureBlendLayer(Color(0x4de6e6e6), TextureBlendOperation.LinearLight),
+            TextureBlendLayer(Color(0xff1af500), TextureBlendOperation.Lab),
         )
     } else {
         listOf(
-            BlendColorEntry(Color(0xcc4a4a4a), BlurBlendMode.ColorBurn),
-            BlendColorEntry(Color(0xff4f4f4f), BlurBlendMode.LinearLight),
-            BlendColorEntry(Color(0xff1af200), BlurBlendMode.Lab),
+            TextureBlendLayer(Color(0xcc4a4a4a), TextureBlendOperation.ColorBurn),
+            TextureBlendLayer(Color(0xff4f4f4f), TextureBlendOperation.LinearLight),
+            TextureBlendLayer(Color(0xff1af200), TextureBlendOperation.Lab),
         )
     }
 }
 
 @Composable
 private fun rememberSkeletonPulseAlpha(label: String): Float {
+    if (hk.uwu.mixui.motion.rememberReduceMotionEnabled()) return 0.65f
     val infiniteTransition = rememberInfiniteTransition(label = label)
     val alpha = infiniteTransition.animateFloat(
         initialValue = 0.45f,
@@ -265,8 +260,27 @@ fun AboutScreen(
     bottomInnerPadding: Dp = 0.dp,
     onOpenPresetPackDialog: () -> Unit = {},
 ) {
-    val versionText = rememberVersionText()
     val contributorState by ContributorRepository.state.collectAsState()
+    LaunchedEffect(Unit) { ContributorRepository.preload() }
+    AboutScreenContent(
+        bottomInnerPadding = bottomInnerPadding,
+        contributorState = contributorState,
+        onLoadContributors = { ContributorRepository.ensureLoaded(force = false) },
+        onRetryContributors = { ContributorRepository.ensureLoaded(force = true) },
+        onOpenPresetPackDialog = onOpenPresetPackDialog,
+    )
+}
+
+/** The production route tree with repository actions supplied by its owner. */
+@Composable
+internal fun AboutScreenContent(
+    contributorState: ContributorLoadState,
+    bottomInnerPadding: Dp = 0.dp,
+    onLoadContributors: () -> Unit = {},
+    onRetryContributors: () -> Unit = {},
+    onOpenPresetPackDialog: () -> Unit = {},
+) {
+    val versionText = rememberVersionText()
     val lazyListState = rememberLazyListState()
 
     var route by remember { mutableStateOf<AboutRoute>(AboutRoute.Root) }
@@ -308,13 +322,9 @@ fun AboutScreen(
         )
     }
 
-    LaunchedEffect(Unit) {
-        ContributorRepository.preload()
-    }
-
     LaunchedEffect(route) {
         if (route is AboutRoute.Contributors) {
-            ContributorRepository.ensureLoaded(force = false)
+            onLoadContributors()
         }
     }
 
@@ -391,24 +401,25 @@ fun AboutScreen(
             AboutRoute.Contributors -> AboutSecondaryPage(
                 title = stringResource(R.string.credits_contributors_title),
                 onBack = { route = AboutRoute.Root },
-            ) { paddingValues, scrollBehavior, hazeState ->
+            ) { paddingValues, listState, hazeState ->
                 ContributorListContent(
                     bottomInnerPadding = bottomInnerPadding,
                     paddingValues = paddingValues,
-                    scrollBehavior = scrollBehavior,
+                    lazyListState = listState,
                     hazeState = hazeState,
                     state = contributorState,
+                    onRetry = onRetryContributors,
                 )
             }
 
             AboutRoute.Licenses -> AboutSecondaryPage(
                 title = stringResource(R.string.licenses_name),
                 onBack = { route = AboutRoute.Root },
-            ) { paddingValues, scrollBehavior, hazeState ->
+            ) { paddingValues, listState, hazeState ->
                 LicenseContent(
                     bottomInnerPadding = bottomInnerPadding,
                     paddingValues = paddingValues,
-                    scrollBehavior = scrollBehavior,
+                    lazyListState = listState,
                     hazeState = hazeState,
                 )
             }
@@ -427,7 +438,6 @@ private fun AboutRootPage(
     onOpenLibraries: () -> Unit,
     onOpenPresetPackDialog: () -> Unit,
 ) {
-    val scrollBehavior = MiuixScrollBehavior()
     val hazeState = rememberAcrylicHazeState()
     val gradientFadeDistancePx = with(LocalDensity.current) {
         AboutGradientFadeDistance.toPx().coerceAtLeast(1f)
@@ -445,32 +455,37 @@ private fun AboutRootPage(
         }
     }
 
-    Scaffold(
-        topBar = {
-            SmallTopAppBar(
-                title = stringResource(R.string.about_navigation),
-                scrollBehavior = scrollBehavior,
-                color = colorScheme.surface.copy(alpha = if (scrollProgress == 1f) 1f else 0f),
-                titleColor = colorScheme.onSurface.copy(alpha = scrollProgress),
-                defaultWindowInsetsPadding = false,
-                navigationIconPadding = 12.dp,
-            )
+    // About has always used a fixed compact header: the hero owns the title at
+    // rest, and only the small toolbar title fades in as the hero scrolls away.
+    // Do not use the collapsing scaffold here; secondary routes still need it.
+    CompactGlassTopBarScene(isContentScrolled = scrollProgress > 0f) { bodyModifier ->
+        Scaffold(
+            popupHost = {},
+            topBar = {
+                CompactGlassTopBar(
+                    title = stringResource(R.string.about_navigation),
+                    modifier = Modifier.testTag("about-root-header").graphicsLayer {
+                        alpha = scrollProgress
+                    },
+                )
+            },
+        ) { paddingValues ->
+            Box(Modifier.fillMaxSize().then(bodyModifier)) {
+                AboutRootContent(
+                    bottomInnerPadding = bottomInnerPadding,
+                    paddingValues = paddingValues,
+                    hazeState = hazeState,
+                    versionText = versionText,
+                    entries = entries,
+                    onOpenContributors = onOpenContributors,
+                    scrollProgress = scrollProgress,
+                    lazyListState = lazyListState,
+                    onOpenLibraries = onOpenLibraries,
+                    onOpenPresetPackDialog = onOpenPresetPackDialog,
+                    animateEnter = animateEnter,
+                )
+            }
         }
-    ) { paddingValues ->
-        AboutRootContent(
-            bottomInnerPadding = bottomInnerPadding,
-            paddingValues = paddingValues,
-            scrollBehavior = scrollBehavior,
-            hazeState = hazeState,
-            versionText = versionText,
-            entries = entries,
-            onOpenContributors = onOpenContributors,
-            scrollProgress = scrollProgress,
-            lazyListState = lazyListState,
-            onOpenLibraries = onOpenLibraries,
-            onOpenPresetPackDialog = onOpenPresetPackDialog,
-            animateEnter = animateEnter,
-        )
     }
 }
 
@@ -478,40 +493,25 @@ private fun AboutRootPage(
 private fun AboutSecondaryPage(
     title: String,
     onBack: () -> Unit,
-    content: @Composable (PaddingValues, ScrollBehavior, HazeState) -> Unit,
+    content: @Composable (PaddingValues, LazyListState, HazeState) -> Unit,
 ) {
-    val layoutDirection = LocalLayoutDirection.current
-    val scrollBehavior = MiuixScrollBehavior()
+    val listState = rememberLazyListState()
     val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                color = Color.Transparent,
-                title = title,
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            modifier = Modifier.graphicsLayer {
-                                if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
-                            },
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
-                        )
-                    }
-                },
-                navigationIconPadding = 12.dp,
-                scrollBehavior = scrollBehavior,
-            )
-        }
+    GlassTopBarScaffold(
+        title = title,
+        isContentScrolled = listState.firstVisibleItemIndex > 0 ||
+            listState.firstVisibleItemScrollOffset > 0,
+        contentListState = listState,
+        navigationIcon = {
+            TopBarIconButton(onClick = onBack, modifier = Modifier.testTag("about-back")) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.scene_route_navigate_back),
+                )
+            }
+        },
     ) { paddingValues ->
-        content(
-            paddingValues,
-            scrollBehavior,
-            hazeState,
-        )
+        content(paddingValues, listState, hazeState)
     }
 }
 
@@ -519,7 +519,6 @@ private fun AboutSecondaryPage(
 private fun AboutRootContent(
     bottomInnerPadding: Dp,
     paddingValues: PaddingValues,
-    scrollBehavior: ScrollBehavior,
     hazeState: HazeState,
     versionText: String,
     entries: List<CreditEntry>,
@@ -531,9 +530,10 @@ private fun AboutRootContent(
     animateEnter: Boolean,
 ) {
     val context = LocalContext.current
+    val layoutDirection = LocalLayoutDirection.current
     val visualTokens = rememberAboutVisualTokens()
 
-    val backdrop = rememberLayerBackdrop()
+    val backdrop = rememberTextureBackdrop()
 
     val scrollPadding = pageContentPadding(
         paddingValues,
@@ -566,7 +566,6 @@ private fun AboutRootContent(
     var projectNameProgress by remember { mutableFloatStateOf(0f) }
     var versionCodeProgress by remember { mutableFloatStateOf(0f) }
     var initialLogoAreaY by remember { mutableFloatStateOf(0f) }
-    val runtimeShaderSupported = remember { isRuntimeShaderSupported() }
 
 
     LaunchedEffect(lazyListState) {
@@ -604,13 +603,13 @@ private fun AboutRootContent(
             }
             .collect { }
     }
-    BgEffectBackground(
-        dynamicBackground = runtimeShaderSupported,
+    AnimatedGradientBackground(
+        dynamicBackground = true,
         modifier = Modifier.fillMaxSize(),
-        bgModifier = Modifier.layerBackdrop(backdrop),
+        backgroundModifier = Modifier.textureBackdropSource(backdrop),
         backgroundColor = visualTokens.backgroundColor,
         isDarkTheme = visualTokens.isDarkTheme,
-        effectBackground = runtimeShaderSupported,
+        effectBackground = true,
         alpha = { 1f - scrollProgress },
     ) {
         // ── 修改：Logo 固定悬浮在 LazyColumn 下方，与 AboutPage 结构一致 ──
@@ -650,10 +649,8 @@ private fun AboutRootContent(
                         .textureBlur(
                             backdrop = backdrop,
                             shape = RoundedCornerShape(24.dp),
-                            blurRadius = 150f,
-                            colors = BlurColors(
-                                blendColors = visualTokens.logoBlendColors,
-                            ),
+                            blurRadius = 150.dp,
+                            blendLayers = visualTokens.logoBlendColors,
                             contentBlendMode = BlendMode.DstIn,
                             enabled = true,
                         ),
@@ -680,10 +677,8 @@ private fun AboutRootContent(
                     .textureBlur(
                         backdrop = backdrop,
                         shape = RoundedCornerShape(16.dp),
-                        blurRadius = 150f,
-                        colors = BlurColors(
-                            blendColors = visualTokens.logoBlendColors,
-                        ),
+                        blurRadius = 150.dp,
+                        blendLayers = visualTokens.logoBlendColors,
                         contentBlendMode = BlendMode.DstIn,
                         enabled = true,
                     ),
@@ -719,12 +714,12 @@ private fun AboutRootContent(
             state = lazyListState,
             modifier = Modifier
                 .fillMaxSize()
-                .scrollEndHaptic()
-                .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .rearAcrylicSource(hazeState)
-                .padding(horizontal = AboutPageHorizontalPadding),
+                .testTag("about-root-list")
+                .pageScrollFeedback()
+                .rearAcrylicSource(hazeState),
             contentPadding = PaddingValues(
+                start = paddingValues.calculateStartPadding(layoutDirection) + AboutPageHorizontalPadding,
+                end = paddingValues.calculateEndPadding(layoutDirection) + AboutPageHorizontalPadding,
                 top = scrollPadding.calculateTopPadding(),
                 bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
             ),
@@ -765,14 +760,9 @@ private fun AboutRootContent(
                         modifier = Modifier.textureBlur(
                             backdrop = backdrop,
                             shape = RoundedCornerShape(16.dp),
-                            blurRadius = 60f,
+                            blurRadius = 60.dp,
                             noiseCoefficient = 0.001f,
-                            colors = BlurColors(
-                                blendColors = visualTokens.cardBlendColors,
-                                brightness = 0f,
-                                contrast = 1f,
-                                saturation = 1f,
-                            ),
+                            blendLayers = visualTokens.cardBlendColors,
                             enabled = true,
                         ),
                         colors = CardDefaults.defaultColors(
@@ -780,13 +770,14 @@ private fun AboutRootContent(
                             Color.Transparent,
                         ),
                     ) {
-                        SuperCard(
+                        ListItem(
+                            animateContentSize = true,
                             title = stringResource(R.string.preset_pack_title),
                             summary = stringResource(R.string.preset_pack_summary),
                             onClick = onOpenPresetPackDialog,
                             endActions = {
                                 Icon(
-                                    imageVector = MiuixIcons.Download,
+                                    imageVector = UiIcons.Download,
                                     tint = colorScheme.onSurface,
                                     contentDescription = null,
                                 )
@@ -807,14 +798,9 @@ private fun AboutRootContent(
                                     .textureBlur(
                                         backdrop = backdrop,
                                         shape = RoundedCornerShape(16.dp),
-                                        blurRadius = 60f,
+                                        blurRadius = 60.dp,
                                         noiseCoefficient = 0.001f,
-                                        colors = BlurColors(
-                                            blendColors = visualTokens.cardBlendColors,
-                                            brightness = 0f,
-                                            contrast = 1f,
-                                            saturation = 1f,
-                                        ),
+                                        blendLayers = visualTokens.cardBlendColors,
                                         enabled = true,
                                     ),
                                 colors = CardDefaults.defaultColors(
@@ -822,13 +808,14 @@ private fun AboutRootContent(
                                     Color.Transparent,
                                 ),
                             ) {
-                                SuperCard(
+                                ListItem(
+                                    animateContentSize = true,
                                     title = stringResource(R.string.credits_contributors_title),
                                     summary = stringResource(R.string.credits_contributors_desc),
                                     onClick = onOpenContributors,
                                     endActions = {
                                         Icon(
-                                            imageVector = MiuixIcons.Create,
+                                            imageVector = UiIcons.Create,
                                             tint = colorScheme.onSurface,
                                             contentDescription = null
                                         )
@@ -848,14 +835,9 @@ private fun AboutRootContent(
                                         .textureBlur(
                                             backdrop = backdrop,
                                             shape = RoundedCornerShape(16.dp),
-                                            blurRadius = 60f,
+                                            blurRadius = 60.dp,
                                             noiseCoefficient = 0.001f,
-                                            colors = BlurColors(
-                                                blendColors = visualTokens.cardBlendColors,
-                                                brightness = 0f,
-                                                contrast = 1f,
-                                                saturation = 1f,
-                                            ),
+                                            blendLayers = visualTokens.cardBlendColors,
                                             enabled = true,
                                         ),
                                     colors = CardDefaults.defaultColors(
@@ -863,7 +845,8 @@ private fun AboutRootContent(
                                         Color.Transparent,
                                     ),
                                 ) {
-                                    SuperCard(
+                                    ListItem(
+                                        animateContentSize = true,
                                         title = stringResource(entry.titleRes),
                                         summary = stringResource(entry.summaryRes),
                                         onClick = {
@@ -876,7 +859,7 @@ private fun AboutRootContent(
                                         },
                                         endActions = {
                                             Icon(
-                                                imageVector = MiuixIcons.Link,
+                                                imageVector = UiIcons.Link,
                                                 tint = colorScheme.onSurface,
                                                 contentDescription = null
                                             )
@@ -896,14 +879,9 @@ private fun AboutRootContent(
                                     .textureBlur(
                                         backdrop = backdrop,
                                         shape = RoundedCornerShape(16.dp),
-                                        blurRadius = 60f,
+                                        blurRadius = 60.dp,
                                         noiseCoefficient = 0.001f,
-                                        colors = BlurColors(
-                                            blendColors = visualTokens.cardBlendColors,
-                                            brightness = 0f,
-                                            contrast = 1f,
-                                            saturation = 1f,
-                                        ),
+                                        blendLayers = visualTokens.cardBlendColors,
                                         enabled = true,
                                     ),
                                 colors = CardDefaults.defaultColors(
@@ -911,13 +889,14 @@ private fun AboutRootContent(
                                     Color.Transparent,
                                 ),
                             ) {
-                                SuperCard(
+                                ListItem(
+                                    animateContentSize = true,
                                     title = stringResource(R.string.licenses_name),
                                     summary = stringResource(R.string.licenses_name_summary),
                                     onClick = onOpenLibraries,
                                     endActions = {
                                         Icon(
-                                            imageVector = MiuixIcons.Info,
+                                            imageVector = UiIcons.Info,
                                             tint = colorScheme.onSurface,
                                             contentDescription = null
                                         )
@@ -936,7 +915,7 @@ private fun AboutRootContent(
 @Composable
 private fun AboutDeviceInfoCard(
     context: android.content.Context,
-    backdrop: top.yukonga.miuix.kmp.blur.LayerBackdrop,
+    backdrop: TextureBackdrop,
     visualTokens: AboutVisualTokens,
     animateEnter: Boolean,
 ) {
@@ -947,9 +926,9 @@ private fun AboutDeviceInfoCard(
     ) {
         val layoutDirection = LocalLayoutDirection.current
         val deviceInfoCardPadding = PaddingValues(
-            start = BasicComponentDefaults.InsideMargin.calculateStartPadding(layoutDirection),
+            start = ListItemDefaults.InsideMargin.calculateStartPadding(layoutDirection),
             top = AboutDeviceInfoCardTopPadding,
-            end = BasicComponentDefaults.InsideMargin.calculateEndPadding(layoutDirection),
+            end = ListItemDefaults.InsideMargin.calculateEndPadding(layoutDirection),
             bottom = AboutDeviceInfoCardBottomPadding,
         )
         val deviceInfoRowPadding = PaddingValues(vertical = AboutDeviceInfoRowVerticalPadding)
@@ -960,14 +939,9 @@ private fun AboutDeviceInfoCard(
                 .textureBlur(
                     backdrop = backdrop,
                     shape = RoundedCornerShape(16.dp),
-                    blurRadius = 60f,
+                    blurRadius = 60.dp,
                     noiseCoefficient = 0.001f,
-                    colors = BlurColors(
-                        blendColors = visualTokens.cardBlendColors,
-                        brightness = 0f,
-                        contrast = 1f,
-                        saturation = 1f,
-                    ),
+                    blendLayers = visualTokens.cardBlendColors,
                     enabled = true,
                 ),
             colors = CardDefaults.defaultColors(
@@ -983,41 +957,41 @@ private fun AboutDeviceInfoCard(
                     modifier = Modifier.padding(bottom = AboutDeviceInfoHeaderBottomSpacing),
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Medium,
-                    color = BasicComponentDefaults.titleColor().color,
+                    color = ListItemDefaults.titleColor().color,
                 )
 
-                BasicComponent(
+                ListItem(
                     title = stringResource(R.string.device_name),
                     summary = DeviceConfigTools.marketName,
                     insideMargin = deviceInfoRowPadding,
                 )
 
-                BasicComponent(
+                ListItem(
                     title = stringResource(R.string.android_version),
                     summary = DeviceConfigTools.androidVersion,
                     insideMargin = deviceInfoRowPadding,
                 )
 
-                BasicComponent(
+                ListItem(
                     title = stringResource(R.string.os_version),
                     summary = OSVersionTools.addVersionSuffix(context),
                     insideMargin = deviceInfoRowPadding,
                 )
 
-                BasicComponent(
+                ListItem(
                     title = stringResource(R.string.module_version_label),
                     summary = rememberVersionText(),
                     insideMargin = deviceInfoRowPadding,
                 )
 
-                BasicComponent(
+                ListItem(
                     title = stringResource(R.string.version_codename_label),
                     summary = AppProperties.PROJECT_APP_VERSION_CODENAME,
                     insideMargin = deviceInfoRowPadding,
                 )
 
                 if (subscreenVer != "UNKNOWN") {
-                    BasicComponent(
+                    ListItem(
                         title = stringResource(R.string.subsceen_version),
                         summary = subscreenVer,
                         insideMargin = deviceInfoRowPadding,
@@ -1051,21 +1025,24 @@ private fun AboutReveal(
 private fun ContributorListContent(
     bottomInnerPadding: Dp,
     paddingValues: PaddingValues,
-    scrollBehavior: ScrollBehavior,
+    lazyListState: LazyListState,
     hazeState: HazeState,
     state: ContributorLoadState,
+    onRetry: () -> Unit,
 ) {
+    val layoutDirection = LocalLayoutDirection.current
     val avatarPlaceholderAlpha = rememberSkeletonPulseAlpha("contributor-avatar-skeleton")
 
     LazyColumn(
+        state = lazyListState,
         modifier = Modifier
             .fillMaxSize()
-            .scrollEndHaptic()
-            .overScrollVertical()
-            .nestedScroll(scrollBehavior.nestedScrollConnection)
-            .rearAcrylicSource(hazeState)
-            .padding(horizontal = AboutPageHorizontalPadding),
+            .testTag("about-secondary-list")
+            .pageScrollFeedback()
+            .rearAcrylicSource(hazeState),
         contentPadding = PaddingValues(
+            start = paddingValues.calculateStartPadding(layoutDirection) + AboutPageHorizontalPadding,
+            end = paddingValues.calculateEndPadding(layoutDirection) + AboutPageHorizontalPadding,
             top = paddingValues.calculateTopPadding(),
             bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
         ),
@@ -1099,12 +1076,13 @@ private fun ContributorListContent(
             ContributorLoadState.Failed -> item {
                 ArtRevealItem(visible = true, delayMillis = 40) {
                     Card(modifier = Modifier.fillMaxWidth()) {
-                        SuperCard(
+                        ListItem(
+                            animateContentSize = true,
                             title = stringResource(R.string.credits_contributors_title),
                             summary = stringResource(R.string.credits_contributors_load_failed),
                             bottomAction = {
                                 Button(
-                                    onClick = { ContributorRepository.ensureLoaded(force = true) },
+                                    onClick = onRetry,
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Text(text = stringResource(R.string.credits_contributors_retry))
@@ -1151,38 +1129,44 @@ private fun ContributorListContent(
 }
 
 @Composable
-private fun LicenseContent(
+internal fun LicenseContent(
     bottomInnerPadding: Dp,
     paddingValues: PaddingValues,
-    scrollBehavior: ScrollBehavior,
+    lazyListState: LazyListState,
     hazeState: HazeState,
+    libraries: AboutLibraries? = null,
+    licenseSheetState: LibraryLicenseSheetState = remember { LibraryLicenseSheetState() },
 ) {
     val context = LocalContext.current
-    val data = remember {
+    val layoutDirection = LocalLayoutDirection.current
+    val data = libraries ?: remember(context) {
         loadLibraries(context)
     }
 
 
     LazyColumn(
+        state = lazyListState,
         modifier = Modifier
             .fillMaxSize()
-            .scrollEndHaptic()
-            .overScrollVertical()
-            .nestedScroll(scrollBehavior.nestedScrollConnection)
-            .rearAcrylicSource(hazeState)
-            .padding(horizontal = 12.dp),
+            .testTag("about-secondary-list")
+            .pageScrollFeedback()
+            .rearAcrylicSource(hazeState),
         contentPadding = PaddingValues(
+            start = paddingValues.calculateStartPadding(layoutDirection) + AboutPageHorizontalPadding,
+            end = paddingValues.calculateEndPadding(layoutDirection) + AboutPageHorizontalPadding,
             top = paddingValues.calculateTopPadding(),
             bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
         ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         overscrollEffect = null,
     ) {
-        items(data.libraries) {
-            LibraryItem(it, data.licenses)
+        items(data.libraries, key = { it.uniqueId }) {
+            LibraryItem(it, data.licenses, onLicenseClick = licenseSheetState::open)
         }
     }
 
+    // Keep the sheet alive when its source row leaves the lazy viewport, including exit.
+    LibraryLicenseSheet(licenseSheetState)
 }
 
 @Composable
@@ -1195,7 +1179,8 @@ private fun ContributorCard(
     val hasLink = link != null
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        SuperCard(
+        ListItem(
+            animateContentSize = true,
             title = item.name,
             summary = item.description.takeIf { it.isNotBlank() },
             startAction = {
@@ -1212,7 +1197,7 @@ private fun ContributorCard(
             endActions = {
                 if (hasLink) {
                     Icon(
-                        imageVector = MiuixIcons.Link,
+                        imageVector = UiIcons.Link,
                         tint = colorScheme.onSurface,
                         contentDescription = null,
                     )

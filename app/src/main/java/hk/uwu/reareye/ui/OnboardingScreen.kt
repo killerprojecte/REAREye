@@ -9,14 +9,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -55,13 +57,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.CardDefaults
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.theme.MixTheme
 
 private data class PermissionSnapshot(
     val lsp: ModuleActivationState,
@@ -120,13 +122,13 @@ fun OnboardingScreen(
     val pageSettled = !pagerState.isScrollInProgress && pagerState.currentPage == page
     val canContinue =
         pageSettled && (page != 2 || (lspScopeReady && permissionSnapshot.root == true))
-    val accent = MiuixTheme.colorScheme.primary
+    val accent = MixTheme.colorScheme.primary
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MiuixTheme.colorScheme.background)
-            .padding(WindowInsets.statusBars.asPaddingValues())
+            .background(MixTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
             .padding(horizontal = 20.dp, vertical = 18.dp),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -193,8 +195,8 @@ fun OnboardingScreen(
                         onClick = { if (page == 2) onFinished(true) else page += 1 },
                         enabled = canContinue,
                         colors = ButtonDefaults.buttonColors(
-                            color = MiuixTheme.colorScheme.primary,
-                            contentColor = MiuixTheme.colorScheme.onPrimary,
+                            color = MixTheme.colorScheme.primary,
+                            contentColor = MixTheme.colorScheme.onPrimary,
                         ),
                         modifier = Modifier.weight(1f),
                     ) {
@@ -225,7 +227,7 @@ private fun OobePage(
                     modifier = Modifier
                         .size(216.dp)
                         .clip(CircleShape)
-                        .background(MiuixTheme.colorScheme.surfaceVariant),
+                        .background(MixTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center,
                 ) {
                     Image(
@@ -240,15 +242,15 @@ private fun OobePage(
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
                     text = stringResource(R.string.oobe_welcome_title),
-                    style = MiuixTheme.textStyles.headline1.copy(fontWeight = FontWeight.Bold),
+                    style = MixTheme.textStyles.headline1.copy(fontWeight = FontWeight.Bold),
                     textAlign = TextAlign.Center,
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = stringResource(R.string.oobe_welcome_summary),
-                    style = MiuixTheme.textStyles.body1,
+                    style = MixTheme.textStyles.body1,
                     textAlign = TextAlign.Center,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
 
@@ -256,21 +258,21 @@ private fun OobePage(
                 Icon(
                     Icons.Outlined.Info,
                     contentDescription = null,
-                    tint = MiuixTheme.colorScheme.primary,
+                    tint = MixTheme.colorScheme.primary,
                     modifier = Modifier.size(64.dp)
                 )
                 Spacer(modifier = Modifier.height(18.dp))
                 Text(
                     stringResource(R.string.oobe_disclaimer_title),
-                    style = MiuixTheme.textStyles.headline1.copy(fontWeight = FontWeight.Bold),
+                    style = MixTheme.textStyles.headline1.copy(fontWeight = FontWeight.Bold),
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     stringResource(R.string.oobe_disclaimer_summary),
-                    style = MiuixTheme.textStyles.body1,
+                    style = MixTheme.textStyles.body1,
                     textAlign = TextAlign.Center,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 DisclaimerCard()
@@ -280,21 +282,21 @@ private fun OobePage(
                 Icon(
                     Icons.Outlined.Security,
                     contentDescription = null,
-                    tint = MiuixTheme.colorScheme.primary,
+                    tint = MixTheme.colorScheme.primary,
                     modifier = Modifier.size(64.dp)
                 )
                 Spacer(modifier = Modifier.height(18.dp))
                 Text(
                     stringResource(R.string.oobe_permission_title),
-                    style = MiuixTheme.textStyles.headline1.copy(fontWeight = FontWeight.Bold),
+                    style = MixTheme.textStyles.headline1.copy(fontWeight = FontWeight.Bold),
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     stringResource(R.string.oobe_permission_summary),
-                    style = MiuixTheme.textStyles.body1,
+                    style = MixTheme.textStyles.body1,
                     textAlign = TextAlign.Center,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    color = MixTheme.colorScheme.onSurfaceVariantSummary
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 PermissionCard(permissionSnapshot, onRefreshPermissions)
@@ -307,7 +309,7 @@ private fun OobePage(
 private fun DisclaimerCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer),
+        colors = CardDefaults.defaultColors(color = MixTheme.colorScheme.secondaryContainer),
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -317,7 +319,7 @@ private fun DisclaimerCard() {
                 Icon(
                     Icons.Outlined.Warning,
                     contentDescription = null,
-                    tint = MiuixTheme.colorScheme.error
+                    tint = MixTheme.colorScheme.error
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
@@ -327,15 +329,15 @@ private fun DisclaimerCard() {
             }
             Text(
                 stringResource(R.string.oobe_disclaimer_point_one),
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                color = MixTheme.colorScheme.onSurfaceVariantSummary
             )
             Text(
                 stringResource(R.string.oobe_disclaimer_point_two),
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                color = MixTheme.colorScheme.onSurfaceVariantSummary
             )
             Text(
                 stringResource(R.string.oobe_disclaimer_point_three),
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                color = MixTheme.colorScheme.onSurfaceVariantSummary
             )
         }
     }
@@ -394,13 +396,13 @@ private fun PermissionRow(title: String, summary: String, ready: Boolean) {
         Icon(
             imageVector = if (ready) Icons.Outlined.CheckCircle else Icons.Outlined.Lock,
             contentDescription = null,
-            tint = if (ready) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            tint = if (ready) MixTheme.colorScheme.primary else MixTheme.colorScheme.onSurfaceVariantSummary,
             modifier = Modifier.size(22.dp),
         )
         Spacer(modifier = Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(title, fontWeight = FontWeight.Medium)
-            Text(summary, fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            Text(summary, fontSize = 13.sp, color = MixTheme.colorScheme.onSurfaceVariantSummary)
         }
     }
 }

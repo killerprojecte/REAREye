@@ -1,0 +1,385 @@
+package hk.uwu.reareye.ui.capture
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import android.app.Application
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import java.io.File
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import hk.uwu.mixui.MixColorSchemeMode
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.MixUiHost
+import hk.uwu.reareye.R
+import hk.uwu.reareye.ui.GuideMemoryPrefs
+import hk.uwu.reareye.ui.config.*
+import hk.uwu.reareye.ui.screen.ConfigNodePage
+import org.junit.After
+import org.junit.Assert.*
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.android.controller.ActivityController
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/** Production Category/Favorites/Lyrics list, with in-memory preferences and no manager IO.
+ * This tests page callbacks, not ConfigScreen's outer route stack or manager tab lifetime.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36], manifest = Config.NONE, application = Application::class,
+    qualifiers = "zh-rCN-w400dp-h800dp-mdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class ConfigNodeNativeTitleTest {
+    @get:Rule val compose = createEmptyComposeRule()
+    private var activity: ActivityController<ComponentActivity>? = null
+    private var favoriteIds by mutableStateOf(emptySet<String>())
+    private val opened = mutableListOf<String>()
+    private var backs = 0
+    private lateinit var pagePrefs: PrefsManager
+    private val changed = mutableListOf<String>()
+    private fun frames() { repeat(12) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() } }
+    private fun label(id: Int) = activity!!.get().getString(id)
+    private fun open(
+        backend: MixUiBackend,
+        nodes: List<ConfigNode>,
+        favorites: Boolean = false,
+        dark: Boolean = false,
+        direction: LayoutDirection = LayoutDirection.Ltr,
+        fontScale: Float = 1f,
+        pageTitle: String = if (favorites) "Fixture Favorites" else "Fixture Category",
+        mochiStyle: hk.uwu.mixui.MixMochiStyle = hk.uwu.mixui.MixMochiStyle.Default,
+        preparePreferences: (PrefsManager) -> Unit = {},
+    ) {
+        compose.mainClock.autoAdvance = false
+        opened.clear(); backs = 0; favoriteIds = emptySet()
+        val prefs = PrefsManager(GuideMemoryPrefs())
+        preparePreferences(prefs)
+        pagePrefs = prefs; changed.clear()
+        compose.runOnUiThread {
+            activity?.close()
+            activity = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+            activity!!.get().enableEdgeToEdge()
+            activity!!.get().setContent {
+                NativeTitleTestEnvironment(direction, fontScale) {
+                MixUiHost(backend, if (dark) MixColorSchemeMode.Dark else MixColorSchemeMode.Light, mochiStyle = mochiStyle) {
+                    Box(Modifier.fillMaxSize()) {
+                        ConfigNodePage(
+                            title = pageTitle,
+                            nodes = nodes,
+                            prefsManager = prefs,
+                            bottomObstruction = 96.dp,
+                            onBack = { backs++ },
+                            onOpenCategory = { opened += "category:${it.key}" },
+                            onOpenAppList = { opened += "apps:${it.key}" },
+                            onOpenManager = { opened += "manager:${it.key}" },
+                            onPreferenceChanged = { changed += it.key },
+                            favoriteNodeIds = favoriteIds,
+                            resolveFavoriteNodeId = { it.key },
+                            onToggleFavorite = { node ->
+                                node.key?.let { id -> favoriteIds = if (id in favoriteIds) favoriteIds - id else favoriteIds + id }
+                            },
+                            emptyStateRes = if (favorites) R.string.config_favorites_empty else null,
+                        )
+                        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(96.dp)
+                            .testTag("config-bottom-overlay"))
+                    }
+                }
+                }
+            }
+        }
+        frames()
+    }
+    private fun capture(name: String) {
+        val folder = File(System.getProperty("ui.capture.output"), "config-native-lists").apply { mkdirs() }
+        val roots = compose.onAllNodes(isRoot(), useUnmergedTree = true)
+        roots.fetchSemanticsNodes().indices.forEach { index ->
+            val bitmap = roots[index].captureToImage().asAndroidBitmap()
+            val suffix = if (index == 0) "" else "-root$index"
+            File(folder, "$name$suffix.png").outputStream().use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        }
+    }
+    @After fun close() {
+        compose.mainClock.autoAdvance = true
+        compose.runOnUiThread { activity?.close(); activity = null }
+    }
+    @Test fun actualMusicLyricsCategoryUsesNativeMochiPreferences() {
+        val category = hk.uwu.reareye.ui.components.config.buildMoreCategories(REAREyeConfig)
+            .single { it.group.id == "music_lyrics" }.category
+        for (style in hk.uwu.mixui.MixMochiStyle.entries) for (dark in listOf(false, true)) {
+            open(MixUiBackend.Mochi, category.children, dark = dark, mochiStyle = style,
+                pageTitle = "音乐与歌词", preparePreferences = { prefs ->
+                    prefs.putBoolean(ConfigKeys.HOOK_MUSIC_CONTROLS_WHITELIST, true)
+                })
+            val prefix = "native-music-${style.name}-${if (dark) "dark" else "light"}"
+            capture("$prefix-initial")
+            val mode = compose.onNodeWithText(label(R.string.lyric_display_mode))
+            mode.performScrollTo(); frames()
+            mode.performTouchInput { click() }; frames()
+            compose.onNodeWithText(label(R.string.lyric_display_mode_translation)).assertIsDisplayed()
+            val output = File(System.getProperty("ui.capture.output"), "config-native-lists").apply { mkdirs() }
+            fun wholeWindow(name: String) {
+                val image = compose.runOnUiThread { captureWindowBitmap(activity!!.get().window) }
+                File(output, "$prefix-$name.png").outputStream().use {
+                    check(image.compress(Bitmap.CompressFormat.PNG, 100, it))
+                }
+            }
+            wholeWindow("multi-open")
+            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }
+            repeat(12) { index ->
+                compose.mainClock.advanceTimeByFrame(); compose.waitForIdle()
+                wholeWindow("multi-close-${index.toString().padStart(2, '0')}")
+            }
+            frames()
+            compose.onNodeWithText(label(R.string.lyric_display_mode_translation)).assertDoesNotExist()
+            assertTrue("Opening and cancelling never changes stored preferences", changed.isEmpty())
+            assertEquals(0, backs)
+        }
+    }
+
+    @Test fun productionSingleAndMaskMenusPersistInBothBackendsAndThemes() {
+        val single = ConfigItem("capture_single", R.string.config_tab_cards,
+            type = ConfigType.EnumSingleSelect(1, listOf(
+                ConfigType.EnumOption(R.string.config_tab_components, 1),
+                ConfigType.EnumOption(R.string.config_tab_wallpapers, 2))))
+        val mask = ConfigItem("capture_mask", R.string.config_tab_more,
+            type = ConfigType.MaskMultiSelect(1, listOf(
+                ConfigType.MaskOption(R.string.config_tab_components, 1),
+                ConfigType.MaskOption(R.string.config_tab_wallpapers, 2))))
+        for (backend in MixUiBackend.entries) for (dark in listOf(false, true)) {
+            open(backend, listOf(single), dark = dark)
+            compose.onNodeWithText(label(R.string.config_tab_cards)).performClick(); frames()
+            capture("dropdown-${backend.name}-$dark-single-open")
+            compose.onNodeWithText(label(R.string.config_tab_wallpapers)).performClick(); frames()
+            assertEquals(2, pagePrefs.getInt("capture_single", -1))
+            assertEquals(listOf("capture_single"), changed)
+            open(backend, listOf(mask), dark = dark)
+            compose.onNodeWithText(label(R.string.config_tab_more)).performClick(); frames()
+            capture("dropdown-${backend.name}-$dark-multiple-open")
+            compose.onNodeWithText(label(R.string.config_tab_wallpapers)).performClick(); frames()
+            assertEquals(3, pagePrefs.getInt("capture_mask", -1))
+            assertEquals(listOf("capture_mask"), changed)
+            compose.onNodeWithText(label(R.string.config_tab_more)).performClick(); frames()
+            compose.onNodeWithText(label(R.string.config_tab_wallpapers)).assertIsOn()
+            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }; frames()
+            assertEquals(3, pagePrefs.getInt("capture_mask", -1))
+            assertEquals(1, changed.size)
+        }
+    }
+    @Test fun actualCategoryAndFavoritesUseNativeHeadersAndBackCallbacks() {
+        for (backend in MixUiBackend.entries) for (favorites in listOf(false, true)) for (dark in listOf(false, true)) {
+            open(backend, emptyList(), favorites, dark)
+            val title = if (favorites) "Fixture Favorites" else "Fixture Category"
+            val titles = compose.onAllNodesWithText(title, useUnmergedTree = true)
+            assertTrue(titles.fetchSemanticsNodes().isNotEmpty())
+            val layouts = titles.fetchSemanticsNodes().indices.flatMap { index ->
+                val result = mutableListOf<TextLayoutResult>()
+                titles[index].performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(result) }
+                result
+            }
+            if (backend == MixUiBackend.Mochi) {
+                assertTrue("Mochi large header retains the existing 32sp normal MIUIX alignment", layouts.any {
+                    it.layoutInput.style.fontSize == 32.sp && it.layoutInput.style.fontWeight == FontWeight.Normal
+                })
+            } else {
+                assertTrue("Native MIUIX expanded large header", layouts.any {
+                    it.layoutInput.style.fontSize.value >= 28f
+                })
+            }
+            if (favorites) compose.onNodeWithText(label(R.string.config_favorites_empty)).assertIsDisplayed()
+            capture("${backend.name}-${if (dark) "dark" else "light"}-${if (favorites) "favorites" else "category"}")
+            compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back)).performClick()
+            compose.runOnIdle { assertEquals(1, backs) }
+        }
+    }
+    @Test fun actualRowsPreserveCategoryAppListAndManagerCallbacks() {
+        val nodes = listOf(
+            ConfigCategory(key = "child", titleRes = R.string.config_tab_more),
+            ConfigItem("apps", R.string.config_tab_components, type = ConfigType.AppList()),
+            ConfigItem("manager", R.string.config_tab_cards, type = ConfigType.Manager(ConfigType.ManagerType.CARD)),
+        )
+        for (backend in MixUiBackend.entries) for (dark in listOf(false, true)) {
+            open(backend, nodes, dark = dark)
+            capture("${backend.name}-${if (dark) "dark" else "light"}-populated-category")
+            for (id in listOf(R.string.config_tab_more, R.string.config_tab_components, R.string.config_tab_cards)) {
+                compose.onNodeWithText(label(id)).performClick(); frames()
+            }
+            compose.runOnIdle { assertEquals(listOf("category:child", "apps:apps", "manager:manager"), opened) }
+        }
+    }
+    @Test fun actualFavoritePopupCanDismissAddAndRemoveAcrossHosts() {
+        val node = ConfigCategory(key = "favorite-node", titleRes = R.string.config_tab_more)
+        for (backend in MixUiBackend.entries) {
+            open(backend, listOf(node))
+            fun longPressRow() {
+                val row = compose.onNodeWithText(label(R.string.config_tab_more))
+                row.performTouchInput { down(center) }
+                compose.mainClock.advanceTimeBy(800); compose.waitForIdle()
+                row.performTouchInput { up() }
+                frames()
+            }
+            longPressRow()
+            compose.onNodeWithText(label(R.string.config_favorite_add)).assertIsDisplayed()
+            capture("${backend.name}-favorite-popup")
+            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }
+            frames()
+            compose.onNodeWithText(label(R.string.config_favorite_add)).assertDoesNotExist()
+            assertEquals(0, backs)
+            assertTrue(opened.isEmpty())
+            longPressRow()
+            compose.onNodeWithText(label(R.string.config_favorite_add)).performClick(); frames()
+            assertEquals(setOf("favorite-node"), favoriteIds)
+            // The production toggle deliberately keeps the popup open and refreshes its label.
+            compose.onNodeWithText(label(R.string.config_favorite_remove)).assertIsDisplayed()
+            compose.runOnUiThread { activity!!.get().onBackPressedDispatcher.onBackPressed() }
+            frames()
+            compose.onNodeWithText(label(R.string.config_favorite_remove)).assertDoesNotExist()
+            longPressRow()
+            compose.onNodeWithText(label(R.string.config_favorite_remove)).performClick(); frames()
+            assertTrue(favoriteIds.isEmpty())
+            compose.onNodeWithText(label(R.string.config_favorite_add)).assertIsDisplayed()
+            assertTrue(opened.isEmpty())
+        }
+    }
+
+    @Test fun actualLongListHasOneScrollContainerAndClearsBottomOverlay() {
+        val nodes = List(40) { index -> ConfigCategory(
+            key = "node-$index",
+            titleRes = if (index == 39) R.string.config_tab_wallpapers else R.string.config_tab_more,
+        ) }
+        for (backend in MixUiBackend.entries) {
+            open(backend, nodes)
+            compose.onAllNodes(hasScrollAction()).assertCountEquals(1)
+            compose.onNode(hasScrollAction()).performScrollToKey("node-39")
+            frames()
+            compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 10000f) }
+            frames()
+            val last = compose.onNodeWithText(label(R.string.config_tab_wallpapers))
+            last.assertIsDisplayed()
+            val overlayTop = compose.onNodeWithTag("config-bottom-overlay").fetchSemanticsNode().boundsInRoot.top
+            assertTrue(last.fetchSemanticsNode().boundsInRoot.bottom < overlayTop)
+            capture("${backend.name}-long-list-bottom")
+            compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, -100000f) }
+            frames()
+            compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back)).assertIsDisplayed()
+        }
+    }
+    @Test fun shortNotificationCategoryRestoresAfterBodyPullDown() {
+        org.junit.Assume.assumeTrue(java.lang.Boolean.getBoolean("ui.capture.enabled"))
+        val group = hk.uwu.reareye.ui.components.config.buildMoreCategories(REAREyeConfig)
+            .first { it.group.id == "notifications_route" }
+        for (dark in listOf(false, true)) {
+            open(MixUiBackend.Miuix, group.category.children, dark = dark)
+            val list = compose.onNode(hasScrollAction())
+            val first = compose.onNodeWithText(label(requireNotNull(group.category.children.first().titleRes)))
+            val initialTop = first.fetchSemanticsNode().boundsInRoot.top
+            capture("miuix-short-notifications-$dark-expanded")
+            list.performTouchInput { swipeUp(durationMillis = 500) }; frames()
+            capture("miuix-short-notifications-$dark-collapsed")
+            val collapsedTop = first.fetchSemanticsNode().boundsInRoot.top
+            list.performTouchInput { swipeDown(durationMillis = 500) }; frames()
+            capture("miuix-short-notifications-$dark-restored")
+            val defaultStartRestoredTop = first.fetchSemanticsNode().boundsInRoot.top
+            val rowCenter = first.fetchSemanticsNode().boundsInRoot.center
+            val viewport = list.fetchSemanticsNode().boundsInRoot
+            list.performTouchInput {
+                val start = androidx.compose.ui.geometry.Offset(rowCenter.x - viewport.left, rowCenter.y - viewport.top)
+                swipe(start, start.copy(y = (start.y + 300f).coerceAtMost(height - 1f)), durationMillis = 500)
+            }; frames()
+            val rowStartRestoredTop = first.fetchSemanticsNode().boundsInRoot.top
+            capture("miuix-short-notifications-$dark-row-area-restored")
+            assertEquals("An actual row-origin downward gesture restores the native title", initialTop, rowStartRestoredTop, 1.5f)
+            list.performTouchInput { swipeUp(durationMillis = 500) }; frames()
+            list.performTouchInput {
+                swipe(androidx.compose.ui.geometry.Offset(center.x, height * 0.5f),
+                    androidx.compose.ui.geometry.Offset(center.x, height * 0.85f), durationMillis = 500)
+            }; frames()
+            capture("miuix-short-notifications-$dark-blank-area-restored")
+            val restoredTop = first.fetchSemanticsNode().boundsInRoot.top
+            File(System.getProperty("ui.capture.output"), "config-native-lists/short-notifications-$dark.txt")
+                .writeText("first row top: expanded=$initialTop collapsed=$collapsedTop defaultStartDown=$defaultStartRestoredTop rowStartDown=$rowStartRestoredTop blankAreaDown=$restoredTop\n")
+            assertTrue("Upward body gesture must collapse native title", collapsedTop < initialTop)
+            assertEquals("Downward body gesture must restore native title", initialTop, restoredTop, 1.5f)
+        }
+    }
+
+    @Test fun actualReareyeSettingsCollapsedTitleGeometry() {
+        val category = hk.uwu.reareye.ui.components.config.buildMoreCategories(REAREyeConfig)
+            .first { it.group.id == "reareye_settings" }.category
+        for (backend in MixUiBackend.entries) for (direction in listOf(LayoutDirection.Ltr, LayoutDirection.Rtl)) {
+            val title = "REAREye 设置"
+            open(backend, category.children, direction = direction, pageTitle = title)
+            val key = "reareye-settings-${backend.name}-$direction"
+            capture("$key-expanded")
+            writeNativeTitleGeometry("reareye-settings", "$key-expanded", compose.nativeTitleGeometry(title))
+            compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }; frames()
+            capture("$key-collapsed")
+            val geometries = compose.nativeTitleGeometry(title)
+            writeNativeTitleGeometry("reareye-settings", "$key-collapsed", geometries)
+            val compact = geometries.first { it.layout.layoutInput.style.fontSize.value < 28f }
+            val back = compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back)).fetchSemanticsNode().boundsInRoot
+            val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val glyphs = title.indices.map { compact.layout.getBoundingBox(it) }
+            val glyphCenter = compact.bounds.left + (glyphs.minOf { it.left } + glyphs.maxOf { it.right }) / 2f
+            val output = File(System.getProperty("ui.capture.output"), "reareye-settings").apply { mkdirs() }
+            File(output, "$key-centers.txt").writeText("root=$root\nback=$back\ntext=${compact.bounds}\nglyphCenter=$glyphCenter\nscreenCenter=${root.center.x}\n")
+            assertEquals("Settings title fits the whole-bar center without touching the back button", root.center.x, glyphCenter, 1.5f)
+            assertTrue("Collapsed title remains separate from back button", !compact.bounds.overlaps(back))
+            compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back)).performClick()
+            compose.runOnIdle { assertEquals(1, backs) }
+        }
+    }
+
+    @Test fun productionCategoryAndFavoritesTitleInsetsMatchMiuix() {
+        val failures = mutableListOf<String>()
+        val nodes = List(30) { index -> ConfigCategory(key = "alignment-$index", titleRes = R.string.config_tab_more) }
+        for (favorites in listOf(false, true)) for (fontScale in listOf(1f, 1.3f)) {
+            for (backend in MixUiBackend.entries) {
+                val titleText = if (favorites) "收藏 Favorites" else "通知与消息 Notifications"
+                open(backend, nodes, favorites = favorites, fontScale = fontScale, pageTitle = titleText)
+                val key = "alignment-${backend.name}-$favorites-$fontScale"
+                val expanded = compose.nativeTitleGeometry(titleText)
+                writeNativeTitleGeometry("config-native-lists", "$key-expanded", expanded)
+                capture("$key-expanded")
+                val title = expanded.maxBy { it.layout.layoutInput.style.fontSize.value }
+                if (backend == MixUiBackend.Mochi) {
+                    assertTrue("Native auto-size must not exceed the shared 32sp large-title size", title.layout.layoutInput.style.fontSize.value <= 32f)
+                    assertEquals(androidx.compose.ui.text.font.FontWeight.Normal, title.layout.layoutInput.style.fontWeight)
+                }
+                val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+                val inset = title.startInset(root, LayoutDirection.Ltr)
+                if (kotlin.math.abs(inset - 26f) > 1f) failures += "$key title first-glyph inset=$inset, expected 26px"
+                repeat(2) { compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }; frames() }
+                val collapsed = compose.nativeTitleGeometry(titleText)
+                writeNativeTitleGeometry("config-native-lists", "$key-collapsed", collapsed)
+                capture("$key-collapsed")
+                assertTrue("$key keeps a visible native compact title", collapsed.any {
+                    it.layout.layoutInput.style.fontSize.value < 28f && it.bounds.height > 0f && it.bounds.bottom < 150f
+                })
+                compose.onNodeWithContentDescription(label(R.string.scene_route_navigate_back)).performClick()
+                compose.runOnIdle { assertEquals(1, backs) }
+            }
+        }
+        assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
+
+}

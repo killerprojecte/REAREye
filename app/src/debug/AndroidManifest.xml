@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Never packaged in release. Run only on a disposable capture emulator. -->
+        <activity
+            android:name=".ui.capture.UiCaptureActivity"
+            android:exported="true"
+            android:theme="@style/Theme.AppDefault" />
+    </application>
+</manifest>

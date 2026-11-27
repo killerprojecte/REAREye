@@ -46,9 +46,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
+import hk.uwu.mixui.MixColorSchemeMode
+import hk.uwu.mixui.MixUiBackend
+import hk.uwu.mixui.MixUiHost
+import hk.uwu.mixui.theme.MixTheme
 
 /** Exercise the app's composable, including its asynchronous parser, rather than a second parser. */
 @RunWith(RobolectricTestRunner::class)
@@ -198,10 +199,10 @@ class MarkdownTextTest {
     }
 
     @Test
-    fun lightThemeUsesMiuixColorsAndBodyLineHeight() = assertTheme(ColorSchemeMode.Light)
+    fun lightThemeUsesMiuixColorsAndBodyLineHeight() = assertTheme(MixColorSchemeMode.Light)
 
     @Test
-    fun darkThemeUsesMiuixColorsAndBodyLineHeight() = assertTheme(ColorSchemeMode.Dark)
+    fun darkThemeUsesMiuixColorsAndBodyLineHeight() = assertTheme(MixColorSchemeMode.Dark)
 
     @Test
     fun linkClicksReachUriHandlerAndUnsupportedUriDoesNotEscape() {
@@ -234,11 +235,11 @@ class MarkdownTextTest {
         }
     }
 
-    private fun assertTheme(mode: ColorSchemeMode) {
+    private fun assertTheme(mode: MixColorSchemeMode) {
         var expectedText = Color.Unspecified
         var checkMapping: (() -> Unit)? = null
         setContent(mode) {
-            val scheme = MiuixTheme.colorScheme
+            val scheme = MixTheme.colorScheme
             val colors = miuixMarkdownColors(scheme.onSurfaceContainer)
             val typography = miuixMarkdownTypography(scheme.onSurfaceContainer)
             val customColor = Color(0xFF123456)
@@ -274,19 +275,19 @@ class MarkdownTextTest {
     }
 
     private fun setContent(
-        mode: ColorSchemeMode = ColorSchemeMode.Light,
+        mode: MixColorSchemeMode = MixColorSchemeMode.Light,
         content: @Composable () -> Unit,
     ) {
         compose.runOnUiThread {
             val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
             activity = controller
             controller.get().setContent {
-                MiuixTheme(ThemeController(mode)) {
+                MixUiHost(backend = MixUiBackend.Miuix, colorMode = mode) {
                     // Match a chat item's unbounded vertical constraints, not a fixed-height
                     // screen that would leave zero height for rows after a long table header.
                     Box(
                         Modifier
-                            .background(MiuixTheme.colorScheme.background)
+                            .background(MixTheme.colorScheme.background)
                             .width(320.dp)
                             .verticalScroll(rememberScrollState())
                     ) { content() }

@@ -14,12 +14,10 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -27,9 +25,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,7 +40,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -50,6 +49,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwallpaper.RearWallpaperInfo
+import hk.uwu.reareye.repository.rearwidget.RearCardConfig
+import hk.uwu.reareye.repository.rearwidget.RearWidgetManagerRepository
 import hk.uwu.reareye.ui.components.config.AppListSelectorScreen
 import hk.uwu.reareye.ui.components.config.BusinessExtraConfigManagerScreen
 import hk.uwu.reareye.ui.components.config.BusinessExtraConfigScreen
@@ -64,6 +65,7 @@ import hk.uwu.reareye.ui.components.config.SceneRouteManagerScreen
 import hk.uwu.reareye.ui.components.config.buildMoreCategories
 import hk.uwu.reareye.ui.components.config.rememberRearWallpaperManagerState
 import hk.uwu.reareye.ui.components.config.template.RearWallpaperTemplateConfigScreen
+import hk.uwu.reareye.ui.components.config.template.WidgetTemplateConfigScreen
 import hk.uwu.reareye.ui.components.script.ScriptManagementScreen
 import hk.uwu.reareye.ui.config.ConfigCategory
 import hk.uwu.reareye.ui.config.ConfigGroup
@@ -71,36 +73,28 @@ import hk.uwu.reareye.ui.config.ConfigItem
 import hk.uwu.reareye.ui.config.ConfigKeys
 import hk.uwu.reareye.ui.config.ConfigNode
 import hk.uwu.reareye.ui.config.ConfigType
-import hk.uwu.reareye.ui.config.ModuleNavigationBarMode
 import hk.uwu.reareye.ui.config.PrefsManager
 import hk.uwu.reareye.ui.config.PrefsManager.Companion.getPrefsManager
 import hk.uwu.reareye.ui.config.REAREyeConfig
-import hk.uwu.reareye.ui.theme.AppThemeMode
-import hk.uwu.reareye.ui.theme.rearAcrylicEffect
+import hk.uwu.reareye.ui.theme.AppMochiThemeStyle
+import hk.uwu.reareye.ui.theme.AppThemePreferences
 import hk.uwu.reareye.ui.theme.rearAcrylicSource
 import hk.uwu.reareye.ui.theme.rememberAcrylicHazeState
-import hk.uwu.reareye.ui.theme.rememberAcrylicHazeStyle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.ScrollBehavior
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import kotlinx.coroutines.withContext
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.GlassAnchoredMenu
+import hk.uwu.mixui.components.GlassMenuOption
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.Scaffold
+import hk.uwu.mixui.components.LargeTitleLazyScaffold
+import hk.uwu.mixui.components.TopBarIconButton
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.ArrowPreference
+import hk.uwu.mixui.theme.MixTheme
 import java.util.IdentityHashMap
 
 private sealed interface ConfigRoute {
@@ -118,6 +112,7 @@ private sealed interface ConfigRoute {
     data object LyricsManager : ConfigRoute
     data object ScriptManagement : ConfigRoute
     data class WallpaperTemplate(val wallpaper: RearWallpaperInfo) : ConfigRoute
+    data class CardTemplate(val card: RearCardConfig, val sourceFilePath: String) : ConfigRoute
 }
 
 private const val NAV_BAR_EXIT_DURATION_MS = 220L
@@ -157,7 +152,8 @@ fun ConfigScreen(
     onQuickManagerTargetHandled: () -> Unit = {},
     onAppListModeChange: (Boolean) -> Unit = {},
     onThemeModeChange: (Int) -> Unit = {},
-    onNavigationBarModeChange: (Int) -> Unit = {},
+    onMochiThemeStyleChange: (Int) -> Unit = {},
+    onNavigationBarStyleChange: (Int) -> Unit = {},
     onOpenRearStore: () -> Unit = {},
     onOpenRearStoreDetail: (String) -> Unit = {},
 ) {
@@ -188,17 +184,43 @@ fun ConfigScreen(
     var moreSearchSessionActive by rememberSaveable { mutableStateOf(false) }
     var moreSearchQuery by rememberSaveable { mutableStateOf("") }
     var pendingMoreSearchCategory by remember { mutableStateOf<ConfigCategory?>(null) }
+    var scriptEditingActive by remember { mutableStateOf(false) }
+    var cardRefreshRevision by remember { mutableIntStateOf(0) }
+    var overlayEnterPending by remember { mutableStateOf(false) }
+    val pendingOverlayQuickTarget = quickManagerTarget in setOf(
+        ConfigType.ManagerType.SCENE_ROUTE,
+        ConfigType.ManagerType.BOUNDS,
+    )
     val currentRoute = routeStack.last()
-    val isOverlayMode = currentRoute.isOverlayRoute()
+    val isOverlayMode = currentRoute.isOverlayRoute() ||
+        (currentRoute == ConfigRoute.ScriptManagement && scriptEditingActive)
+    val effectiveOverlayMode = isOverlayMode || overlayEnterPending || pendingOverlayQuickTarget
+    var hadOverlayActive by remember { mutableStateOf(effectiveOverlayMode) }
+
+    LaunchedEffect(effectiveOverlayMode) {
+        if (effectiveOverlayMode) {
+            hadOverlayActive = true
+            onAppListModeChange(true)
+        } else {
+            if (hadOverlayActive) {
+                delay(OVERLAY_ROUTE_EXIT_DURATION_MS)
+                hadOverlayActive = false
+            }
+            onAppListModeChange(false)
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            onAppListModeChange(false)
+        }
+    }
     val animatedRoute = remember(currentRoute, routeStack.size) {
         ConfigAnimatedRoute(
             route = currentRoute,
             depth = routeStack.size,
         )
     }
-    val scrollBehavior = MiuixScrollBehavior()
     val hazeState = rememberAcrylicHazeState()
-    val hazeStyle = rememberAcrylicHazeStyle()
     val routeScope = rememberCoroutineScope()
 
     val favoriteNodeIndex = remember(REAREyeConfig) {
@@ -247,45 +269,36 @@ fun ConfigScreen(
     val handlePreferenceChanged = remember(
         prefsManager,
         onThemeModeChange,
-        onNavigationBarModeChange,
+        onMochiThemeStyleChange,
+        onNavigationBarStyleChange,
     ) {
         { item: ConfigItem ->
             when (item.key) {
-                ConfigKeys.MODULE_THEME_MODE -> {
-                    onThemeModeChange(
-                        prefsManager.getInt(
-                            ConfigKeys.MODULE_THEME_MODE,
-                            AppThemeMode.default.value,
-                        )
-                    )
+                ConfigKeys.MODULE_MOCHI_THEME_STYLE -> {
+                    onMochiThemeStyleChange(prefsManager.getInt(
+                        ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value,
+                    ))
                 }
 
-                ConfigKeys.MODULE_NAVIGATION_BAR_MODE -> {
-                    onNavigationBarModeChange(
-                        prefsManager.getInt(
-                            ConfigKeys.MODULE_NAVIGATION_BAR_MODE,
-                            ModuleNavigationBarMode.default.value,
-                        )
+                ConfigKeys.MODULE_THEME_MODE -> {
+                    onNavigationBarStyleChange(AppThemePreferences.readNavigationStyle(prefsManager.prefs).value)
+                    onThemeModeChange(
+                        AppThemePreferences.readMode(prefsManager.prefs).value
                     )
+                    onMochiThemeStyleChange(prefsManager.getInt(
+                        ConfigKeys.MODULE_MOCHI_THEME_STYLE, AppMochiThemeStyle.default.value,
+                    ))
                 }
+
+
             }
         }
     }
 
     fun navigateBack() {
         if (routeStack.size <= 1) return
-        if (isOverlayMode) {
-            routeScope.launch {
-                val newStack = routeStack.dropLast(1)
-                routeStack = newStack
-                delay(OVERLAY_ROUTE_EXIT_DURATION_MS)
-                if (!newStack.last().isOverlayRoute()) {
-                    onAppListModeChange(false)
-                }
-            }
-        } else {
-            routeStack = routeStack.dropLast(1)
-        }
+        overlayEnterPending = false
+        routeStack = routeStack.dropLast(1)
     }
 
     BackHandler(enabled = routeStack.size > 1) {
@@ -294,18 +307,16 @@ fun ConfigScreen(
 
     fun openOverlayRoute(route: ConfigRoute) {
         routeScope.launch {
+            overlayEnterPending = true
             onAppListModeChange(true)
             delay(NAV_BAR_EXIT_DURATION_MS)
             routeStack = routeStack + route
+            overlayEnterPending = false
         }
     }
 
     fun closeOverlayRoute() {
-        routeScope.launch {
-            routeStack = listOf(ConfigRoute.Root)
-            delay(OVERLAY_ROUTE_EXIT_DURATION_MS)
-            onAppListModeChange(false)
-        }
+        navigateBack()
     }
 
     fun openManagerRoute(managerType: ConfigType.ManagerType?) {
@@ -407,7 +418,6 @@ fun ConfigScreen(
                         top = paddingValues.calculateTopPadding(),
                         bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
                     ),
-                    scrollBehavior = scrollBehavior,
                     modifier = Modifier.rearAcrylicSource(hazeState),
                     onOpenCategory = { category ->
                         // More owns these categories, so returning keeps the More tab selected.
@@ -448,6 +458,11 @@ fun ConfigScreen(
                             onFocusCardHandled = onFocusHandled,
                             onOpenComponent = onComponentRequested,
                             onOpenStoreDetail = onOpenRearStoreDetail,
+                            onEditTemplate = { card, sourceFilePath ->
+                                dashboardTabIndex = 0
+                                routeStack = routeStack + ConfigRoute.CardTemplate(card, sourceFilePath)
+                            },
+                            externalRefreshRevision = cardRefreshRevision,
                             actionRequest = actionRequest,
                             onActionHandled = onActionHandled,
                         )
@@ -491,90 +506,40 @@ fun ConfigScreen(
                     },
                 )
 
-                is ConfigRoute.Category -> ConfigSubpageLayout(
+                is ConfigRoute.Category -> ConfigNodePage(
                     title = stringResource(route.category.titleRes),
                     onBack = ::navigateBack,
-                    scrollBehavior = scrollBehavior,
-                    topBarModifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                ) {
-                    ConfigNodeList(
-                        nodes = route.category.children,
-                        prefsManager = prefsManager,
-                        contentPadding = PaddingValues(
-                            bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
-                        ),
-                        scrollBehavior = scrollBehavior,
-                        modifier = Modifier.rearAcrylicSource(hazeState),
-                        onOpenCategory = { category ->
-                            routeStack = routeStack + ConfigRoute.Category(category)
-                        },
-                        onOpenAppList = { item ->
-                            openOverlayRoute(ConfigRoute.AppList(item))
-                        },
-                        onOpenManager = { item -> openManagerItem(item) },
-                        onPreferenceChanged = handlePreferenceChanged,
-                        favoriteNodeIds = favoriteNodeIds,
-                        resolveFavoriteNodeId = { node ->
-                            favoriteNodeIndex.nodeIdLookup[node]
-                        },
-                        onToggleFavorite = { node ->
-                            toggleFavoriteNode(node)
-                        },
-                    )
-                }
+                    nodes = route.category.children,
+                    prefsManager = prefsManager,
+                    bottomObstruction = bottomInnerPadding,
+                    onOpenCategory = { category ->
+                        routeStack = routeStack + ConfigRoute.Category(category)
+                    },
+                    onOpenAppList = { item ->
+                        openOverlayRoute(ConfigRoute.AppList(item))
+                    },
+                    onOpenManager = { item -> openManagerItem(item) },
+                    onPreferenceChanged = handlePreferenceChanged,
+                    favoriteNodeIds = favoriteNodeIds,
+                    resolveFavoriteNodeId = { node ->
+                        favoriteNodeIndex.nodeIdLookup[node]
+                    },
+                    onToggleFavorite = { node ->
+                        toggleFavoriteNode(node)
+                    },
+                )
 
                 ConfigRoute.LyricsManager -> {
                     val lyricsCategory = findConfigCategoryByTitleRes(
                         REAREyeConfig,
                         R.string.subcategory_lyrics,
                     )
-                    ConfigSubpageLayout(
+                    ConfigNodePage(
                         title = stringResource(R.string.subcategory_lyrics),
                         onBack = ::navigateBack,
-                        scrollBehavior = scrollBehavior,
-                        topBarModifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                    ) {
-                        ConfigNodeList(
-                            nodes = lyricsCategory?.children.orEmpty(),
-                            prefsManager = prefsManager,
-                            contentPadding = PaddingValues(
-                                bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
-                            ),
-                            scrollBehavior = scrollBehavior,
-                            modifier = Modifier.rearAcrylicSource(hazeState),
-                            onOpenCategory = { category ->
-                                routeStack = routeStack + ConfigRoute.Category(category)
-                            },
-                            onOpenAppList = { item ->
-                                openOverlayRoute(ConfigRoute.AppList(item))
-                            },
-                            onOpenManager = { item -> openManagerItem(item) },
-                            onPreferenceChanged = handlePreferenceChanged,
-                            favoriteNodeIds = favoriteNodeIds,
-                            resolveFavoriteNodeId = { node ->
-                                favoriteNodeIndex.nodeIdLookup[node]
-                            },
-                            onToggleFavorite = { node ->
-                                toggleFavoriteNode(node)
-                            },
-                        )
-                    }
-                }
-
-                ConfigRoute.Favorites -> ConfigSubpageLayout(
-                    title = stringResource(R.string.config_favorites_title),
-                    onBack = ::navigateBack,
-                    scrollBehavior = scrollBehavior,
-                    topBarModifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                ) {
-                    ConfigNodeList(
-                        nodes = favoriteNodes,
+                        nodes = lyricsCategory?.children.orEmpty(),
                         prefsManager = prefsManager,
-                        contentPadding = PaddingValues(
-                            bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
-                        ),
-                        scrollBehavior = scrollBehavior,
-                        modifier = Modifier.rearAcrylicSource(hazeState),
+                        bottomObstruction = bottomInnerPadding,
                         onOpenCategory = { category ->
                             routeStack = routeStack + ConfigRoute.Category(category)
                         },
@@ -583,7 +548,6 @@ fun ConfigScreen(
                         },
                         onOpenManager = { item -> openManagerItem(item) },
                         onPreferenceChanged = handlePreferenceChanged,
-                        emptyStateRes = R.string.config_favorites_empty,
                         favoriteNodeIds = favoriteNodeIds,
                         resolveFavoriteNodeId = { node ->
                             favoriteNodeIndex.nodeIdLookup[node]
@@ -594,25 +558,70 @@ fun ConfigScreen(
                     )
                 }
 
-                is ConfigRoute.WallpaperTemplate -> ConfigSubpageLayout(
-                    title = stringResource(R.string.rear_wallpaper_template_title),
+                ConfigRoute.Favorites -> ConfigNodePage(
+                    title = stringResource(R.string.config_favorites_title),
                     onBack = ::navigateBack,
-                    scrollBehavior = scrollBehavior,
-                    topBarModifier = Modifier.rearAcrylicEffect(hazeState, hazeStyle),
-                ) {
-                    RearWallpaperTemplateConfigScreen(
-                        wallpaper = route.wallpaper,
-                        embedded = true,
-                        allowContentPresentation = !routeTransition.isRunning ||
-                                routeTransition.targetState.route !is ConfigRoute.WallpaperTemplate,
-                        contentPadding = PaddingValues(
-                            bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
-                        ),
-                        modifier = Modifier.rearAcrylicSource(hazeState),
-                        onBack = ::navigateBack,
-                        onSaved = ::navigateBack,
-                    )
-                }
+                    nodes = favoriteNodes,
+                    prefsManager = prefsManager,
+                    bottomObstruction = bottomInnerPadding,
+                    onOpenCategory = { category ->
+                        routeStack = routeStack + ConfigRoute.Category(category)
+                    },
+                    onOpenAppList = { item ->
+                        openOverlayRoute(ConfigRoute.AppList(item))
+                    },
+                    onOpenManager = { item -> openManagerItem(item) },
+                    onPreferenceChanged = handlePreferenceChanged,
+                    emptyStateRes = R.string.config_favorites_empty,
+                    favoriteNodeIds = favoriteNodeIds,
+                    resolveFavoriteNodeId = { node ->
+                        favoriteNodeIndex.nodeIdLookup[node]
+                    },
+                    onToggleFavorite = { node ->
+                        toggleFavoriteNode(node)
+                    },
+                )
+
+                is ConfigRoute.WallpaperTemplate -> RearWallpaperTemplateConfigScreen(
+                    wallpaper = route.wallpaper,
+                    allowContentPresentation = !routeTransition.isRunning ||
+                            routeTransition.targetState.route !is ConfigRoute.WallpaperTemplate,
+                    contentPadding = PaddingValues(
+                        bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
+                    ),
+                    onBack = ::navigateBack,
+                    onSaved = ::navigateBack,
+                )
+
+                is ConfigRoute.CardTemplate -> WidgetTemplateConfigScreen(
+                    business = route.card.business,
+                    sourceFilePath = route.sourceFilePath,
+                    cardStorageKey = route.card.id,
+                    currentConfigJson = route.card.oneConfigJson,
+                    allowContentPresentation = !routeTransition.isRunning ||
+                            routeTransition.targetState.route !is ConfigRoute.CardTemplate,
+                    contentPadding = PaddingValues(
+                        bottom = paddingValues.calculateBottomPadding() + bottomInnerPadding,
+                    ),
+                    onBack = ::navigateBack,
+                    onSave = { normalizedJson ->
+                        routeScope.launch {
+                            withContext(Dispatchers.IO) {
+                                val existing = RearWidgetManagerRepository.loadCards(prefsManager)
+                                val updated = existing.map { item ->
+                                    if (item.id == route.card.id) {
+                                        item.copy(oneConfigJson = normalizedJson?.takeIf { it.isNotBlank() })
+                                    } else {
+                                        item
+                                    }
+                                }
+                                RearWidgetManagerRepository.saveCards(context, prefsManager, updated)
+                            }
+                            cardRefreshRevision++
+                            navigateBack()
+                        }
+                    },
+                )
 
                 is ConfigRoute.AppList -> AppListSelectorScreen(
                     configItem = route.item,
@@ -655,7 +664,7 @@ fun ConfigScreen(
                 is ConfigRoute.BusinessExtraDetail -> BusinessExtraConfigScreen(
                     prefsManager = prefsManager,
                     business = route.business,
-                    onBack = { routeStack = routeStack.dropLast(1) },
+                    onBack = ::navigateBack,
                 )
 
                 ConfigRoute.CustomBoundsCompatManager -> CustomBoundsCompatManagerScreen(
@@ -665,7 +674,8 @@ fun ConfigScreen(
 
                 ConfigRoute.ScriptManagement -> ScriptManagementScreen(
                     onBack = ::navigateBack,
-                    bottomInnerPadding = bottomInnerPadding,
+                    bottomInnerPadding = if (scriptEditingActive) 0.dp else bottomInnerPadding,
+                    onEditingModeChange = { scriptEditingActive = it },
                 )
             }
         }
@@ -691,40 +701,6 @@ fun ConfigScreen(
     )
 }
 
-@Composable
-private fun ConfigSubpageLayout(
-    title: String,
-    onBack: () -> Unit,
-    scrollBehavior: ScrollBehavior,
-    topBarModifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            modifier = topBarModifier,
-            color = Color.Transparent,
-            title = title,
-            navigationIconPadding = 12.dp,
-            navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = null,
-                    )
-                }
-            },
-            scrollBehavior = scrollBehavior,
-        )
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-        ) {
-            content()
-        }
-    }
-}
-
 private fun findConfigCategoryByTitleRes(
     nodes: List<ConfigNode>,
     titleRes: Int,
@@ -741,11 +717,12 @@ private fun findConfigCategoryByTitleRes(
 }
 
 @Composable
-private fun ConfigNodeList(
+internal fun ConfigNodePage(
     nodes: List<ConfigNode>,
     prefsManager: PrefsManager,
-    contentPadding: PaddingValues,
-    scrollBehavior: ScrollBehavior,
+    title: String,
+    onBack: () -> Unit,
+    bottomObstruction: Dp,
     modifier: Modifier = Modifier,
     onOpenCategory: (ConfigCategory) -> Unit,
     onOpenAppList: (ConfigItem) -> Unit,
@@ -764,17 +741,21 @@ private fun ConfigNodeList(
         derivedStateOf { listState.isScrollInProgress }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxHeight()
-            .scrollEndHaptic()
-            .overScrollVertical()
-            .nestedScroll(scrollBehavior.nestedScrollConnection)
-            .then(modifier)
-            .padding(horizontal = 12.dp),
-        contentPadding = contentPadding,
-        overscrollEffect = null
+    LargeTitleLazyScaffold(
+        title = title,
+        modifier = modifier,
+        listState = listState,
+        bottomObstruction = bottomObstruction,
+        // Rows already own their spacing; the page must not add a second gap.
+        contentSpacing = 0.dp,
+        navigationIcon = {
+            TopBarIconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.scene_route_navigate_back),
+                )
+            }
+        },
     ) {
         if (showFavoriteCategoryEntry) {
             item(key = "favorite_config_category_entry") {
@@ -821,8 +802,8 @@ private fun ConfigNodeList(
                 ) {
                     Text(
                         text = stringResource(emptyStateRes),
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        style = MixTheme.textStyles.body2,
+                        color = MixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     )
                 }
@@ -895,12 +876,24 @@ internal fun ConfigNodeRowWithFavoriteMenu(
     val favoriteIconTint = rememberFavoriteIconTint()
     var showFavoritePopup by remember(favoriteNodeId) { mutableStateOf(false) }
 
-    Box(
+    GlassAnchoredMenu(
+        expanded = showFavoritePopup,
+        onExpandedChange = { showFavoritePopup = it },
+        enabled = canFavorite,
+        options = listOf(GlassMenuOption(
+            title = stringResource(if (isFavorite) R.string.config_favorite_remove else R.string.config_favorite_add),
+            dismissOnClick = false,
+            icon = { iconModifier ->
+                FavoritePopupIcon(isFavorite = isFavorite, tint = favoriteIconTint, modifier = iconModifier)
+            },
+        )),
+        onOptionClick = { onToggleFavorite(node) },
         modifier = Modifier.configNodeLongPress(
             enabled = canFavorite,
             isScrolling = isListScrolling,
             onLongPress = { showFavoritePopup = true },
-        )
+        ),
+        width = 240.dp,
     ) {
         ConfigNodeRow(
             node = node,
@@ -910,56 +903,14 @@ internal fun ConfigNodeRowWithFavoriteMenu(
             onOpenManager = onOpenManager,
             onPreferenceChanged = onPreferenceChanged,
         )
-
-        if (canFavorite) {
-            OverlayListPopup(
-                show = showFavoritePopup,
-                popupModifier = Modifier,
-                popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-                alignment = PopupPositionProvider.Align.Start,
-                enableWindowDim = true,
-                onDismissRequest = { showFavoritePopup = false },
-                maxHeight = null,
-                minWidth = 180.dp,
-                renderInRootScaffold = true,
-            ) {
-                ListPopupColumn {
-                    DropdownImpl(
-                        item = DropdownItem(
-                            icon = { iconModifier ->
-                                FavoritePopupIcon(
-                                    isFavorite = isFavorite,
-                                    tint = favoriteIconTint,
-                                    modifier = iconModifier,
-                                )
-                            },
-                            title = stringResource(
-                                if (isFavorite) {
-                                    R.string.config_favorite_remove
-                                } else {
-                                    R.string.config_favorite_add
-                                }
-                            )
-                        ),
-                        optionSize = 1,
-                        isSelected = false,
-                        index = 0,
-                        dropdownColors = DropdownDefaults.dropdownColors(),
-                        onSelectedIndexChange = {
-                            onToggleFavorite(node)
-                        },
-                    )
-                }
-            }
-        }
     }
 }
 
 @Composable
 private fun rememberFavoriteIconTint(): Color {
     return lerp(
-        start = MiuixTheme.colorScheme.error,
-        stop = MiuixTheme.colorScheme.errorContainer,
+        start = MixTheme.colorScheme.error,
+        stop = MixTheme.colorScheme.errorContainer,
         fraction = 0.32f,
     )
 }

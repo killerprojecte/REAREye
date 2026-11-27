@@ -1,58 +1,33 @@
 package hk.uwu.reareye.ui.components.config
 
-import androidx.compose.foundation.LocalOverscrollFactory
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.roundToIntRect
+import androidx.compose.ui.res.stringResource
 import hk.uwu.reareye.R
 import hk.uwu.reareye.repository.rearwidget.RearBusinessConfig
-import hk.uwu.reareye.ui.components.DialogFormColumn
-import hk.uwu.reareye.ui.components.LocalOverlayDialogBounds
-import hk.uwu.reareye.ui.components.OverlayDialog
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.TabRowWithContour
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.GlassEditorSheet
+import hk.uwu.mixui.components.Tabs
+import hk.uwu.mixui.components.Text
+import androidx.compose.ui.platform.testTag
+import hk.uwu.mixui.components.SuggestionMenu
+import hk.uwu.mixui.components.EditorTextField
+import hk.uwu.mixui.components.SwitchPreference
+import hk.uwu.mixui.components.PreferenceRow
+import androidx.compose.runtime.snapshots.SnapshotStateList
 
 @Composable
 internal fun RearCardCreateDialog(
@@ -79,52 +54,55 @@ internal fun RearCardCreateDialog(
     onConfirmNormal: () -> Unit,
     onConfirmApp: () -> Unit,
     onDismissRequest: () -> Unit,
+    submitting: Boolean = false,
+    sessionKey: Any? = Unit,
 ) {
     val safeMode = mode.coerceIn(0, 1)
-    val businessSnapshot = businesses.toList()
-    val autocompleteBusinesses = remember(businessSnapshot) {
-        businessSnapshot
-            .distinctBy { it.business }
-            .sortedBy { it.business.lowercase() }
-    }
-    val autocompleteDensity = LocalDensity.current
-    val autocompleteTextMeasurer = rememberTextMeasurer()
-    val autocompleteTextStyle = TextStyle(
-        fontSize = MiuixTheme.textStyles.body1.fontSize,
-        fontWeight = FontWeight.Medium,
-    )
-    val autocompleteWidth = remember(
-        autocompleteBusinesses,
-        autocompleteDensity,
-        autocompleteTextMeasurer,
-        autocompleteTextStyle,
-    ) {
-        val widestTextPx = autocompleteBusinesses.maxOfOrNull { business ->
-            autocompleteTextMeasurer.measure(
-                text = AnnotatedString(business.business),
-                style = autocompleteTextStyle,
-                maxLines = 1,
-                softWrap = false,
-            ).size.width
-        } ?: 0
-        with(autocompleteDensity) {
-            (
-                    widestTextPx.toDp() +
-                            DropdownDefaults.DialogHorizontalPadding * 2 +
-                            DropdownDefaults.CheckIconStartPadding +
-                            DropdownDefaults.CheckIconSize
-                    ).coerceIn(ListPopupDefaults.MinWidth, 288.dp)
-        }
-    }
-    OverlayDialog(
+    var formBounds by remember { mutableStateOf(IntRect.Zero) }
+    var suggestionsExpanded by remember(show, safeMode, sessionKey) { mutableStateOf(false) }
+    var suggestionsVisible by remember(show, safeMode, sessionKey) { mutableStateOf(false) }
+    var bindingExpanded by remember(show, safeMode, sessionKey) { mutableStateOf(false) }
+    var bindingVisible by remember(show, safeMode, sessionKey) { mutableStateOf(false) }
+    // Managers own SnapshotStateLists: their immutable snapshot is O(1), and still
+    // observes in-place catalog updates. Ordinary mutable lists retain copy semantics.
+    val businessSnapshot = if (businesses is SnapshotStateList) businesses.toList() else businesses.toList()
+    val autocompleteCatalog = remember(businessSnapshot) { RearBusinessSuggestions(businessSnapshot) }
+    val bindingOptions = remember(businessSnapshot) { businessSnapshot.map { it.business } }
+    GlassEditorSheet(
+        // Suggestions follow this visible viewport, but glass is drawn in the
+        // same-window overlay above the sheet, outside the content recording.
+        modifier = Modifier.testTag("rear-card-create-form").onGloballyPositioned {
+            formBounds = it.boundsInWindow().roundToIntRect()
+        },
         show = show,
         title = stringResource(
             if (safeMode == 1) R.string.rear_widget_add_app_card else R.string.rear_widget_add_card,
         ),
+        sessionKey = sessionKey,
+        dismissRequestKey = suggestionsExpanded || bindingExpanded,
+        confirmText = stringResource(R.string.rear_widget_confirm),
+        cancelText = stringResource(R.string.rear_widget_cancel),
+        confirmEnabled = !submitting && if (safeMode == 1) {
+            appTitle.isNotBlank() && businesses.isNotEmpty()
+        } else {
+            normalPackageName.isNotBlank() && normalBusiness.isNotBlank()
+        },
+        onConfirm = { if (safeMode == 1) onConfirmApp() else onConfirmNormal() },
+        // Cancel/scrim/drag dismiss the form. Only Back is intercepted below
+        // for suggestions; swallowing a native drag dismissal strands its offset.
         onDismissRequest = onDismissRequest,
     ) {
-        DialogFormColumn {
-            TabRowWithContour(
+        // Register inside the sheet content, after its native Back handler. A
+        // suggestion dismissal must not start the native sheet hide animation.
+        BackHandler(enabled = show && (suggestionsVisible || bindingVisible)) {
+            suggestionsExpanded = false
+            bindingExpanded = false
+        }
+        Column(
+            modifier = Modifier.testTag("rear-card-create-dialog"),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Tabs(
                 tabs = listOf(
                     stringResource(R.string.rear_widget_card_tab_normal),
                     stringResource(R.string.rear_widget_card_tab_app),
@@ -135,50 +113,63 @@ internal fun RearCardCreateDialog(
             )
 
             if (safeMode == 1) {
-                TextField(
+                EditorTextField(
                     value = appTitle,
                     onValueChange = onAppTitleChange,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("rear-card-create-app-title"),
                     label = stringResource(R.string.rear_widget_app_card_name),
                     singleLine = true,
                 )
                 if (businesses.isNotEmpty()) {
                     val safeBusinessIndex =
                         selectedAppBusinessIndex.coerceIn(0, businesses.lastIndex)
-                    WindowSpinnerPreference(
-                        items = businesses.map { business -> DropdownItem(title = business.business) },
+                    SuggestionMenu(
+                        expanded = bindingExpanded,
+                        options = bindingOptions,
                         selectedIndex = safeBusinessIndex,
-                        title = stringResource(R.string.rear_widget_app_bound_component_title),
-                        summary = businesses[safeBusinessIndex].business,
-                        onSelectedIndexChange = onSelectedAppBusinessIndexChange,
-                    )
+                        onSelectedIndexChange = { index ->
+                            if (bindingExpanded && index in businesses.indices) {
+                                bindingExpanded = false
+                                onSelectedAppBusinessIndexChange(index)
+                            }
+                        },
+                        onDismissRequest = { bindingExpanded = false },
+                        onVisibilityChanged = { bindingVisible = it },
+                        boundsInWindow = formBounds,
+                        maxHeight = 280.dp,
+                    ) {
+                        PreferenceRow(
+                            modifier = Modifier.testTag("rear-card-business-selector"),
+                            title = stringResource(R.string.rear_widget_app_bound_component_title),
+                            summary = businesses[safeBusinessIndex].business,
+                            onClick = { bindingExpanded = !bindingExpanded },
+                        )
+                    }
                 } else {
                     Text(stringResource(R.string.rear_widget_app_no_component))
                 }
-                RearCardDialogButtons(
-                    confirmEnabled = appTitle.isNotBlank() && businesses.isNotEmpty(),
-                    onConfirm = onConfirmApp,
-                    onCancel = onDismissRequest,
-                )
             } else {
-                TextField(
+                EditorTextField(
                     value = normalTitle,
                     onValueChange = onNormalTitleChange,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("rear-card-create-title"),
                     label = stringResource(R.string.rear_widget_card_title),
                     singleLine = true,
                 )
-                TextField(
+                EditorTextField(
                     value = normalPackageName,
                     onValueChange = onNormalPackageNameChange,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("rear-card-create-package"),
                     label = stringResource(R.string.rear_widget_target_package),
                     singleLine = true,
                 )
                 RearBusinessAutocompleteTextField(
                     value = normalBusiness,
-                    businesses = autocompleteBusinesses,
-                    suggestionWidth = autocompleteWidth,
+                    expanded = suggestionsExpanded,
+                    onExpandedChange = { suggestionsExpanded = it },
+                    onVisibilityChanged = { suggestionsVisible = it },
+                    catalog = autocompleteCatalog,
+                    boundsInWindow = formBounds,
                     onValueChange = onNormalBusinessChange,
                     onSelect = { business ->
                         onNormalBusinessChange(business.business)
@@ -194,10 +185,10 @@ internal fun RearCardCreateDialog(
                     checked = normalAutomaticPriority,
                     onCheckedChange = onNormalAutomaticPriorityChange,
                 )
-                TextField(
+                EditorTextField(
                     value = normalPriorityText,
                     onValueChange = onNormalPriorityTextChange,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("rear-card-create-priority"),
                     label = stringResource(R.string.rear_widget_default_priority),
                     enabled = !normalAutomaticPriority,
                     singleLine = true,
@@ -208,11 +199,6 @@ internal fun RearCardCreateDialog(
                     checked = normalSticky,
                     onCheckedChange = onNormalStickyChange,
                 )
-                RearCardDialogButtons(
-                    confirmEnabled = normalPackageName.isNotBlank() && normalBusiness.isNotBlank(),
-                    onConfirm = onConfirmNormal,
-                    onCancel = onDismissRequest,
-                )
             }
         }
     }
@@ -221,164 +207,72 @@ internal fun RearCardCreateDialog(
 @Composable
 private fun RearBusinessAutocompleteTextField(
     value: String,
-    businesses: List<RearBusinessConfig>,
-    suggestionWidth: Dp,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onVisibilityChanged: (Boolean) -> Unit,
+    catalog: RearBusinessSuggestions,
+    boundsInWindow: IntRect,
     onValueChange: (String) -> Unit,
     onSelect: (RearBusinessConfig) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val suggestionShape = RoundedCornerShape(16.dp)
-    val dialogBounds = LocalOverlayDialogBounds.current
-    val density = LocalDensity.current
-    val dialogInsetPx = with(density) { 8.dp.roundToPx() }
-    val defaultPositionProvider = ListPopupDefaults.DropdownPositionProvider
-    val boundedPositionProvider = remember(dialogBounds, dialogInsetPx) {
-        object : PopupPositionProvider {
-            override fun getMargins(): PaddingValues = defaultPositionProvider.getMargins()
-
-            override fun calculatePosition(
-                anchorBounds: IntRect,
-                windowBounds: IntRect,
-                layoutDirection: LayoutDirection,
-                popupContentSize: IntSize,
-                popupMargin: IntRect,
-                alignment: PopupPositionProvider.Align,
-            ): IntOffset {
-                val boundedWindow = if (dialogBounds != IntRect.Zero) {
-                    val left = maxOf(windowBounds.left, dialogBounds.left + dialogInsetPx)
-                    val top = maxOf(windowBounds.top, dialogBounds.top + dialogInsetPx)
-                    val right = minOf(windowBounds.right, dialogBounds.right - dialogInsetPx)
-                    val bottom = minOf(windowBounds.bottom, dialogBounds.bottom - dialogInsetPx)
-                    if (right > left && bottom > top) {
-                        IntRect(left = left, top = top, right = right, bottom = bottom)
-                    } else {
-                        windowBounds
-                    }
-                } else {
-                    windowBounds
-                }
-                return defaultPositionProvider.calculatePosition(
-                    anchorBounds = anchorBounds,
-                    windowBounds = boundedWindow,
-                    layoutDirection = layoutDirection,
-                    popupContentSize = popupContentSize,
-                    popupMargin = popupMargin,
-                    alignment = alignment,
-                )
-            }
-        }
-    }
-    val suggestionMaxHeight = if (dialogBounds == IntRect.Zero) {
-        DropdownDefaults.MinHeight * 3
-    } else {
-        with(density) {
-            (dialogBounds.height - dialogInsetPx * 2)
-                .coerceAtLeast(50.dp.roundToPx())
-                .toDp()
-                .coerceAtMost(DropdownDefaults.MinHeight * 3)
-        }
-    }
     val normalizedQuery = value.trim()
-    val suggestions = remember(businesses, normalizedQuery) {
-        if (normalizedQuery.isEmpty()) {
-            businesses
-        } else {
-            businesses.filter { business ->
-                business.business.contains(normalizedQuery, ignoreCase = true)
-            }
-        }
+    val suggestions = remember(catalog, normalizedQuery) { catalog.filter(normalizedQuery) }
+    val selectedIndex = remember(suggestions, value) {
+        suggestions.entries.indexOfFirst { it.business.equals(value, ignoreCase = true) }
     }
-
-    Box(modifier = Modifier.fillMaxWidth()) {
-        TextField(
+    val currentSuggestions by androidx.compose.runtime.rememberUpdatedState(suggestions.entries)
+    val selectNow by androidx.compose.runtime.rememberUpdatedState(onSelect)
+    SuggestionMenu(
+        expanded = expanded,
+        options = suggestions.labels,
+        optionSummaries = suggestions.packages,
+        selectedIndex = selectedIndex,
+        onSelectedIndexChange = { index ->
+            currentSuggestions.getOrNull(index)?.let(selectNow)
+            onExpandedChange(false)
+        },
+        onDismissRequest = { onExpandedChange(false) },
+        onVisibilityChanged = onVisibilityChanged,
+        boundsInWindow = boundsInWindow,
+    ) {
+        EditorTextField(
             value = value,
             onValueChange = { nextValue ->
                 onValueChange(nextValue)
-                expanded = true
+                onExpandedChange(true)
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { focusState ->
-                    expanded = focusState.isFocused
-                },
+            modifier = Modifier.fillMaxWidth().testTag("rear-card-business-input")
+                .onFocusChanged { onExpandedChange(it.isFocused) },
             label = stringResource(R.string.rear_widget_business_name),
             singleLine = true,
         )
-
-        OverlayListPopup(
-            show = expanded && suggestions.isNotEmpty(),
-            popupModifier = Modifier,
-            popupPositionProvider = boundedPositionProvider,
-            alignment = PopupPositionProvider.Align.Start,
-            enableWindowDim = false,
-            onDismissRequest = { expanded = false },
-            maxHeight = suggestionMaxHeight,
-            minWidth = ListPopupDefaults.MinWidth,
-            renderInRootScaffold = false,
-        ) {
-            Box(
-                modifier = Modifier
-                    .clip(suggestionShape)
-                    .background(MiuixTheme.colorScheme.surfaceContainerHigh)
-                    .border(
-                        width = 1.dp,
-                        color = MiuixTheme.colorScheme.outline.copy(alpha = 0.32f),
-                        shape = suggestionShape,
-                    ),
-            ) {
-                CompositionLocalProvider(LocalOverscrollFactory provides null) {
-                    LazyColumn(
-                        modifier = Modifier
-                            .width(suggestionWidth)
-                            .heightIn(max = suggestionMaxHeight),
-                    ) {
-                        itemsIndexed(
-                            items = suggestions,
-                            key = { _, business -> business.business },
-                        ) { index, business ->
-                            DropdownImpl(
-                                item = DropdownItem(title = business.business),
-                                optionSize = suggestions.size,
-                                isSelected = business.business.equals(value, ignoreCase = true),
-                                index = index,
-                                dropdownColors = DropdownDefaults.dropdownColors(),
-                                dialogMode = true,
-                                onSelectedIndexChange = {
-                                    onSelect(business)
-                                    expanded = false
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
-@Composable
-private fun RearCardDialogButtons(
-    confirmEnabled: Boolean,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Button(
-            onClick = onConfirm,
-            enabled = confirmEnabled,
-            colors = ButtonDefaults.buttonColorsPrimary(),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.rear_widget_confirm))
+/** Snapshot-scoped index: sort once, then preserve that order in linear match buckets. */
+internal class RearBusinessSuggestions(businesses: List<RearBusinessConfig>) {
+    private val all = RearBusinessSuggestionResult(businesses.distinctBy { it.business }
+        .map { it to it.business.lowercase() }.sortedBy { it.second }.map { it.first })
+
+    fun filter(query: String): RearBusinessSuggestionResult {
+        val normalized = query.trim()
+        if (normalized.isEmpty()) return all
+        val exact = ArrayList<RearBusinessConfig>()
+        val prefix = ArrayList<RearBusinessConfig>()
+        val contains = ArrayList<RearBusinessConfig>()
+        for (business in all.entries) {
+            val name = business.business
+            when {
+                name.equals(normalized, ignoreCase = true) -> exact.add(business)
+                name.startsWith(normalized, ignoreCase = true) -> prefix.add(business)
+                name.contains(normalized, ignoreCase = true) -> contains.add(business)
+            }
         }
-        Button(
-            onClick = onCancel,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.rear_widget_cancel))
-        }
+        return RearBusinessSuggestionResult(exact + prefix + contains)
     }
+}
+
+internal class RearBusinessSuggestionResult(val entries: List<RearBusinessConfig>) {
+    val labels = entries.map { it.business }
+    val packages = entries.map { it.packageName }
 }

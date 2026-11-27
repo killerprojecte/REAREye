@@ -33,6 +33,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import hk.uwu.reareye.R
 import hk.uwu.reareye.agent.CapabilityScope
 import hk.uwu.reareye.agent.CapabilitySource
@@ -45,6 +46,9 @@ import hk.uwu.reareye.agent.ReasoningEffort
 import hk.uwu.reareye.agent.ReasoningMapping
 import hk.uwu.reareye.agent.ReasoningPolicy
 import hk.uwu.reareye.agent.ReasoningStatus
+import hk.uwu.reareye.agent.catalog.MaryReasoningCatalog
+import hk.uwu.reareye.agent.catalog.ReasoningCatalogIndex
+import hk.uwu.reareye.agent.withReasoningCatalog
 import hk.uwu.reareye.agent.model.ChatMessage
 import hk.uwu.reareye.agent.model.MessageRole
 import hk.uwu.reareye.agent.provider.ChatEvent
@@ -54,29 +58,26 @@ import hk.uwu.reareye.agent.provider.ProviderRequestDiagnostics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.DropdownDefaults
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import hk.uwu.mixui.components.ListItem
+import hk.uwu.mixui.components.Button
+import hk.uwu.mixui.components.ButtonDefaults
+import hk.uwu.mixui.components.Card
+import hk.uwu.mixui.components.GlassSelectPreference
+import hk.uwu.mixui.components.CircularProgressIndicator
+import hk.uwu.mixui.components.Icon
+import hk.uwu.mixui.components.IconButton
+import hk.uwu.mixui.components.Text
+import hk.uwu.mixui.components.TextField
+import hk.uwu.mixui.components.EditorTextField
+import hk.uwu.mixui.components.DialogActions
+import hk.uwu.mixui.components.GlassPreferenceFormDialog
+import hk.uwu.mixui.components.PreferenceRow
+import hk.uwu.mixui.components.SwitchPreference
+import hk.uwu.mixui.theme.MixTheme
 
 internal data class ModelDraft(
     val provider: ProviderConfig = ProviderConfig(),
@@ -164,10 +165,12 @@ internal fun ModelConfigurationCard(
     title: Int,
     draft: ModelDraft,
     onChange: (ModelDraft) -> Unit,
-    unreadable: Boolean
+    unreadable: Boolean,
+    reasoningCatalog: StateFlow<ReasoningCatalogIndex> = MaryReasoningCatalog.index,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val catalog by reasoningCatalog.collectAsStateWithLifecycle()
     var testing by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<String?>(null) }
     var resultError by remember { mutableStateOf(false) }
@@ -200,15 +203,11 @@ internal fun ModelConfigurationCard(
             MarySettingsChoicePreference(
                 title = stringResource(R.string.mary_settings_ui_protocol),
                 items = Protocol.entries.map { protocol ->
-                    DropdownItem(
-                        title = stringResource(
-                            when (protocol) {
-                                Protocol.CHAT_COMPLETIONS -> R.string.mary_protocol_chat_completions
-                                Protocol.RESPONSES -> R.string.mary_protocol_responses
-                                Protocol.ANTHROPIC -> R.string.mary_protocol_anthropic
-                            }
-                        )
-                    )
+                    stringResource(when (protocol) {
+                        Protocol.CHAT_COMPLETIONS -> R.string.mary_protocol_chat_completions
+                        Protocol.RESPONSES -> R.string.mary_protocol_responses
+                        Protocol.ANTHROPIC -> R.string.mary_protocol_anthropic
+                    })
                 },
                 selectedIndex = Protocol.entries.indexOf(draft.provider.protocol),
                 onSelectedIndexChange = { index ->
@@ -252,7 +251,7 @@ internal fun ModelConfigurationCard(
                         modifier = Modifier.testTag("mary-model-test-$title"),
                         enabled = !testing && !loadingModels && draft.valid() && draft.provider.model.isNotBlank(),
                         onClick = {
-                            val config = draft.build()
+                            val config = draft.build().withReasoningCatalog(catalog)
                             testing = true
                             result = null
                             resultError = false
@@ -322,7 +321,7 @@ internal fun ModelConfigurationCard(
                         )
                     }
                 })
-            BasicComponent(
+            ListItem(
                 title = stringResource(R.string.mary_settings_available_models),
                 enabled = !loadingModels && !testing && draft.connectionValid(),
                 endActions = {
@@ -360,11 +359,7 @@ internal fun ModelConfigurationCard(
             val selectModelLabel = stringResource(R.string.mary_settings_select_model)
             if (models.isNotEmpty()) MarySettingsChoicePreference(
                 title = selectModelLabel,
-                items = listOf(DropdownItem(title = selectModelLabel)) + models.map {
-                    DropdownItem(
-                        title = it.id
-                    )
-                },
+                items = listOf(selectModelLabel) + models.map { it.id },
                 selectedIndex = models.indexOfFirst { it.id == draft.provider.model } + 1,
                 enabled = !loadingModels && !testing,
                 onSelectedIndexChange = select@{ index ->
@@ -414,7 +409,7 @@ internal fun ModelConfigurationCard(
             )
             modelStatus?.let { if (modelError) MarySettingsDiagnostic(it) else MarySettingsHint(it) }
             result?.let { if (resultError) MarySettingsDiagnostic(it) else MarySettingsHint(it) }
-            BasicComponent(
+            ListItem(
                 title = stringResource(R.string.mary_settings_advanced_model),
                 onClick = { advanced = !advanced },
                 endActions = {
@@ -425,7 +420,7 @@ internal fun ModelConfigurationCard(
                 },
             )
             if (advanced) {
-                ReasoningConfiguration(draft, onChange)
+                ReasoningConfiguration(draft, catalog, onChange)
                 MarySettingsField(
                     draft.temperature,
                     { onChange(draft.copy(temperature = it)) },
@@ -447,8 +442,12 @@ internal fun ModelConfigurationCard(
 }
 
 @Composable
-private fun ReasoningConfiguration(draft: ModelDraft, onChange: (ModelDraft) -> Unit) {
-    val config = draft.connectionConfig()
+internal fun ReasoningConfiguration(
+    draft: ModelDraft,
+    catalog: ReasoningCatalogIndex,
+    onChange: (ModelDraft) -> Unit,
+) {
+    val config = draft.connectionConfig().withReasoningCatalog(catalog)
     val override =
         config.reasoningOverride?.takeIf { it.validFor(config) && it.source == CapabilitySource.MANUAL }
     val choice = when (override?.status) {
@@ -461,7 +460,7 @@ private fun ReasoningConfiguration(draft: ModelDraft, onChange: (ModelDraft) -> 
             R.string.mary_capability_unsupported,
             R.string.mary_capability_manual
         )
-            .map { DropdownItem(title = stringResource(it)) },
+            .map { stringResource(it) },
         selectedIndex = choice,
         onSelectedIndexChange = { index ->
             onChange(
@@ -483,16 +482,17 @@ private fun ReasoningConfiguration(draft: ModelDraft, onChange: (ModelDraft) -> 
             R.string.mary_capability_status_levels,
             support.levels.joinToString { it.name.lowercase() })
     )
-    MarySettingsHint(
-        stringResource(
-            when (support.source) {
-                CapabilitySource.MANUAL -> R.string.mary_capability_source_manual
-                CapabilitySource.SERVICE_METADATA -> R.string.mary_capability_source_service
-                CapabilitySource.OFFLINE -> R.string.mary_capability_source_offline
-                CapabilitySource.UNKNOWN -> R.string.mary_capability_source_unknown
-            }
+    val sourceLabel = when (support.source) {
+        CapabilitySource.MANUAL -> stringResource(R.string.mary_capability_source_manual)
+        CapabilitySource.SERVICE_METADATA -> stringResource(R.string.mary_capability_source_service)
+        CapabilitySource.CATALOG_METADATA -> stringResource(
+            R.string.mary_capability_source_catalog,
+            support.catalogSourceName.orEmpty(),
         )
-    )
+        CapabilitySource.OFFLINE -> stringResource(R.string.mary_capability_source_offline)
+        CapabilitySource.UNKNOWN -> stringResource(R.string.mary_capability_source_unknown)
+    }
+    MarySettingsHint(sourceLabel)
     if (choice == 2 && override != null) {
         val mappings = if (config.protocol == Protocol.ANTHROPIC)
             listOf(
@@ -508,17 +508,13 @@ private fun ReasoningConfiguration(draft: ModelDraft, onChange: (ModelDraft) -> 
         MarySettingsChoicePreference(
             title = stringResource(R.string.mary_capability_mapping),
             items = mappings.map { mapping ->
-                DropdownItem(
-                    title = stringResource(
-                        when (mapping) {
-                            ReasoningMapping.OPENAI_EFFORT -> R.string.mary_capability_openai
-                            ReasoningMapping.OPENROUTER_REASONING -> R.string.mary_capability_openrouter
-                            ReasoningMapping.DEEPSEEK_THINKING -> R.string.mary_capability_deepseek
-                            ReasoningMapping.CLAUDE_BUDGET -> R.string.mary_capability_claude_budget
-                            ReasoningMapping.CLAUDE_ADAPTIVE -> R.string.mary_capability_claude_adaptive
-                        }
-                    )
-                )
+                stringResource(when (mapping) {
+                    ReasoningMapping.OPENAI_EFFORT -> R.string.mary_capability_openai
+                    ReasoningMapping.OPENROUTER_REASONING -> R.string.mary_capability_openrouter
+                    ReasoningMapping.DEEPSEEK_THINKING -> R.string.mary_capability_deepseek
+                    ReasoningMapping.CLAUDE_BUDGET -> R.string.mary_capability_claude_budget
+                    ReasoningMapping.CLAUDE_ADAPTIVE -> R.string.mary_capability_claude_adaptive
+                })
             },
             selectedIndex = mappings.indexOf(override.mapping).coerceAtLeast(0),
             onSelectedIndexChange = {
@@ -551,60 +547,32 @@ private fun ReasoningConfiguration(draft: ModelDraft, onChange: (ModelDraft) -> 
     MarySettingsHint(stringResource(R.string.mary_capability_scope_hint))
 }
 
-/** Same ArrowPreference + root OverlayListPopup used by EnumSingleSelectConfigInput. */
+/** Native mixui glass selector; caller retains model state and persistence. */
 @Composable
 internal fun MarySettingsChoicePreference(
     title: String,
-    items: List<DropdownItem>,
+    items: List<String>,
     selectedIndex: Int,
     onSelectedIndexChange: (Int) -> Unit,
     summary: String? = null,
     enabled: Boolean = true,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val selected = items.getOrNull(selectedIndex)?.text.orEmpty()
-    Box {
-        ArrowPreference(
-            title = title,
-            summary = listOfNotNull(
-                summary?.takeIf { it.isNotBlank() },
-                selected.takeIf { it.isNotBlank() }).joinToString("\n"),
-            enabled = enabled,
-            holdDownState = expanded,
-            onClick = { expanded = true },
-        )
-        OverlayListPopup(
-            show = expanded,
-            popupModifier = Modifier,
-            popupPositionProvider = ListPopupDefaults.DropdownPositionProvider,
-            alignment = PopupPositionProvider.Align.End,
-            enableWindowDim = true,
-            onDismissRequest = { expanded = false },
-            maxHeight = null,
-            minWidth = 220.dp,
-            renderInRootScaffold = true,
-        ) {
-            ListPopupColumn {
-                items.forEachIndexed { index, item ->
-                    DropdownImpl(
-                        item = item,
-                        optionSize = items.size,
-                        isSelected = selectedIndex == index,
-                        index = index,
-                        dropdownColors = DropdownDefaults.dropdownColors(),
-                        onSelectedIndexChange = {
-                            expanded = false
-                            scope.launch {
-                                withFrameNanos { }
-                                onSelectedIndexChange(index)
-                            }
-                        },
-                    )
-                }
+    val selected = items.getOrNull(selectedIndex).orEmpty()
+    GlassSelectPreference(
+        title = title,
+        items = items,
+        selectedIndex = selectedIndex,
+        summary = listOfNotNull(summary?.takeIf { it.isNotBlank() },
+            selected.takeIf { it.isNotBlank() }).joinToString("\n"),
+        enabled = enabled,
+        onSelectedIndexChange = { index ->
+            scope.launch {
+                withFrameNanos { }
+                onSelectedIndexChange(index)
             }
-        }
-    }
+        },
+    )
 }
 
 @Composable
@@ -614,12 +582,12 @@ internal fun MarySettingsSectionTitle(title: Int) {
         modifier = Modifier
             .testTag("mary-model-section-$title")
             .padding(start = 16.dp, top = 8.dp),
-        style = MiuixTheme.textStyles.footnote1,
-        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+        style = MixTheme.textStyles.footnote1,
+        color = MixTheme.colorScheme.onSurfaceVariantSummary
     )
 }
 
-/** Preference rows stay compact; editing uses the same native dialog as app-card settings. */
+/** Full summaries and native in-window editors through mixui. */
 @Composable
 internal fun MarySettingsField(
     value: String,
@@ -629,31 +597,43 @@ internal fun MarySettingsField(
     summary: String? = null,
 ) {
     var editing by remember { mutableStateOf(false) }
+    var editToken by remember { mutableStateOf(Any()) }
     var input by remember { mutableStateOf(value) }
     val fieldTitle = stringResource(label)
-    ArrowPreference(
+    PreferenceRow(
         title = fieldTitle,
         summary = if (password && value.isNotEmpty()) "••••••" else summary
             ?: value.ifBlank { stringResource(R.string.mary_settings_value_default) },
         holdDownState = editing,
-        onClick = { input = value; editing = true },
+        onClick = { if (!editing) { input = value; editToken = Any(); editing = true } },
     )
-    OverlayDialog(show = editing, title = fieldTitle, onDismissRequest = { editing = false }) {
-        DialogFormColumn {
-            TextField(
-                value = input, onValueChange = { input = it }, label = fieldTitle,
-                modifier = Modifier.fillMaxWidth(), singleLine = true,
-                visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None
-            )
-            Button(
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                onClick = {
-                    onChange(input)
-                    editing = false
-                }) { Text(stringResource(R.string.rear_widget_confirm)) }
-            Button(modifier = Modifier.fillMaxWidth(), onClick = { editing = false }) {
-                Text(stringResource(R.string.rear_widget_cancel))
+    val token = editToken
+    val dismiss = { if (editToken === token) editing = false }
+    GlassPreferenceFormDialog(
+        show = editing, title = fieldTitle, onDismissRequest = dismiss,
+        modifier = Modifier.testTag("mary-field-dialog-$label"),
+    ) {
+        androidx.compose.runtime.key(token) {
+            DialogFormColumn {
+                EditorTextField(
+                    autoFocus = editing && editToken === token,
+                    selectAllOnFocus = true,
+                    focusSessionKey = token,
+                    value = input, onValueChange = { input = it }, label = fieldTitle,
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None
+                )
+                DialogActions(
+                    cancelText = stringResource(R.string.rear_widget_cancel),
+                    confirmText = stringResource(R.string.rear_widget_confirm),
+                    onCancel = dismiss,
+                    onConfirm = {
+                        if (editing && editToken === token) {
+                            editing = false
+                            onChange(input)
+                        }
+                    },
+                )
             }
         }
     }
@@ -666,8 +646,8 @@ internal fun MarySettingsHint(text: String) {
         modifier = Modifier
             .padding(horizontal = 16.dp)
             .padding(bottom = 14.dp),
-        style = MiuixTheme.textStyles.footnote2,
-        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+        style = MixTheme.textStyles.footnote2,
+        color = MixTheme.colorScheme.onSurfaceVariantSummary
     )
 }
 
@@ -685,11 +665,11 @@ internal fun MarySettingsDiagnostic(text: String) {
                 .fillMaxWidth()
                 .heightIn(max = 240.dp)
                 .verticalScroll(rememberScrollState()),
-            style = MiuixTheme.textStyles.body2.copy(
+            style = MixTheme.textStyles.body2.copy(
                 fontFamily = FontFamily.Monospace,
                 fontSize = 13.sp
             ),
-            color = MiuixTheme.colorScheme.error
+            color = MixTheme.colorScheme.error
         )
     }
 }
