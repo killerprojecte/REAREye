@@ -39,6 +39,7 @@ internal class MaryWebAddressPolicy(
     private val systemDns: Dns = Dns.SYSTEM,
     private val allowsAddress: (InetAddress) -> Boolean = ::isPublicMaryWebAddress,
     private val standardPortsOnly: Boolean = true,
+    private val fixedHttpsHosts: Set<String> = emptySet(),
 ) {
     fun url(input: String, previous: HttpUrl? = null): HttpUrl {
         if (input.isEmpty() || input.length > MARY_WEB_MAX_URL_CHARS || '\\' in input) invalidUrl()
@@ -61,6 +62,7 @@ internal class MaryWebAddressPolicy(
 
     fun validate(url: HttpUrl) {
         if (url.toString().length > MARY_WEB_MAX_URL_CHARS || url.username.isNotEmpty() || url.password.isNotEmpty()) invalidUrl()
+        if (fixedHttpsHosts.isNotEmpty() && !isFixedHttpsEndpoint(url)) invalidUrl()
         val defaultPort = if (url.isHttps) 443 else 80
         if (standardPortsOnly && url.port != defaultPort) {
             throw MaryWebFailure("只允许使用标准端口的公开 HTTP(S) 地址。")
@@ -97,12 +99,16 @@ internal class MaryWebAddressPolicy(
         else hostname.trimEnd('.') + "."
         systemDns.lookup(name).also { addresses ->
             if (addresses.isEmpty()) throw UnknownHostException()
-            if (addresses.any { !allowsAddress(it) }) blockedHost()
+            // A fixed HTTPS service can use a VPN's DNS mapping. Its hostname and certificate
+            // still have to match; arbitrary page URLs never use this policy.
+            if (hostname !in fixedHttpsHosts && addresses.any { !allowsAddress(it) }) blockedHost()
         }
     }
 
-    fun verifyConnectedAddress(address: InetAddress?) {
-        if (address == null || !allowsAddress(address)) blockedHost()
+    private fun isFixedHttpsEndpoint(url: HttpUrl) = url.isHttps && url.port == 443 && url.host in fixedHttpsHosts
+
+    fun verifyConnectedAddress(url: HttpUrl, address: InetAddress?) {
+        if (address == null || (!isFixedHttpsEndpoint(url) && !allowsAddress(address))) blockedHost()
     }
 }
 
@@ -165,8 +171,9 @@ internal class MaryWebHttp(private val policy: MaryWebAddressPolicy = MaryWebAdd
         .readTimeout(8, TimeUnit.SECONDS)
         .callTimeout(12, TimeUnit.SECONDS)
         .addNetworkInterceptor { chain ->
-            policy.verifyConnectedAddress(chain.connection()?.route()?.socketAddress?.address)
-            val response = chain.proceed(chain.request())
+            val request = chain.request()
+            policy.verifyConnectedAddress(request.url, chain.connection()?.route()?.socketAddress?.address)
+            val response = chain.proceed(request)
             // OkHttp can repeat a request on 503 Retry-After: 0 even when connection retries are off.
             if (response.code == 503) response.newBuilder().removeHeader("Retry-After").build() else response
         }
@@ -183,12 +190,15 @@ internal class MaryWebHttp(private val policy: MaryWebAddressPolicy = MaryWebAdd
         initial: HttpUrl,
         accept: String,
         allowRedirect: (HttpUrl) -> Boolean = { true },
+        acceptLanguage: String? = null,
         supported: (MediaType?) -> Boolean,
     ): MaryWebPage = withTimeoutOrNull(OPERATION_TIMEOUT_MS) {
         var url = initial
         repeat(MAX_REDIRECTS + 1) { hop ->
             policy.validate(url)
-            val request = Request.Builder().url(url).header("Accept", accept).build()
+            val request = Request.Builder().url(url).header("Accept", accept).apply {
+                if (acceptLanguage != null) header("Accept-Language", acceptLanguage)
+            }.build()
             when (val attempt = client.newCall(request).awaitAttempt(supported)) {
                 is Attempt.Content -> return@withTimeoutOrNull attempt.page
                 is Attempt.Redirect -> {

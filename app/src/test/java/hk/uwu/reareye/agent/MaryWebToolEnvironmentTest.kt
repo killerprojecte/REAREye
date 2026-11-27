@@ -14,6 +14,7 @@ import hk.uwu.reareye.agent.tools.allowsBingSearchRedirect
 import hk.uwu.reareye.agent.tools.isPublicMaryWebAddress
 import java.io.ByteArrayOutputStream
 import java.net.InetAddress
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.GZIPOutputStream
@@ -60,54 +61,91 @@ class MaryWebToolEnvironmentTest {
         val specs = environment.availableTools()
         assertEquals(listOf("local", "web_search", "web_fetch"), specs.map { it.name })
         assertTrue(specs.drop(1).all { it.risk == ToolRisk.READ_ONLY })
+        val han = Regex("\\p{IsHan}")
+        assertTrue(specs.drop(1).all { spec ->
+            !han.containsMatchIn(spec.description) && spec.params.none { han.containsMatchIn(it.description) }
+        })
         enabled = false
         assertTrue(environment.execute("web_search", searchArgs()).isError)
     }
 
     @Test
-    fun `Bing query is encoded and public RSS yields distinct sources and cleaned snippets`() = withServer { server, origin ->
+    fun `Bing falls back to RSS and preserves public links and cleaned snippets`() = withServer { server, origin ->
+        server.enqueue(htmlSearch("<ol id='b_results'></ol>"))
         server.enqueue(MockResponse.Builder().setHeader("Content-Type", "text/xml; charset=utf-8").body("""
             <rss version="2.0"><channel>
               <item><title>First &amp; co</title><link>https://example.org/a?x=1&amp;y=2</link>
                 <description><![CDATA[<b>Actual</b> summary<script>ignored</script>]]></description></item>
               <item><title>Duplicate</title><link>https://example.org/a?x=1&amp;y=2#duplicate</link></item>
-              <item><title>Private URL</title><link>http://127.0.0.2/internal</link></item>
-              <item><title>Second</title><link>https://example.net/b</link></item>
-              <item><title>Beyond limit</title><link>https://example.net/c</link></item>
+              <item><title>First private URL</title><link>http://127.0.0.2/internal</link></item>
+              <item><title>Second 中文</title><link>https://example.net/b</link></item>
             </channel></rss>
         """.trimIndent()).build())
-        val result = environment(origin).execute("web_search", searchArgs("weather & 中文", 2)).payload()
+        val result = environment(origin).execute("web_search", searchArgs("First & 中文", 2)).payload()
         assertEquals("bing", result.string("source"))
-        assertEquals("weather & 中文", result.string("query"))
+        assertEquals("First & 中文", result.string("query"))
         val entries = result.getValue("results").jsonArray.map { it.jsonObject }
-        assertEquals(listOf("First & co", "Second"), entries.map { it.string("title") })
+        assertEquals(listOf("First & co", "Second 中文"), entries.map { it.string("title") })
         assertEquals("Actual summary", entries.first().string("snippet"))
         assertEquals("https://example.org/a?x=1&y=2", entries.first().string("url"))
+        val first = server.takeRequest()
+        assertEquals("/search?q=First%20%26%20%E4%B8%AD%E6%96%87&mkt=zh-CN", first.target)
+        assertEquals("zh-CN,zh;q=0.9,en;q=0.6", first.headers["Accept-Language"])
+        val rss = server.takeRequest()
+        assertEquals("/search?q=First%20%26%20%E4%B8%AD%E6%96%87&format=rss", rss.target)
+        assertNull(rss.headers["Authorization"])
+        assertNull(rss.headers["Cookie"])
+    }
+
+    @Test
+    fun `specific model results outrank brand navigation and spread across publishers`() = withServer { server, origin ->
+        val target = "https://reviews.example.org/phones/18?sku=18&size=pro"
+        val encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(target.encodeToByteArray())
+        server.enqueue(htmlSearch("""
+            <ol id="b_results">
+              <li class="b_algo"><h2><a href="https://mi.com/">Xiaomi official website</a></h2></li>
+              <li class="b_ad"><h2><a href="https://ads.example.net/">Xiaomi 18 Pro Max Ad</a></h2></li>
+              <li class="b_algo"><h2><a href="https://mi.com/18-pro-max">Xiaomi 18 Pro Max</a></h2></li>
+              <li class="b_algo"><h2><a href="https://global.mi.com/18-pro-max">Xiaomi 18 Pro Max Global</a></h2></li>
+              <li class="b_algo"><h2><a href="https://www.bing.com/ck/a?u=a1$encoded">Xiaomi 18 Pro Max review</a></h2>
+                <div class="b_caption"><p><span class="algoSlug_icon">Translate</span>Hands-on review</p></div></li>
+              <li class="b_algo"><h3><a href="https://compare.example.net/specs">小米 18 Pro Max 参数</a></h3></li>
+            </ol>
+        """.trimIndent()))
+        val payload = environment(origin).execute("web_search", searchArgs("Xiaomi 18 Pro Max", 3)).payload()
+        val results = payload.getValue("results").jsonArray.map { it.jsonObject }
+        assertEquals(listOf("https://mi.com/18-pro-max", target, "https://compare.example.net/specs"), results.map { it.string("url") })
+        assertEquals("Hands-on review", results[1].string("snippet"))
         val request = server.takeRequest()
-        assertEquals("/search?q=weather%20%26%20%E4%B8%AD%E6%96%87&format=rss", request.target)
-        assertNull(request.headers["Authorization"])
-        assertNull(request.headers["Cookie"])
-        assertNull(request.headers["X-Goog-Api-Key"])
+        assertEquals("/search?q=Xiaomi%2018%20Pro%20Max", request.target)
+        assertEquals("en-US,en;q=0.9", request.headers["Accept-Language"])
+        assertEquals(1, server.requestCount)
     }
 
     @Test
     fun `Bing accepts a full-length CJK query without exceeding the transport URL cap`() = withServer { server, origin ->
-        server.enqueue(MockResponse.Builder().setHeader("Content-Type", "text/xml").body("<rss><channel/></rss>").build())
         val query = "中".repeat(200)
+        server.enqueue(htmlSearch("<ol id='b_results'><li class='b_algo'><h2><a href='https://example.org/'>$query</a></h2></li></ol>"))
         val environment = environment(origin)
-        assertEquals(query, environment.execute("web_search", searchArgs(query)).payload().string("query"))
+        assertEquals(query, environment.execute("web_search", searchArgs(query, 1)).payload().string("query"))
         assertTrue(environment.execute("web_search", searchArgs(query + "中")).isError)
         assertEquals(1, server.requestCount)
     }
 
     @Test
-    fun `Bing rejects HTML pretending to be a feed and never follows cross-origin redirects`() = withServer { server, origin ->
-        server.enqueue(MockResponse.Builder().setHeader("Content-Type", "text/xml").body("<html>Not a feed</html>").build())
-        server.enqueue(MockResponse.Builder().code(302).setHeader("Location", "//another.example.net/search").build())
-        val environment = environment(origin)
-        assertTrue(environment.execute("web_search", searchArgs()).isError)
-        assertTrue(environment.execute("web_search", searchArgs()).isError)
+    fun `Bing never follows cross-origin redirects in either representation`() = withServer { server, origin ->
+        repeat(2) {
+            server.enqueue(MockResponse.Builder().code(302).setHeader("Location", "//another.example.net/search").build())
+        }
+        assertTrue(environment(origin).execute("web_search", searchArgs()).isError)
         assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `Bing rejects an invalid RSS response when the HTML request fails`() = withServer { server, origin ->
+        server.enqueue(MockResponse.Builder().code(503).build())
+        server.enqueue(MockResponse.Builder().setHeader("Content-Type", "text/xml").body("<html>Not a feed</html>").build())
+        assertTrue(environment(origin).execute("web_search", searchArgs()).isError)
     }
 
     @Test
@@ -246,6 +284,25 @@ class MaryWebToolEnvironmentTest {
         assertThrows(MaryWebFailure::class.java) { policy.dns.lookup("example.net") }
     }
 
+    @Test
+    fun `fixed Bing HTTPS endpoints can use VPN DNS without relaxing web fetch`() {
+        val fakeAddress = InetAddress.getByName("198.18.0.3")
+        val resolver = Dns { listOf(fakeAddress) }
+        val fetch = MaryWebAddressPolicy(resolver)
+        val search = MaryWebAddressPolicy(resolver, fixedHttpsHosts = setOf("www.bing.com", "cn.bing.com"))
+        for (host in listOf("www.bing.com", "cn.bing.com")) {
+            val target = search.url("https://$host/search")
+            assertEquals(listOf(fakeAddress), search.dns.lookup(host))
+            search.verifyConnectedAddress(target, fakeAddress)
+            assertThrows(MaryWebFailure::class.java) { fetch.dns.lookup(host) }
+            assertThrows(MaryWebFailure::class.java) { fetch.verifyConnectedAddress(target, fakeAddress) }
+        }
+        for (url in listOf("http://www.bing.com/", "https://www.bing.com:8443/", "https://www.bing.com.example.net/",
+            "https://127.0.0.1/", "https://example.net/")) {
+            assertThrows(url, MaryWebFailure::class.java) { search.url(url) }
+        }
+    }
+
     private fun withServer(block: suspend (MockWebServer, HttpUrl) -> Unit) {
         MockWebServer().use { server ->
             server.start(mockAddress, 0)
@@ -263,6 +320,9 @@ class MaryWebToolEnvironmentTest {
         MaryWebHttp(MaryWebAddressPolicy(dns, { it == mockAddress }, standardPortsOnly = false)),
         checkNotNull(origin.resolve("/search")),
     )
+
+    private fun htmlSearch(body: String) = MockResponse.Builder()
+        .setHeader("Content-Type", "text/html; charset=utf-8").body(body).build()
 
     private fun searchArgs(query: String = "weather", limit: Int? = null) = buildJsonObject {
         put("query", query)

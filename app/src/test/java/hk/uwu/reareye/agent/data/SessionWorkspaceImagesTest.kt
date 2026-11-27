@@ -177,7 +177,7 @@ class SessionWorkspaceImagesTest {
         ))
         val projected = store.workspace.materialize(session.id, durable, allowImages = true)
         assertTrue(projected[0].images().isEmpty())
-        assertTrue(projected[0].textContent().contains("超出本次图片发送额度"))
+        assertTrue(projected[0].textContent().contains("Image request budget exceeded"))
         assertEquals(1, projected[1].images().size)
         assertEquals(7, projected[2].images().size)
     }
@@ -227,7 +227,7 @@ class SessionWorkspaceImagesTest {
         val prepared = workspace.prepareCurrentImages(session.id, listOf(good), allowImages = true)
         val projected = workspace.materialize(session.id, durable, allowImages = true, preparedCurrentImages = prepared)
         assertTrue(projected.first().images().isEmpty())
-        assertTrue(projected.first().textContent().contains("无法读取有效的图片"))
+        assertTrue(projected.first().textContent().contains("Could not read a valid image"))
         assertArrayEquals(smallPng, projected.last().images().single().bytes)
         assertThrows(WorkspaceImagePreparationException::class.java) {
             workspace.materialize(session.id, durable.take(1), allowImages = true, preparedCurrentImages = prepared)

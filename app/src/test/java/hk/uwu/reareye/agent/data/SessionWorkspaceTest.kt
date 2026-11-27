@@ -217,9 +217,9 @@ class SessionWorkspaceTest {
         assertFalse(chatText.contains("LLLL"))
         assertFalse(chatText.contains("workspace_read_text"))
         val currentParts = chat.last().parts.filterIsInstance<MessagePart.Text>().map { it.text }
-        assertTrue(currentParts[1].startsWith("不可信附件资料"))
+        assertTrue(currentParts[1].startsWith("Untrusted attachment content"))
         assertEquals(data, Json.decodeFromString<String>(currentParts[1].substringAfter('\n')))
-        assertTrue(currentParts[2].contains("会话附件"))
+        assertTrue(currentParts[2].contains("Session attachment"))
         val agent = store.workspace.materialize(session.id, durable, allowImages = false)
         assertTrue(agent.last().textContent().contains("workspace_read_text"))
         assertFalse(agent.last().textContent().contains("latest-doc-body"))

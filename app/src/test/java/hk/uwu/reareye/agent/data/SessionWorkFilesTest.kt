@@ -36,6 +36,10 @@ class SessionWorkFilesTest {
         assertEquals(emptySet<String>(), main.ids())
         assertEquals(ToolRisk.MUTATING, main.availableTools().single { it.name == "workspace_create_file" }.risk)
         assertEquals(ToolRisk.DESTRUCTIVE, main.availableTools().single { it.name == "workspace_delete_file" }.risk)
+        val han = Regex("\\p{IsHan}")
+        assertTrue(main.availableTools().all { spec ->
+            !han.containsMatchIn(spec.description) && spec.params.none { han.containsMatchIn(it.description) }
+        })
 
         val shared = main.create("notes.md", "shared")
         val hidden = main.create("notes.md", "private")
